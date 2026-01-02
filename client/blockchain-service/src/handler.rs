@@ -1320,34 +1320,6 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::QueryBucketsForMsp { msp_id, callback } => {
-                    let current_block_hash = self.client.info().best_hash;
-
-                    // Query buckets managed by the given MSP.
-                    let buckets = self
-                        .client
-                        .runtime_api()
-                        .query_buckets_for_msp(current_block_hash, &msp_id)
-                        .map_err(|e| {
-                            error!(target: LOG_TARGET, "Failed to call runtime API query_buckets_for_msp: {:?}", e);
-                            e
-                        })
-                        .ok()
-                        .and_then(|api_result| {
-                            api_result.map_err(|e| {
-                                error!(target: LOG_TARGET, "Runtime API error in query_buckets_for_msp: {:?}", e);
-                                e
-                            }).ok()
-                        })
-                        .unwrap_or_default();
-
-                    match callback.send(Ok(buckets)) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send back buckets for MSP: {:?}", e);
-                        }
-                    }
-                }
                 BlockchainServiceCommand::QueryPendingStorageRequests {
                     maybe_file_keys,
                     callback,

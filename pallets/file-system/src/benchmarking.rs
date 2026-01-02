@@ -2523,6 +2523,64 @@ mod benchmarks {
                 size,
                 fingerprint: fingerprint.into(),
             });
+
+            // Set up storage request for this file with active storage request (worst-case scenario).
+            // This ensures the benchmark captures the cost of cleanup_storage_request and add_incomplete_storage_request.
+            // We maximize BSPs volunteered/confirmed since cleanup_storage_request drains all BSPs from storage.
+            let expiration_tick = frame_system::Pallet::<T>::block_number() + 100u32.into();
+            let deposit: BalanceOf<T> = T::BaseStorageRequestCreationDeposit::get();
+            let max_replication_target: ReplicationTargetType<T> =
+                T::MaxReplicationTarget::get().into();
+
+            let storage_request_metadata = StorageRequestMetadata::<T> {
+                requested_at: frame_system::Pallet::<T>::block_number(),
+                expires_at: expiration_tick,
+                owner: user_account.clone(),
+                bucket_id,
+                location: location.clone(),
+                fingerprint: fingerprint.into(),
+                size,
+                msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted triggers incomplete storage request creation
+                user_peer_ids: Default::default(),
+                bsps_required: max_replication_target,
+                bsps_confirmed: max_replication_target,
+                bsps_volunteered: max_replication_target,
+                deposit_paid: deposit,
+            };
+
+            // Hold the deposit so cleanup_storage_request can release it (triggers Currency::release).
+            <T as pallet::Config>::Currency::hold(
+                &HoldReason::StorageRequestCreationHold.into(),
+                &user_account,
+                deposit,
+            )?;
+
+            // Insert storage request so it gets cleaned up during file deletion.
+            <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
+
+            // Associate file with bucket so cleanup_storage_request removes this entry.
+            <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
+
+            // Add to expiration queue so cleanup_storage_request removes from it.
+            <StorageRequestExpirations<T>>::mutate(expiration_tick, |items| {
+                let _ = items.try_push(file_key);
+            });
+
+            // Add MaxReplicationTarget BSPs to maximize the drain cost in cleanup_storage_request.
+            // This is the worst-case scenario where all BSPs have confirmed storing the file.
+            for i in 0u64..T::MaxReplicationTarget::get().into() {
+                let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
+                mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+                let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
+                StorageRequestBsps::<T>::insert(
+                    &file_key,
+                    &volunteered_bsp_id,
+                    StorageRequestBspsMetadata::<T> {
+                        confirmed: true,
+                        _phantom: Default::default(),
+                    },
+                );
+            }
         }
 
         // Update bucket size to match total
@@ -2641,7 +2699,7 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::BucketFileDeletionsCompleted {
                 user: user_account.clone(),
-                file_keys: file_keys_bounded,
+                file_keys: file_keys_bounded.clone(),
                 bucket_id,
                 msp_id: Some(msp_id),
                 old_root: old_bucket_root,
@@ -2680,6 +2738,22 @@ mod benchmarks {
             Some(expected_zero_rate),
             "Payment stream should be updated to zero-sized bucket rate"
         );
+
+        // Ensure incomplete storage requests were created (since MSP had accepted the storage requests)
+        for file_key in file_keys_bounded.iter() {
+            assert!(
+                crate::IncompleteStorageRequests::<T>::contains_key(file_key),
+                "IncompleteStorageRequest should be created for file with active storage request"
+            );
+        }
+
+        // Ensure storage requests were cleaned up
+        for file_key in file_keys_bounded.iter() {
+            assert!(
+                !StorageRequests::<T>::contains_key(file_key),
+                "StorageRequest should be removed after deletion"
+            );
+        }
 
         Ok(())
     }
@@ -2797,6 +2871,64 @@ mod benchmarks {
                 size,
                 fingerprint: fingerprint.into(),
             });
+
+            // Set up storage request for this file with active storage request (worst-case scenario).
+            // This ensures the benchmark captures the cost of cleanup_storage_request and add_incomplete_storage_request.
+            // We maximize BSPs volunteered/confirmed since cleanup_storage_request drains all BSPs from storage.
+            let expiration_tick = frame_system::Pallet::<T>::block_number() + 100u32.into();
+            let deposit: BalanceOf<T> = T::BaseStorageRequestCreationDeposit::get();
+            let max_replication_target: ReplicationTargetType<T> =
+                T::MaxReplicationTarget::get().into();
+
+            let storage_request_metadata = StorageRequestMetadata::<T> {
+                requested_at: frame_system::Pallet::<T>::block_number(),
+                expires_at: expiration_tick,
+                owner: user_account.clone(),
+                bucket_id,
+                location: location.clone(),
+                fingerprint: fingerprint.into(),
+                size,
+                msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted triggers incomplete storage request creation
+                user_peer_ids: Default::default(),
+                bsps_required: max_replication_target,
+                bsps_confirmed: max_replication_target,
+                bsps_volunteered: max_replication_target,
+                deposit_paid: deposit,
+            };
+
+            // Hold the deposit so cleanup_storage_request can release it (triggers Currency::release).
+            <T as pallet::Config>::Currency::hold(
+                &HoldReason::StorageRequestCreationHold.into(),
+                &user_account,
+                deposit,
+            )?;
+
+            // Insert storage request so it gets cleaned up during file deletion.
+            <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
+
+            // Associate file with bucket so cleanup_storage_request removes this entry.
+            <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
+
+            // Add to expiration queue so cleanup_storage_request removes from it.
+            <StorageRequestExpirations<T>>::mutate(expiration_tick, |items| {
+                let _ = items.try_push(file_key);
+            });
+
+            // Add MaxReplicationTarget BSPs to maximize the drain cost in cleanup_storage_request.
+            // This is the worst-case scenario where all BSPs have confirmed storing the file.
+            for i in 0u64..T::MaxReplicationTarget::get().into() {
+                let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
+                mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+                let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
+                StorageRequestBsps::<T>::insert(
+                    &file_key,
+                    &volunteered_bsp_id,
+                    StorageRequestBspsMetadata::<T> {
+                        confirmed: true,
+                        _phantom: Default::default(),
+                    },
+                );
+            }
         }
 
         // Increase BSP used capacity to match file size
@@ -2891,7 +3023,7 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::BspFileDeletionsCompleted {
                 users: users_bounded,
-                file_keys: file_keys_bounded,
+                file_keys: file_keys_bounded.clone(),
                 bsp_id,
                 old_root: old_bsp_root,
                 new_root: new_bsp_root,
@@ -2919,6 +3051,22 @@ mod benchmarks {
             ),
             "Dynamic-rate payment stream should be removed after deletion"
         );
+
+        // Ensure incomplete storage requests were created (since MSP had accepted the storage requests)
+        for file_key in file_keys_bounded.iter() {
+            assert!(
+                crate::IncompleteStorageRequests::<T>::contains_key(file_key),
+                "IncompleteStorageRequest should be created for file with active storage request"
+            );
+        }
+
+        // Ensure storage requests were cleaned up
+        for file_key in file_keys_bounded.iter() {
+            assert!(
+                !StorageRequests::<T>::contains_key(file_key),
+                "StorageRequest should be removed after deletion"
+            );
+        }
 
         Ok(())
     }
