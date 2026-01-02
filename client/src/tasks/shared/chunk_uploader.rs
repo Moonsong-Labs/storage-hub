@@ -223,7 +223,7 @@ where
                                 ));
                             }
                             Err(e) => {
-                                return Err(anyhow::anyhow!( 
+                                return Err(anyhow::anyhow!(
                                     "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?}) with file key [0x{:x}] and fingerprint [{:x}]",
                                     peer_id,
                                     e,
