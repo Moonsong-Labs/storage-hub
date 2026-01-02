@@ -50,12 +50,13 @@ use crate::{
         MspStorageRequestStatus, MultiAddresses, PeerIds, PendingStopStoringRequest, ProviderIdFor,
         RejectedStorageRequest, ReplicationTarget, ReplicationTargetType, StorageDataUnit,
         StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
-        StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber, ValuePropId,
+        StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber,
+        UserOperationPauseFlags, ValuePropId,
     },
     weights::WeightInfo,
     BucketsWithStorageRequests, Error, Event, HoldReason, IncompleteStorageRequests, Pallet,
     PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestBsps,
-    StorageRequestExpirations, StorageRequests,
+    StorageRequestExpirations, StorageRequests, UserOperationPauseFlagsStorage,
 };
 
 macro_rules! expect_or_err {
@@ -527,6 +528,13 @@ where
         private: bool,
         value_prop_id: ValuePropId<T>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
+        // Check that creating buckets is not currently paused.
+        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
+        ensure!(
+            !pause_flags.is_set(UserOperationPauseFlags::FLAG_CREATE_BUCKET),
+            Error::<T>::UserOperationPaused
+        );
+
         // Check if the MSP is indeed an MSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
@@ -586,6 +594,13 @@ where
         new_msp_id: ProviderIdFor<T>,
         new_value_prop_id: ValuePropId<T>,
     ) -> Result<(), DispatchError> {
+        // Check that requesting to move buckets is not currently paused.
+        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
+        ensure!(
+            !pause_flags.is_set(UserOperationPauseFlags::FLAG_REQUEST_MOVE_BUCKET),
+            Error::<T>::UserOperationPaused
+        );
+
         // Check that the user is not currently insolvent.
         ensure!(
             !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
@@ -752,6 +767,13 @@ where
         bucket_id: BucketIdFor<T>,
         private: bool,
     ) -> Result<Option<CollectionIdFor<T>>, DispatchError> {
+        // Check that updating bucket privacy and related collection operations are not paused.
+        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
+        ensure!(
+            !pause_flags.is_set(UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION),
+            Error::<T>::UserOperationPaused
+        );
+
         // Check that the user is not currently insolvent.
         ensure!(
             !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
@@ -803,6 +825,13 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
     ) -> Result<CollectionIdFor<T>, DispatchError> {
+        // Check that updating bucket privacy and related collection operations are not paused.
+        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
+        ensure!(
+            !pause_flags.is_set(UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION),
+            Error::<T>::UserOperationPaused
+        );
+
         // Check that the user is not currently insolvent.
         ensure!(
             !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
@@ -836,6 +865,13 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
     ) -> Result<Option<CollectionIdFor<T>>, DispatchError> {
+        // Check that deleting buckets is not currently paused.
+        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
+        ensure!(
+            !pause_flags.is_set(UserOperationPauseFlags::FLAG_DELETE_BUCKET),
+            Error::<T>::UserOperationPaused
+        );
+
         // Check that the bucket with the received ID exists.
         ensure!(
             <T::Providers as ReadBucketsInterface>::bucket_exists(&bucket_id),
@@ -910,6 +946,13 @@ where
         replication_target: ReplicationTarget<T>,
         user_peer_ids: Option<PeerIds<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
+        // Check that issuing storage requests is not currently paused.
+        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
+        ensure!(
+            !pause_flags.is_set(UserOperationPauseFlags::FLAG_ISSUE_STORAGE_REQUEST),
+            Error::<T>::UserOperationPaused
+        );
+
         // Check that the user is not currently insolvent.
         ensure!(
             !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
@@ -1317,6 +1360,13 @@ where
         size: StorageDataUnit<T>,
         fingerprint: Fingerprint<T>,
     ) -> DispatchResult {
+        // Check that requesting file deletions is not currently paused.
+        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
+        ensure!(
+            !pause_flags.is_set(UserOperationPauseFlags::FLAG_REQUEST_DELETE_FILE),
+            Error::<T>::UserOperationPaused
+        );
+
         // Check that the user that's sending the deletion request is not currently insolvent.
         // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
         // to delete their files and buckets using the available extrinsics or resolve their
@@ -1393,6 +1443,13 @@ where
         bsp_id: Option<ProviderIdFor<T>>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
+        // Check that executing file deletions is not currently paused.
+        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
+        ensure!(
+            !pause_flags.is_set(UserOperationPauseFlags::FLAG_DELETE_FILES),
+            Error::<T>::UserOperationPaused
+        );
+
         // Ensure we have at least one file to delete
         ensure!(!file_deletions.is_empty(), Error::<T>::NoFileKeysToDelete);
 

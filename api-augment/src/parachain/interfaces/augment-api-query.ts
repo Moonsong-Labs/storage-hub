@@ -462,6 +462,18 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
+       * Bitmask controlling which user operations are currently paused.
+       *
+       * When a particular bit is set in this mask, the corresponding user operation in this pallet
+       * is considered paused and should fail with [`Error::UserOperationPaused`].
+       *
+       * By default this is initialised to [`UserOperationPauseFlags::NONE`], meaning no operations
+       * are paused. Governance (for example via sudo) can update it using the
+       * `set_user_operation_pause_flags` extrinsic.
+       **/
+      userOperationPauseFlagsStorage: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * Generic query
        **/
       [key: string]: QueryableStorageEntry<ApiType>;

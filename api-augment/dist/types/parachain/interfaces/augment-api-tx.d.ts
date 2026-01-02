@@ -509,6 +509,16 @@ declare module '@polkadot/api-base/types/submittable' {
              **/
             revokeStorageRequest: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
+             * Set the pause flags that control which user operations are currently allowed.
+             *
+             * This extrinsic can only be called by `Root` (for example via `pallet-sudo` or governance).
+             * Passing [`UserOperationPauseFlags::NONE`] unpauses all operations, while setting one or more
+             * bits in the flags pauses the corresponding user operations.
+             *
+             * This call replaces the entire bitmask in storage with the provided value.
+             **/
+            setUserOperationPauseFlags: AugmentedSubmittable<(newFlags: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32]>;
+            /**
              * Executed by a SP to stop storing a file from an insolvent user.
              *
              * This is used when a user has become insolvent and the SP needs to stop storing the files of that user, since

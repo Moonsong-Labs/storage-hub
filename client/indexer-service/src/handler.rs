@@ -1258,6 +1258,9 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
 
+            // User operation pause flags events
+            pallet_file_system::Event::UserOperationPauseFlagsUpdated { .. } => {}
+
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())

@@ -709,6 +709,14 @@ declare module "@polkadot/api-base/types/events" {
         { actualUsedCapacity: u64 }
       >;
       /**
+       * Notifies that the user operation pause flags have been updated.
+       **/
+      UserOperationPauseFlagsUpdated: AugmentedEvent<
+        ApiType,
+        [old: u32, new_: u32],
+        { old: u32; new_: u32 }
+      >;
+      /**
        * Generic event
        **/
       [key: string]: AugmentedEvent<ApiType>;
