@@ -961,7 +961,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "is_file_key_expected finished for file_key=[{:x}]. Result: {}",
+            "is_file_key_expected finished for file_key=[0x{:x}]. Result: {}",
             file_key,
             expected
         );
