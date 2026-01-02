@@ -498,7 +498,7 @@ where
                     return;
                 }
 
-                debug!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
+                info!(target: LOG_TARGET, "🪾 Applying mutations to BSP [{:?}]", provider_id);
                 debug!(target: LOG_TARGET, "Mutations: {:?}", mutations);
 
                 // Log mutations at info level during catchup/sync for better visibility
