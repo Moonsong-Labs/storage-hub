@@ -754,12 +754,12 @@ where
                     // This is a valid scenario. It would be the case where the bucket is managed by this MSP.
                     trace!(target: LOG_TARGET, "Bucket [0x{:x}] is managed by this MSP [0x{:x}].", bucket_id, managed_msp_id);
                     return true;
-                 }
-                 Ok(Some(msp_id)) => {
-                     // This is a valid scenario. It would be the case where the mutation is being applied to a bucket that is managed by another MSP.
-                     trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. It is managed by MSP [0x{:x}].", bucket_id, managed_msp_id, msp_id);
-                     return false;
-                 }
+                }
+                Ok(Some(msp_id)) => {
+                    // This is a valid scenario. It would be the case where the mutation is being applied to a bucket that is managed by another MSP.
+                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. It is managed by MSP [0x{:x}].", bucket_id, managed_msp_id, msp_id);
+                    return false;
+                }
                 Ok(None) => {
                     // This is a valid scenario. It would be the case where the bucket is not managed by any MSP.
                     trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by any MSP.", bucket_id);
