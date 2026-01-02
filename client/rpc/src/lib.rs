@@ -1096,10 +1096,10 @@ where
                     file_key: *file_key,
                     should_remove_file: true,
                 }) {
-                    debug!(target: LOG_TARGET, "File key {} is a checkpoint challenge for a file deletion", file_key);
+                    debug!(target: LOG_TARGET, "File key [{:x}] is a checkpoint challenge for a file deletion", file_key);
                     false
                 } else {
-                    debug!(target: LOG_TARGET, "File key {} is not a checkpoint challenge for a file deletion", file_key);
+                    debug!(target: LOG_TARGET, "File key [{:x}] is not a checkpoint challenge for a file deletion", file_key);
                     true
                 }
             } else {
@@ -1487,7 +1487,9 @@ where
     let metadata = read_file_storage
         .get_metadata(&file_key)
         .map_err(|e| into_rpc_error(format!("Error retrieving file metadata: {:?}", e)))?
-        .ok_or_else(|| into_rpc_error(format!("File metadata not found for key {:?}", file_key)))?;
+        .ok_or_else(|| {
+            into_rpc_error(format!("File metadata not found for key [{:x}]", file_key))
+        })?;
     // Release the file storage read lock as soon as possible.
     drop(read_file_storage);
 

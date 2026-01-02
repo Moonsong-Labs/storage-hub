@@ -35,6 +35,7 @@ pub mod benchmark_proofs;
 #[cfg(feature = "runtime-benchmarks")]
 pub mod benchmarking;
 
+pub mod migrations;
 pub mod types;
 mod utils;
 pub mod weights;
@@ -409,7 +410,11 @@ pub mod pallet {
         type IntentionMsgAdapter: shp_traits::MessageAdapter;
     }
 
+    /// The current storage version.
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
     #[pallet::pallet]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
