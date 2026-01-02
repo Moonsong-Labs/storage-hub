@@ -45,6 +45,7 @@ import * as NodeBspNet from "./node";
 import * as PendingDb from "./pending";
 import type { BspNetApi, BspStoredOptions, SealBlockOptions, SqlClient } from "./types";
 import * as Waits from "./waits";
+import * as Prometheus from "../prometheus";
 
 /**
  * Options for the waitForTxInPool method.
@@ -1176,6 +1177,42 @@ export class BspNetTestApi implements AsyncDisposable {
       }) => BspNetFisherman.retryableWaitAndVerifyBatchDeletions(options)
     };
 
+    /**
+     * Prometheus operations namespace
+     * Contains methods for querying and asserting Prometheus metrics.
+     */
+    const remappedPrometheusNs = {
+      /**
+       * Query the Prometheus API with a PromQL query.
+       * @param query - PromQL query string
+       * @returns Prometheus query result
+       */
+      query: (query: string) => Prometheus.queryPrometheus(query),
+
+      /**
+       * Get the current value of a metric from Prometheus.
+       * @param query - PromQL query string
+       * @returns Numeric value of the metric, or 0 if not found
+       */
+      getMetricValue: (query: string) => Prometheus.getMetricValue(query),
+
+      /**
+       * Get the targets that Prometheus is currently scraping.
+       * @returns Prometheus targets result with active scrape targets
+       */
+      getTargets: () => Prometheus.getPrometheusTargets(),
+
+      /**
+       * Wait for Prometheus to scrape and reflect updated metrics (7s).
+       */
+      waitForScrape: () => Prometheus.waitForMetricsScrape(),
+
+      /**
+       * Default Prometheus URL for tests.
+       */
+      url: Prometheus.PROMETHEUS_URL
+    };
+
     return Object.assign(this._api, {
       /**
        * Soon Deprecated. Use api.file.newStorageRequest() instead.
@@ -1241,6 +1278,11 @@ export class BspNetTestApi implements AsyncDisposable {
        * Contains methods for interacting with and testing fisherman node functionality.
        */
       fisherman: remappedFishermanNs,
+      /**
+       * Prometheus operations namespace
+       * Provides methods for querying and asserting Prometheus metrics.
+       */
+      prometheus: remappedPrometheusNs,
       /**
        * Accounts namespace
        * Provides runtime-dependent test accounts for convenience.

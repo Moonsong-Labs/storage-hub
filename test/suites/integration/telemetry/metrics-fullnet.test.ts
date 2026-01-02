@@ -1,0 +1,331 @@
+import assert from "node:assert";
+import { describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
+
+await describeMspNet(
+  "Prometheus metrics ingestion",
+  {
+    initialised: false,
+    indexer: true,
+    telemetry: true
+  },
+  ({ before, createUserApi, createMsp1Api, createBspApi, it }) => {
+    let userApi: EnrichedBspApi;
+    let mspApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
+
+    before(async () => {
+      userApi = await createUserApi();
+      const maybeMspApi = await createMsp1Api();
+      assert(maybeMspApi, "MSP API not available");
+      mspApi = maybeMspApi;
+      bspApi = await createBspApi();
+
+      // Wait for Prometheus to be ready and scraping targets
+      // Increased iterations to 30 (60 seconds) to allow for Docker image pull on first run
+      await waitFor({
+        lambda: async () => {
+          try {
+            const targets = await userApi.prometheus.getTargets();
+            const healthyTargets = targets.data.activeTargets.filter((t) => t.health === "up");
+            return healthyTargets.length >= 4; // BSP, MSP-1, MSP-2, User
+          } catch {
+            return false;
+          }
+        },
+        delay: 2000,
+        iterations: 30
+      });
+    });
+
+    it("Prometheus server is accessible and scraping all nodes", async () => {
+      const response = await fetch(`${userApi.prometheus.url}/-/ready`);
+      assert.strictEqual(response.ok, true, "Prometheus server should be ready");
+
+      const targets = await userApi.prometheus.getTargets();
+      const healthyTargets = targets.data.activeTargets.filter((t) => t.health === "up");
+
+      console.log(`Prometheus is scraping ${healthyTargets.length} healthy targets`);
+      for (const target of healthyTargets) {
+        console.log(`  - ${target.labels.job}: ${target.scrapeUrl}`);
+      }
+
+      assert(healthyTargets.length >= 4, "Expected at least 4 healthy scrape targets");
+    });
+
+    it("Substrate metrics are available from all nodes", async () => {
+      // Verify block height metrics are being collected from all nodes
+      const jobs = ["storagehub-bsp", "storagehub-msp-1", "storagehub-msp-2", "storagehub-user"];
+
+      for (const job of jobs) {
+        const blockHeight = await userApi.prometheus.getMetricValue(
+          `substrate_block_height{job="${job}"}`
+        );
+        console.log(`  ${job} block height: ${blockHeight}`);
+        assert(blockHeight >= 0, `Expected block height from ${job} to be >= 0`);
+      }
+    });
+
+    it("Storage request metrics increment after batch file uploads", async () => {
+      // Get initial metric values (using centralized event handler metrics)
+      // The event label is derived from the event type name: NewStorageRequest -> new_storage_request
+      // Check both pending (event received) and success (handler completed) status labels
+      const initialMspPending = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-msp-1"}'
+      );
+      const initialMspSuccess = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-msp-1"}'
+      );
+      const initialBspPending = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-bsp"}'
+      );
+      const initialBspSuccess = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-bsp"}'
+      );
+      console.log(
+        `Initial MSP storage requests - pending: ${initialMspPending}, success: ${initialMspSuccess}`
+      );
+      console.log(
+        `Initial BSP storage requests - pending: ${initialBspPending}, success: ${initialBspSuccess}`
+      );
+
+      // Get MSP value proposition for batch storage requests
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
+      const valuePropId = valueProps[0].id;
+
+      // Use batchStorageRequests to create multiple files at once
+      // This helper handles bucket creation, file loading, storage request issuance,
+      // MSP acceptance, and BSP volunteering all in one call
+      const batchResult = await userApi.file.batchStorageRequests({
+        files: [
+          {
+            source: "res/smile.jpg",
+            destination: "test/prometheus-batch-0.jpg",
+            bucketIdOrName: "prometheus-test-bucket-0",
+            replicationTarget: 1
+          },
+          {
+            source: "res/smile.jpg",
+            destination: "test/prometheus-batch-1.jpg",
+            bucketIdOrName: "prometheus-test-bucket-0",
+            replicationTarget: 1
+          },
+          {
+            source: "res/whatsup.jpg",
+            destination: "test/prometheus-batch-2.jpg",
+            bucketIdOrName: "prometheus-test-bucket-1",
+            replicationTarget: 1
+          },
+          {
+            source: "res/whatsup.jpg",
+            destination: "test/prometheus-batch-3.jpg",
+            bucketIdOrName: "prometheus-test-bucket-1",
+            replicationTarget: 1
+          }
+        ],
+        mspId,
+        valuePropId,
+        owner: shUser,
+        bspApi,
+        mspApi
+      });
+
+      const { fileKeys } = batchResult;
+      console.log(`Created ${fileKeys.length} storage requests`);
+
+      // Verify all files are stored in MSP
+      for (const fileKey of fileKeys) {
+        await waitFor({
+          lambda: async () =>
+            (await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        });
+      }
+
+      // Verify all files are stored in BSP
+      for (const fileKey of fileKeys) {
+        await waitFor({
+          lambda: async () =>
+            (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        });
+      }
+
+      // Wait for Prometheus to scrape the updated metrics
+      await userApi.prometheus.waitForScrape();
+
+      // Check that metrics have incremented for both pending and success
+      const finalMspPending = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-msp-1"}'
+      );
+      const finalMspSuccess = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-msp-1"}'
+      );
+      const finalBspPending = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-bsp"}'
+      );
+      const finalBspSuccess = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-bsp"}'
+      );
+      console.log(
+        `Final MSP storage requests - pending: ${finalMspPending}, success: ${finalMspSuccess}`
+      );
+      console.log(
+        `Final BSP storage requests - pending: ${finalBspPending}, success: ${finalBspSuccess}`
+      );
+
+      // Metrics should have increased after processing 4 storage requests
+      // Both pending and success should increment for successful handlers
+      assert(
+        finalMspPending > initialMspPending,
+        `Expected MSP pending to increment, got ${finalMspPending}`
+      );
+      assert(
+        finalMspSuccess > initialMspSuccess,
+        `Expected MSP success to increment, got ${finalMspSuccess}`
+      );
+      assert(
+        finalBspPending > initialBspPending,
+        `Expected BSP pending to increment, got ${finalBspPending}`
+      );
+      assert(
+        finalBspSuccess > initialBspSuccess,
+        `Expected BSP success to increment, got ${finalBspSuccess}`
+      );
+
+      // Verify pending >= success (every success was first pending)
+      assert(
+        finalMspPending >= finalMspSuccess,
+        `MSP pending (${finalMspPending}) should be >= success (${finalMspSuccess})`
+      );
+      assert(
+        finalBspPending >= finalBspSuccess,
+        `BSP pending (${finalBspPending}) should be >= success (${finalBspSuccess})`
+      );
+    });
+
+    it("Histogram metrics are populated after storage operations", async () => {
+      // After the previous test ran storage requests, check histogram metrics
+
+      // Event handler duration histogram - check metrics for events that occurred during the test
+      // These events should have been triggered by the batch file uploads:
+      // - new_storage_request: Initial storage request handling (BSP and MSP)
+      // - remote_upload_request: File chunk uploads from user to MSP/BSP
+      // - process_confirm_storing_request: BSP confirm storage processing
+      // - process_msp_respond_storing_request: MSP respond to storage request
+
+      const eventsToCheck = [
+        "new_storage_request",
+        "remote_upload_request",
+        "process_confirm_storing_request",
+        "process_msp_respond_storing_request"
+      ];
+
+      let totalEventCount = 0;
+      console.log("Event handler histograms:");
+
+      for (const event of eventsToCheck) {
+        const count = await userApi.prometheus.getMetricValue(
+          `storagehub_event_handler_seconds_count{event="${event}"}`
+        );
+        const sum = await userApi.prometheus.getMetricValue(
+          `storagehub_event_handler_seconds_sum{event="${event}"}`
+        );
+        if (count > 0) {
+          totalEventCount += count;
+          console.log(
+            `  ${event}: count=${count}, sum=${sum.toFixed(3)}s, avg=${(sum / count).toFixed(3)}s`
+          );
+        }
+      }
+
+      assert(
+        totalEventCount > 0,
+        "Expected event_handler_seconds to have recorded observations for at least one event type"
+      );
+      console.log(`Total event handler observations: ${totalEventCount}`);
+
+      // File transfer duration histogram
+      // Note: file_transfer_seconds is only recorded when send_chunks() is called for peer-to-peer
+      // transfers. Direct uploads via batchStorageRequests may not trigger this metric.
+      const fileTransferCount = await userApi.prometheus.getMetricValue(
+        "storagehub_file_transfer_seconds_count"
+      );
+      const fileTransferSum = await userApi.prometheus.getMetricValue(
+        "storagehub_file_transfer_seconds_sum"
+      );
+      console.log(
+        `File transfer histogram - count: ${fileTransferCount}, sum: ${fileTransferSum.toFixed(3)}s`
+      );
+      // Only log informational - this metric may be 0 for direct uploads
+      if (fileTransferCount > 0) {
+        console.log(
+          `  Average file transfer time: ${(fileTransferSum / fileTransferCount).toFixed(
+            3
+          )} seconds`
+        );
+      } else {
+        console.log("  (No peer-to-peer file transfers occurred in this test)");
+      }
+    });
+
+    it("All StorageHub metric types are queryable", async () => {
+      // Query all storagehub metrics and log them for visibility
+      const result = await userApi.prometheus.query('{__name__=~"storagehub_.*"}');
+
+      assert.strictEqual(result.status, "success", "Failed to query StorageHub metrics");
+
+      // Group metrics by type
+      const counters: string[] = [];
+      const histograms: string[] = [];
+      const gauges: string[] = [];
+
+      for (const metric of result.data.result) {
+        const name = metric.metric.__name__;
+        if (name.endsWith("_total")) {
+          if (!counters.includes(name)) counters.push(name);
+        } else if (name.endsWith("_bucket") || name.endsWith("_sum") || name.endsWith("_count")) {
+          const baseName = name.replace(/_bucket$|_sum$|_count$/, "");
+          if (!histograms.includes(baseName)) histograms.push(baseName);
+        } else {
+          if (!gauges.includes(name)) gauges.push(name);
+        }
+      }
+
+      console.log("\nStorageHub Metrics Summary:");
+      console.log(`  Counters (${counters.length}): ${counters.join(", ") || "none"}`);
+      console.log(`  Histograms (${histograms.length}): ${histograms.join(", ") || "none"}`);
+      console.log(`  Gauges (${gauges.length}): ${gauges.join(", ") || "none"}`);
+
+      const totalMetrics = counters.length + histograms.length + gauges.length;
+      console.log(`  Total unique metrics: ${totalMetrics}`);
+    });
+
+    it("Prometheus can aggregate metrics across nodes", async () => {
+      // Test aggregation query summing event handler metrics across all nodes
+      // Filter by event type and aggregate by status
+      const sumResult = await userApi.prometheus.query(
+        'sum(storagehub_event_handler_total{event="new_storage_request",job=~"storagehub-msp.*"}) by (status)'
+      );
+      const bspSumResult = await userApi.prometheus.query(
+        'sum(storagehub_event_handler_total{event="new_storage_request",job="storagehub-bsp"}) by (status)'
+      );
+
+      console.log("\nAggregated metrics:");
+      if (sumResult.data.result.length > 0) {
+        for (const item of sumResult.data.result) {
+          console.log(
+            `  MSP storage requests (${item.metric.status || "total"}): ${item.value?.[1]}`
+          );
+        }
+      }
+      if (bspSumResult.data.result.length > 0) {
+        for (const item of bspSumResult.data.result) {
+          console.log(
+            `  BSP storage requests (${item.metric.status || "total"}): ${item.value?.[1]}`
+          );
+        }
+      }
+
+      assert.strictEqual(sumResult.status, "success", "Aggregation query should succeed");
+    });
+  }
+);

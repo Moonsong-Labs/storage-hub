@@ -290,6 +290,38 @@ export class NetworkLauncher {
       );
     }
 
+    // Remove Prometheus and Grafana services if not enabled
+    if (!this.config.telemetry) {
+      if (composeYaml.services["sh-prometheus"]) {
+        delete composeYaml.services["sh-prometheus"];
+      }
+      if (composeYaml.services["sh-grafana"]) {
+        delete composeYaml.services["sh-grafana"];
+      }
+    }
+
+    // Add --prometheus-external to nodes when prometheus is enabled
+    if (this.config.telemetry) {
+      if (composeYaml.services["sh-bsp"]) {
+        composeYaml.services["sh-bsp"].command.push("--prometheus-external");
+      }
+      if (composeYaml.services["sh-user"]) {
+        composeYaml.services["sh-user"].command.push("--prometheus-external");
+      }
+      if (composeYaml.services["sh-msp-1"]) {
+        composeYaml.services["sh-msp-1"].command.push("--prometheus-external");
+      }
+      if (composeYaml.services["sh-msp-2"]) {
+        composeYaml.services["sh-msp-2"].command.push("--prometheus-external");
+      }
+      if (composeYaml.services["sh-fisherman"]) {
+        composeYaml.services["sh-fisherman"].command.push("--prometheus-external");
+      }
+      if (composeYaml.services["sh-indexer"]) {
+        composeYaml.services["sh-indexer"].command.push("--prometheus-external");
+      }
+    }
+
     const cwd = path.resolve(process.cwd(), "..", "docker");
     const entries = Object.entries(composeYaml.services).map(([key, value]: any) => {
       let remappedValue: any;
@@ -490,6 +522,20 @@ export class NetworkLauncher {
           BSP_IP: bspIp,
           BSP_PEER_ID: bspPeerId
         }
+      });
+    }
+
+    // Start Prometheus and Grafana if enabled
+    if (this.config.telemetry) {
+      await compose.upOne("sh-prometheus", {
+        cwd,
+        config: tmpFile,
+        log: verbose
+      });
+      await compose.upOne("sh-grafana", {
+        cwd,
+        config: tmpFile,
+        log: verbose
       });
     }
 
@@ -1192,4 +1238,9 @@ export type NetLaunchConfig = {
    * When true, launches a dedicated Postgres container and passes its URL to MSP 1 as a CLI arg.
    */
   pendingTxDb?: boolean;
+
+  /**
+   * If true, runs Prometheus server for metrics collection.
+   */
+  telemetry?: boolean;
 };

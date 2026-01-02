@@ -37,6 +37,8 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter_by,
+    metrics::STATUS_SUCCESS,
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
@@ -174,7 +176,15 @@ where
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
-            Ok(complete) => complete,
+            Ok((complete, bytes_processed)) => {
+                inc_counter_by!(
+                    handler: self.storage_hub_handler,
+                    bytes_uploaded_total,
+                    STATUS_SUCCESS,
+                    bytes_processed as u64
+                );
+                complete
+            }
             Err(e) => {
                 error!(target: LOG_TARGET, "Failed to handle remote upload request: {:?}", e);
 
@@ -801,11 +811,13 @@ where
 
     /// Handles the [`RemoteUploadRequest`] event.
     ///
-    /// Returns `true` if the file is complete, `false` if the file is incomplete.
+    /// Returns a tuple of (file_complete, bytes_processed) where:
+    /// - `file_complete` is `true` if the file is complete, `false` if incomplete.
+    /// - `bytes_processed` is the total number of bytes in the batch that was processed.
     async fn handle_remote_upload_request_event(
         &mut self,
         event: RemoteUploadRequest<Runtime>,
-    ) -> anyhow::Result<bool> {
+    ) -> anyhow::Result<(bool, usize)> {
         debug!(target: LOG_TARGET, "Handling remote upload request for file key [{:x}]", event.file_key);
 
         let file_key = event.file_key.into();
@@ -869,6 +881,9 @@ where
                 return Err(e);
             }
         };
+
+        // Calculate total batch size for metrics
+        let total_batch_bytes: usize = proven.iter().map(|chunk| chunk.data.len()).sum();
 
         let mut file_complete = false;
 
@@ -971,7 +986,7 @@ where
             }
         }
 
-        Ok(file_complete)
+        Ok((file_complete, total_batch_bytes))
     }
 
     async fn is_allowed(&self, event: &NewStorageRequest<Runtime>) -> anyhow::Result<bool> {

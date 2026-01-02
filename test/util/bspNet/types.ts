@@ -114,6 +114,53 @@ export interface BspNetApi extends ApiPromise {
       onChainNonce: bigint;
     }) => Promise<void>;
   };
+
+  /**
+   * Prometheus operations namespace.
+   * Provides methods for querying and asserting Prometheus metrics.
+   */
+  prometheus: {
+    /**
+     * Query the Prometheus API with a PromQL query.
+     */
+    query: (query: string) => Promise<{
+      status: string;
+      data: {
+        resultType: string;
+        result: Array<{
+          metric: Record<string, string>;
+          value?: [number, string];
+          values?: Array<[number, string]>;
+        }>;
+      };
+    }>;
+    /**
+     * Get the current value of a metric from Prometheus.
+     */
+    getMetricValue: (query: string) => Promise<number>;
+    /**
+     * Get the targets that Prometheus is currently scraping.
+     */
+    getTargets: () => Promise<{
+      status: string;
+      data: {
+        activeTargets: Array<{
+          labels: Record<string, string>;
+          scrapeUrl: string;
+          health: string;
+          lastScrape: string;
+        }>;
+      };
+    }>;
+    /**
+     * Wait for Prometheus to scrape updated metrics.
+     */
+    waitForScrape: () => Promise<void>;
+    /**
+     * Default Prometheus URL for tests.
+     */
+    url: string;
+  };
 }
 
 /**
@@ -256,6 +303,11 @@ export type BspNetConfig = {
    * Defaults to 'info' if not specified.
    */
   logLevel?: string;
+
+  /**
+   * If true, runs Prometheus server for metrics collection.
+   */
+  telemetry?: boolean;
 };
 
 /**
@@ -495,6 +547,8 @@ export type TestOptions = {
    * Defaults to 'info' if not specified.
    */
   logLevel?: string;
+  /** If true, runs Prometheus server for metrics collection */
+  telemetry?: boolean;
 };
 
 /**

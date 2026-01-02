@@ -103,6 +103,7 @@ serde = { version = "1.0.210", default-features = false }
 serde_json = { version = "1.0.121", default-features = false }
 smallvec = "1.11.0"
 strum = { version = "0.26.3", features = ["derive"] }
+sysinfo = "0.37"
 thiserror = "1.0.48"
 tokio = "1.36.0"
 tokio-postgres = "0.7"
