@@ -1,0 +1,46 @@
+name: Release version consistency
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_doc_path:
+        description: "Path to the release markdown file (e.g. release/StorageHub-release0.3.0.md)"
+        required: true
+        type: string
+
+jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "latest"
+
+      - name: Determine release doc path
+        id: release_doc
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "path=${{ inputs.release_doc_path }}" >> "$GITHUB_OUTPUT"
+          else
+            # Tag push of the form refs/tags/vX.Y.Z
+            ref="${GITHUB_REF#refs/tags/}"
+            version="${ref#v}"
+            doc="release/StorageHub-release${version}.md"
+            echo "path=${doc}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Show release doc path
+        run: |
+          echo "Using release doc: ${{ steps.release_doc.outputs.path }}"
+
+      - name: Check versions
+        run: |
+          bun release/check_versions.ts --release-doc "${{ steps.release_doc.outputs.path }}"
