@@ -127,6 +127,7 @@
 //! 4. **Abstraction**: Higher-level data structures hide RocksDB complexity
 //! 5. **Flexibility**: Easy to add new column families or data structures
 
+use crate::rocksdb::{default_db_options, open_db, open_db_with_migrations, MigrationRunner};
 use codec::{Decode, Encode};
 use rocksdb::{
     AsColumnFamilyRef, ColumnFamily, DBPinnableSlice, Direction, IteratorMode, ReadOptions,
@@ -138,6 +139,9 @@ use std::{
     marker::PhantomData,
     ops::RangeBounds,
 };
+
+// Re-export DatabaseError for convenience
+pub use crate::rocksdb::DatabaseError;
 
 /// Defines how types are encoded to and decoded from bytes for storage in RocksDB.
 ///
@@ -715,9 +719,63 @@ pub struct TypedRocksDB {
 }
 
 impl TypedRocksDB {
-    /// Opens a RocksDB database with default options at the given path.
-    pub fn open_default(path: &str) -> Result<Self, rocksdb::Error> {
-        let db = DB::open_default(path)?;
+    /// Opens a RocksDB database without migrations.
+    ///
+    /// Use this for stores that don't need migration support.
+    ///
+    /// # Schema Version Behavior
+    ///
+    /// This method creates the `__schema_version__` column family and writes version 0.
+    /// Since migrations must start at version 1, this ensures:
+    ///
+    /// - The database format is consistent with migration-enabled databases
+    /// - If the store later switches to [`open_with_migrations`](Self::open_with_migrations),
+    ///   all migrations will run
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the database directory
+    /// * `current_column_families` - The column families defined in the current schema
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// const CURRENT_CFS: &[&str] = &["cf1", "cf2", "cf3"];
+    /// let db = TypedRocksDB::open("/path/to/db", CURRENT_CFS)?;
+    /// ```
+    pub fn open(path: &str, current_column_families: &[&str]) -> Result<Self, DatabaseError> {
+        let opts = default_db_options();
+        let db = open_db(&opts, path, current_column_families)?;
+        Ok(Self { db })
+    }
+
+    /// Opens a RocksDB database with migration support.
+    ///
+    /// This method:
+    /// 1. Discovers any existing column families in the database (including deprecated ones)
+    /// 2. Opens the database with all existing + current column families
+    /// 3. Runs pending migrations to drop deprecated column families
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the database directory
+    /// * `current_column_families` - The column families defined in the current schema
+    ///   (deprecated column families should NOT be included here)
+    /// * `migrations` - The store-specific migrations to apply
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// const CURRENT_CFS: &[&str] = &["cf1", "cf2", "cf3"];
+    /// let db = TypedRocksDB::open_with_migrations("/path/to/db", CURRENT_CFS, my_store_migrations())?;
+    /// ```
+    pub fn open_with_migrations(
+        path: &str,
+        current_column_families: &[&str],
+        migrations: impl Into<MigrationRunner>,
+    ) -> Result<Self, DatabaseError> {
+        let opts = default_db_options();
+        let db = open_db_with_migrations(&opts, path, current_column_families, migrations)?;
         Ok(Self { db })
     }
 }
@@ -2092,5 +2150,136 @@ mod tests {
         // Count remaining keys
         let keys = range_map.keys();
         assert_eq!(keys.len(), 50); // Only odd-numbered keys remain
+    }
+
+    /// Tests for `TypedRocksDB::open()` and `TypedRocksDB::open_with_migrations()`
+    /// with `TypedDbContext`.
+    ///
+    /// These tests verify that the TypedRocksDB open methods work correctly with
+    /// the typed context API.
+    mod typed_rocks_db_open_tests {
+        use super::*;
+        use crate::rocksdb::Migration;
+
+        // Define a simple CF for testing
+        struct TestDataCf;
+        impl ScaleEncodedCf for TestDataCf {
+            type Key = u32;
+            type Value = String;
+            const SCALE_ENCODED_NAME: &'static str = "test_data_cf";
+        }
+
+        impl Default for TestDataCf {
+            fn default() -> Self {
+                Self
+            }
+        }
+
+        #[test]
+        fn open_used_with_context() {
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
+
+            let current_cfs = &[TestDataCf::SCALE_ENCODED_NAME];
+
+            // Create initial database
+            {
+                let mut opts = Options::default();
+                opts.create_if_missing(true);
+                opts.create_missing_column_families(true);
+
+                let cf_descriptors = vec![
+                    ColumnFamilyDescriptor::new("default", Options::default()),
+                    ColumnFamilyDescriptor::new(TestDataCf::SCALE_ENCODED_NAME, Options::default()),
+                ];
+
+                let _db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+            }
+
+            let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
+
+            // Create a context and use the typed API
+            let write_support = BufferedWriteSupport::new(&typed_db);
+            let context = TypedDbContext::new(&typed_db, write_support);
+
+            // Write using typed API
+            context
+                .cf(&TestDataCf)
+                .put(&42u32, &"hello world".to_string());
+            context.flush();
+
+            // Read back
+            let value = context.cf(&TestDataCf).get(&42u32);
+            assert_eq!(value, Some("hello world".to_string()));
+        }
+
+        #[test]
+        fn open_with_migrations_drops_deprecated_cfs_and_works_with_context() {
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
+
+            // Define a test migration that drops a deprecated CF
+            struct TestV1Migration;
+            impl Migration for TestV1Migration {
+                fn version(&self) -> u32 {
+                    1
+                }
+                fn deprecated_column_families(&self) -> &'static [&'static str] {
+                    &["deprecated_cf"]
+                }
+                fn description(&self) -> &'static str {
+                    "Remove deprecated_cf"
+                }
+            }
+
+            // Create initial database with a deprecated column family
+            {
+                let mut opts = Options::default();
+                opts.create_if_missing(true);
+                opts.create_missing_column_families(true);
+
+                let cf_descriptors = vec![
+                    ColumnFamilyDescriptor::new("default", Options::default()),
+                    ColumnFamilyDescriptor::new(TestDataCf::SCALE_ENCODED_NAME, Options::default()),
+                    ColumnFamilyDescriptor::new("deprecated_cf", Options::default()),
+                ];
+
+                let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+
+                // Write some data to both CFs
+                let active_cf = db.cf_handle(TestDataCf::SCALE_ENCODED_NAME).unwrap();
+                db.put_cf(&active_cf, b"key", b"value").unwrap();
+
+                let deprecated_cf = db.cf_handle("deprecated_cf").unwrap();
+                db.put_cf(&deprecated_cf, b"old_key", b"old_value").unwrap();
+            }
+
+            // Open with migrations - should drop deprecated_cf
+            let current_cfs = &[TestDataCf::SCALE_ENCODED_NAME];
+            let migrations: Vec<Box<dyn Migration>> = vec![Box::new(TestV1Migration)];
+
+            let typed_db =
+                TypedRocksDB::open_with_migrations(path, current_cfs, migrations).unwrap();
+
+            // Verify deprecated CF was dropped
+            assert!(
+                typed_db.db.cf_handle("deprecated_cf").is_none(),
+                "Deprecated CF should have been dropped by migration"
+            );
+
+            // Verify active CF still works with TypedDbContext
+            let write_support = BufferedWriteSupport::new(&typed_db);
+            let context = TypedDbContext::new(&typed_db, write_support);
+
+            // Write new data
+            context
+                .cf(&TestDataCf)
+                .put(&123u32, &"migrated data".to_string());
+            context.flush();
+
+            // Read back
+            let value = context.cf(&TestDataCf).get(&123u32);
+            assert_eq!(value, Some("migrated data".to_string()));
+        }
     }
 }
