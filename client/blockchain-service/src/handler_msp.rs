@@ -750,17 +750,16 @@ where
             .query_msp_id_of_bucket_id(*block_hash, &bucket_id)
         {
             Ok(runtime_api_result) => match runtime_api_result {
-                Ok(Some(msp_id)) => {
-                    if msp_id != *managed_msp_id {
-                        // This is a valid scenario. It would be the case where the mutation is being applied to a bucket that is managed by another MSP.
-                        trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. It is managed by MSP [0x{:x}].", bucket_id, managed_msp_id, msp_id);
-                        return false;
-                    } else {
-                        // This is a valid scenario. It would be the case where the bucket is managed by this MSP.
-                        trace!(target: LOG_TARGET, "Bucket [0x{:x}] is managed by this MSP [0x{:x}].", bucket_id, managed_msp_id);
-                        return true;
-                    }
-                }
+                Ok(Some(msp_id)) if msp_id == *managed_msp_id => {
+                    // This is a valid scenario. It would be the case where the bucket is managed by this MSP.
+                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] is managed by this MSP [0x{:x}].", bucket_id, managed_msp_id);
+                    return true;
+                 }
+                 Ok(Some(msp_id)) => {
+                     // This is a valid scenario. It would be the case where the mutation is being applied to a bucket that is managed by another MSP.
+                     trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. It is managed by MSP [0x{:x}].", bucket_id, managed_msp_id, msp_id);
+                     return false;
+                 }
                 Ok(None) => {
                     // This is a valid scenario. It would be the case where the bucket is not managed by any MSP.
                     trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by any MSP.", bucket_id);
