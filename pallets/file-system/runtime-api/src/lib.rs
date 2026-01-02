@@ -75,6 +75,12 @@ pub enum QueryIncompleteStorageRequestMetadataError {
     InternalError,
 }
 
+/// Error type for the `query_pending_bsp_confirm_storage_requests` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum QueryPendingBspConfirmStorageRequestsError {
+    InternalError,
+}
+
 /// Response type for incomplete storage request metadata that can be safely passed across runtime boundary
 #[derive(Clone, Debug, Eq, PartialEq, Encode, Decode, TypeInfo)]
 pub struct IncompleteStorageRequestMetadataResponse<
@@ -126,5 +132,6 @@ sp_api::decl_runtime_apis! {
         fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId) -> BTreeMap<H256, StorageRequestMetadata>;
         fn query_incomplete_storage_request_metadata(file_key: FileKey) -> Result<IncompleteStorageRequestMetadataResponse<AccountId, BucketId, StorageDataUnit, Fingerprint, BackupStorageProviderId>, QueryIncompleteStorageRequestMetadataError>;
         fn list_incomplete_storage_request_keys(start_after: Option<FileKey>, limit: u32) -> Vec<FileKey>;
+        fn query_pending_bsp_confirm_storage_requests(bsp_id: BackupStorageProviderId, file_keys: Vec<FileKey>) -> Vec<FileKey>;
     }
 }
