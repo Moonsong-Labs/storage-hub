@@ -429,7 +429,7 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             UserNotInsolvent: AugmentedError<ApiType>;
             /**
-             * Operation is currently paused by governance.
+             * Operation is currently paused.
              **/
             UserOperationPaused: AugmentedError<ApiType>;
             /**
