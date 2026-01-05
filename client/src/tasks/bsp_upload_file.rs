@@ -384,7 +384,7 @@ where
         // Also track the original ConfirmStoringRequest for each file key so we can re-queue on proof errors.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let mut file_keys_and_proofs = Vec::new();
-        let mut file_key_to_request = Vec::new();
+        let mut confirming_file_keys = Vec::new();
         let mut requests_to_retry = Vec::new();
         for (confirm_storing_request, chunks_to_prove) in
             confirm_storing_requests_with_chunks_to_prove.into_iter()
@@ -401,7 +401,7 @@ where
                         file_key: confirm_storing_request.file_key,
                         proof,
                     });
-                    file_key_to_request.push(confirm_storing_request.clone());
+                    confirming_file_keys.push(confirm_storing_request.clone());
                 }
                 _ => {
                     let mut confirm_storing_request = confirm_storing_request.clone();
@@ -492,11 +492,12 @@ where
             Err(e) => {
                 error!(
                     target: LOG_TARGET,
-                    "Extrinsic submission failed after exhausting retries, re-queuing file keys for retry: {:?}",
+                    "Extrinsic submission failed after exhausting retries, re-queuing {} file key(s) for retry: {:?}",
+                    confirming_file_keys.len(),
                     e
                 );
 
-                self.requeue_confirm_storing_requests(&file_key_to_request)
+                self.requeue_confirm_storing_requests(&confirming_file_keys)
                     .await;
 
                 // Release the forest root write lock before returning error
@@ -513,7 +514,7 @@ where
             }
             Ok(Some(events)) => {
                 if let Err(err) = self
-                    .handle_confirm_storing_extrinsic_result(events, &file_key_to_request)
+                    .handle_confirm_storing_extrinsic_result(events, &confirming_file_keys)
                     .await
                 {
                     error!(target: LOG_TARGET, "Failed to handle extrinsic dispatch result: {:?}", err);
@@ -530,9 +531,10 @@ where
             Ok(None) => {
                 error!(
                     target: LOG_TARGET,
-                    "Expected events but got None - this should not happen. Re-queuing file keys for safety."
+                    "Expected events but got None - this should not happen. Re-queuing {} file key(s) for safety.",
+                    confirming_file_keys.len()
                 );
-                self.requeue_confirm_storing_requests(&file_key_to_request)
+                self.requeue_confirm_storing_requests(&confirming_file_keys)
                     .await;
             }
         }
@@ -1269,12 +1271,12 @@ where
     /// the storage request is stale.
     async fn requeue_confirm_storing_requests(
         &self,
-        file_key_to_request: &Vec<ConfirmStoringRequest<Runtime>>,
+        confirming_file_keys: &Vec<ConfirmStoringRequest<Runtime>>,
     ) {
-        for request in file_key_to_request.iter() {
+        for request in confirming_file_keys.iter() {
             info!(
                 target: LOG_TARGET,
-                "Re-queuing file {:?} for retry (transient error)",
+                "Re-queuing file key [{:x}] for retry (transient error)",
                 request.file_key
             );
 
@@ -1286,7 +1288,7 @@ where
             {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to re-queue confirm storing request for file {:?}: {:?}",
+                    "Failed to re-queue confirm storing request for file key [{:x}]: {:?}",
                     request.file_key,
                     e
                 );
@@ -1306,7 +1308,7 @@ where
     async fn handle_confirm_storing_extrinsic_result(
         &self,
         events: StorageHubEventsVec<Runtime>,
-        file_key_to_request: &Vec<ConfirmStoringRequest<Runtime>>,
+        confirming_file_keys: &Vec<ConfirmStoringRequest<Runtime>>,
     ) -> anyhow::Result<()> {
         // Check if the extrinsic succeeded or failed by looking for an ExtrinsicFailed event
         let maybe_dispatch_error = events.iter().find_map(|event_record| {
@@ -1370,7 +1372,7 @@ where
                 dispatch_error
             );
 
-            self.requeue_confirm_storing_requests(file_key_to_request)
+            self.requeue_confirm_storing_requests(confirming_file_keys)
                 .await;
         } else {
             // Non-proof errors are permanent failures that won't be resolved by retrying
