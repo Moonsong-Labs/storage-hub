@@ -27,7 +27,7 @@ use shc_common::{
     traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
     typed_store::ProvidesTypedDbSingleAccess,
     types::{
-        AccountId, BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
+        AccountId, BlockNumber, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
         ProofsDealerProviderId, StorageEnableEvents, StorageHubClient, StorageProviderId,
         TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
@@ -48,8 +48,8 @@ use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{
     events::{
-        AcceptedBspVolunteer, LastChargeableInfoUpdated, NewStorageRequest, NotifyPeriod,
-        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        AcceptedBspVolunteer, LastChargeableInfoUpdated, NotifyPeriod, SlashableProvider,
+        SpStopStoringInsolventUser, UserWithoutFunds,
     },
     handler::LOG_TARGET,
     state::LastProcessedBlockCf,
