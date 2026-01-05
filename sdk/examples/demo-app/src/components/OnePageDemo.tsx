@@ -8,6 +8,7 @@ import { MspClient } from '@storagehub-sdk/msp-client';
 import { FileManager } from './FileManager';
 import { loadAppConfig } from '../config/load';
 import type { AppConfig } from '../config/types';
+import { getMetaMaskProvider, checkMetaMaskAvailable, safeProviderRequest } from '../utils/metamask';
 
 export function OnePageDemo() {
   const idRpcUrl = useId();
@@ -72,7 +73,7 @@ export function OnePageDemo() {
 
   // Check MetaMask availability after component mounts (client-side only)
   useEffect(() => {
-    setIsMetaMaskAvailable(typeof window !== 'undefined' && typeof window.ethereum !== 'undefined');
+    setIsMetaMaskAvailable(checkMetaMaskAvailable());
   }, []);
 
   // Connect wallet function
@@ -91,9 +92,50 @@ export function OnePageDemo() {
     setWalletError(null);
 
     try {
-      console.log('🔄 Step 1: Requesting account access...');
-      // Request account access
-      const accounts = await window.ethereum?.request({ method: 'eth_requestAccounts' }) as string[];
+      const provider = getMetaMaskProvider();
+      if (!provider) {
+        throw new Error('MetaMask provider not available');
+      }
+
+      // CRITICAL: Configure network BEFORE requesting accounts
+      // This prevents wallet picker extension errors when the network doesn't exist in MetaMask
+      console.log('🔄 Step 1: Checking and configuring network...');
+      let currentChainId: number;
+      try {
+        const currentChainIdHex = await safeProviderRequest(provider, 'eth_chainId') as string;
+        currentChainId = Number.parseInt(currentChainIdHex, 16);
+      } catch (error) {
+        // If we can't get chain ID, assume we need to add the network
+        currentChainId = 0;
+      }
+
+      // Switch to StorageHub chain if needed
+      if (currentChainId !== config.chainId) {
+        try {
+          // Try to switch first (network might already exist)
+          await safeProviderRequest(provider, 'wallet_switchEthereumChain', [{ chainId: `0x${config.chainId.toString(16)}` }]);
+        } catch (switchError: unknown) {
+          // If chain doesn't exist (error 4902), add it
+          if (switchError && typeof switchError === 'object' && 'code' in switchError && (switchError as { code: number }).code === 4902) {
+            await safeProviderRequest(provider, 'wallet_addEthereumChain', [{
+              chainId: `0x${config.chainId.toString(16)}`,
+              chainName: storageHubChain.name,
+              nativeCurrency: storageHubChain.nativeCurrency,
+              rpcUrls: [config.rpcUrl],
+            }]);
+          } else {
+            const errMsg =
+              switchError && typeof switchError === 'object' && 'message' in switchError
+                ? (switchError as { message: string }).message
+                : String(switchError);
+            throw new Error(`Failed to configure network: ${errMsg}`);
+          }
+        }
+      }
+
+      // NOW request account access (network is configured)
+      console.log('🔄 Step 2: Requesting account access...');
+      const accounts = await safeProviderRequest(provider, 'eth_requestAccounts') as string[];
 
       if (!accounts || accounts.length === 0) {
         throw new Error('No accounts returned from MetaMask');
@@ -101,55 +143,10 @@ export function OnePageDemo() {
 
       const rawAddress = accounts[0] as `0x${string}`;
       const address = getAddress(rawAddress); // Ensure proper checksum format
-      console.log('✅ Step 1 Complete: Got address (raw):', rawAddress);
-      console.log('✅ Step 1 Complete: Got address (checksum):', address);
 
-      console.log('🔄 Step 2: Checking current network...');
-      // Check current network directly via MetaMask
-      const currentChainIdHex = await window.ethereum?.request({ method: 'eth_chainId' }) as string;
-      const currentChainId = Number.parseInt(currentChainIdHex, 16);
-      console.log('Current Chain ID:', currentChainId, 'Expected:', config.chainId);
-
-      // Switch to StorageHub chain if needed
-      if (currentChainId !== config.chainId) {
-        console.log('🔄 Step 3: Switching to StorageHub network...');
-        try {
-          await window.ethereum?.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${config.chainId.toString(16)}` }],
-          });
-          console.log('✅ Network switched successfully');
-        } catch (switchError: unknown) {
-          // If chain doesn't exist, add it
-          if (switchError && typeof switchError === 'object' && 'code' in switchError && (switchError as { code: number }).code === 4902) {
-            console.log('🔄 Network not found, adding StorageHub network...');
-            await window.ethereum?.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: `0x${config.chainId.toString(16)}`,
-                chainName: storageHubChain.name,
-                nativeCurrency: storageHubChain.nativeCurrency,
-                rpcUrls: [config.rpcUrl],
-              }],
-            });
-            console.log('✅ Network added successfully');
-          } else {
-            console.error('Network switch failed:', switchError);
-            const errMsg =
-              switchError && typeof switchError === 'object' && 'message' in switchError
-                ? (switchError as { message: string }).message
-                : String(switchError);
-            throw new Error(`Failed to switch network: ${errMsg}`);
-          }
-        }
-      }
-
-      console.log('🔄 Step 4: Creating Viem clients...');
+      console.log('🔄 Step 3: Creating Viem clients...');
       // Create Viem clients with error handling
-      if (!window.ethereum) {
-        throw new Error('MetaMask provider not available');
-      }
-      const transport = custom(window.ethereum, {
+      const transport = custom(provider, {
         retryCount: 3,
         retryDelay: 1000,
       });
@@ -165,15 +162,12 @@ export function OnePageDemo() {
         account: address,
       });
 
-      console.log('✅ Step 4 Complete: Viem clients created');
-
-      console.log('🔄 Step 5: Getting wallet balance...');
+      console.log('🔄 Step 4: Getting wallet balance...');
       // Get balance with error handling
       let formattedBalance = '0';
       try {
         const balance = await publicClient.getBalance({ address });
         formattedBalance = formatEther(balance);
-        console.log('✅ Step 5 Complete: Balance retrieved:', formattedBalance, 'SH');
       } catch (balanceError) {
         console.warn('⚠️ Could not fetch balance, using default:', balanceError);
         // Don't fail the connection just because balance fetch failed
@@ -197,11 +191,13 @@ export function OnePageDemo() {
       // Provide more specific error messages
       let errorMessage = 'Failed to connect wallet';
       const errorMsg = error && typeof error === 'object' && 'message' in error ? (error as { message: string }).message : '';
-      if (errorMsg.includes('User rejected')) {
+      if (errorMsg.includes('User rejected') || errorMsg.includes('user rejected')) {
         errorMessage = 'Connection cancelled by user';
-      } else if (errorMsg.includes('network')) {
+      } else if (errorMsg.includes('Unexpected error') || errorMsg.includes('selectExtension')) {
+        errorMessage = 'Wallet picker extension error. Try disabling other wallet extensions or refresh the page.';
+      } else if (errorMsg.includes('network') || errorMsg.includes('Network')) {
         errorMessage = 'Network configuration error. Please check your MetaMask settings.';
-      } else if (errorMsg.includes('JSON-RPC')) {
+      } else if (errorMsg.includes('JSON-RPC') || errorMsg.includes('RPC')) {
         errorMessage = 'RPC connection error. Please ensure the StorageHub node is running.';
       } else if (errorMsg) {
         errorMessage = errorMsg;
@@ -337,15 +333,16 @@ export function OnePageDemo() {
       void connectWallet();
     };
 
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-      window.ethereum.on('chainChanged', handleChainChanged);
+    const provider = getMetaMaskProvider();
+    if (provider) {
+      provider.on('accountsChanged', handleAccountsChanged);
+      provider.on('chainChanged', handleChainChanged);
     }
 
     return () => {
-      if (window.ethereum) {
-        window.ethereum.removeListener?.('accountsChanged', handleAccountsChanged);
-        window.ethereum.removeListener?.('chainChanged', handleChainChanged);
+      if (provider) {
+        provider.removeListener?.('accountsChanged', handleAccountsChanged);
+        provider.removeListener?.('chainChanged', handleChainChanged);
       }
     };
   }, [isMetaMaskAvailable, walletAddress, connectWallet]);
