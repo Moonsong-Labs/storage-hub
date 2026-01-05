@@ -1936,6 +1936,8 @@ where
             MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {
                     // New storage request event coming from pallet-file-system.
+                    // Only emit for BSP nodes. MSP nodes emit this event at the end of the block import
+                    // via handle_pending_storage_requests() which handles deduplication via `file_key_statuses`.
                     StorageEnableEvents::FileSystem(
                         pallet_file_system::Event::NewStorageRequest {
                             who,
@@ -1947,16 +1949,20 @@ where
                             peer_ids,
                             expires_at,
                         },
-                    ) => self.emit(NewStorageRequest {
-                        who,
-                        file_key: FileKey::from(file_key.as_ref()),
-                        bucket_id,
-                        location,
-                        fingerprint: fingerprint.as_ref().into(),
-                        size,
-                        user_peer_ids: peer_ids,
-                        expires_at: expires_at,
-                    }),
+                    ) => {
+                        if !matches!(&self.maybe_managed_provider, Some(ManagedProvider::Msp(_))) {
+                            self.emit(NewStorageRequest {
+                                who,
+                                file_key: FileKey::from(file_key.as_ref()),
+                                bucket_id,
+                                location,
+                                fingerprint: fingerprint.as_ref().into(),
+                                size,
+                                user_peer_ids: peer_ids,
+                                expires_at,
+                            });
+                        }
+                    }
                     // A provider has been marked as slashable.
                     StorageEnableEvents::ProofsDealer(
                         pallet_proofs_dealer::Event::SlashableProvider {
