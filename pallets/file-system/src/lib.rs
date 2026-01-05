@@ -966,7 +966,7 @@ pub mod pallet {
         FailedToCreateFileMetadata,
         /// The bounded vector that holds file metadata to process it is full but there's still more to process.
         FileMetadataProcessingQueueFull,
-        /// Operation is currently paused by governance.
+        /// Operation is currently paused.
         UserOperationPaused,
     }
 

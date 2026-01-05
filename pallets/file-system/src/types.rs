@@ -400,8 +400,13 @@ impl UserOperationPauseFlags {
     }
 
     /// Returns `true` if any of the bits in `mask` are set in this flags value.
-    pub const fn is_set(self, mask: u32) -> bool {
+    pub const fn is_any_set(self, mask: u32) -> bool {
         (self.0 & mask) != 0
+    }
+
+    /// Returns `true` if all of the bits in `mask` are set in this flags value.
+    pub const fn is_all_set(self, mask: u32) -> bool {
+        (self.0 & mask) == mask
     }
 
     /// Sets all bits present in `mask`.

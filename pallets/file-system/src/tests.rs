@@ -72,11 +72,10 @@ mod user_operation_pause_flags_tests {
             let flags = UserOperationPauseFlagsStorage::<Test>::get();
 
             assert_eq!(flags.bits(), UserOperationPauseFlags::NONE.bits());
-            assert!(!flags.is_set(UserOperationPauseFlags::FLAG_CREATE_BUCKET));
-            assert!(
-                !flags.is_set(UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION)
-            );
-            assert!(!flags.is_set(UserOperationPauseFlags::FLAG_DELETE_FILES));
+            assert!(!flags.is_all_set(UserOperationPauseFlags::FLAG_CREATE_BUCKET));
+            assert!(!flags
+                .is_all_set(UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION));
+            assert!(!flags.is_all_set(UserOperationPauseFlags::FLAG_DELETE_FILES));
         });
     }
 
@@ -137,215 +136,6 @@ mod user_operation_pause_flags_tests {
             );
         });
     }
-}
-
-mod create_bucket_tests {
-    use super::*;
-
-    mod failure {
-
-        use super::*;
-
-        #[test]
-        fn create_bucket_msp_not_provider_fail() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let msp = Keyring::Charlie.to_account_id();
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-
-                assert_noop!(
-                    FileSystem::create_bucket(
-                        origin,
-                        H256::from_slice(&msp.as_slice()),
-                        name,
-                        true,
-                        ValuePropId::<Test>::default()
-                    ),
-                    Error::<Test>::NotAMsp
-                );
-            });
-        }
-
-        #[test]
-        fn create_bucket_user_without_enough_funds_for_deposit_fail() {
-            new_test_ext().execute_with(|| {
-                let owner_without_balance = Keyring::Ferdie.to_account_id();
-                let origin = RuntimeOrigin::signed(owner_without_balance.clone());
-                let msp = Keyring::Charlie.to_account_id();
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let private = false;
-
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-
-                assert_noop!(
-                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
-                    pallet_storage_providers::Error::<Test>::NotEnoughBalance
-                );
-            });
-        }
-
-        #[test]
-        fn create_public_bucket_fails_with_insolvent_provider() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let msp = Keyring::Charlie.to_account_id();
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let private = false;
-
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-
-                // Simulate insolvent provider
-                pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    StorageProviderId::<Test>::MainStorageProvider(msp_id),
-                    (),
-                );
-
-                // Dispatch a signed extrinsic.
-                assert_noop!(
-                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
-                    Error::<Test>::OperationNotAllowedForInsolventProvider
-                );
-            });
-        }
-    }
-
-    mod success {
-        use super::*;
-
-        #[test]
-        fn create_private_bucket_success() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let owner_initial_balance = <Test as Config>::Currency::free_balance(&owner);
-                let bucket_creation_deposit =
-                    <Test as pallet_storage_providers::Config>::BucketDeposit::get();
-                let nft_collection_deposit: BalanceOf<Test> =
-                    <Test as pallet_nfts::Config>::CollectionDeposit::get();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let msp = Keyring::Charlie.to_account_id();
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let private = true;
-
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-
-                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &owner,
-                    name.clone(),
-                );
-
-                // Dispatch a signed extrinsic.
-                assert_ok!(FileSystem::create_bucket(
-                    origin,
-                    msp_id,
-                    name.clone(),
-                    private,
-                    value_prop_id
-                ));
-
-                // Check if collection was created
-                assert!(
-                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
-                        &bucket_id
-                    )
-                    .unwrap()
-                    .is_some()
-                );
-
-                // Check that the deposit was held from the owner's balance
-                assert_eq!(
-                    <Test as Config>::Currency::balance_on_hold(
-                        &RuntimeHoldReason::Providers(
-                            pallet_storage_providers::HoldReason::BucketDeposit
-                        ),
-                        &owner
-                    ),
-                    bucket_creation_deposit
-                );
-
-                let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
-				let base_deposit: u128 = <Test as pallet_payment_streams::Config>::BaseDeposit::get();
-                assert_eq!(
-                    <Test as Config>::Currency::free_balance(&owner),
-                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit - new_stream_deposit as u128 - base_deposit
-                );
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::NewBucket {
-                        who: owner.clone(),
-                        msp_id,
-                        bucket_id,
-                        name,
-                        collection_id: Some(0),
-                        private,
-                        value_prop_id: value_prop_id,
-                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
-                    }
-                    .into(),
-                );
-
-                // Check fixed rate payment stream is created
-                assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner));
-            });
-        }
-
-        #[test]
-        fn create_public_bucket_success() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let msp = Keyring::Charlie.to_account_id();
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let private = false;
-
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-
-                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &owner,
-                    name.clone(),
-                );
-
-                // Dispatch a signed extrinsic.
-                assert_ok!(FileSystem::create_bucket(
-                    origin,
-                    msp_id,
-                    name.clone(),
-                    private,
-                    value_prop_id
-                ));
-
-                // Check that the bucket does not have a corresponding collection
-                assert!(
-                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
-                        &bucket_id
-                    )
-                    .unwrap()
-                    .is_none()
-                );
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::NewBucket {
-                        who: owner,
-                        msp_id,
-                        bucket_id,
-                        name,
-                        collection_id: None,
-                        private,
-                        value_prop_id,
-                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
-                    }
-                    .into(),
-                );
-            });
-        }
-    }
-}
-
-mod pause_ensures_tests {
-    use super::*;
 
     #[test]
     fn create_bucket_fails_when_operation_paused() {
@@ -620,6 +410,211 @@ mod pause_ensures_tests {
                 Error::<Test>::UserOperationPaused
             );
         });
+    }
+}
+
+mod create_bucket_tests {
+    use super::*;
+
+    mod failure {
+
+        use super::*;
+
+        #[test]
+        fn create_bucket_msp_not_provider_fail() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+                assert_noop!(
+                    FileSystem::create_bucket(
+                        origin,
+                        H256::from_slice(&msp.as_slice()),
+                        name,
+                        true,
+                        ValuePropId::<Test>::default()
+                    ),
+                    Error::<Test>::NotAMsp
+                );
+            });
+        }
+
+        #[test]
+        fn create_bucket_user_without_enough_funds_for_deposit_fail() {
+            new_test_ext().execute_with(|| {
+                let owner_without_balance = Keyring::Ferdie.to_account_id();
+                let origin = RuntimeOrigin::signed(owner_without_balance.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let private = false;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                assert_noop!(
+                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
+                    pallet_storage_providers::Error::<Test>::NotEnoughBalance
+                );
+            });
+        }
+
+        #[test]
+        fn create_public_bucket_fails_with_insolvent_provider() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let private = false;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                // Simulate insolvent provider
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::MainStorageProvider(msp_id),
+                    (),
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_noop!(
+                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn create_private_bucket_success() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let owner_initial_balance = <Test as Config>::Currency::free_balance(&owner);
+                let bucket_creation_deposit =
+                    <Test as pallet_storage_providers::Config>::BucketDeposit::get();
+                let nft_collection_deposit: BalanceOf<Test> =
+                    <Test as pallet_nfts::Config>::CollectionDeposit::get();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let private = true;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
+                    &owner,
+                    name.clone(),
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::create_bucket(
+                    origin,
+                    msp_id,
+                    name.clone(),
+                    private,
+                    value_prop_id
+                ));
+
+                // Check if collection was created
+                assert!(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
+                        &bucket_id
+                    )
+                    .unwrap()
+                    .is_some()
+                );
+
+                // Check that the deposit was held from the owner's balance
+                assert_eq!(
+                    <Test as Config>::Currency::balance_on_hold(
+                        &RuntimeHoldReason::Providers(
+                            pallet_storage_providers::HoldReason::BucketDeposit
+                        ),
+                        &owner
+                    ),
+                    bucket_creation_deposit
+                );
+
+                let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
+				let base_deposit: u128 = <Test as pallet_payment_streams::Config>::BaseDeposit::get();
+                assert_eq!(
+                    <Test as Config>::Currency::free_balance(&owner),
+                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit - new_stream_deposit as u128 - base_deposit
+                );
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::NewBucket {
+                        who: owner.clone(),
+                        msp_id,
+                        bucket_id,
+                        name,
+                        collection_id: Some(0),
+                        private,
+                        value_prop_id: value_prop_id,
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
+                    }
+                    .into(),
+                );
+
+                // Check fixed rate payment stream is created
+                assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner));
+            });
+        }
+
+        #[test]
+        fn create_public_bucket_success() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let private = false;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
+                    &owner,
+                    name.clone(),
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::create_bucket(
+                    origin,
+                    msp_id,
+                    name.clone(),
+                    private,
+                    value_prop_id
+                ));
+
+                // Check that the bucket does not have a corresponding collection
+                assert!(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
+                        &bucket_id
+                    )
+                    .unwrap()
+                    .is_none()
+                );
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::NewBucket {
+                        who: owner,
+                        msp_id,
+                        bucket_id,
+                        name,
+                        collection_id: None,
+                        private,
+                        value_prop_id,
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
+                    }
+                    .into(),
+                );
+            });
+        }
     }
 }
 
