@@ -200,7 +200,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// Takes a list of file keys and returns only those where the BSP has volunteered
     /// but not yet confirmed storing.
     ///
-    /// Internall calls the runtime API `query_pending_bsp_confirm_storage_requests` which filters out:
+    /// Internally calls the runtime API `query_pending_bsp_confirm_storage_requests` to filter out:
     /// - File keys where the BSP has already confirmed storing
     /// - File keys where the BSP is not a volunteer
     /// - File keys where the storage request doesn't exist

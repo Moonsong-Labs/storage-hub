@@ -75,12 +75,6 @@ pub enum QueryIncompleteStorageRequestMetadataError {
     InternalError,
 }
 
-/// Error type for the `query_pending_bsp_confirm_storage_requests` runtime API call.
-#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub enum QueryPendingBspConfirmStorageRequestsError {
-    InternalError,
-}
-
 /// Response type for incomplete storage request metadata that can be safely passed across runtime boundary
 #[derive(Clone, Debug, Eq, PartialEq, Encode, Decode, TypeInfo)]
 pub struct IncompleteStorageRequestMetadataResponse<
