@@ -517,7 +517,8 @@ where
                     .handle_confirm_storing_extrinsic_result(events, &confirming_file_keys)
                     .await
                 {
-                    error!(target: LOG_TARGET, "Failed to handle extrinsic dispatch result: {:?}", err);
+                    let err_msg = format!("Failed to handle confirm storing extrinsic result for {} file key(s): {:?}", confirming_file_keys.len(), err);
+                    error!(target: LOG_TARGET, err_msg);
 
                     // Release the forest root write lock before returning error
                     self.storage_hub_handler
@@ -525,7 +526,7 @@ where
                         .release_forest_root_write_lock(forest_root_write_tx)
                         .await?;
 
-                    return Err(err);
+                    return Err(anyhow!(err_msg));
                 }
             }
             Ok(None) => {
@@ -1327,7 +1328,12 @@ where
 
         let Some(dispatch_error) = maybe_dispatch_error else {
             // No dispatch error found, extrinsic succeeded
-            info!(target: LOG_TARGET, "Confirm storing extrinsic succeeded");
+            info!(
+                target: LOG_TARGET,
+                "Confirm storing extrinsic succeeded for {} file key(s): {:x?}",
+                confirming_file_keys.len(),
+                confirming_file_keys.iter().map(|r| r.file_key).collect::<Vec<_>>()
+            );
             return Ok(());
         };
 
