@@ -3,7 +3,7 @@ import {
   assertExtrinsicPresent,
   describeBspNet,
   type EnrichedBspApi,
-  waitFor,
+  waitFor
 } from "../../../util";
 
 await describeBspNet(
@@ -28,7 +28,7 @@ await describeBspNet(
       await userApi.wait.bspStored({
         expectedExts: 1,
         timeoutMs: 12000,
-        sealBlock: false,
+        sealBlock: false
       });
 
       await assertDockerLog("storage-hub-sh-bsp-1", "attempt #1", 40000);
@@ -51,7 +51,7 @@ await describeBspNet(
             matches = await assertExtrinsicPresent(userApi, {
               module: "fileSystem",
               method: "bspConfirmStoring",
-              checkTxPool: true,
+              checkTxPool: true
             });
           } catch {
             // No matching extrinsics found yet
@@ -71,7 +71,7 @@ await describeBspNet(
           return hasExtrinsicWithTip;
         },
         iterations: 100,
-        delay: 100,
+        delay: 100
       });
     });
   }
