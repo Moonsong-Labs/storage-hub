@@ -188,8 +188,6 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
         file_key: FileKey,
         bsp_id: BackupStorageProviderId<Runtime>,
     },
-    #[command(success_type = Vec<BucketId<Runtime>>)]
-    QueryBucketsForMsp { msp_id: ProviderId<Runtime> },
     /// Query pending storage requests for the MSP.
     /// If `file_keys` is provided, only query those specific storage requests from storage.
     /// If `file_keys` is None, returns all pending storage requests via runtime API.

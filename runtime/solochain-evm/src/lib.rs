@@ -165,6 +165,9 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
     fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
+/// Migrations to run on runtime upgrade.
+pub type Migrations = (pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,);
+
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
     Runtime,
@@ -172,6 +175,7 @@ pub type Executive = frame_executive::Executive<
     frame_system::ChainContext<Runtime>,
     Runtime,
     AllPalletsWithSystem,
+    Migrations,
 >;
 
 /// Handles converting a weight scalar to a fee value, based on the scale and granularity of the

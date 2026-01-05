@@ -97,7 +97,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Processing finalised bucket mutations applied for bucket [{:?}]",
+            "Processing finalised bucket mutations applied for bucket [0x{:x}]",
             event.bucket_id
         );
         debug!(target: LOG_TARGET, "Mutations to apply: {:?}", event.mutations);
@@ -108,7 +108,7 @@ where
 
             // Only process remove mutations in this task.
             if !matches!(mutation.1, TrieMutation::Remove(_)) {
-                debug!(target: LOG_TARGET, "Skipping non-remove mutation for file key {:?}", file_key);
+                debug!(target: LOG_TARGET, "Skipping non-remove mutation for file key [{:x}]", file_key);
                 continue;
             }
 
@@ -121,14 +121,14 @@ where
                 .await
                 .ok_or_else(|| {
                     anyhow!(
-                        "CRITICAL❗️❗️ Failed to get forest storage for bucket [{:?}].",
+                        "CRITICAL❗️❗️ Failed to get forest storage for bucket [0x{:x}].",
                         event.bucket_id
                     )
                 })?;
             if read_fs.read().await.contains_file_key(&file_key.into())? {
                 warn!(
                     target: LOG_TARGET,
-                    "BucketMutationsApplied and finalised for file key {:?} in bucket {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.\\n Mutation: {:?}",
+                    "BucketMutationsApplied and finalised for file key [{:x}] in bucket [0x{:x}], but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.\\n Mutation: {:?}",
                     file_key,
                     event.bucket_id,
                     mutation
@@ -140,7 +140,7 @@ where
         }
 
         Ok(format!(
-            "Handled FinalisedBucketMutationsApplied for bucket [{:x}]",
+            "Handled FinalisedBucketMutationsApplied for bucket [0x{:x}]",
             event.bucket_id
         ))
     }
@@ -160,7 +160,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Processing finalised storage request expired for file key {:?} in bucket {:?}",
+            "Processing finalised storage request expired for file key [{:x}] in bucket [0x{:x}]",
             event.file_key,
             event.bucket_id
         );
@@ -174,7 +174,7 @@ where
             .await
             .ok_or_else(|| {
                 anyhow!(
-                    "CRITICAL❗️❗️ Failed to get forest storage for bucket [{:?}].",
+                    "CRITICAL❗️❗️ Failed to get forest storage for bucket [0x{:x}].",
                     event.bucket_id
                 )
             })?;
@@ -186,7 +186,7 @@ where
         {
             warn!(
                 target: LOG_TARGET,
-                "StorageRequestExpired and finalised for file key {:?} in bucket {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.",
+                "StorageRequestExpired and finalised for file key [{:x}] in bucket [0x{:x}], but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.",
                 event.file_key,
                 event.bucket_id
             );
@@ -211,13 +211,13 @@ where
         } else {
             debug!(
                 target: LOG_TARGET,
-                "File key {:?} not present in File Storage; skipping removal.",
+                "File key [{:x}] not present in File Storage; skipping removal.",
                 event.file_key
             );
         }
 
         Ok(format!(
-            "Handled FinalisedStorageRequestRejected for file key [{:x}] in bucket [{:x}]",
+            "Handled FinalisedStorageRequestRejected for file key [{:x}] in bucket [0x{:x}]",
             event.file_key, event.bucket_id
         ))
     }

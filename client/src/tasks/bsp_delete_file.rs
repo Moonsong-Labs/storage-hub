@@ -150,7 +150,7 @@ where
         {
             warn!(
                 target: LOG_TARGET,
-                "FinalisedBspConfirmStoppedStoring applied and finalised for file key {:x}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by this BSP.",
+                "FinalisedBspConfirmStoppedStoring applied and finalised for file key [{:x}], but file key is still in Forest. This can only happen if the same file key was added again after deleted by this BSP.",
                 event.file_key
             );
         } else {
@@ -203,7 +203,7 @@ where
 
             // Only process remove mutations in this task.
             if !matches!(mutation.1, TrieMutation::Remove(_)) {
-                debug!(target: LOG_TARGET, "Skipping non-remove mutation for file key {:?}", file_key);
+                debug!(target: LOG_TARGET, "Skipping non-remove mutation for file key [{:x}]", file_key);
                 continue;
             }
 
@@ -218,7 +218,7 @@ where
             if read_fs.read().await.contains_file_key(&file_key.into())? {
                 warn!(
                     target: LOG_TARGET,
-                    "TrieRemoveMutation applied and finalised for file key {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.\n Mutation: {:?}",
+                    "TrieRemoveMutation applied and finalised for file key [{:x}], but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.\n Mutation: {:?}",
                     file_key,
                     mutation
                 );
