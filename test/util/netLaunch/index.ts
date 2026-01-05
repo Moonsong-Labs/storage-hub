@@ -927,7 +927,7 @@ export class NetworkLauncher {
     await api.wait.nodeCatchUpToChainTip(bspDownApi);
     await api.wait.nodeCatchUpToChainTip(bspTwoApi);
     await api.wait.nodeCatchUpToChainTip(bspThreeApi);
-    
+
     await bspTwoApi.disconnect();
     await bspThreeApi.disconnect();
     await bspDownApi.disconnect();
