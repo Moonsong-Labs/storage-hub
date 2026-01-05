@@ -20,7 +20,7 @@ import {
  *   the fisherman to submit bucket file deletions for the files that are in the bucket forest.
  * - Storage requests are revoked by the user before the MSP accepted the storage request (i.e. the files are not in the bucket forest).
  *   We expect the fisherman to submit BSP file deletions for the files that are not in the bucket forest but not bucket file deletions.
- * - (SKIPPED - waiting on PR https://github.com/Moonsong-Labs/storage-hub/pull/600) A subsequent storage request is revoked after the MSP already accepted the first request
+ * - A subsequent storage request is revoked after the MSP already accepted the first request
  *   (file is already in the bucket forest). We expect the fisherman to only submit BSP deletion for the revoked request,
  *   NOT a bucket deletion.
  */
@@ -36,16 +36,19 @@ await describeMspNet(
   },
   ({
     before,
+    after,
     it,
     createUserApi,
     createBspApi,
     createMsp1Api,
     createSqlClient,
     createFishermanApi,
-    createIndexerApi
+    createIndexerApi,
+    createApi
   }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
+    let bspTwoApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
     let indexerApi: EnrichedBspApi;
     let sql: SqlClient;
@@ -81,6 +84,12 @@ await describeMspNet(
 
       // Wait for indexer to process the finalized block (producerApi will seal a finalized block by default)
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+    });
+
+    after(async () => {
+      if (bspTwoApi) {
+        await bspTwoApi.disconnect();
+      }
     });
 
     it("batches user-requested file deletions after MSP stops storing bucket", async () => {
@@ -442,8 +451,7 @@ await describeMspNet(
       }
     });
 
-    // TODO: Unskip this test once this PR is merged: https://github.com/Moonsong-Labs/storage-hub/pull/600
-    it.skip("revoked subsequent storage request only triggers BSP deletion (not bucket deletion) when file already in bucket", async () => {
+    it("revoked subsequent storage request only triggers BSP deletion (not bucket deletion) when file already in bucket", async () => {
       // This test verifies that when a subsequent storage request is revoked after the MSP
       // has already accepted the first request (file is in bucket), the fisherman only submits
       // BSP deletion for the revoked request, NOT a bucket deletion (since is_in_bucket = true).
@@ -509,13 +517,16 @@ await describeMspNet(
 
       // Step 3: Onboard BSP2 after first storage request completes
       // This ensures BSP2 is available to volunteer for the second request
-      await userApi.docker.onboardBsp({
+      const { rpcPort: bspTwoRpcPort } = await userApi.docker.onboardBsp({
         bspSigner: bspTwoKey,
         name: "sh-bsp-two",
         bspId: ShConsts.BSP_TWO_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-two"],
         waitForIdle: true
       });
+
+      // Create API connection to BSP two for forest root verification
+      bspTwoApi = await createApi(`ws://127.0.0.1:${bspTwoRpcPort}`);
 
       // Step 5: Issue second storage request for same file
       const fingerprint = userApi.shConsts.TEST_ARTEFACTS[source].fingerprint;
@@ -621,7 +632,7 @@ await describeMspNet(
         deletionType: "Incomplete",
         expectExt: 1, // Only BSP deletion, NO bucket deletion
         userApi,
-        bspApi,
+        bspApi: bspTwoApi,
         expectedBspCount: 1, // BSP deletion for the revoked request
         mspApi: msp1Api,
         expectedBucketCount: 0, // NO bucket deletion since file is still in bucket (is_in_bucket = true)
@@ -636,7 +647,7 @@ await describeMspNet(
         `;
       assert.equal(
         mspAssociations.length,
-        1,
+        2,
         "MSP association from first request should still exist"
       );
 
@@ -646,11 +657,13 @@ await describeMspNet(
           WHERE file_key = ${hexToBuffer(secondFileKey)}
         `;
       assert(finalRecords.length >= 1, "At least first file record should still exist");
-      assert.equal(
-        finalRecords[0].is_in_bucket,
-        true,
-        "First file record should still have is_in_bucket = true after fisherman processing"
-      );
+      for (const rec of finalRecords) {
+        assert.equal(
+          rec.is_in_bucket,
+          true,
+          "All file records should have is_in_bucket = true after fisherman processing"
+        );
+      }
     });
   }
 );
