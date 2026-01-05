@@ -531,7 +531,7 @@ where
         // Check that creating buckets is not currently paused.
         let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
         ensure!(
-            !pause_flags.is_set(UserOperationPauseFlags::FLAG_CREATE_BUCKET),
+            !pause_flags.is_all_set(UserOperationPauseFlags::FLAG_CREATE_BUCKET),
             Error::<T>::UserOperationPaused
         );
 
@@ -597,7 +597,7 @@ where
         // Check that requesting to move buckets is not currently paused.
         let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
         ensure!(
-            !pause_flags.is_set(UserOperationPauseFlags::FLAG_REQUEST_MOVE_BUCKET),
+            !pause_flags.is_all_set(UserOperationPauseFlags::FLAG_REQUEST_MOVE_BUCKET),
             Error::<T>::UserOperationPaused
         );
 
@@ -770,7 +770,8 @@ where
         // Check that updating bucket privacy and related collection operations are not paused.
         let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
         ensure!(
-            !pause_flags.is_set(UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION),
+            !pause_flags
+                .is_all_set(UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION),
             Error::<T>::UserOperationPaused
         );
 
@@ -828,7 +829,8 @@ where
         // Check that updating bucket privacy and related collection operations are not paused.
         let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
         ensure!(
-            !pause_flags.is_set(UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION),
+            !pause_flags
+                .is_all_set(UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION),
             Error::<T>::UserOperationPaused
         );
 
@@ -868,7 +870,7 @@ where
         // Check that deleting buckets is not currently paused.
         let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
         ensure!(
-            !pause_flags.is_set(UserOperationPauseFlags::FLAG_DELETE_BUCKET),
+            !pause_flags.is_all_set(UserOperationPauseFlags::FLAG_DELETE_BUCKET),
             Error::<T>::UserOperationPaused
         );
 
@@ -949,7 +951,7 @@ where
         // Check that issuing storage requests is not currently paused.
         let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
         ensure!(
-            !pause_flags.is_set(UserOperationPauseFlags::FLAG_ISSUE_STORAGE_REQUEST),
+            !pause_flags.is_all_set(UserOperationPauseFlags::FLAG_ISSUE_STORAGE_REQUEST),
             Error::<T>::UserOperationPaused
         );
 
@@ -1363,7 +1365,7 @@ where
         // Check that requesting file deletions is not currently paused.
         let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
         ensure!(
-            !pause_flags.is_set(UserOperationPauseFlags::FLAG_REQUEST_DELETE_FILE),
+            !pause_flags.is_all_set(UserOperationPauseFlags::FLAG_REQUEST_DELETE_FILE),
             Error::<T>::UserOperationPaused
         );
 
@@ -1446,7 +1448,7 @@ where
         // Check that executing file deletions is not currently paused.
         let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
         ensure!(
-            !pause_flags.is_set(UserOperationPauseFlags::FLAG_DELETE_FILES),
+            !pause_flags.is_all_set(UserOperationPauseFlags::FLAG_DELETE_FILES),
             Error::<T>::UserOperationPaused
         );
 
