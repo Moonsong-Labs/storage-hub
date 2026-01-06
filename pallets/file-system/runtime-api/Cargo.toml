@@ -1,7 +1,7 @@
 [package]
 name = "pallet-file-system-runtime-api"
 description = "Crate exposing StorageHub protocol related helper runtime API calls."
-version = "0.1.0"
+version = "0.3.0"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
