@@ -1,0 +1,30 @@
+{
+  "families": {
+    "core_rust": {
+      "version": "0.3.0",
+      "roots": [
+        ".",
+        "backend",
+        "client",
+        "node",
+        "pallets",
+        "primitives",
+        "runtime",
+        "precompiles",
+        "xcm-simulator"
+      ]
+    },
+    "sdk": {
+      "version": "0.3.0",
+      "roots": ["sdk"]
+    },
+    "types_bundle": {
+      "version": "0.3.0",
+      "roots": ["types-bundle"]
+    },
+    "api_augment": {
+      "version": "0.3.0",
+      "roots": ["api-augment"]
+    }
+  }
+}
