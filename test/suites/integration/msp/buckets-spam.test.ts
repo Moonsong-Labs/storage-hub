@@ -1,0 +1,130 @@
+import assert, { strictEqual } from "node:assert";
+import * as readline from "node:readline";
+import { describeMspNet, type EnrichedBspApi, shUser } from "../../../util";
+
+// Stress/regression repro: bucket-creation spam should NOT make the MSP fall behind during block import.
+//
+// Why this exists:
+// - We previously triggered severe MSP block-import lag once storage reached ~10k+ buckets, because block import processing
+//   called an expensive runtime API (`query_buckets_for_msp`) that iterates *all* buckets. Worse, it was effectively hit for
+//   many StorageHub-related events in a block (not just the relevant one), so a single “spammy” block could take minutes.
+//
+// What this test does (intentionally “unrealistic”, but very effective at surfacing the symptom):
+// - Alternates between:
+//   - a “quiet” block that only force-sets the spam user balance to max (so funds never run out), and
+//   - a “spam” block that batches 500 `createBucket` extrinsics (i.e. lots of events in one block).
+// - Repeats until 100k buckets are created (200 blocks × 500 buckets/block), which is enough to reproduce the old behaviour.
+//
+// How to use it:
+// - Unskip it and run with `only: true, keepAlive: true`.
+// - Suggestion: include processing duration in the MSP log line
+//   `📭 Block import notification (#{}): {} processed successfully` (e.g. “… processed successfully in …”) and then watch
+//   those timings to see whether block import time grows with bucket count (old behaviour) or stays flat (fixed behaviour).
+await describeMspNet(
+  "Stress: bucket creation spam does not cause MSP block-import lag",
+  { initialised: false, networkConfig: "standard" },
+  ({ before, createMsp1Api, it, createUserApi }) => {
+    let userApi: EnrichedBspApi;
+    let mspApi: EnrichedBspApi;
+
+    before(async () => {
+      userApi = await createUserApi();
+      const maybeMspApi = await createMsp1Api();
+
+      assert(maybeMspApi, "MSP API not available");
+      mspApi = maybeMspApi;
+    });
+
+    const renderProgress = (line: string) => {
+      // In CI/non-TTY, fall back to normal logs (can't reliably "overwrite" lines).
+      if (!process.stdout.isTTY) {
+        console.log(line);
+        return;
+      }
+
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
+      process.stdout.write(line);
+    };
+
+    const finishProgress = () => {
+      if (process.stdout.isTTY) {
+        process.stdout.write("\n");
+      }
+    };
+
+    const setMaxBalanceToUser = async () => {
+      const amount = 2n ** 128n - 1n;
+      const sudoCall = userApi.tx.sudo.sudo(
+        userApi.tx.balances.forceSetBalance(userApi.accounts.shUser.address, amount)
+      );
+
+      await userApi.block.seal({
+        calls: [sudoCall],
+        signer: userApi.accounts.sudo,
+        finaliseBlock: true
+      });
+    };
+
+    it(
+      "Create 100k buckets, 500 per block",
+      {
+        skip: "Manual stress test (slow): this intentionally spams the chain with buckets; unskip to reproduce/observe MSP block-import timings."
+      },
+      async () => {
+        const blocksToBuild = 200;
+        const bucketsPerBlock = 500;
+
+        const mspNodePeerId = await mspApi.rpc.system.localPeerId();
+        strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
+
+        const mspId = userApi.shConsts.DUMMY_MSP_ID;
+        const valueProps =
+          await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
+        assert(valueProps.length > 0, "No value propositions found for MSP");
+        const valuePropId = valueProps[0].id.toHex();
+
+        const startedAtMs = Date.now();
+        let createdBuckets = 0;
+
+        try {
+          for (let blockIndex = 0; blockIndex < blocksToBuild; blockIndex++) {
+            await setMaxBalanceToUser();
+
+            const calls = new Array(bucketsPerBlock);
+            for (let i = 0; i < bucketsPerBlock; i++) {
+              const bucketName = `spam-${blockIndex}-${i}`;
+              calls[i] = userApi.tx.fileSystem.createBucket(mspId, bucketName, false, valuePropId);
+            }
+
+            const sealed = await userApi.block.seal({
+              calls,
+              signer: shUser,
+              finaliseBlock: true
+            });
+
+            createdBuckets += bucketsPerBlock;
+
+            const latestHeader = await userApi.rpc.chain.getHeader(sealed.blockReceipt.blockHash);
+            const blockNumber = latestHeader.number.toNumber();
+            const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAtMs) / 1000));
+            const rate = Math.floor(createdBuckets / elapsedSec);
+            const freeBalance = (await userApi.query.system.account(shUser.address)).data.free;
+
+            renderProgress(
+              `Built block #${blockNumber} (${blockIndex + 1}/${blocksToBuild}) - buckets created: ${createdBuckets} (${rate}/s) - user free balance: ${freeBalance.toString()}`
+            );
+          }
+        } finally {
+          finishProgress();
+        }
+
+        strictEqual(
+          createdBuckets,
+          blocksToBuild * bucketsPerBlock,
+          "Bucket creation counter must match expected total"
+        );
+      }
+    );
+  }
+);

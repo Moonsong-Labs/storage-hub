@@ -133,7 +133,7 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer for file_key {:x}, location 0x{}, fingerprint {:x}",
+            "Initiating BSP volunteer for file_key [{:x}], location 0x{}, fingerprint {:x}",
             event.file_key,
             hex::encode(event.location.as_slice()),
             event.fingerprint
@@ -144,7 +144,7 @@ where
 
         match result {
             Ok(()) => Ok(format!(
-                "Handled NewStorageRequest for file_key {:x}",
+                "Handled NewStorageRequest for file_key [{:x}]",
                 file_key
             )),
             Err(e) => {
@@ -341,6 +341,7 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let mut file_keys_and_proofs = Vec::new();
         let mut file_metadatas = HashMap::new();
+        let mut requests_to_retry = Vec::new();
         for (confirm_storing_request, chunks_to_prove) in
             confirm_storing_requests_with_chunks_to_prove.into_iter()
         {
@@ -365,16 +366,21 @@ where
                         error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key);
                     } else {
                         error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, confirm_storing_request.try_count, self.config.max_try_count);
-                        self.storage_hub_handler
-                            .blockchain
-                            .queue_confirm_bsp_request(confirm_storing_request)
-                            .await?;
+                        requests_to_retry.push(confirm_storing_request);
                     }
                 }
             }
         }
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
+
+        // Re-enqueue any requests that we could not process, now that the file storage lock is dropped.
+        for confirm_storing_request in requests_to_retry {
+            self.storage_hub_handler
+                .blockchain
+                .queue_confirm_bsp_request(confirm_storing_request)
+                .await?;
+        }
 
         if file_keys_and_proofs.is_empty() {
             error!(target: LOG_TARGET, "Failed to generate proofs for ALL the requested files.\n");
@@ -473,7 +479,7 @@ where
         let is_allowed = self.is_allowed(&event).await?;
 
         if !is_allowed {
-            warn!(target: LOG_TARGET, "File with file key {:x} is in our exclude list. Skipping volunteer.", event.file_key);
+            warn!(target: LOG_TARGET, "File with file key [{:x}] is in our exclude list. Skipping volunteer.", event.file_key);
             return Ok(());
         }
 
@@ -490,7 +496,7 @@ where
         if fs.read().await.contains_file_key(&event.file_key.into())? {
             info!(
                 target: LOG_TARGET,
-                "Skipping file key {:x} NewStorageRequest because we are already storing it.",
+                "Skipping file key [{:x}] NewStorageRequest because we are already storing it.",
                 event.file_key
             );
             return Ok(());
@@ -800,15 +806,15 @@ where
         &mut self,
         event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
-        debug!(target: LOG_TARGET, "Handling remote upload request for file key {:x}", event.file_key);
+        debug!(target: LOG_TARGET, "Handling remote upload request for file key [{:x}]", event.file_key);
 
         let file_key = event.file_key.into();
 
-        trace!(target: LOG_TARGET, "Waiting to acquire write lock on file storage for file key {:?}", file_key);
+        trace!(target: LOG_TARGET, "Waiting to acquire write lock on file storage for file key [{:x}]", file_key);
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // Get the file metadata to verify the fingerprint
-        trace!(target: LOG_TARGET, "Acquired write lock on file storage for file key {:?}", file_key);
+        trace!(target: LOG_TARGET, "Acquired write lock on file storage for file key [{:x}]", file_key);
         let file_metadata = write_file_storage
             .get_metadata(&file_key)
             .map_err(|e| anyhow!("Failed to get file metadata: {:?}", e))?
@@ -819,7 +825,7 @@ where
         if event.file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
             error!(
                 target: LOG_TARGET,
-                "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                "Fingerprint mismatch for file [{:x}]. Expected: {:?}, got: {:?}",
                 file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint()
             );
             return Err(anyhow!("Fingerprint mismatch"));
@@ -926,7 +932,7 @@ where
                     }
                     FileStorageWriteError::FileDoesNotExist => {
                         return Err(anyhow::anyhow!(format!(
-                            "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
+                            "File does not exist for key [{:x}]. Maybe we forgot to unregister before deleting?",
                             event.file_key
                         )));
                     }
@@ -950,14 +956,14 @@ where
                     }
                     FileStorageWriteError::FingerprintAndStoredFileMismatch => {
                         return Err(anyhow::anyhow!(format!(
-                            "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
+                            "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key [{:x}].",
                             event.file_key
                         )));
                     }
                     FileStorageWriteError::FailedToConstructTrieIter
                     | FileStorageWriteError::FailedToConstructFileTrie => {
                         return Err(anyhow::anyhow!(format!(
-                            "This is a bug! Failed to construct trie iter for key {:?}.",
+                            "This is a bug! Failed to construct trie iter for key [{:x}].",
                             event.file_key
                         )));
                     }

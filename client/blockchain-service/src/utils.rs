@@ -25,6 +25,7 @@ use shc_common::{
         get_provider_id_from_keystore, GetProviderIdError,
     },
     traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
+    typed_store::ProvidesTypedDbSingleAccess,
     types::{
         AccountId, BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
         ProofsDealerProviderId, StorageEnableEvents, StorageHubClient, StorageProviderId,
@@ -51,6 +52,7 @@ use crate::{
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     handler::LOG_TARGET,
+    state::LastProcessedBlockCf,
     transaction_watchers::spawn_transaction_watcher,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
@@ -59,6 +61,10 @@ use crate::{
     },
     BlockchainService,
 };
+
+#[allow(deprecated)]
+// LastProcessedBlockNumberCf is deprecated but kept for backward compatibility
+use crate::state::LastProcessedBlockNumberCf;
 
 impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
@@ -366,7 +372,6 @@ where
             // Construct the tree route from the last best block processed and the new best block.
             // Fetch the parents of the new best block until:
             // - We reach the genesis block, or
-            // - The size of the route is equal to `BlockchainServiceConfig::max_blocks_behind_to_catch_up_root_changes`, or
             // - The parent block is not found, or
             // - We reach the last best block processed.
             let mut route = vec![new_block_info.into()];
@@ -378,13 +383,9 @@ where
                     break;
                 }
 
-                // Check if the route reached the maximum number of blocks to catch up on.
-                // The cast is safe because it is reasonable to assume the route length is less than u32::MAX.
-                let route_length = BlockNumber::<Runtime>::from(route.len() as u32);
-                if route_length == self.config.max_blocks_behind_to_catch_up_root_changes {
-                    trace!(target: LOG_TARGET, "Reached maximum blocks to catch up on while building tree route for new best block");
-                    break;
-                }
+                // We don't truncate the route here as it will be always smaller or equal to the `MAJOR_SYNC_BLOCKS` constant
+                // of Substrate (otherwise the `handle_block_import_notification` handler would not have been executed, since we
+                // would be in sync mode) and this constant is small enough to not cause any performance issues or overly long tree routes.
 
                 // Get the parent block.
                 let parent_hash = match self.client.header(last_block_added.hash) {
@@ -1303,13 +1304,13 @@ where
                     if is_current_transaction {
                         debug!(
                             target: LOG_TARGET,
-                            "✓ Transaction with nonce {} (hash: {:?}) was finalized. Removing from tracking.",
+                            "✓ Transaction with nonce {} (hash: {:?}) was finalised. Removing from tracking.",
                             nonce, tx_hash
                         );
                     } else {
                         warn!(
                             target: LOG_TARGET,
-                            "⚠️ Old transaction with nonce {} (hash: {:?}) was finalized, but we have a different transaction ({:?}) in manager. \
+                            "⚠️ Old transaction with nonce {} (hash: {:?}) was finalised, but we have a different transaction ({:?}) in manager. \
                                 Removing newer transaction as nonce is now consumed.",
                             nonce, tx_hash, self.transaction_manager.pending.get(&nonce).map(|tx| tx.hash)
                         );
@@ -1764,7 +1765,7 @@ where
         for (file_key, mutation) in mutations {
             // If we are reverting the Forest root changes, we need to revert the mutation.
             let mutation = if revert {
-                debug!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                debug!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:x}]", mutation, file_key);
                 match self.revert_mutation(mutation) {
                     Ok(mutation) => mutation,
                     Err(e) => {
@@ -1773,7 +1774,7 @@ where
                     }
                 }
             } else {
-                debug!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                debug!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:x}]", mutation, file_key);
                 mutation.clone()
             };
 
@@ -1828,7 +1829,7 @@ where
     ///
     /// Changes are applied to the Forest in `self.forest_storage_handler.get(forest_key)`. A new Forest storage
     /// instance is created if it does not exist.
-    async fn apply_forest_mutation(
+    pub(crate) async fn apply_forest_mutation(
         &mut self,
         forest_key: Vec<u8>,
         file_key: &Runtime::Hash,
@@ -1934,28 +1935,6 @@ where
         match self.role {
             MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {
-                    // New storage request event coming from pallet-file-system.
-                    StorageEnableEvents::FileSystem(
-                        pallet_file_system::Event::NewStorageRequest {
-                            who,
-                            file_key,
-                            bucket_id,
-                            location,
-                            fingerprint,
-                            size,
-                            peer_ids,
-                            expires_at,
-                        },
-                    ) => self.emit(NewStorageRequest {
-                        who,
-                        file_key: FileKey::from(file_key.as_ref()),
-                        bucket_id,
-                        location,
-                        fingerprint: fingerprint.as_ref().into(),
-                        size,
-                        user_peer_ids: peer_ids,
-                        expires_at: expires_at,
-                    }),
                     // A provider has been marked as slashable.
                     StorageEnableEvents::ProofsDealer(
                         pallet_proofs_dealer::Event::SlashableProvider {
@@ -2079,7 +2058,413 @@ where
                     })
                 }
             }
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::NewStorageRequest {
+                who,
+                file_key,
+                bucket_id,
+                location,
+                fingerprint,
+                size,
+                peer_ids,
+                expires_at,
+            }) if who == Self::caller_pub_key(self.keystore.clone()).into() => {
+                // This event should only be of any use if a node is run as a user (not BSP/MSP).
+                if self.maybe_managed_provider.is_none() {
+                    log::info!(
+                        target: LOG_TARGET,
+                        "NewStorageRequest event for file_key: {:?}",
+                        file_key
+                    );
+
+                    self.emit(NewStorageRequest {
+                        who,
+                        file_key: FileKey::from(file_key.as_ref()),
+                        bucket_id,
+                        location,
+                        fingerprint: Fingerprint::from(fingerprint.as_ref()),
+                        size,
+                        user_peer_ids: peer_ids,
+                        expires_at,
+                    })
+                }
+            }
             _ => {}
         }
+    }
+
+    /// Process finality events for a block if it has been finalised.
+    ///
+    /// This is used during catch-up and initial sync to eagerly process finality for
+    /// blocks that are already finalised, ensuring file storage cleanup happens correctly
+    /// before state might be pruned.
+    ///
+    /// Updates `last_finalised_block_processed` to track finality progress. This is used by
+    /// `handle_finality_notification` to avoid double-processing blocks that were already
+    /// handled here during sync.
+    ///
+    /// Note: For blocks imported before they're finalised, finality processing is handled
+    /// by `handle_finality_notification` when the finality justification eventually arrives.
+    pub(crate) fn process_finality_events_if_finalised(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        block_number: BlockNumber<Runtime>,
+    ) {
+        // Get the current finalised block number from the client
+        let finalised_number: BlockNumber<Runtime> =
+            self.client.info().finalized_number.saturated_into();
+
+        // Only process if this block is finalised
+        if block_number > finalised_number {
+            return;
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "📦 Processing finality events for already-finalised block #{} during sync",
+            block_number
+        );
+
+        self.process_finality_events(block_hash);
+
+        // Update last_finalised_block_processed if this block is more recent
+        if block_number > self.last_finalised_block_processed.number {
+            self.last_finalised_block_processed = MinimalBlockInfo {
+                number: block_number,
+                hash: *block_hash,
+            };
+        }
+    }
+
+    /// Process a single block during sync.
+    ///
+    /// This is a helper function that encapsulates the common logic for processing
+    /// sync blocks during linear chain extensions. It:
+    /// 1. Syncs the provider ID
+    /// 2. Processes mutations based on the provider type (BSP or MSP)
+    /// 3. Checks for finality and processes finality events if the block is finalised
+    /// 4. Updates the last processed block info
+    ///
+    /// Note: For reorgs during sync, mutations are handled by `forest_root_changes_catchup`
+    /// instead, so this function should NOT be called for enacted blocks in a reorg. We instead
+    /// use `process_sync_reorg` for reorgs.
+    pub(crate) async fn process_sync_block(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        block_number: BlockNumber<Runtime>,
+    ) {
+        info!(target: LOG_TARGET, "🛫 Processing initial sync block #{}: {:x}", block_number, block_hash);
+
+        // Ensure the provider ID is synced before processing mutations
+        self.sync_provider_id(block_hash);
+
+        // Process mutations based on the provider type
+        match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                let bsp_id = bsp_handler.bsp_id;
+                self.process_bsp_sync_mutations(block_hash, bsp_id).await;
+            }
+            Some(ManagedProvider::Msp(msp_handler)) => {
+                let msp_id = msp_handler.msp_id;
+                self.process_msp_sync_mutations(block_hash, msp_id).await;
+            }
+            None => {}
+        }
+
+        // Check if this block is already finalised and process finality events if so
+        // This ensures file storage cleanup happens for finalised blocks during sync
+        self.process_finality_events_if_finalised(block_hash, block_number);
+
+        // Update the last processed block in persistent storage for tracking
+        self.update_last_processed_block_info(MinimalBlockInfo {
+            number: block_number,
+            hash: *block_hash,
+        });
+
+        info!(target: LOG_TARGET, "🛬 Initial sync block #{}: {:x} processed successfully", block_number, block_hash);
+    }
+
+    /// Process a reorg during sync.
+    ///
+    /// This handles reorgs that occur while the node is in initial sync mode.
+    /// Unlike `process_sync_block` which handles linear chain extensions, this function:
+    /// 1. Reverts mutations for retracted blocks (via `forest_root_changes_catchup`)
+    /// 2. Applies mutations for enacted blocks (via `forest_root_changes_catchup`)
+    /// 3. Processes finality events for all enacted blocks
+    /// 4. Updates the last processed block info (number and hash)
+    pub(crate) async fn process_sync_reorg(
+        &mut self,
+        tree_route: &TreeRoute<OpaqueBlock>,
+        new_best_block: MinimalBlockInfo<Runtime>,
+    ) {
+        info!(
+            target: LOG_TARGET,
+            "🔀 Processing reorg during sync: {} retracted, {} enacted",
+            tree_route.retracted().len(),
+            tree_route.enacted().len()
+        );
+
+        // Ensure the provider ID is synced before processing mutations
+        self.sync_provider_id(&new_best_block.hash);
+
+        // Apply forest root changes for the reorg (revert retracted, apply enacted mutations)
+        self.forest_root_changes_catchup(tree_route).await;
+
+        // Process finality events for enacted blocks
+        for block in tree_route.enacted() {
+            let block_num: BlockNumber<Runtime> = block.number.saturated_into();
+            self.process_finality_events_if_finalised(&block.hash, block_num);
+        }
+
+        // Update the last processed block to the new best
+        self.update_last_processed_block_info(new_best_block);
+
+        info!(target: LOG_TARGET, "🔀 Reorg during sync: {} retracted, {} enacted processed successfully", tree_route.retracted().len(), tree_route.enacted().len());
+    }
+
+    /// Process finality events for a given block.
+    ///
+    /// This retrieves the events from storage for the block and processes them:
+    /// - Common finality events applicable to all provider types
+    /// - Provider-specific finality events (BSP or MSP)
+    ///
+    /// This is called both from `handle_finality_notification` for real-time finality
+    /// and from `process_finality_events_if_finalised` during catch-up/sync.
+    pub(crate) fn process_finality_events(&mut self, block_hash: &Runtime::Hash) {
+        match get_events_at_block::<Runtime>(&self.client, block_hash) {
+            Ok(block_events) => {
+                for ev in block_events {
+                    // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
+                    self.process_common_finality_events(ev.event.clone().into());
+
+                    // Process Provider-specific events.
+                    match &self.maybe_managed_provider {
+                        Some(ManagedProvider::Bsp(_)) => {
+                            self.bsp_process_finality_events(block_hash, ev.event.clone().into());
+                        }
+                        Some(ManagedProvider::Msp(_)) => {
+                            self.msp_process_finality_events(block_hash, ev.event.clone().into());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Err(e) => {
+                // TODO: This can happen for older blocks where state has been pruned, or if
+                // we're parsing a block authored with an older version of the runtime
+                // using a node that has a newer version of the runtime. Consider using runtime APIs
+                // for getting old data of previous blocks, and this just for current blocks.
+                error!(
+                        target: LOG_TARGET,
+                        "Failed to get events for block {:?}: {:?}",
+                        block_hash, e
+                );
+            }
+        }
+    }
+
+    /// Catch up on any blocks that were imported to the database but not processed.
+    ///
+    /// This handles race conditions during shutdown where the Substrate client database commits a block write
+    /// before our handlers fully processed it. On restart, we compare `last_processed_block`
+    /// (from persistent storage) with the database's `best_block` and process any gap.
+    ///
+    /// This function also correctly handles reorgs that may have occurred while the node was offline,
+    /// by properly reverting mutations from the old chain before applying mutations
+    /// from the new chain.
+    ///
+    /// This function also initializes `self.best_block` to the client's actual best block,
+    /// ensuring we start from the correct position regardless of whether there are missed blocks.
+    pub(crate) async fn catch_up_missed_blocks(&mut self) {
+        // Get the best block saved in the node's Substrate client database
+        let chain_info = self.client.info();
+        let best_number: BlockNumber<Runtime> = chain_info.best_number.saturated_into();
+        let best_hash = chain_info.best_hash;
+
+        // Initialize self.best_block to match the client's actual state
+        self.best_block = MinimalBlockInfo {
+            number: best_number,
+            hash: best_hash,
+        };
+
+        // Get the last processed block saved in the node's persistent storage
+        let Some(last_processed) = self.get_last_processed_block_info() else {
+            // If there's no `last_processed_block` in persistent storage, it means this is the first startup of the node, which
+            // means there's nothing to catch up on.
+            info!(target: LOG_TARGET, "No last processed block found in persistent storage. Skipping startup catch up.");
+            return;
+        };
+
+        // If we're already at the best block, there's nothing to catch up on
+        // Note: There are three other possible conditions and all three require a catch up:
+        // - `last_processed.number < best_number`, the obvious one.
+        // - `last_processed.number == best_number` but `last_processed.hash != best_hash`, a reorg.
+        // - `last_processed.number > best_number`, also a reorg but to a smaller height.
+        if last_processed.hash == best_hash {
+            info!(
+                target: LOG_TARGET,
+                "☑️ No missed blocks to catch up (last_processed=#{}: {:?}, best=#{}: {:?})",
+                last_processed.number, last_processed.hash, best_number, best_hash
+            );
+            return;
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "🔄 Catching up missed blocks from #{} ({:?}) to #{} ({:?})",
+            last_processed.number, last_processed.hash, best_number, best_hash
+        );
+
+        // Build the tree route from the last processed block to the best block.
+        // This correctly handles both linear extensions (retracted is empty) and
+        // reorgs (retracted contains blocks from the old chain that need to be reverted).
+        let tree_route = match sp_blockchain::tree_route(
+            self.client.as_ref(),
+            last_processed.hash,
+            best_hash,
+        ) {
+            Ok(route) => route,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to build tree route for startup catchup: {:?}. Block may have been pruned.",
+                    e
+                );
+                return;
+            }
+        };
+
+        let retracted_count = tree_route.retracted().len();
+        let enacted_count = tree_route.enacted().len();
+
+        if retracted_count > 0 {
+            info!(
+                target: LOG_TARGET,
+                "🔀 Detected reorg during startup catchup: {} retracted, {} enacted",
+                retracted_count, enacted_count
+            );
+        }
+
+        // Get the finalised block number before catching up
+        let finalised_number: BlockNumber<Runtime> = chain_info.finalized_number.saturated_into();
+
+        // Ensure the provider ID is synced before processing mutations
+        self.sync_provider_id(&best_hash);
+
+        // Apply Forest root changes for the entire tree route.
+        self.forest_root_changes_catchup(&tree_route).await;
+
+        // Process finality events for enacted blocks that are finalised.
+        // We don't process finality for retracted blocks since they're no longer canonical.
+        for block in tree_route.enacted() {
+            let block_num: BlockNumber<Runtime> = block.number.saturated_into();
+            self.process_finality_events_if_finalised(&block.hash, block_num);
+        }
+
+        // Update the local best block and last processed block to reflect the catch up
+        self.best_block = MinimalBlockInfo {
+            number: best_number,
+            hash: best_hash,
+        };
+        self.update_last_processed_block_info(self.best_block);
+
+        // Update last_finalised_block_processed based on how far we've caught up
+        // If best_number <= finalised_number, all caught-up blocks are finalised
+        if best_number <= finalised_number {
+            self.last_finalised_block_processed = MinimalBlockInfo {
+                number: best_number,
+                hash: best_hash,
+            };
+        } else {
+            // Only some blocks are finalised, update to the finalised block
+            if let Ok(Some(finalised_hash)) = self.client.hash(finalised_number.saturated_into()) {
+                self.last_finalised_block_processed = MinimalBlockInfo {
+                    number: finalised_number,
+                    hash: finalised_hash,
+                };
+            }
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "✅ Startup catchup complete. Reverted {} block(s), processed {} block(s).",
+            retracted_count, enacted_count
+        );
+    }
+
+    /// Update the last processed block in persistent storage.
+    ///
+    /// This value is used on startup to detect and process any blocks that were imported
+    /// to the database but not fully processed (e.g., due to race conditions during shutdown).
+    /// Both the block number and hash are stored to correctly detect reorgs during catchup.
+    pub(crate) fn update_last_processed_block_info(&self, block_info: MinimalBlockInfo<Runtime>) {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        state_store_context
+            .access_value(&LastProcessedBlockCf::<Runtime> {
+                phantom: Default::default(),
+            })
+            .write(&block_info);
+        state_store_context.commit();
+    }
+
+    /// Read the last processed block from persistent storage.
+    ///
+    /// Returns `None` if no block has been processed yet (first run).
+    ///
+    /// This function provides backward compatibility by first trying to read from the new
+    /// `LastProcessedBlockCf` format (which stores both number and hash), and falling back
+    /// to the deprecated `LastProcessedBlockNumberCf` format (which only stores the number).
+    /// When reading from the old format, the hash is retrieved from the Substrate client's
+    /// canonical chain mapping for that block number.
+    #[allow(deprecated)]
+    pub(crate) fn get_last_processed_block_info(&self) -> Option<MinimalBlockInfo<Runtime>> {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+
+        // Try to read from the new format first (stores both number and hash)
+        if let Some(block_info) = state_store_context
+            .access_value(&LastProcessedBlockCf::<Runtime> {
+                phantom: Default::default(),
+            })
+            .read()
+        {
+            return Some(block_info);
+        }
+
+        // Fall back to the deprecated format (only stores number)
+        // This provides backward compatibility for databases created before this change
+        let block_number: BlockNumber<Runtime> = state_store_context
+            .access_value(&LastProcessedBlockNumberCf::<Runtime> {
+                phantom: Default::default(),
+            })
+            .read()?;
+
+        // Get the hash from the Substrate client's canonical chain mapping
+        // Note: If a reorg happened while offline, this hash might be different from what
+        // we actually processed. However, this is acceptable as a backward compatibility
+        // path, as it's no worse than the previous behavior, and new runs will use the new
+        // correct format that stores both number and hash.
+        let block_hash = match self.client.hash(block_number.saturated_into()) {
+            Ok(Some(hash)) => hash,
+            Ok(None) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Could not find hash for last processed block #{} during backward compat read. Block may have been pruned.",
+                    block_number
+                );
+                return None;
+            }
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to get hash for last processed block #{} during backward compat read: {:?}",
+                    block_number, e
+                );
+                return None;
+            }
+        };
+
+        Some(MinimalBlockInfo {
+            number: block_number,
+            hash: block_hash,
+        })
     }
 }

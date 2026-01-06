@@ -189,7 +189,7 @@ impl MspFile {
             .await?;
 
         log::debug!(
-            "Created {} MSP-file associations for bucket {:?} with MSP {}",
+            "Created {} MSP-file associations for bucket [{:?}] with MSP {}",
             created_count,
             bucket_id,
             msp_id
