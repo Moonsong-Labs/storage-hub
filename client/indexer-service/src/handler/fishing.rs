@@ -266,6 +266,7 @@ where
                 | pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit {
                     ..
                 }
+                | pallet_file_system::Event::UserOperationPauseFlagsUpdated { .. }
                 | pallet_file_system::Event::__Ignore(_, _) => {
                     trace!(target: LOG_TARGET, "Ignoring non-essential FileSystem event in fishing mode");
                 }
