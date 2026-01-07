@@ -68,7 +68,8 @@ where
             }
 
             Err(anyhow::anyhow!(
-                "Failed to send file {:?} to any of the peers",
+                "Failed to send file with file key [0x{:x}] and fingerprint [{:x}] to any of the peers",
+                file_key,
                 file_metadata.fingerprint()
             ))
         }
@@ -214,13 +215,20 @@ where
                             Err(RequestFailure::Refused)
                             | Err(RequestFailure::Network(_))
                             | Err(RequestFailure::NotConnected) => {
-                                return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
+                                return Err(anyhow::anyhow!(
+                                    "Failed to send file with file key [0x{:x}] and fingerprint [{:x}] to peer {:?}",
+                                    file_key,
+                                    fingerprint,
+                                    peer_id
+                                ));
                             }
                             Err(e) => {
                                 return Err(anyhow::anyhow!(
-                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?})",
+                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?}) with file key [0x{:x}] and fingerprint [{:x}]",
                                     peer_id,
-                                    e
+                                    e,
+                                    file_key,
+                                    fingerprint
                                 ));
                             }
                         }
@@ -326,13 +334,20 @@ where
                             Err(RequestFailure::Refused)
                             | Err(RequestFailure::Network(_))
                             | Err(RequestFailure::NotConnected) => {
-                                return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
+                                return Err(anyhow::anyhow!(
+                                    "Failed to send file with file key [0x{:x}] and fingerprint [{:x}] to peer {:?}",
+                                    file_key,
+                                    fingerprint,
+                                    peer_id
+                                ));
                             }
                             Err(e) => {
                                 return Err(anyhow::anyhow!(
-                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?})",
+                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?}) with file key [0x{:x}] and fingerprint [{:x}]",
                                     peer_id,
-                                    e
+                                    e,
+                                    file_key,
+                                    fingerprint
                                 ));
                             }
                         }
