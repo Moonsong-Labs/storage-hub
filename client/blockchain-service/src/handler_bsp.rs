@@ -314,16 +314,16 @@ where
     ///
     /// This function is called every time a new block is imported and after each request is queued.
     ///
-    /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
+    /// _IMPORTANT: This check will be skipped if the block currently being processed does not match the client's best block._
     pub(crate) fn bsp_assign_forest_root_write_lock(&mut self) {
         let client_best_hash = self.client.info().best_hash;
         let client_best_number = self.client.info().best_number;
 
-        // Skip if the latest processed block doesn't match the current best block
-        if self.best_block.hash != client_best_hash
-            || self.best_block.number != client_best_number.into()
+        // Skip if the block currently being processed doesn't match the client's best block
+        if self.current_block.hash != client_best_hash
+            || self.current_block.number != client_best_number.into()
         {
-            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])", self.best_block.hash, self.best_block.number, client_best_hash, client_best_number);
+            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because block currently being processed does not match client's best block (current block hash and number [{}, {}], client best block hash and number [{}, {}])", self.current_block.hash, self.current_block.number, client_best_hash, client_best_number);
             return;
         }
 

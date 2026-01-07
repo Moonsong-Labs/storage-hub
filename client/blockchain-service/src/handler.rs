@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use futures::prelude::*;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashSet, VecDeque},
     path::PathBuf,
     sync::Arc,
 };
@@ -83,11 +83,21 @@ where
     /// This is used to manage Forest Storage instances and update their roots when there are
     /// Forest-root-changing events on-chain, for the Storage Provider managed by this service.
     pub(crate) forest_storage_handler: FSH,
-    /// The hash and number of the last best block processed by the BlockchainService.
+    /// The hash and number of the block currently being processed by the BlockchainService.
     ///
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
-    pub(crate) best_block: MinimalBlockInfo<Runtime>,
+    ///
+    /// Note: This is updated at the START of block processing, so it doesn't indicate that
+    /// processing has completed. Use `last_block_processed` for that.
+    pub(crate) current_block: MinimalBlockInfo<Runtime>,
+    /// The hash and number of the last block for which we've completed import processing.
+    ///
+    /// Unlike `current_block` which is updated at the start of block processing, this field is
+    /// updated at the END of block import processing. This is important for coordinating with
+    /// finality notifications, as we should only process finality for blocks that have been
+    /// fully import-processed.
+    pub(crate) last_block_processed: MinimalBlockInfo<Runtime>,
     /// The hash and number of the last finalised block processed by the BlockchainService.
     pub(crate) last_finalised_block_processed: MinimalBlockInfo<Runtime>,
     /// Nonce counter for the extrinsics.
@@ -155,6 +165,17 @@ where
     pub(crate) role: MultiInstancesNodeRole,
     /// Dedicated leadership connection used to hold advisory locks when DB is enabled.
     pub(crate) leadership_conn: Option<LeadershipClient>,
+    /// Queue for finality notifications that arrive before their corresponding block import.
+    ///
+    /// This handles the race condition where finality notifications can outpace block import
+    /// notifications if the block import processing is lagging behind.
+    /// When a finality notification arrives for a block that hasn't been
+    /// import-processed yet (`finality_block_number > last_block_processed.number`),
+    /// it's queued here and processed after block import catches up.
+    ///
+    /// The queue is drained at the end of each block import notification, processing any
+    /// queued finality notifications whose block numbers are now <= last_block_processed.number.
+    pub(crate) pending_finality_notifications: VecDeque<FinalityNotification<OpaqueBlock>>,
 }
 
 #[derive(Debug, Clone)]
@@ -439,7 +460,7 @@ where
                     }
                 }
                 BlockchainServiceCommand::GetBestBlockInfo { callback } => {
-                    let best_block_info = self.best_block;
+                    let best_block_info = self.last_block_processed;
                     match callback.send(Ok(best_block_info)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Best block info sent successfully");
@@ -1526,7 +1547,11 @@ where
             keystore,
             rpc_handlers,
             forest_storage_handler,
-            best_block: MinimalBlockInfo {
+            current_block: MinimalBlockInfo {
+                number: 0u32.into(),
+                hash: genesis_hash,
+            },
+            last_block_processed: MinimalBlockInfo {
                 number: 0u32.into(),
                 hash: genesis_hash,
             },
@@ -1552,6 +1577,7 @@ where
             pending_tx_store: None,
             role: MultiInstancesNodeRole::Standalone,
             leadership_conn: None,
+            pending_finality_notifications: VecDeque::new(),
         }
     }
 
@@ -1569,13 +1595,14 @@ where
         // This prevents:
         // 1. Double-processing of reorgs during sync (which would trigger unwanted events)
         // 2. Premature triggering of `handle_initial_sync` during any reorgs during sync
-        // 3. Duplicate `register_best_block_and_check_reorg` calls
+        // 3. Duplicate `register_current_block_and_check_reorg` calls
         if notification.origin == sp_consensus::BlockOrigin::NetworkInitialSync {
             return;
         }
 
         // Check if this new imported block is the new best, and if it causes a reorg.
-        let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
+        let new_block_notification_kind =
+            self.register_current_block_and_check_reorg(&notification);
 
         // Get the new best block info, and the `TreeRoute`, i.e. the blocks from the old best block to the new best block.
         // A new non-best block is ignored and not processed.
@@ -1614,6 +1641,9 @@ where
             .await;
 
         info!(target: LOG_TARGET, "📭 Block import notification (#{}): {} processed successfully", block_number, block_hash);
+
+        // Drain any pending finality notifications that can now be processed
+        self.drain_pending_finality_notifications().await;
     }
 
     /// Handle block notifications during network initial sync.
@@ -1674,7 +1704,8 @@ where
         }
 
         // Check if this new imported block is the new best, and if it causes a reorg.
-        let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
+        let new_block_notification_kind =
+            self.register_current_block_and_check_reorg(&notification);
 
         match new_block_notification_kind {
             NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => {
@@ -1695,6 +1726,9 @@ where
                 self.process_sync_reorg(&tree_route, new_best_block).await;
             }
         }
+
+        // Drain any pending finality notifications that can now be processed
+        self.drain_pending_finality_notifications().await;
     }
 
     /// Initialises the Blockchain Service with variables that should be checked and
@@ -1847,10 +1881,12 @@ where
             }
         }
 
-        self.update_last_processed_block_info(MinimalBlockInfo {
+        // Update both the in-memory tracker and persistent storage
+        self.last_block_processed = MinimalBlockInfo {
             number: *block_number,
             hash: *block_hash,
-        });
+        };
+        self.update_last_processed_block_info(self.last_block_processed);
     }
 
     /// Handle a finality notification.
@@ -1858,6 +1894,10 @@ where
     /// This processes finality events for the finalised block and all implicitly finalised blocks
     /// in the `tree_route`. This is important for scenarios where finality jumps multiple blocks
     /// at once (e.g., after a node restart, network partition recovery or solved finality staleness).
+    ///
+    /// If the finality notification is for a block that hasn't been import-processed yet
+    /// (`block_number > last_block_processed.number`), it is queued for later processing. This handles
+    /// the race condition where finality notifications can arrive before block import notifications.
     async fn handle_finality_notification(
         &mut self,
         notification: FinalityNotification<OpaqueBlock>,
@@ -1886,6 +1926,93 @@ where
             return;
         }
 
+        // If this finality notification is for a block that hasn't been fully import-processed yet,
+        // queue it for later. This prevents processing finality events before the forest has
+        // been updated by block import, which would cause issues like failing to delete files
+        // because they're still in the forest.
+        if block_number > self.last_block_processed.number {
+            warn!(
+                target: LOG_TARGET,
+                "⏳ Finality notification #{} ahead of last import-processed block #{}, deferring to queue",
+                block_number, self.last_block_processed.number
+            );
+            self.pending_finality_notifications.push_back(notification);
+            return;
+        }
+
+        // If the block number is the same as the last import-processed block number, but the hash is different,
+        // it means the block has been reorged and we need to wait for the new block that replaces it before processing
+        // the finality notification.
+        if block_number == self.last_block_processed.number
+            && block_hash != self.last_block_processed.hash
+        {
+            warn!(
+                target: LOG_TARGET,
+                "🔄 Finality notification #{}: finalised block {:x} is a reorg of block {:x}, deferring to queue",
+                block_number, block_hash, self.last_block_processed.hash
+            );
+            self.pending_finality_notifications.push_back(notification);
+            return;
+        }
+
+        // Process the finality notification
+        self.process_finality_notification(notification).await;
+    }
+
+    /// Drain and process any pending finality notifications that can now be processed.
+    ///
+    /// This is called after block import processing to handle any finality notifications
+    /// that were queued because they arrived before their corresponding block import.
+    async fn drain_pending_finality_notifications(&mut self) {
+        // Process notifications in order while they're <= last_block_processed
+        while let Some(notification) = self.pending_finality_notifications.front() {
+            let block_number: BlockNumber<Runtime> =
+                (*notification.header.number()).saturated_into();
+
+            if block_number > self.last_block_processed.number {
+                // Still ahead, stop draining
+                break;
+            }
+
+            if block_number == self.last_block_processed.number
+                && notification.hash != self.last_block_processed.hash
+            {
+                // The last processed block has been reorged, stop draining
+                break;
+            }
+
+            // Safe to process now
+            let notification = self.pending_finality_notifications.pop_front().unwrap();
+
+            // Skip if the finality has been already processed
+            if block_number <= self.last_finalised_block_processed.number {
+                trace!(
+                    target: LOG_TARGET,
+                    "🔁 Deferred finality notification #{} already processed, skipping",
+                    block_number
+                );
+                continue;
+            }
+
+            info!(
+                target: LOG_TARGET,
+                "⏰ Processing deferred finality notification #{} (queue size: {})",
+                block_number,
+                self.pending_finality_notifications.len()
+            );
+
+            self.process_finality_notification(notification).await;
+        }
+    }
+
+    /// Internal method to process a finality notification.
+    async fn process_finality_notification(
+        &mut self,
+        notification: FinalityNotification<OpaqueBlock>,
+    ) {
+        let block_hash = notification.hash;
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).saturated_into();
+
         info!(target: LOG_TARGET, "📩 Finality notification #{}: {:x}", block_number, block_hash);
 
         // Process finality events for all implicitly finalised blocks in tree_route.
@@ -1899,35 +2026,37 @@ where
         // was behind our `last_finalised_block_processed`.
         if !notification.tree_route.is_empty() {
             info!(
-                target: LOG_TARGET,
-                "📦 Processing finality events for {} implicitly finalised blocks",
-                notification.tree_route.len()
+                    target: LOG_TARGET,
+                    "📦 Processing finality events for {} implicitly finalised blocks",
+                    notification.tree_route.len()
             );
 
             let last_processed = self.last_finalised_block_processed.number;
 
             for intermediate_hash in notification.tree_route.iter() {
                 // Get the block number for this hash to check if we already processed it
-                let intermediate_number: BlockNumber<Runtime> =
-                    match self.client.number(*intermediate_hash) {
-                        Ok(Some(num)) => num.saturated_into(),
-                        Ok(None) => {
-                            warn!(
+                let intermediate_number: BlockNumber<Runtime> = match self
+                    .client
+                    .number(*intermediate_hash)
+                {
+                    Ok(Some(num)) => num.saturated_into(),
+                    Ok(None) => {
+                        warn!(
                                 target: LOG_TARGET,
                                 "Could not find block number for hash {:?} in tree_route, skipping",
                                 intermediate_hash
-                            );
-                            continue;
-                        }
-                        Err(e) => {
-                            warn!(
+                        );
+                        continue;
+                    }
+                    Err(e) => {
+                        warn!(
                                 target: LOG_TARGET,
                                 "Error getting block number for hash {:?}: {:?}, skipping",
                                 intermediate_hash, e
-                            );
-                            continue;
-                        }
-                    };
+                        );
+                        continue;
+                    }
+                };
 
                 // Skip if already processed
                 if intermediate_number <= last_processed {
@@ -1950,11 +2079,12 @@ where
                 .await;
         }
 
-        // Update the last finalised block processed.
+        // Update the last finalised block processed (in memory and persistent storage).
         self.last_finalised_block_processed = MinimalBlockInfo {
             number: block_number.saturated_into(),
             hash: block_hash,
         };
+        self.update_last_finalised_block_info(self.last_finalised_block_processed);
 
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {:x} processed successfully", block_number, block_hash);
     }
