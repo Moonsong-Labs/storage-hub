@@ -38,8 +38,9 @@ use shc_blockchain_service::{
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        BackupStorageProviderId, BucketId, FileDeletionRequest, ForestProof as CommonForestProof,
-        OffchainSignature, StorageProofsMerkleTrieLayout, StorageProviderId,
+        BackupStorageProviderId, BucketId, DisplayHexListExt, FileDeletionRequest,
+        ForestProof as CommonForestProof, OffchainSignature, StorageProofsMerkleTrieLayout,
+        StorageProviderId,
     },
 };
 use shc_fisherman_service::{
@@ -158,15 +159,14 @@ where
             )
             .await?;
 
-        debug!(
+        info!(
             target: LOG_TARGET,
             "🎣 Found {} BSP groups and {} bucket groups to process",
             grouped_deletions.bsp_deletions.len(),
             grouped_deletions.bucket_deletions.len()
         );
 
-        // Spawn futures for each target
-        let mut futures = Vec::new();
+        let mut target_futures: Vec<(FileDeletionTarget<Runtime>, _)> = Vec::new();
 
         // Spawn for each BSP group
         for (bsp_id, files) in grouped_deletions.bsp_deletions {
@@ -177,12 +177,13 @@ where
                 files.len()
             );
 
+            let deletion_target = FileDeletionTarget::BspId(bsp_id);
             let future = self.batch_delete_files_for_target(
-                FileDeletionTarget::BspId(bsp_id),
+                deletion_target.clone(),
                 files,
                 event.deletion_type,
             );
-            futures.push(future);
+            target_futures.push((deletion_target, future));
         }
 
         // Spawn for each Bucket group
@@ -194,13 +195,16 @@ where
                 files.len()
             );
 
+            let deletion_target = FileDeletionTarget::BucketId(bucket_id);
             let future = self.batch_delete_files_for_target(
-                FileDeletionTarget::BucketId(bucket_id),
+                deletion_target.clone(),
                 files,
                 event.deletion_type,
             );
-            futures.push(future);
+            target_futures.push((deletion_target, future));
         }
+
+        let (targets, futures): (Vec<_>, Vec<_>) = target_futures.into_iter().unzip();
 
         // Check if there's any work to do
         if futures.is_empty() {
@@ -236,13 +240,12 @@ where
                 failures
             );
 
-            // Log individual errors
-            for (idx, result) in results.iter().enumerate() {
+            for (target, result) in targets.iter().zip(results.iter()) {
                 if let Err(e) = result {
                     error!(
                         target: LOG_TARGET,
-                        "🎣 Target {} failed: {:?}",
-                        idx,
+                        "🎣 Target {:?} batch deletion failed: {:?}",
+                        target,
                         e
                     );
                 }
@@ -303,15 +306,15 @@ where
         files: Vec<BatchFileDeletionData<Runtime>>,
         deletion_type: shc_indexer_db::models::FileDeletionType,
     ) -> anyhow::Result<()> {
+        let file_keys: Vec<_> = files.iter().map(|f| f.file_key).collect();
+
         info!(
             target: LOG_TARGET,
-            "🎣 Processing {} files for target {:?}",
+            "🎣 Processing {} files for target {:?}: [{}]",
             files.len(),
-            target
+            target,
+            file_keys.display_hex_list()
         );
-
-        // Extract file keys from files
-        let file_keys: Vec<_> = files.iter().map(|f| f.file_key).collect();
 
         // Generate forest proof for all files in this target's batch
         // Returns only the file_keys that actually exist in the forest after catch-up
@@ -327,11 +330,12 @@ where
             .filter(|f| remaining_file_keys.contains(&f.file_key))
             .collect();
 
-        debug!(
+        info!(
             target: LOG_TARGET,
-            "🎣 Filtered {} files down to {} valid files for target {:?}",
+            "🎣 Filtered {} file keys down to {} valid file keys. Remaining file keys to delete: [{}] for target {:?}",
             file_keys.len(),
-            remaining_files.len(),
+            remaining_file_keys.len(),
+            remaining_file_keys.display_hex_list(),
             target
         );
 
@@ -376,11 +380,7 @@ where
             "🎣 Successfully deleted {} files for target {:?}: [{}]",
             remaining_files.len(),
             target,
-            remaining_files
-                .iter()
-                .map(|f| format!("{:x}", f.file_key))
-                .collect::<Vec<_>>()
-                .join(", ")
+            remaining_file_keys.display_hex_list()
         );
 
         Ok(())
