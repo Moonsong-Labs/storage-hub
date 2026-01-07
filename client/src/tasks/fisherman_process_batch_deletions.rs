@@ -373,9 +373,14 @@ where
 
         info!(
             target: LOG_TARGET,
-            "🎣 Successfully processed {} files for target {:?}",
+            "🎣 Successfully deleted {} files for target {:?}: [{}]",
             remaining_files.len(),
-            target
+            target,
+            remaining_files
+                .iter()
+                .map(|f| format!("{:x}", f.file_key))
+                .collect::<Vec<_>>()
+                .join(", ")
         );
 
         Ok(())
