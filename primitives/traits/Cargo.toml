@@ -1,7 +1,7 @@
 [package]
 name = "shp-traits"
 description = "Support traits used in StorageHub"
-version = "0.1.0"
+version = "0.3.0"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
