@@ -1911,6 +1911,8 @@ where
             return;
         }
 
+        info!(target: LOG_TARGET, "📩 Received finality notification for block #{}: 0x{:x}", block_number, block_hash);
+
         // Skip if this finalised block was already processed.
         // This can happen during sync when both `handle_sync_block_notification` (via
         // `process_finality_events_if_finalised`) and this handler process the same block.
@@ -1933,7 +1935,7 @@ where
         if block_number > self.last_block_processed.number {
             warn!(
                 target: LOG_TARGET,
-                "⏳ Finality notification #{} ahead of last import-processed block #{}, deferring to queue",
+                "⏳ Finality notification for block #{} is ahead of last import-processed block #{}, deferring to queue",
                 block_number, self.last_block_processed.number
             );
             self.pending_finality_notifications.push_back(notification);
@@ -1948,7 +1950,7 @@ where
         {
             warn!(
                 target: LOG_TARGET,
-                "🔄 Finality notification #{}: finalised block {:x} is a reorg of block {:x}, deferring to queue",
+                "🔄 Finality notification for block #{}: finalised block 0x{:x} is a reorg of the last processed block 0x{:x}, deferring to queue",
                 block_number, block_hash, self.last_block_processed.hash
             );
             self.pending_finality_notifications.push_back(notification);
@@ -2013,7 +2015,7 @@ where
         let block_hash = notification.hash;
         let block_number: BlockNumber<Runtime> = (*notification.header.number()).saturated_into();
 
-        info!(target: LOG_TARGET, "📩 Finality notification #{}: {:x}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📨 Processing finality notification for block #{}: 0x{:x}", block_number, block_hash);
 
         // Process finality events for all implicitly finalised blocks in tree_route.
         // tree_route contains all blocks from (old_finalised, new_finalised_parent), i.e., the blocks
@@ -2086,6 +2088,6 @@ where
         };
         self.update_last_finalised_block_info(self.last_finalised_block_processed);
 
-        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:x} processed successfully", block_number, block_hash);
+        info!(target: LOG_TARGET, "✅ Finality notification for block #{}: 0x{:x} processed successfully", block_number, block_hash);
     }
 }
