@@ -512,9 +512,12 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
 
         quote! {
             impl #impl_generics crate::forest_write_lock::TakeForestWriteLock<#runtime_param> for #name #ty_generics #where_clause {
-                fn take_forest_root_write_lock(&self) -> crate::forest_write_lock::ForestRootWriteLockGuard<#runtime_param> {
-                    self.forest_root_write_lock.blocking_lock().take()
-                        .expect("forest root write lock guard already taken - this is a bug")
+                fn take_forest_root_write_lock(&self) -> anyhow::Result<crate::forest_write_lock::ForestRootWriteLockGuard<#runtime_param>> {
+                    self.forest_root_write_lock
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("forest root write lock mutex poisoned"))?
+                        .take()
+                        .ok_or_else(|| anyhow::anyhow!("forest root write lock guard already taken"))
                 }
             }
         }

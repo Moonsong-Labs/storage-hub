@@ -28,10 +28,16 @@
 //! // BlockchainService receives it and calls manager.mark_released()
 //! ```
 
-use std::{marker::PhantomData, sync::Arc};
+use std::{
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
 
+use log::warn;
 use shc_common::traits::StorageEnableRuntime;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
+
+const LOG_TARGET: &str = "blockchain-service-forest-write-lock";
 
 /// Sender type for forest root write lock release notifications.
 ///
@@ -123,6 +129,12 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
     /// This should be called by the BlockchainService when it receives a release
     /// notification on the release channel.
     pub fn mark_released(&mut self) {
+        if !self.locked {
+            warn!(
+                target: LOG_TARGET,
+                "Received lock release while not locked - possible spurious release"
+            );
+        }
         self.locked = false;
     }
 
@@ -204,11 +216,12 @@ impl<Runtime: StorageEnableRuntime> Drop for ForestRootWriteLockGuard<Runtime> {
 pub trait TakeForestWriteLock<Runtime: StorageEnableRuntime>: Send + 'static {
     /// Takes ownership of the forest root write lock guard from this event.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the guard has already been taken. This indicates a bug since
-    /// events with forest write locks should only be processed once.
-    fn take_forest_root_write_lock(&self) -> ForestRootWriteLockGuard<Runtime>;
+    /// Returns an error if:
+    /// - The mutex is poisoned (a thread panicked while holding the lock)
+    /// - The guard has already been taken (indicates a bug - events should only be processed once)
+    fn take_forest_root_write_lock(&self) -> anyhow::Result<ForestRootWriteLockGuard<Runtime>>;
 }
 
 /// Type alias for the forest root write lock field in events.

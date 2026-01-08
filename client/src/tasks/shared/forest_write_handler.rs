@@ -60,7 +60,7 @@ where
     async fn handle_event(&mut self, event: E) -> Result<String> {
         // Extract the guard from the event. This will be held for the duration
         // of the inner handler's execution and released automatically on drop.
-        let _guard: ForestRootWriteLockGuard<Runtime> = event.take_forest_root_write_lock();
+        let _guard: ForestRootWriteLockGuard<Runtime> = event.take_forest_root_write_lock()?;
 
         // Call the inner handler. The guard stays in scope until this completes.
         self.inner.handle_event(event).await
