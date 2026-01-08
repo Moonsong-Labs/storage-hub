@@ -16,7 +16,7 @@ pub const STATUS_PENDING: &str = "pending";
 // ============================================================================
 
 /// Log target for telemetry-related logging.
-pub const LOG_TARGET: &str = "storagehub::metrics";
+pub const LOG_TARGET: &str = "metrics";
 
 // ============================================================================
 // Histogram Bucket Constants
