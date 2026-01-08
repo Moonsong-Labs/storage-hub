@@ -386,7 +386,6 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
         self.peer_manager
             .record_success(peer_id, total_bytes as u64, elapsed.as_millis() as u64)
             .await;
-
         Ok(true)
     }
 
@@ -455,7 +454,6 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
 
                     if attempt == self.limits.download_retry_attempts {
                         self.peer_manager.record_failure(peer_id).await;
-
                         return Err(anyhow!(
                             "Failed to download after {} attempts: {:?}",
                             attempt + 1,
