@@ -178,17 +178,8 @@ where
             );
         }
 
-        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
-        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
-                return Err(anyhow!(
-                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
-                ));
-            }
-        };
+        // NOTE: The forest root write lock is now automatically managed by the ForestWriteHandler wrapper.
+        // The lock guard is extracted before this handler is called and released when it completes.
 
         // Check if this proof is the next one to be submitted.
         // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
@@ -343,11 +334,8 @@ where
 
         trace!(target: LOG_TARGET, "Proof submitted successfully");
 
-        // Release the forest root write "lock" and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await?;
+        // NOTE: The forest root write lock is automatically released when the ForestWriteHandler
+        // wrapper's guard is dropped after this handler returns.
 
         Ok(format!(
             "Handled ProcessSubmitProofRequest for provider {:x}",

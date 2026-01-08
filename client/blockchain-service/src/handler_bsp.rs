@@ -1,7 +1,5 @@
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
-use std::{sync::Arc, u32};
-use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
@@ -327,44 +325,21 @@ where
             return;
         }
 
-        // Verify we have a BSP handler.
+        // Verify we have a BSP handler and check if the lock is available.
         let managed_bsp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id,
+            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                // If the lock is currently held, wait for it to be released.
+                if bsp_handler.lock_manager.is_locked() {
+                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
+                    return;
+                }
+                bsp_handler.bsp_id
+            }
             _ => {
                 error!(target: LOG_TARGET, "`bsp_check_pending_forest_root_writes` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
             }
         };
-
-        // This is done in a closure to avoid borrowing `self` immutably and then mutably.
-        // Inside of this closure, we borrow `self` mutably when taking ownership of the lock.
-        {
-            let forest_root_write_lock = match &mut self.maybe_managed_provider {
-                Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
-                _ => unreachable!("We just checked this is a BSP"),
-            };
-            if let Some(rx) = forest_root_write_lock.as_mut() {
-                // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
-                match rx.try_recv() {
-                    // If the channel is empty, means we still need to wait for the current task to finish.
-                    Err(TryRecvError::Empty) => {
-                        trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
-                        return;
-                    }
-                    Ok(_) => {
-                        trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
-                    }
-                    Err(TryRecvError::Closed) => {
-                        error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
-                    }
-                }
-            } else {
-                info!(target: LOG_TARGET, "Forest root write lock not assigned to any task");
-            }
-
-            // Clear the lock, given that at this point we know that the lock is released.
-            *forest_root_write_lock = None;
-        }
 
         // At this point we know that the lock is released and we can start processing new requests.
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
@@ -704,41 +679,44 @@ where
     }
 
     fn bsp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
-        // Get the BSP's Forest root write lock.
-        let forest_root_write_lock = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
+        // Acquire the forest root write lock from the lock manager.
+        // This should always succeed since we only call this after confirming the lock is available.
+        let guard = match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                match bsp_handler.lock_manager.try_acquire() {
+                    Some(guard) => guard,
+                    None => {
+                        error!(target: LOG_TARGET, "Failed to acquire forest root write lock. Lock is already held. This should never happen.");
+                        return;
+                    }
+                }
+            }
             _ => {
                 error!(target: LOG_TARGET, "`bsp_emit_forest_write_event` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
             }
         };
 
-        // Create a new channel to assign ownership of the BSP's Forest root write lock.
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        *forest_root_write_lock = Some(rx);
-
-        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
-        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
-        // event. Clone is required because there is no constraint on the number of listeners that can
-        // subscribe to the event (and each is guaranteed to receive all emitted events).
-        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+        // Convert the guard into Arc<Mutex<Option<...>>> so the event can implement Clone
+        // (required by the event bus for multiple subscribers).
+        let forest_root_write_lock = guard.into();
         match data.into() {
             ForestWriteLockTaskData::SubmitProofRequest(data) => {
                 self.emit(ProcessSubmitProofRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_lock,
                 });
             }
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
                 self.emit(ProcessConfirmStoringRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_lock,
                 });
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 self.emit(ProcessStopStoringForInsolventUserRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_lock,
                 });
             }
             ForestWriteLockTaskData::MspRespondStorageRequest(_) => {

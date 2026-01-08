@@ -1,6 +1,7 @@
 pub mod capacity_manager;
 pub mod commands;
 pub mod events;
+pub mod forest_write_lock;
 pub mod handler;
 pub mod handler_bsp;
 pub mod handler_msp;
@@ -22,6 +23,10 @@ use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::types::StorageHubClient;
 
 pub use self::{
+    forest_write_lock::{
+        ForestRootWriteLock, ForestRootWriteLockGuard, ForestWriteLockManager,
+        LockReleaseReceiver, LockReleaseSender, TakeForestWriteLock,
+    },
     handler::BlockchainService,
     types::{FileKeyStatus, FileKeyStatusUpdate},
 };

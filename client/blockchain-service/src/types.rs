@@ -31,6 +31,8 @@ use crate::{
     transaction_manager::wait_for_transaction_status,
 };
 
+use crate::forest_write_lock::{ForestWriteLockManager, LockReleaseSender};
+
 /// A struct that holds the information to submit a storage proof.
 ///
 /// This struct is used as an item in the `pending_submit_proof_requests` queue.
@@ -775,19 +777,17 @@ impl<Runtime: StorageEnableRuntime> FileDistributionInfo<Runtime> {
 /// A struct that holds the information to handle a BSP.
 ///
 /// This struct implements all the needed logic to manage BSP specific functionality.
-#[derive(Debug)]
 pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// The BSP ID.
     pub(crate) bsp_id: BackupStorageProviderId<Runtime>,
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
     /// various edge cases when restarting the node.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest<Runtime>>,
-    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    /// Forest root write lock manager.
     ///
-    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
-    /// would be to send a [`MutexGuard`].
-    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// Manages the lock to prevent multiple tasks from writing to the runtime Forest root
+    /// at the same time.
+    pub(crate) lock_manager: ForestWriteLockManager<Runtime>,
     /// A set of Forest Storage snapshots, ordered by block number and block hash.
     ///
     /// A BSP can have multiple Forest Storage snapshots.
@@ -797,13 +797,31 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
 }
 
 impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
-    pub fn new(bsp_id: BackupStorageProviderId<Runtime>) -> Self {
+    /// Creates a new BspHandler with the given lock release sender.
+    ///
+    /// The sender is used by the lock manager to notify the BlockchainService
+    /// when the lock is released. The BlockchainService should pass the sender
+    /// from its own lock release channel (created at event loop startup).
+    pub fn new(bsp_id: BackupStorageProviderId<Runtime>, release_tx: LockReleaseSender) -> Self {
         Self {
             bsp_id,
             pending_submit_proof_requests: BTreeSet::new(),
-            forest_root_write_lock: None,
+            lock_manager: ForestWriteLockManager::with_sender(release_tx),
             forest_root_snapshots: BTreeSet::new(),
         }
+    }
+}
+
+impl<Runtime: StorageEnableRuntime> std::fmt::Debug for BspHandler<Runtime> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BspHandler")
+            .field("bsp_id", &self.bsp_id)
+            .field(
+                "pending_submit_proof_requests",
+                &self.pending_submit_proof_requests.len(),
+            )
+            .field("lock_manager", &self.lock_manager)
+            .finish()
     }
 }
 /// Status of a file key in the MSP upload pipeline.
@@ -876,18 +894,16 @@ impl From<FileKeyStatusUpdate> for FileKeyStatus {
 /// A struct that holds the information to handle an MSP.
 ///
 /// This struct implements all the needed logic to manage MSP specific functionality.
-#[derive(Debug)]
 pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// The MSP ID.
     pub(crate) msp_id: MainStorageProviderId<Runtime>,
+    /// Forest root write lock manager.
+    ///
     /// TODO: CHANGE THIS INTO MULTIPLE LOCKS, ONE FOR EACH BUCKET.
     ///
-    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
-    ///
-    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
-    /// would be to send a [`MutexGuard`].
-    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// Manages the lock to prevent multiple tasks from writing to the runtime Forest root
+    /// at the same time.
+    pub(crate) lock_manager: ForestWriteLockManager<Runtime>,
     /// A map of [`BucketId`] to the Forest Storage snapshots.
     ///
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
@@ -915,16 +931,36 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
 }
 
 impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
-    pub fn new(msp_id: MainStorageProviderId<Runtime>) -> Self {
+    /// Creates a new MspHandler with the given lock release sender.
+    ///
+    /// The sender is used by the lock manager to notify the BlockchainService
+    /// when the lock is released. The BlockchainService should pass the sender
+    /// from its own lock release channel (created at event loop startup).
+    pub fn new(msp_id: MainStorageProviderId<Runtime>, release_tx: LockReleaseSender) -> Self {
         Self {
             msp_id,
-            forest_root_write_lock: None,
+            lock_manager: ForestWriteLockManager::with_sender(release_tx),
             forest_root_snapshots: BTreeMap::new(),
             files_to_distribute: HashMap::new(),
             file_key_statuses: HashMap::new(),
             pending_respond_storage_requests: VecDeque::new(),
             pending_respond_storage_request_file_keys: HashSet::new(),
         }
+    }
+}
+
+impl<Runtime: StorageEnableRuntime> std::fmt::Debug for MspHandler<Runtime> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MspHandler")
+            .field("msp_id", &self.msp_id)
+            .field("lock_manager", &self.lock_manager)
+            .field("files_to_distribute", &self.files_to_distribute.len())
+            .field("file_key_statuses", &self.file_key_statuses.len())
+            .field(
+                "pending_respond_storage_requests",
+                &self.pending_respond_storage_requests.len(),
+            )
+            .finish()
     }
 }
 
@@ -938,10 +974,19 @@ pub enum ManagedProvider<Runtime: StorageEnableRuntime> {
 }
 
 impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
-    pub fn new(provider_id: StorageProviderId<Runtime>) -> Self {
+    /// Creates a new ManagedProvider with the given lock release sender.
+    ///
+    /// The sender is used by the lock manager to notify the BlockchainService
+    /// when the lock is released. The BlockchainService should pass the sender
+    /// from its own lock release channel (created at event loop startup).
+    pub fn new(provider_id: StorageProviderId<Runtime>, release_tx: LockReleaseSender) -> Self {
         match provider_id {
-            StorageProviderId::BackupStorageProvider(bsp_id) => Self::Bsp(BspHandler::new(bsp_id)),
-            StorageProviderId::MainStorageProvider(msp_id) => Self::Msp(MspHandler::new(msp_id)),
+            StorageProviderId::BackupStorageProvider(bsp_id) => {
+                Self::Bsp(BspHandler::new(bsp_id, release_tx))
+            }
+            StorageProviderId::MainStorageProvider(msp_id) => {
+                Self::Msp(MspHandler::new(msp_id, release_tx))
+            }
         }
     }
 }

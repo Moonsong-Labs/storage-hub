@@ -17,6 +17,9 @@ pub mod msp_stop_storing_insolvent_user;
 pub mod msp_upload_file;
 pub mod shared {
     pub mod chunk_uploader;
+    pub mod forest_write_handler;
+
+    pub use forest_write_handler::ForestWriteHandler;
 }
 pub mod sp_slash_provider;
 pub mod user_sends_file;

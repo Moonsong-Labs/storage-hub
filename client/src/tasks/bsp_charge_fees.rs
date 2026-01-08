@@ -296,16 +296,8 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.data.who;
 
-        // Get a write-lock on the forest root since we are going to be modifying it by removing a user's file.
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
-                return Err(anyhow!(
-                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
-                ));
-            }
-        };
+        // NOTE: The forest root write lock is now automatically managed by the ForestWriteHandler wrapper.
+        // The lock guard is extracted before this handler is called and released when it completes.
 
         // Get the current Forest key of the Provider running this node.
         let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
@@ -411,11 +403,8 @@ where
             }
         }
 
-        // Release the forest root write "lock" and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await?;
+        // NOTE: The forest root write lock is automatically released when the ForestWriteHandler
+        // wrapper's guard is dropped after this handler returns.
 
         Ok(format!(
             "Handled ProcessStopStoringForInsolventUserRequest for user [{}]",

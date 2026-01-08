@@ -543,7 +543,10 @@ where
             // Case: The node was not managing any Provider.
             (None, _) => {
                 info!(target: LOG_TARGET, "🔑 This node is not managing any Provider. Starting to manage Provider ID {:?}", provider_id);
-                self.maybe_managed_provider = Some(ManagedProvider::new(provider_id));
+                self.maybe_managed_provider = Some(ManagedProvider::new(
+                    provider_id,
+                    self.lock_release_sender.clone(),
+                ));
             }
             // Case: The node goes from managing a BSP, to managing another BSP with a different ID.
             (
@@ -551,7 +554,10 @@ where
                 StorageProviderId::BackupStorageProvider(bsp_id),
             ) if bsp_handler.bsp_id != bsp_id => {
                 warn!(target: LOG_TARGET, "🔄 This node is already managing a BSP. Stopping managing BSP ID {:?} in favour of BSP ID {:?}", bsp_handler.bsp_id, bsp_id);
-                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(bsp_id)));
+                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(
+                    bsp_id,
+                    self.lock_release_sender.clone(),
+                )));
             }
             // Case: The node goes from managing a MSP, to managing a MSP with a different ID.
             (
@@ -559,15 +565,21 @@ where
                 StorageProviderId::MainStorageProvider(msp_id),
             ) if msp_handler.msp_id != msp_id => {
                 warn!(target: LOG_TARGET, "🔄 This node is already managing a MSP. Stopping managing MSP ID {:?} in favour of MSP ID {:?}", msp_handler.msp_id, msp_id);
-                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(msp_id)));
+                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(
+                    msp_id,
+                    self.lock_release_sender.clone(),
+                )));
             }
-            // Case: The node goes from managing a BSP, to managing a MSP   .
+            // Case: The node goes from managing a BSP, to managing a MSP.
             (
                 Some(ManagedProvider::Bsp(bsp_handler)),
                 StorageProviderId::MainStorageProvider(msp_id),
             ) => {
                 warn!(target: LOG_TARGET, "🔄 This node is already managing a BSP. Stopping managing BSP ID {:?} in favour of MSP ID {:?}", bsp_handler.bsp_id, msp_id);
-                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(msp_id)));
+                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(
+                    msp_id,
+                    self.lock_release_sender.clone(),
+                )));
             }
             // Case: The node goes from managing a MSP, to managing a BSP.
             (
@@ -575,7 +587,10 @@ where
                 StorageProviderId::BackupStorageProvider(bsp_id),
             ) => {
                 warn!(target: LOG_TARGET, "🔄 This node is already managing a MSP. Stopping managing MSP ID {:?} in favour of BSP ID {:?}", msp_handler.msp_id, bsp_id);
-                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(bsp_id)));
+                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(
+                    bsp_id,
+                    self.lock_release_sender.clone(),
+                )));
             }
             // Rest of the cases are ignored.
             (Some(ManagedProvider::Bsp(_)), StorageProviderId::BackupStorageProvider(_))
@@ -1351,6 +1366,39 @@ where
                     nonce, tx_hash, tx.hash
                 );
             }
+        }
+    }
+
+    /// Handle forest root write lock release notification.
+    ///
+    /// This is called when a `ForestRootWriteLockGuard` is dropped, sending `()` through
+    /// the lock release channel. This method:
+    /// 1. Marks the lock as released in the lock manager
+    /// 2. Calls the appropriate assign function to give the lock to the next pending task
+    pub(crate) async fn handle_lock_release(&mut self) {
+        if let Some(managed_bsp_or_msp) = &mut self.maybe_managed_provider {
+            // Mark the lock as released in the lock manager.
+            match managed_bsp_or_msp {
+                ManagedProvider::Msp(msp_handler) => {
+                    msp_handler.lock_manager.mark_released();
+                }
+                ManagedProvider::Bsp(bsp_handler) => {
+                    bsp_handler.lock_manager.mark_released();
+                }
+            }
+
+            // Check if there are any pending requests to use the forest root write lock.
+            // If so, we give them the lock right away.
+            match managed_bsp_or_msp {
+                ManagedProvider::Msp(_) => {
+                    self.msp_assign_forest_root_write_lock();
+                }
+                ManagedProvider::Bsp(_) => {
+                    self.bsp_assign_forest_root_write_lock();
+                }
+            }
+        } else {
+            error!(target: LOG_TARGET, "Received a lock release while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
         }
     }
 

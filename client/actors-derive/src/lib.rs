@@ -103,7 +103,7 @@ use syn::{
     Attribute, DeriveInput, Generics, Ident, LitStr, Token, Type,
 };
 
-/// Parser for the `#[actor(actor = "...")]` attribute that accompanies the `ActorEvent` derive macro.
+/// Parser for the `#[actor(actor = "...", forest_root_write_lock)]` attribute that accompanies the `ActorEvent` derive macro.
 ///
 /// # Usage
 ///
@@ -113,22 +113,35 @@ use syn::{
 /// pub struct MyEvent {
 ///     // fields...
 /// }
+///
+/// // With forest root write lock support:
+/// #[derive(Debug, Clone, ActorEvent)]
+/// #[actor(actor = "blockchain_service", forest_root_write_lock)]
+/// pub struct MyLockingEvent {
+///     pub data: MyData,
+///     // forest_root_write_lock field is expected to be defined
+/// }
 /// ```
 ///
 /// The `actor` parameter specifies which actor this event is registered with.
 /// This is used by the `ActorEventBus` macro to automatically generate the appropriate
 /// event bus implementations. All events with the same actor ID will be included in the
 /// corresponding event bus provider.
+///
+/// The optional `forest_root_write_lock` flag indicates that this event carries a forest
+/// root write lock and should implement the `TakeForestWriteLock` trait.
 #[allow(dead_code)]
 struct ActorEventArgs {
     /// The actor ID string (e.g., "blockchain_service") that this event is associated with.
     /// This ID is used to register the event with a specific actor's event bus.
     actor: LitStr,
+    /// Whether this event has a forest root write lock field.
+    has_forest_root_write_lock: bool,
 }
 
 impl Parse for ActorEventArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        // The format we're trying to parse is: actor = "actor_id"
+        // The format we're trying to parse is: actor = "actor_id" [, forest_root_write_lock]
         let name: Ident = input.parse()?;
         if name != "actor" {
             return Err(syn::Error::new(
@@ -140,7 +153,25 @@ impl Parse for ActorEventArgs {
         let _: Token![=] = input.parse()?;
         let actor: LitStr = input.parse()?;
 
-        Ok(ActorEventArgs { actor })
+        // Check for optional forest_root_write_lock flag
+        let has_forest_root_write_lock = if input.peek(Token![,]) {
+            let _: Token![,] = input.parse()?;
+            let flag: Ident = input.parse()?;
+            if flag != "forest_root_write_lock" {
+                return Err(syn::Error::new(
+                    flag.span(),
+                    "Expected `forest_root_write_lock` after comma",
+                ));
+            }
+            true
+        } else {
+            false
+        };
+
+        Ok(ActorEventArgs {
+            actor,
+            has_forest_root_write_lock,
+        })
     }
 }
 
@@ -333,12 +364,18 @@ fn get_registry() -> std::sync::MutexGuard<'static, ActorRegistry> {
     ACTOR_REGISTRY.lock().unwrap()
 }
 
-// Extract actor ID from attribute using a simple approach with string operations
-fn get_actor_id_from_attr(attr: &Attribute) -> Option<String> {
+/// Result of parsing the actor attribute, containing actor ID and optional flags.
+struct ActorAttrInfo {
+    actor_id: String,
+    has_forest_root_write_lock: bool,
+}
+
+// Extract actor ID and flags from attribute using a simple approach with string operations
+fn get_actor_info_from_attr(attr: &Attribute) -> Option<ActorAttrInfo> {
     // Convert the meta to a string and parse manually
     let meta_str = attr.meta.to_token_stream().to_string();
 
-    // Expected format: actor(actor = "actor_id")
+    // Expected format: actor(actor = "actor_id" [, forest_root_write_lock])
     if !meta_str.starts_with("actor") {
         return None;
     }
@@ -358,12 +395,18 @@ fn get_actor_id_from_attr(attr: &Attribute) -> Option<String> {
         return None;
     }
 
-    // Find the quoted value
+    // Find the quoted value for actor ID
     let quote_start = params.find('"').unwrap() + 1;
     let quote_end = params.rfind('"').unwrap();
-    let actor_id = &params[quote_start..quote_end];
+    let actor_id = params[quote_start..quote_end].to_string();
 
-    Some(actor_id.to_string())
+    // Check for forest_root_write_lock flag
+    let has_forest_root_write_lock = params.contains("forest_root_write_lock");
+
+    Some(ActorAttrInfo {
+        actor_id,
+        has_forest_root_write_lock,
+    })
 }
 
 /// A derive macro for implementing `EventBusMessage` for event structs.
@@ -371,6 +414,7 @@ fn get_actor_id_from_attr(attr: &Attribute) -> Option<String> {
 /// This macro automatically:
 /// - Implements `EventBusMessage` for the struct
 /// - Registers the event with the specified actor ID
+/// - Optionally implements `TakeForestWriteLock` when `forest_root_write_lock` flag is present
 ///
 /// # Usage
 ///
@@ -386,10 +430,28 @@ fn get_actor_id_from_attr(attr: &Attribute) -> Option<String> {
 /// }
 /// ```
 ///
+/// ## With Forest Root Write Lock
+///
+/// Events that carry a forest root write lock should use the `forest_root_write_lock` flag:
+///
+/// ```ignore
+/// #[derive(Debug, Clone, ActorEvent)]
+/// #[actor(actor = "blockchain_service", forest_root_write_lock)]
+/// pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntime> {
+///     pub data: ProcessSubmitProofRequestData<Runtime>,
+///     pub forest_root_write_lock: ForestRootWriteLock<Runtime>,
+/// }
+/// ```
+///
+/// This will additionally implement `TakeForestWriteLock` for the event,
+/// enabling automatic lock management via the `ForestWriteHandler` wrapper.
+///
 /// # Attributes
 ///
 /// - `#[actor(actor = "actor_id")]`: Required. Specifies which actor this event is registered with.
 ///   The `actor_id` is a string identifier for the actor.
+/// - `#[actor(actor = "actor_id", forest_root_write_lock)]`: Optional flag indicating the event
+///   carries a forest root write lock and should implement `TakeForestWriteLock`.
 #[proc_macro_derive(ActorEvent, attributes(actor))]
 pub fn derive_actor_event(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -400,13 +462,13 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
         .attrs
         .iter()
         .find(|attr| attr.path().is_ident("actor"));
-    let actor_id = match actor_attr {
-        Some(attr) => match get_actor_id_from_attr(attr) {
-            Some(id) => id,
+    let actor_info = match actor_attr {
+        Some(attr) => match get_actor_info_from_attr(attr) {
+            Some(info) => info,
             None => {
                 return syn::Error::new(
                         attr.span(),
-                        "Failed to parse actor attribute: expected format #[actor(actor = \"actor_id\")]",
+                        "Failed to parse actor attribute: expected format #[actor(actor = \"actor_id\")] or #[actor(actor = \"actor_id\", forest_root_write_lock)]",
                     )
                     .to_compile_error()
                     .into();
@@ -428,14 +490,41 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
 
     // Register this event with the actor, including generic information
     get_registry().register_event_with_generics(
-        &actor_id,
+        &actor_info.actor_id,
         &name.to_string(),
         ty_generics.to_token_stream().to_string(),
         where_clause.to_token_stream().to_string(),
     );
 
-    let expanded = quote! {
+    // Generate base EventBusMessage implementation
+    let event_bus_message_impl = quote! {
         impl #impl_generics ::shc_actors_framework::event_bus::EventBusMessage for #name #ty_generics #where_clause {}
+    };
+
+    // Optionally generate TakeForestWriteLock implementation
+    let forest_lock_impl = if actor_info.has_forest_root_write_lock {
+        let runtime_param = generics
+            .type_params()
+            .next()
+            .map(|p| &p.ident)
+            .cloned()
+            .unwrap_or_else(|| Ident::new("Runtime", Span::call_site()));
+
+        quote! {
+            impl #impl_generics crate::forest_write_lock::TakeForestWriteLock<#runtime_param> for #name #ty_generics #where_clause {
+                fn take_forest_root_write_lock(&self) -> crate::forest_write_lock::ForestRootWriteLockGuard<#runtime_param> {
+                    self.forest_root_write_lock.blocking_lock().take()
+                        .expect("forest root write lock guard already taken - this is a bug")
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    let expanded = quote! {
+        #event_bus_message_impl
+        #forest_lock_impl
     };
 
     TokenStream::from(expanded)
@@ -705,7 +794,14 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 /// - `critical`: Default critical value for all mappings (optional, defaults to false)
 /// - An array of mappings, where each mapping is either:
 ///   - `EventType => TaskType`: Uses default critical value
-///   - `EventType => { task: TaskType, critical: bool }`: Overrides critical value for this mapping
+///   - `EventType => { task: TaskType, critical: bool, forest_write_lock: bool }`: Overrides values for this mapping
+///
+/// # Forest Write Lock
+///
+/// When `forest_write_lock: true` is specified for a mapping, the task handler is wrapped
+/// in `ForestWriteHandler`, which automatically extracts and holds the forest root write lock
+/// guard for the duration of event handling. This ensures the lock is always released when
+/// the handler completes, regardless of success or failure.
 ///
 /// # Examples
 ///
@@ -720,7 +816,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 ///         // Override critical for specific mapping
 ///         NewStorageRequest => { task: MspUploadFileTask, critical: false },
 ///         // Use default critical value
-///         ProcessMspRespondStoringRequest => MspUploadFileTask,
+///         ProcessMspRespondStoringRequest => { task: MspUploadFileTask, forest_write_lock: true },
 ///         FinalisedMspStoppedStoringBucket => MspDeleteBucketTask,
 ///     ]
 /// );
@@ -739,6 +835,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
         event_type: syn::Type,
         task_type: syn::Type,
         critical_override: Option<syn::LitBool>,
+        forest_write_lock: Option<syn::LitBool>,
     }
 
     impl Parse for ActorEventMapArgs {
@@ -787,53 +884,59 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                 let _: Token![=>] = content.parse()?;
 
                 // Parse task type or task config
-                let (task_type, critical_override) = if content.peek(syn::token::Brace) {
-                    // Complex form: EventType => { task: TaskType, critical: bool }
-                    let inner_content;
-                    let _ = syn::braced!(inner_content in content);
+                let (task_type, critical_override, forest_write_lock) =
+                    if content.peek(syn::token::Brace) {
+                        // Complex form: EventType => { task: TaskType, critical: bool, forest_write_lock: bool }
+                        let inner_content;
+                        let _ = syn::braced!(inner_content in content);
 
-                    let mut task = None;
-                    let mut crit_override = None;
+                        let mut task = None;
+                        let mut crit_override = None;
+                        let mut forest_lock = None;
 
-                    while !inner_content.is_empty() {
-                        let key: Ident = inner_content.parse()?;
-                        let _: Token![:] = inner_content.parse()?;
+                        while !inner_content.is_empty() {
+                            let key: Ident = inner_content.parse()?;
+                            let _: Token![:] = inner_content.parse()?;
 
-                        if key == "task" {
-                            task = Some(inner_content.parse()?);
-                        } else if key == "critical" {
-                            crit_override = Some(inner_content.parse()?);
-                        } else {
-                            return Err(syn::Error::new(
-                                key.span(),
-                                format!("Unknown mapping parameter: {}", key),
-                            ));
+                            if key == "task" {
+                                task = Some(inner_content.parse()?);
+                            } else if key == "critical" {
+                                crit_override = Some(inner_content.parse()?);
+                            } else if key == "forest_write_lock" {
+                                forest_lock = Some(inner_content.parse()?);
+                            } else {
+                                return Err(syn::Error::new(
+                                    key.span(),
+                                    format!("Unknown mapping parameter: {}", key),
+                                ));
+                            }
+
+                            // Parse comma if there are more fields
+                            if inner_content.peek(Token![,]) {
+                                let _: Token![,] = inner_content.parse()?;
+                            }
                         }
 
-                        // Parse comma if there are more fields
-                        if inner_content.peek(Token![,]) {
-                            let _: Token![,] = inner_content.parse()?;
-                        }
-                    }
-
-                    (
-                        task.ok_or_else(|| {
-                            syn::Error::new(
-                                Span::call_site(),
-                                "Missing required parameter 'task' in mapping",
-                            )
-                        })?,
-                        crit_override,
-                    )
-                } else {
-                    // Simple form: EventType => TaskType
-                    (content.parse()?, None)
-                };
+                        (
+                            task.ok_or_else(|| {
+                                syn::Error::new(
+                                    Span::call_site(),
+                                    "Missing required parameter 'task' in mapping",
+                                )
+                            })?,
+                            crit_override,
+                            forest_lock,
+                        )
+                    } else {
+                        // Simple form: EventType => TaskType
+                        (content.parse()?, None, None)
+                    };
 
                 mappings.push(EventTaskMapping {
                     event_type,
                     task_type,
                     critical_override,
+                    forest_write_lock,
                 });
 
                 // Parse comma if there are more mappings
@@ -886,15 +989,36 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             .as_ref()
             .unwrap_or(&default_critical);
 
-        quote! {
-            subscribe_actor_event!(
-                event: #event_type,
-                task: #task_type,
-                service: #service,
-                spawner: #spawner,
-                context: #context,
-                critical: #critical,
-            );
+        // Check if forest_write_lock is enabled for this mapping
+        let use_forest_lock = mapping
+            .forest_write_lock
+            .as_ref()
+            .map_or(false, |lit| lit.value);
+
+        if use_forest_lock {
+            let task_expr = quote! {
+                crate::tasks::shared::ForestWriteHandler::new(#task_type::new(#context.clone()))
+            };
+            quote! {
+                subscribe_actor_event!(
+                    event: #event_type,
+                    task: (#task_expr),
+                    service: #service,
+                    spawner: #spawner,
+                    critical: #critical,
+                );
+            }
+        } else {
+            quote! {
+                subscribe_actor_event!(
+                    event: #event_type,
+                    task: #task_type,
+                    service: #service,
+                    spawner: #spawner,
+                    context: #context,
+                    critical: #critical,
+                );
+            }
         }
     });
 

@@ -254,16 +254,8 @@ where
             event.data.confirm_storing_requests,
         );
 
-        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
-        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
+        // NOTE: The forest root write lock is now automatically managed by the ForestWriteHandler wrapper.
+        // The lock guard is extracted before this handler is called and released when it completes.
 
         // Get the BSP ID of the Provider running this node and its current Forest root.
         let own_provider_id = self
@@ -446,11 +438,8 @@ where
                 )
             })?;
 
-        // Release the forest root write "lock" and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await?;
+        // NOTE: The forest root write lock is automatically released when the ForestWriteHandler
+        // wrapper's guard is dropped after this handler returns.
 
         Ok(format!(
             "Processed ProcessConfirmStoringRequest for BSP [{:x}]",
