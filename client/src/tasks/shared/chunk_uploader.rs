@@ -70,7 +70,8 @@ where
             }
 
             Err(anyhow::anyhow!(
-                "Failed to send file {:?} to any of the peers",
+                "Failed to send file with file key [0x{:x}] and fingerprint [{:x}] to any of the peers",
+                file_key,
                 file_metadata.fingerprint()
             ))
         }
@@ -231,7 +232,12 @@ where
                                     STATUS_FAILURE,
                                     start_time.elapsed().as_secs_f64()
                                 );
-                                return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
+                                return Err(anyhow::anyhow!(
+                                    "Failed to send file with file key [0x{:x}] and fingerprint [{:x}] to peer {:?}",
+                                    file_key,
+                                    fingerprint,
+                                    peer_id
+                                ));
                             }
                             Err(e) => {
                                 observe_histogram!(
@@ -241,9 +247,11 @@ where
                                     start_time.elapsed().as_secs_f64()
                                 );
                                 return Err(anyhow::anyhow!(
-                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?})",
+                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?}) with file key [0x{:x}] and fingerprint [{:x}]",
                                     peer_id,
-                                    e
+                                    e,
+                                    file_key,
+                                    fingerprint
                                 ));
                             }
                         }
@@ -355,7 +363,12 @@ where
                                     STATUS_FAILURE,
                                     start_time.elapsed().as_secs_f64()
                                 );
-                                return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
+                                return Err(anyhow::anyhow!(
+                                    "Failed to send file with file key [0x{:x}] and fingerprint [{:x}] to peer {:?}",
+                                    file_key,
+                                    fingerprint,
+                                    peer_id
+                                ));
                             }
                             Err(e) => {
                                 observe_histogram!(
@@ -365,9 +378,11 @@ where
                                     start_time.elapsed().as_secs_f64()
                                 );
                                 return Err(anyhow::anyhow!(
-                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?})",
+                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?}) with file key [0x{:x}] and fingerprint [{:x}]",
                                     peer_id,
-                                    e
+                                    e,
+                                    file_key,
+                                    fingerprint
                                 ));
                             }
                         }
