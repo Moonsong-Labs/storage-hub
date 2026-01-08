@@ -219,13 +219,21 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                 }
                 Err(_) => {
                     // The permit will eventually be released, so we do nothing here and will retry next block.
-                    // This is a warning because it could indicate a bug if the permit is held for too long, or indefinitely for that matter.
-                    debug!(
+                    info!(
                         target: LOG_TARGET,
                         "🎣 Batch interval reached but semaphore permit is held (previous batch still processing), will retry next block"
                     );
                 }
             }
+        } else {
+            let remaining = self
+                .last_batch_time
+                .map(|t| self.batch_interval_duration.saturating_sub(t.elapsed()));
+            debug!(
+                target: LOG_TARGET,
+                "🎣 Skipping batch deletion cycle, interval not reached (remaining: {:?})",
+                remaining
+            );
         }
 
         Ok(())
