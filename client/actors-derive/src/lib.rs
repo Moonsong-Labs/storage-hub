@@ -1429,6 +1429,7 @@ fn generate_method_impl(
 /// - Adds appropriate callback fields to each command variant based on the specified mode
 /// - Generates an interface trait with methods for each command variant
 /// - Implements the interface trait for ActorHandle<ServiceType>
+/// - Generates a `command_name(&self) -> &'static str` method on the enum for logging/metrics
 ///
 /// # Parameters
 ///
@@ -1491,6 +1492,17 @@ fn generate_method_impl(
 ///
 /// The generated interface trait will have method names in snake_case derived from the variant names.
 /// For example, a variant named `SendExtrinsic` will generate a method named `send_extrinsic`.
+///
+/// # Generated `command_name` Method
+///
+/// The macro also generates a `command_name(&self) -> &'static str` method on the enum itself.
+/// This method returns the snake_case name of the command variant, which is useful for logging,
+/// metrics, and debugging purposes.
+///
+/// ```ignore
+/// let cmd = BlockchainServiceCommand::SendExtrinsic { ... };
+/// assert_eq!(cmd.command_name(), "send_extrinsic");
+/// ```
 #[proc_macro_attribute]
 pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as ActorCommandArgs);
