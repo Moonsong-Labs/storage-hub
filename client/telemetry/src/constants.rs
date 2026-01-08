@@ -1,8 +1,7 @@
 //! Status constants and histogram bucket definitions for telemetry.
 
-// ============================================================================
-// Status Constants
-// ============================================================================
+/// Log target for telemetry-related logging.
+pub const LOG_TARGET: &str = "metrics";
 
 /// Metric status label for successful operations.
 pub const STATUS_SUCCESS: &str = "success";
@@ -10,17 +9,6 @@ pub const STATUS_SUCCESS: &str = "success";
 pub const STATUS_FAILURE: &str = "failure";
 /// Metric status label for pending operations.
 pub const STATUS_PENDING: &str = "pending";
-
-// ============================================================================
-// Logging
-// ============================================================================
-
-/// Log target for telemetry-related logging.
-pub const LOG_TARGET: &str = "metrics";
-
-// ============================================================================
-// Histogram Bucket Constants
-// ============================================================================
 
 /// System metrics collection interval in seconds.
 pub const SYSTEM_METRICS_INTERVAL_SECS: u64 = 5;
