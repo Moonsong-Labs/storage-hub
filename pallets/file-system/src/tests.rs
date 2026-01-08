@@ -7,12 +7,12 @@ use crate::{
         IncompleteStorageRequestMetadata, MoveBucketRequestMetadata, MspStorageRequestStatus,
         PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit, StorageRequestBspsMetadata,
         StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
-        StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
+        StorageRequestTtl, ThresholdType, TickNumber, UserOperationPauseFlags, ValuePropId,
     },
     weights::WeightInfo,
     Config, Error, Event, IncompleteStorageRequests, NextAvailableStorageRequestExpirationTick,
     PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
-    StorageRequests,
+    StorageRequests, UserOperationPauseFlagsStorage,
 };
 use codec::Encode;
 use frame_support::{
@@ -59,6 +59,358 @@ fn create_test_file_metadata(
         fingerprint.as_bytes().into(),
     )
     .unwrap()
+}
+
+mod user_operation_pause_flags_tests {
+    use super::*;
+
+    #[test]
+    fn default_flags_have_no_operations_paused() {
+        new_test_ext().execute_with(|| {
+            // By default, the storage value should be the default for `UserOperationPauseFlags`,
+            // which corresponds to `NONE` (no operations paused).
+            let flags = UserOperationPauseFlagsStorage::<Test>::get();
+
+            assert_eq!(flags.bits(), UserOperationPauseFlags::NONE.bits());
+            assert!(!flags.is_all_set(UserOperationPauseFlags::FLAG_CREATE_BUCKET));
+            assert!(!flags
+                .is_all_set(UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION));
+            assert!(!flags.is_all_set(UserOperationPauseFlags::FLAG_DELETE_FILES));
+        });
+    }
+
+    #[test]
+    fn root_can_update_pause_flags_and_emits_event() {
+        new_test_ext().execute_with(|| {
+            // Initial state: no operations paused.
+            assert_eq!(
+                UserOperationPauseFlagsStorage::<Test>::get().bits(),
+                UserOperationPauseFlags::NONE.bits()
+            );
+
+            // Build a mask that pauses creating buckets and issuing storage requests.
+            let new_flags = UserOperationPauseFlags::from_bits(
+                UserOperationPauseFlags::FLAG_CREATE_BUCKET
+                    | UserOperationPauseFlags::FLAG_ISSUE_STORAGE_REQUEST,
+            );
+
+            // Call the root-only extrinsic.
+            assert_ok!(FileSystem::set_user_operation_pause_flags(
+                RuntimeOrigin::root(),
+                new_flags
+            ));
+
+            // Storage must be updated.
+            let stored = UserOperationPauseFlagsStorage::<Test>::get();
+            assert_eq!(stored.bits(), new_flags.bits());
+
+            // Check that the event was emitted.
+            System::assert_last_event(
+                Event::UserOperationPauseFlagsUpdated {
+                    old: UserOperationPauseFlags::NONE,
+                    new: new_flags,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn non_root_cannot_update_pause_flags() {
+        new_test_ext().execute_with(|| {
+            let alice = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(alice.clone());
+
+            let new_flags =
+                UserOperationPauseFlags::from_bits(UserOperationPauseFlags::FLAG_CREATE_BUCKET);
+
+            assert_noop!(
+                FileSystem::set_user_operation_pause_flags(origin, new_flags),
+                sp_runtime::DispatchError::BadOrigin
+            );
+
+            // Storage must remain at the default value.
+            assert_eq!(
+                UserOperationPauseFlagsStorage::<Test>::get().bits(),
+                UserOperationPauseFlags::NONE.bits()
+            );
+        });
+    }
+
+    #[test]
+    fn create_bucket_fails_when_operation_paused() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            // Pause bucket creation.
+            UserOperationPauseFlagsStorage::<Test>::set(UserOperationPauseFlags::from_bits(
+                UserOperationPauseFlags::FLAG_CREATE_BUCKET,
+            ));
+
+            assert_noop!(
+                FileSystem::create_bucket(origin, msp_id, name, private, value_prop_id),
+                Error::<Test>::UserOperationPaused
+            );
+        });
+    }
+
+    #[test]
+    fn request_move_bucket_fails_when_operation_paused() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp_charlie = Keyring::Charlie.to_account_id();
+            let msp_dave = Keyring::Dave.to_account_id();
+
+            let (msp_charlie_id, charlie_value_prop_id) = add_msp_to_provider_storage(&msp_charlie);
+            let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+
+            let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let (bucket_id, _) = create_bucket(
+                &owner,
+                name.clone(),
+                msp_charlie_id,
+                charlie_value_prop_id,
+                false,
+            );
+
+            // Pause move bucket requests.
+            UserOperationPauseFlagsStorage::<Test>::set(UserOperationPauseFlags::from_bits(
+                UserOperationPauseFlags::FLAG_REQUEST_MOVE_BUCKET,
+            ));
+
+            assert_noop!(
+                FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id, dave_value_prop_id),
+                Error::<Test>::UserOperationPaused
+            );
+        });
+    }
+
+    #[test]
+    fn update_bucket_privacy_and_collection_fails_when_operation_paused() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as file_system::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Create a private bucket so that privacy and collection operations are valid.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp_id,
+                name.clone(),
+                true,
+                value_prop_id
+            ));
+
+            // Pause privacy / collection operations.
+            UserOperationPauseFlagsStorage::<Test>::set(UserOperationPauseFlags::from_bits(
+                UserOperationPauseFlags::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION,
+            ));
+
+            // update_bucket_privacy should now fail.
+            assert_noop!(
+                FileSystem::update_bucket_privacy(origin.clone(), bucket_id, false),
+                Error::<Test>::UserOperationPaused
+            );
+
+            // create_and_associate_collection_with_bucket should also fail.
+            assert_noop!(
+                FileSystem::create_and_associate_collection_with_bucket(origin, bucket_id),
+                Error::<Test>::UserOperationPaused
+            );
+        });
+    }
+
+    #[test]
+    fn delete_bucket_fails_when_operation_paused() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as file_system::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Create an empty bucket.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp_id,
+                name,
+                false,
+                value_prop_id
+            ));
+
+            // Pause bucket deletion.
+            UserOperationPauseFlagsStorage::<Test>::set(UserOperationPauseFlags::from_bits(
+                UserOperationPauseFlags::FLAG_DELETE_BUCKET,
+            ));
+
+            assert_noop!(
+                FileSystem::delete_bucket(origin, bucket_id),
+                Error::<Test>::UserOperationPaused
+            );
+        });
+    }
+
+    #[test]
+    fn issue_storage_request_fails_when_operation_paused() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+            let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+            let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let (bucket_id, _) = create_bucket(&owner, name, msp_id, value_prop_id, false);
+
+            // Pause issuing storage requests.
+            UserOperationPauseFlagsStorage::<Test>::set(UserOperationPauseFlags::from_bits(
+                UserOperationPauseFlags::FLAG_ISSUE_STORAGE_REQUEST,
+            ));
+
+            assert_noop!(
+                FileSystem::issue_storage_request(
+                    origin,
+                    bucket_id,
+                    location,
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids,
+                    ReplicationTarget::Standard
+                ),
+                Error::<Test>::UserOperationPaused
+            );
+        });
+    }
+
+    #[test]
+    fn request_delete_file_fails_when_operation_paused() {
+        new_test_ext().execute_with(|| {
+            let alice_pair = Keyring::Alice.pair();
+            let alice_account = Keyring::Alice.to_account_id();
+            let alice_origin = RuntimeOrigin::signed(alice_account.clone());
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&alice_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"buen_fla".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            // Compute file key as done in the actual implementation
+            let file_key = FileSystem::compute_file_key(
+                alice_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // Construct the file deletion intention
+            let signed_delete_intention = FileOperationIntention::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // Sign the intention
+            let signed_delete_intention_encoded = signed_delete_intention.encode();
+            let signature_bytes = alice_pair.sign(&signed_delete_intention_encoded);
+            let signature = MultiSignature::Sr25519(signature_bytes);
+
+            // Pause requesting file deletions.
+            UserOperationPauseFlagsStorage::<Test>::set(UserOperationPauseFlags::from_bits(
+                UserOperationPauseFlags::FLAG_REQUEST_DELETE_FILE,
+            ));
+
+            assert_noop!(
+                FileSystem::request_delete_file(
+                    alice_origin,
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint
+                ),
+                Error::<Test>::UserOperationPaused
+            );
+        });
+    }
+
+    #[test]
+    fn delete_files_fails_when_operation_paused() {
+        new_test_ext().execute_with(|| {
+            let alice = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
+                setup_file_in_msp_bucket(&alice, &msp);
+
+            // Pause executing file deletions.
+            UserOperationPauseFlagsStorage::<Test>::set(UserOperationPauseFlags::from_bits(
+                UserOperationPauseFlags::FLAG_DELETE_FILES,
+            ));
+
+            // Create signature
+            let (signed_delete_intention, signature) =
+                create_file_deletion_signature(&Keyring::Alice, file_key);
+
+            // Create dummy forest proof
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
+
+            assert_noop!(
+                FileSystem::delete_files(
+                    RuntimeOrigin::signed(alice.clone()),
+                    vec![crate::types::FileDeletionRequest {
+                        file_owner: alice.clone(),
+                        signed_intention: signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                    }]
+                    .try_into()
+                    .unwrap(),
+                    None,
+                    forest_proof,
+                ),
+                Error::<Test>::UserOperationPaused
+            );
+        });
+    }
 }
 
 mod create_bucket_tests {

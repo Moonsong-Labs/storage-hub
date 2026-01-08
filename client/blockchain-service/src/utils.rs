@@ -1983,28 +1983,6 @@ where
         match self.role {
             MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {
-                    // New storage request event coming from pallet-file-system.
-                    StorageEnableEvents::FileSystem(
-                        pallet_file_system::Event::NewStorageRequest {
-                            who,
-                            file_key,
-                            bucket_id,
-                            location,
-                            fingerprint,
-                            size,
-                            peer_ids,
-                            expires_at,
-                        },
-                    ) => self.emit(NewStorageRequest {
-                        who,
-                        file_key: FileKey::from(file_key.as_ref()),
-                        bucket_id,
-                        location,
-                        fingerprint: fingerprint.as_ref().into(),
-                        size,
-                        user_peer_ids: peer_ids,
-                        expires_at: expires_at,
-                    }),
                     // A provider has been marked as slashable.
                     StorageEnableEvents::ProofsDealer(
                         pallet_proofs_dealer::Event::SlashableProvider {
@@ -2125,6 +2103,36 @@ where
                         multiaddresses: multiaddress_vec,
                         owner,
                         size,
+                    })
+                }
+            }
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::NewStorageRequest {
+                who,
+                file_key,
+                bucket_id,
+                location,
+                fingerprint,
+                size,
+                peer_ids,
+                expires_at,
+            }) if who == Self::caller_pub_key(self.keystore.clone()).into() => {
+                // This event should only be of any use if a node is run as a user (not BSP/MSP).
+                if self.maybe_managed_provider.is_none() {
+                    log::info!(
+                        target: LOG_TARGET,
+                        "NewStorageRequest event for file_key: {:?}",
+                        file_key
+                    );
+
+                    self.emit(NewStorageRequest {
+                        who,
+                        file_key: FileKey::from(file_key.as_ref()),
+                        bucket_id,
+                        location,
+                        fingerprint: Fingerprint::from(fingerprint.as_ref()),
+                        size,
+                        user_peer_ids: peer_ids,
+                        expires_at,
                     })
                 }
             }

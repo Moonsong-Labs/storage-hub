@@ -17,8 +17,8 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     typed_store::CFDequeAPI,
     types::{
-        BackupStorageProviderId, BlockNumber, MaxBatchConfirmStorageRequests, StorageEnableEvents,
-        TrieMutation,
+        BackupStorageProviderId, BlockNumber, FileKey, Fingerprint, MaxBatchConfirmStorageRequests,
+        StorageEnableEvents, TrieMutation,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -27,10 +27,10 @@ use crate::{
     events::{
         FinalisedBspConfirmStoppedStoring, FinalisedTrieRemoveMutationsAppliedForBsp,
         ForestWriteLockTaskData, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
-        ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
-        ProcessSubmitProofRequestData,
+        MoveBucketRequested, MultipleNewChallengeSeeds, NewStorageRequest,
+        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
+        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
+        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
     types::{ManagedProvider, MultiInstancesNodeRole},
@@ -200,6 +200,30 @@ where
         match self.role {
             MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {
+                    // New storage request event coming from pallet-file-system.
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::NewStorageRequest {
+                            who,
+                            file_key,
+                            bucket_id,
+                            location,
+                            fingerprint,
+                            size,
+                            peer_ids,
+                            expires_at,
+                        },
+                    ) => {
+                        self.emit(NewStorageRequest {
+                            who,
+                            file_key: FileKey::from(file_key.as_ref()),
+                            bucket_id,
+                            location,
+                            fingerprint: Fingerprint::from(fingerprint.as_ref()),
+                            size,
+                            user_peer_ids: peer_ids,
+                            expires_at,
+                        });
+                    }
                     StorageEnableEvents::ProofsDealer(
                         pallet_proofs_dealer::Event::NewChallengeSeed {
                             challenges_ticker,
