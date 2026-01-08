@@ -57,6 +57,7 @@ shc-actors-derive = { workspace = true }
 shc-blockchain-service-db = { workspace = true }
 shc-forest-manager = { workspace = true }
 shc-common = { workspace = true }
+shc-telemetry = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }

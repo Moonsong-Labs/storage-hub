@@ -16641,6 +16641,7 @@ dependencies = [
  "sc-utils",
  "serde",
  "serde_json",
+ "shc-telemetry",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "tokio",
@@ -16685,6 +16686,7 @@ dependencies = [
  "shc-blockchain-service-db",
  "shc-common",
  "shc-forest-manager",
+ "shc-telemetry",
  "shp-constants",
  "shp-file-key-verifier",
  "shp-file-metadata",
@@ -16777,6 +16779,7 @@ dependencies = [
  "shc-indexer-db",
  "shc-indexer-service",
  "shc-rpc",
+ "shc-telemetry",
  "shp-constants",
  "shp-file-metadata",
  "shp-traits",
@@ -16931,6 +16934,7 @@ dependencies = [
  "shc-actors-framework",
  "shc-common",
  "shc-indexer-db",
+ "shc-telemetry",
  "shp-types",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -17090,6 +17094,16 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "url",
+]
+
+[[package]]
+name = "shc-telemetry"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "substrate-prometheus-endpoint",
+ "sysinfo",
+ "tokio",
 ]
 
 [[package]]

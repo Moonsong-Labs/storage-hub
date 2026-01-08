@@ -107,17 +107,46 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
   },
 
   // === Event Handler Lifecycle Metrics ===
+  event_handler_pending: {
+    name: "storagehub_event_handler_pending",
+    type: "gauge",
+    labels: ["event"],
+    description: "Currently in-flight event handlers by event type"
+  },
   event_handler_total: {
     name: "storagehub_event_handler_total",
     type: "counter",
     labels: ["event", "status"],
-    description: "Event handler invocations by event type and status (pending/success/failure)"
+    description: "Event handler invocations by event type and status (success/failure)"
   },
   event_handler_seconds: {
     name: "storagehub_event_handler_seconds",
     type: "histogram",
     labels: ["event", "status"],
     description: "Event handler processing duration by event type and status"
+  },
+
+  // === Command Processing Metrics ===
+  command_pending: {
+    name: "storagehub_command_pending",
+    type: "gauge",
+    labels: ["command"],
+    description: "Currently in-flight commands by command type"
+  },
+  command_processing_seconds: {
+    name: "storagehub_command_processing_seconds",
+    type: "histogram",
+    labels: ["command", "status"],
+    description: "Command processing duration by command type and status"
+  },
+
+  // === Block Processing Metrics ===
+  block_processing_seconds: {
+    name: "storagehub_block_processing_seconds",
+    type: "histogram",
+    labels: ["operation", "status"],
+    description:
+      "Block processing duration by operation type (block_import, finalized_block) and status"
   },
 
   // === BSP Metrics ===
@@ -136,32 +165,26 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     description: "Outbound file chunk transfer duration (sending to peers)"
   },
 
-  // === Download Metrics ===
-  bytes_downloaded_total: {
-    name: "storagehub_bytes_downloaded_total",
-    type: "counter",
-    labels: ["status"],
-    description: "Bytes downloaded from peers (inbound)"
-  },
-  chunks_downloaded_total: {
-    name: "storagehub_chunks_downloaded_total",
-    type: "counter",
-    labels: ["status"],
-    description: "Chunk batches downloaded from peers"
-  },
-  file_download_seconds: {
-    name: "storagehub_file_download_seconds",
-    type: "histogram",
-    labels: ["status"],
-    description: "Complete file download duration from peers"
-  },
-
   // === Upload Metrics ===
   bytes_uploaded_total: {
     name: "storagehub_bytes_uploaded_total",
     type: "counter",
     labels: ["status"],
     description: "Bytes received from upload requests (inbound)"
+  },
+
+  // === MSP Data Transfer Metrics ===
+  msp_bytes_received_total: {
+    name: "storagehub_msp_bytes_received_total",
+    type: "counter",
+    labels: ["status"],
+    description: "Bytes received by MSP from users (inbound uploads)"
+  },
+  msp_bytes_sent_total: {
+    name: "storagehub_msp_bytes_sent_total",
+    type: "counter",
+    labels: ["status"],
+    description: "Bytes sent by MSP to BSPs (outbound distribution)"
   }
 };
 

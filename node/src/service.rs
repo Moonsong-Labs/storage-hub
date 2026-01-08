@@ -286,6 +286,10 @@ where
         )
         .await;
 
+    // Set the Prometheus metrics registry BEFORE spawning services
+    // so that services like fisherman can access metrics during initialization
+    builder.with_metrics(prometheus_registry);
+
     // Role-specific configuration
     let rpc_config = match role_options {
         RoleOptions::Provider(ProviderOptions {
@@ -393,9 +397,6 @@ where
             RpcConfig::default()
         }
     };
-
-    // Set the Prometheus metrics registry
-    builder.with_metrics(prometheus_registry);
 
     // Create RPC configuration
     let storage_hub_client_rpc_config = builder.create_rpc_config(keystore, rpc_config);

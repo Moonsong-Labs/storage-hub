@@ -12,12 +12,9 @@ use shc_common::{
 };
 use shp_file_metadata::ChunkId;
 
-use crate::{
-    handler::StorageHubHandler,
-    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
-    observe_histogram,
-    types::ShNodeType,
-};
+use shc_telemetry::{observe_histogram, STATUS_FAILURE, STATUS_SUCCESS};
+
+use crate::{handler::StorageHubHandler, types::ShNodeType};
 use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{
@@ -181,6 +178,13 @@ where
                                     })?;
 
                                 if r.file_complete {
+                                    // Record success metrics
+                                    observe_histogram!(
+                                        handler: self.as_handler(),
+                                        file_transfer_seconds,
+                                        STATUS_SUCCESS,
+                                        start_time.elapsed().as_secs_f64()
+                                    );
                                     info!(
                                         target: LOG_TARGET,
                                         "Stopping file upload process. Peer {:?} has the entire file fingerprint {:x}",
@@ -371,6 +375,7 @@ where
                 }
             }
 
+            // Record success metrics
             observe_histogram!(
                 handler: self.as_handler(),
                 file_transfer_seconds,

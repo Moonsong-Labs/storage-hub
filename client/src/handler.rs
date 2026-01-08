@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 
 use shc_actors_derive::{subscribe_actor_event, subscribe_actor_event_map};
 
-use crate::metrics::{MetricsLink, StorageHubMetrics};
+use shc_telemetry::{MetricsLink, StorageHubMetrics};
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::EventHandler,
@@ -177,7 +177,7 @@ where
 
         // Create a FileDownloadManager with the peer manager already initialized
         let file_download_manager = Arc::new(
-            FileDownloadManager::new(Arc::clone(&peer_manager), data_dir, metrics.clone())
+            FileDownloadManager::new(Arc::clone(&peer_manager), data_dir)
                 .expect("Failed to initialize FileDownloadManager"),
         );
 

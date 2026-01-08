@@ -181,7 +181,7 @@ struct SubscribeActorEventArgs {
     context: Option<syn::Expr>,
     critical: Option<syn::LitBool>,
     task_instance: Option<syn::Expr>,
-    metric_recorder: Option<syn::Expr>,
+    metrics: Option<syn::Expr>,
 }
 
 impl Default for SubscribeActorEventArgs {
@@ -194,7 +194,7 @@ impl Default for SubscribeActorEventArgs {
             context: None,
             critical: None,
             task_instance: None,
-            metric_recorder: None,
+            metrics: None,
         }
     }
 }
@@ -230,8 +230,8 @@ impl Parse for SubscribeActorEventArgs {
                 args.context = Some(input.parse()?);
             } else if key == "critical" {
                 args.critical = Some(input.parse()?);
-            } else if key == "metric_recorder" {
-                args.metric_recorder = Some(input.parse()?);
+            } else if key == "metrics" {
+                args.metrics = Some(input.parse()?);
             } else {
                 return Err(syn::Error::new(
                     key.span(),
@@ -665,17 +665,16 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     let critical = args.critical.map_or(false, |lit| lit.value);
     let critical_lit = syn::LitBool::new(critical, Span::call_site());
 
-    // Use the provided metric recorder or default to NoOpMetricRecorder
-    let metric_recorder = args.metric_recorder.map_or_else(
-        || quote! { ::shc_actors_framework::event_bus::NoOpMetricRecorder },
-        |expr| quote! { #expr },
-    );
+    // Use the provided metrics or None
+    let metric_recorder = args
+        .metrics
+        .map_or_else(|| quote! { None }, |expr| quote! { #expr });
 
     // If a task instance is provided, use it
     // Otherwise, create a new task using the task type and context
     let result = if let Some(task) = args.task_instance {
         quote! {{
-            let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _, _> =
+            let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
                 #task.subscribe_to(#task_spawner, #service, #critical_lit, #metric_recorder);
             event_bus_listener.start();
         }}
@@ -685,7 +684,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
         if let Some(context) = args.context {
             quote! {{
                 let task = #task_type::new(#context.clone());
-                let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _, _> =
+                let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
                     task.subscribe_to(#task_spawner, #service, #critical_lit, #metric_recorder);
                 event_bus_listener.start();
             }}
@@ -738,7 +737,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 /// );
 /// ```
 ///
-/// When `metrics` is provided, the macro auto-generates an `EventMetricRecorder` for each mapping
+/// When `metrics` is provided, the macro auto-generates a `MetricRecorder` for each mapping
 /// with the `event` label derived from the event type name (converted to snake_case).
 #[proc_macro]
 pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
@@ -906,8 +905,8 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             .as_ref()
             .unwrap_or(&default_critical);
 
-        // Only generate metric_recorder parameter when metrics are provided
-        let metric_recorder_tokens = args.metrics.as_ref().map(|metrics_expr| {
+        // Only generate metrics parameter when metrics are provided
+        let metrics_tokens = args.metrics.as_ref().map(|metrics_expr| {
             // Extract base type name, stripping any generics (e.g., NewStorageRequest<Runtime> -> NewStorageRequest)
             let base_type_name = match event_type {
                 syn::Type::Path(type_path) => type_path
@@ -919,11 +918,12 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                 _ => event_type.to_token_stream().to_string(),
             };
             let event_name = to_snake_case(&base_type_name);
+            // Create EventMetricsConfig with the MetricsLink and event name
             quote! {
-                metric_recorder: crate::metrics::EventMetricRecorder::new(
-                    #metrics_expr.clone(),
+                metrics: Some(::shc_actors_framework::event_bus::EventMetricsConfig::new(
+                    #metrics_expr,
                     #event_name,
-                ),
+                )),
             }
         });
 
@@ -935,7 +935,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                 spawner: #spawner,
                 context: #context,
                 critical: #critical,
-                #metric_recorder_tokens
+                #metrics_tokens
             );
         }
     });
@@ -1546,9 +1546,16 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut updated_variants = Vec::new();
     let mut trait_method_signatures = Vec::new();
     let mut trait_method_implementations = Vec::new();
+    let mut command_name_arms = Vec::new();
 
     for variant in &input.variants {
         let variant_name = &variant.ident;
+
+        // Generate command_name match arm for this variant
+        let variant_name_snake = to_snake_case(&variant_name.to_string());
+        command_name_arms.push(quote! {
+            Self::#variant_name { .. } => #variant_name_snake
+        });
         let variant_args = extract_command_variant_args(&variant.attrs);
 
         // Get mode and types
@@ -1698,7 +1705,7 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
         _service_where_bounds,
     ) = process_service_type(service_type);
 
-    let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     // Generate the interface trait and implementation
     let trait_def = quote! {
@@ -1717,12 +1724,28 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
+    // Generate command_name method
+    let command_name_impl = quote! {
+        impl #impl_generics #enum_name #ty_generics
+        #where_clause
+        {
+            /// Returns the snake_case name of this command variant.
+            pub fn command_name(&self) -> &'static str {
+                match self {
+                    #(#command_name_arms),*
+                }
+            }
+        }
+    };
+
     // Output the result
     let result = quote! {
         #vis enum #enum_name #generics
         {
             #(#updated_variants,)*
         }
+
+        #command_name_impl
 
         #trait_def
     };

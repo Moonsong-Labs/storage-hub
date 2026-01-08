@@ -7,6 +7,9 @@ use crate::{
     actor::{Actor, ActorHandle, TaskSpawner},
     constants::{MAX_PENDING_EVENTS, MAX_TASKS_SPAWNED_PER_QUEUE},
 };
+use shc_telemetry::{
+    dec_gauge, inc_counter, observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS,
+};
 
 pub trait EventBusMessage: Clone + Send + 'static {}
 
@@ -57,13 +60,13 @@ pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
         event: E,
     ) -> impl std::future::Future<Output = Result<String>> + Send;
 
-    fn subscribe_to_provider<EP: ProvidesEventBus<E>, M: LifecycleMetricRecorder>(
+    fn subscribe_to_provider<EP: ProvidesEventBus<E>>(
         self,
         task_spawner: &TaskSpawner,
         provider: &EP,
         critical: bool,
-        metric_recorder: M,
-    ) -> EventBusListener<E, Self, M>
+        metrics_config: Option<EventMetricsConfig>,
+    ) -> EventBusListener<E, Self>
     where
         Self: Sized + Send,
     {
@@ -73,17 +76,17 @@ pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
             self,
             receiver,
             critical,
-            metric_recorder,
+            metrics_config,
         )
     }
 
-    fn subscribe_to<A: Actor, M: LifecycleMetricRecorder>(
+    fn subscribe_to<A: Actor>(
         self,
         task_spawner: &TaskSpawner,
         actor_handle: &ActorHandle<A>,
         critical: bool,
-        metric_recorder: M,
-    ) -> EventBusListener<E, Self, M>
+        metrics_config: Option<EventMetricsConfig>,
+    ) -> EventBusListener<E, Self>
     where
         Self: Sized + Send,
         <A as Actor>::EventBusProvider: ProvidesEventBus<E>,
@@ -92,34 +95,28 @@ pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
             task_spawner,
             &actor_handle.event_bus_provider,
             critical,
-            metric_recorder,
+            metrics_config,
         )
     }
 }
 
-pub struct EventBusListener<
-    T: EventBusMessage,
-    E: EventHandler<T>,
-    M: LifecycleMetricRecorder = NoOpMetricRecorder,
-> {
+pub struct EventBusListener<T: EventBusMessage, E: EventHandler<T>> {
     spawner: TaskSpawner,
     receiver: broadcast::Receiver<T>,
     event_handler: E,
     semaphore: Arc<Semaphore>,
     // Indicate if the event is critical or not and if the receiver can drop it safely or have to panic.
     critical: bool,
-    metric_recorder: M,
+    metrics_config: Option<EventMetricsConfig>,
 }
 
-impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static, M: LifecycleMetricRecorder>
-    EventBusListener<T, E, M>
-{
+impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T, E> {
     pub fn new(
         spawner: TaskSpawner,
         event_handler: E,
         receiver: broadcast::Receiver<T>,
         critical: bool,
-        metric_recorder: M,
+        metrics_config: Option<EventMetricsConfig>,
     ) -> Self {
         Self {
             spawner: spawner.with_group("event-handler-worker"),
@@ -127,7 +124,7 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static, M: LifecycleMetric
             receiver,
             semaphore: Arc::new(Semaphore::new(MAX_TASKS_SPAWNED_PER_QUEUE)),
             critical,
-            metric_recorder,
+            metrics_config,
         }
     }
 
@@ -136,10 +133,12 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static, M: LifecycleMetric
             match self.receiver.recv().await {
                 Ok(event) => {
                     // Record pending and start timer BEFORE spawning
-                    self.metric_recorder.record_pending();
+                    if let Some(ref config) = self.metrics_config {
+                        config.record_pending();
+                    }
                     let start_time = std::time::Instant::now();
 
-                    let metric_recorder = self.metric_recorder.clone();
+                    let metrics_config = self.metrics_config.clone();
                     let mut cloned_event_handler = self.event_handler.clone();
                     let permit = Arc::clone(&self.semaphore)
                         .acquire_owned()
@@ -151,11 +150,15 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static, M: LifecycleMetric
 
                         match result {
                             Ok(msg) => {
-                                metric_recorder.record_success(duration_secs);
+                                if let Some(ref config) = metrics_config {
+                                    config.record_success(duration_secs);
+                                }
                                 info!("Task completed successfully: {}", msg);
                             }
                             Err(error) => {
-                                metric_recorder.record_failure(duration_secs);
+                                if let Some(ref config) = metrics_config {
+                                    config.record_failure(duration_secs);
+                                }
                                 warn!("Task ended with error: {:?}", error);
                             }
                         };
@@ -187,22 +190,40 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static, M: LifecycleMetric
     }
 }
 
-/// Trait for recording event handler lifecycle metrics.
-/// Tracks: pending (event received), success/failure (handler result), and duration.
-/// Implemented in downstream crates with concrete metrics.
-pub trait LifecycleMetricRecorder: Clone + Send + Sync + 'static {
-    /// Record that an event was received and handler is starting (pending state)
-    fn record_pending(&self) {}
-
-    /// Record that the handler completed successfully, with duration in seconds
-    fn record_success(&self, _duration_secs: f64) {}
-
-    /// Record that the handler failed, with duration in seconds
-    fn record_failure(&self, _duration_secs: f64) {}
+/// Configuration for event metrics recording.
+///
+/// Holds the metrics link and the event name for recording event handler metrics.
+#[derive(Clone)]
+pub struct EventMetricsConfig {
+    metrics: MetricsLink,
+    event_name: &'static str,
 }
 
-/// No-op implementation when metrics are disabled or not specified.
-#[derive(Clone, Default)]
-pub struct NoOpMetricRecorder;
+impl EventMetricsConfig {
+    /// Creates a new event metrics configuration.
+    pub fn new(metrics: MetricsLink, event_name: &'static str) -> Self {
+        Self {
+            metrics,
+            event_name,
+        }
+    }
 
-impl LifecycleMetricRecorder for NoOpMetricRecorder {}
+    /// Record that an event handler has started (pending state).
+    pub fn record_pending(&self) {
+        inc_counter!(metrics: self.metrics.as_ref(), event_handler_pending, self.event_name);
+    }
+
+    /// Record that an event handler completed successfully.
+    pub fn record_success(&self, duration_secs: f64) {
+        dec_gauge!(metrics: self.metrics.as_ref(), event_handler_pending, self.event_name);
+        inc_counter!(metrics: self.metrics.as_ref(), event_handler_total, labels: &[self.event_name, STATUS_SUCCESS]);
+        observe_histogram!(metrics: self.metrics.as_ref(), event_handler_seconds, labels: &[self.event_name, STATUS_SUCCESS], duration_secs);
+    }
+
+    /// Record that an event handler failed.
+    pub fn record_failure(&self, duration_secs: f64) {
+        dec_gauge!(metrics: self.metrics.as_ref(), event_handler_pending, self.event_name);
+        inc_counter!(metrics: self.metrics.as_ref(), event_handler_total, labels: &[self.event_name, STATUS_FAILURE]);
+        observe_histogram!(metrics: self.metrics.as_ref(), event_handler_seconds, labels: &[self.event_name, STATUS_FAILURE], duration_secs);
+    }
+}

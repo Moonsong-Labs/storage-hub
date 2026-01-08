@@ -42,6 +42,7 @@ use shc_common::{
     types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
+use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
 
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
@@ -155,6 +156,11 @@ where
     pub(crate) role: MultiInstancesNodeRole,
     /// Dedicated leadership connection used to hold advisory locks when DB is enabled.
     pub(crate) leadership_conn: Option<LeadershipClient>,
+    /// Metrics link for recording telemetry.
+    ///
+    /// Used for recording command lifecycle metrics (pending count, processing duration)
+    /// and block processing metrics (block import/finality durations).
+    pub(crate) metrics: MetricsLink,
 }
 
 #[derive(Debug, Clone)]
@@ -374,7 +380,19 @@ where
         &mut self,
         message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
-        async {
+        // Extract command name before the match (since message will be partially moved)
+        let command_name = message.command_name();
+        // Clone metrics link for use in async block
+        let metrics = self.metrics.clone();
+
+        async move {
+            // Record pending and start timer
+            shc_telemetry::inc_counter!(metrics: metrics.as_ref(), command_pending, command_name);
+            let start = std::time::Instant::now();
+
+            // Track command success/failure for metrics
+            let mut command_succeeded = true;
+
             match message {
                 BlockchainServiceCommand::SendExtrinsic {
                     call,
@@ -394,6 +412,7 @@ where
                     }
                     Err(e) => {
                         warn!(target: LOG_TARGET, "Failed to send extrinsic: {:?}", e);
+                        command_succeeded = false;
 
                         match callback.send(Err(e)) {
                             Ok(_) => {
@@ -427,6 +446,7 @@ where
                         }
                         Err(e) => {
                             warn!(target: LOG_TARGET, "Failed to retrieve extrinsic: {:?}", e);
+                            command_succeeded = false;
                             match callback.send(Err(e)) {
                                 Ok(_) => {
                                     trace!(target: LOG_TARGET, "Receiver sent successfully");
@@ -1493,6 +1513,11 @@ where
                     }
                 }
             }
+
+            // Record command completion
+            let status = if command_succeeded { STATUS_SUCCESS } else { STATUS_FAILURE };
+            shc_telemetry::dec_gauge!(metrics: metrics.as_ref(), command_pending, command_name);
+            observe_histogram!(metrics: metrics.as_ref(), command_processing_seconds, labels: &[command_name, status], start.elapsed().as_secs_f64());
         }
     }
 
@@ -1517,6 +1542,7 @@ where
         notify_period: Option<u32>,
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
+        metrics: MetricsLink,
     ) -> Self {
         let genesis_hash = client.info().genesis_hash;
         Self {
@@ -1552,6 +1578,7 @@ where
             pending_tx_store: None,
             role: MultiInstancesNodeRole::Standalone,
             leadership_conn: None,
+            metrics,
         }
     }
 
@@ -1597,6 +1624,9 @@ where
             hash: block_hash,
         } = block_info;
 
+        // Start timing block processing after early returns
+        let start = std::time::Instant::now();
+
         info!(target: LOG_TARGET, "📬 Block import notification (#{}): {}", block_number, block_hash);
 
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
@@ -1614,6 +1644,9 @@ where
             .await;
 
         info!(target: LOG_TARGET, "📭 Block import notification (#{}): {} processed successfully", block_number, block_hash);
+
+        // Record block processing duration
+        observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["block_import", STATUS_SUCCESS], start.elapsed().as_secs_f64());
     }
 
     /// Handle block notifications during network initial sync.
@@ -1886,6 +1919,9 @@ where
             return;
         }
 
+        // Start timing block processing after early returns
+        let start = std::time::Instant::now();
+
         info!(target: LOG_TARGET, "📩 Finality notification #{}: {:x}", block_number, block_hash);
 
         // Process finality events for all implicitly finalised blocks in tree_route.
@@ -1957,5 +1993,8 @@ where
         };
 
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {:x} processed successfully", block_number, block_hash);
+
+        // Record block processing duration
+        observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_SUCCESS], start.elapsed().as_secs_f64());
     }
 }

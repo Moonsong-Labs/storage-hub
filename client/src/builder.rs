@@ -11,8 +11,6 @@ use std::{path::PathBuf, sync::Arc};
 use substrate_prometheus_endpoint::Registry;
 use tokio::sync::RwLock;
 
-use crate::metrics::MetricsLink;
-
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
@@ -25,6 +23,8 @@ use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
+
+use shc_telemetry::MetricsLink;
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
@@ -196,6 +196,7 @@ where
                 self.notify_period,
                 capacity_config,
                 maintenance_mode,
+                self.metrics.clone(),
             )
             .await;
 
@@ -249,6 +250,7 @@ where
             client,
             fisherman_options.batch_interval_seconds,
             fisherman_options.batch_deletion_limit,
+            self.metrics.clone(),
         )
         .await;
 

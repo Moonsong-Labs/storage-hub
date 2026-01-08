@@ -20,6 +20,7 @@ use shc_common::{
     types::{BlockNumber, OpaqueBlock, StorageEnableEvents, StorageHubClient},
 };
 use shc_indexer_db::models::FileDeletionType;
+use shc_telemetry::{dec_gauge, inc_counter, observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
 use shp_types::Hash;
 
 use crate::{
@@ -53,6 +54,8 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     last_batch_time: Option<Instant>,
     /// Maximum number of files to process per batch deletion cycle
     batch_deletion_limit: u64,
+    /// Metrics link for recording command processing
+    pub(crate) metrics: MetricsLink,
 }
 
 /// Represents a change to a file key between blocks
@@ -79,6 +82,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         batch_interval_seconds: u64,
         batch_deletion_limit: u64,
+        metrics: MetricsLink,
     ) -> Self {
         Self {
             client,
@@ -88,6 +92,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             batch_interval_duration: Duration::from_secs(batch_interval_seconds),
             last_batch_time: None,
             batch_deletion_limit,
+            metrics,
         }
     }
 
@@ -455,7 +460,18 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
         &mut self,
         message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
+        // Extract command name before moving message into match
+        let command_name = message.command_name();
+        let metrics = self.metrics.clone();
+
         async move {
+            // Record pending and start timer
+            inc_counter!(metrics: metrics.as_ref(), command_pending, command_name);
+            let start = std::time::Instant::now();
+
+            // Track command success/failure for metrics
+            let mut command_succeeded = true;
+
             match message {
                 FishermanServiceCommand::GetFileKeyChangesSinceBlock {
                     from_block,
@@ -472,6 +488,11 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                     let result = self
                         .get_file_key_changes_since_block(from_block, provider)
                         .await;
+
+                    // Track if the business logic failed
+                    if result.is_err() {
+                        command_succeeded = false;
+                    }
 
                     // Send the result back through the callback
                     if let Err(_) = callback.send(result) {
@@ -490,6 +511,11 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
 
                     let result = self.query_incomplete_storage_request(file_key);
 
+                    // Track if the business logic failed
+                    if result.is_err() {
+                        command_succeeded = false;
+                    }
+
                     // Send the result back through the callback
                     if let Err(_) = callback.send(result) {
                         warn!(
@@ -499,6 +525,11 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                     }
                 }
             }
+
+            // Record command completion
+            let status = if command_succeeded { STATUS_SUCCESS } else { STATUS_FAILURE };
+            dec_gauge!(metrics: metrics.as_ref(), command_pending, command_name);
+            observe_histogram!(metrics: metrics.as_ref(), command_processing_seconds, labels: &[command_name, status], start.elapsed().as_secs_f64());
         }
     }
 

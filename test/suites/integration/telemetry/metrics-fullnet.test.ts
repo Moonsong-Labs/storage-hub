@@ -5,7 +5,6 @@ await describeMspNet(
   "Prometheus metrics ingestion",
   {
     initialised: false,
-    indexer: true,
     telemetry: true
   },
   ({ before, createUserApi, createMsp1Api, createBspApi, it }) => {
@@ -44,11 +43,6 @@ await describeMspNet(
       const targets = await userApi.prometheus.getTargets();
       const healthyTargets = targets.data.activeTargets.filter((t) => t.health === "up");
 
-      console.log(`Prometheus is scraping ${healthyTargets.length} healthy targets`);
-      for (const target of healthyTargets) {
-        console.log(`  - ${target.labels.job}: ${target.scrapeUrl}`);
-      }
-
       assert(healthyTargets.length >= 4, "Expected at least 4 healthy scrape targets");
     });
 
@@ -60,7 +54,6 @@ await describeMspNet(
         const blockHeight = await userApi.prometheus.getMetricValue(
           `substrate_block_height{job="${job}"}`
         );
-        console.log(`  ${job} block height: ${blockHeight}`);
         assert(blockHeight >= 0, `Expected block height from ${job} to be >= 0`);
       }
     });
@@ -68,24 +61,13 @@ await describeMspNet(
     it("Storage request metrics increment after batch file uploads", async () => {
       // Get initial metric values (using centralized event handler metrics)
       // The event label is derived from the event type name: NewStorageRequest -> new_storage_request
-      // Check both pending (event received) and success (handler completed) status labels
-      const initialMspPending = await userApi.prometheus.getMetricValue(
-        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-msp-1"}'
-      );
+      // - event_handler_pending: gauge tracking currently in-flight handlers
+      // - event_handler_total with status="success": counter for completed handlers
       const initialMspSuccess = await userApi.prometheus.getMetricValue(
         'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-msp-1"}'
       );
-      const initialBspPending = await userApi.prometheus.getMetricValue(
-        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-bsp"}'
-      );
       const initialBspSuccess = await userApi.prometheus.getMetricValue(
         'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-bsp"}'
-      );
-      console.log(
-        `Initial MSP storage requests - pending: ${initialMspPending}, success: ${initialMspSuccess}`
-      );
-      console.log(
-        `Initial BSP storage requests - pending: ${initialBspPending}, success: ${initialBspSuccess}`
       );
 
       // Get MSP value proposition for batch storage requests
@@ -131,7 +113,6 @@ await describeMspNet(
       });
 
       const { fileKeys } = batchResult;
-      console.log(`Created ${fileKeys.length} storage requests`);
 
       // Verify all files are stored in MSP
       for (const fileKey of fileKeys) {
@@ -152,59 +133,45 @@ await describeMspNet(
       // Wait for Prometheus to scrape the updated metrics
       await userApi.prometheus.waitForScrape();
 
-      // Check that metrics have incremented for both pending and success
-      const finalMspPending = await userApi.prometheus.getMetricValue(
-        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-msp-1"}'
-      );
+      // Check that success counter has incremented
       const finalMspSuccess = await userApi.prometheus.getMetricValue(
         'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-msp-1"}'
-      );
-      const finalBspPending = await userApi.prometheus.getMetricValue(
-        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-bsp"}'
       );
       const finalBspSuccess = await userApi.prometheus.getMetricValue(
         'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-bsp"}'
       );
-      console.log(
-        `Final MSP storage requests - pending: ${finalMspPending}, success: ${finalMspSuccess}`
+
+      // Check pending gauge (should be 0 or low since handlers completed)
+      const mspPendingGauge = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_pending{event="new_storage_request",job="storagehub-msp-1"}'
       );
-      console.log(
-        `Final BSP storage requests - pending: ${finalBspPending}, success: ${finalBspSuccess}`
+      const bspPendingGauge = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_pending{event="new_storage_request",job="storagehub-bsp"}'
       );
 
-      // Metrics should have increased after processing 4 storage requests
-      // Both pending and success should increment for successful handlers
-      assert(
-        finalMspPending > initialMspPending,
-        `Expected MSP pending to increment, got ${finalMspPending}`
-      );
+      // Success counters should have increased after processing 4 storage requests
       assert(
         finalMspSuccess > initialMspSuccess,
         `Expected MSP success to increment, got ${finalMspSuccess}`
-      );
-      assert(
-        finalBspPending > initialBspPending,
-        `Expected BSP pending to increment, got ${finalBspPending}`
       );
       assert(
         finalBspSuccess > initialBspSuccess,
         `Expected BSP success to increment, got ${finalBspSuccess}`
       );
 
-      // Verify pending >= success (every success was first pending)
+      // Pending gauge should be low (0 or close to 0) since all handlers completed
+      // We don't assert exactly 0 because there could be new events arriving
       assert(
-        finalMspPending >= finalMspSuccess,
-        `MSP pending (${finalMspPending}) should be >= success (${finalMspSuccess})`
+        mspPendingGauge <= 5,
+        `MSP pending gauge (${mspPendingGauge}) should be low after handlers complete`
       );
       assert(
-        finalBspPending >= finalBspSuccess,
-        `BSP pending (${finalBspPending}) should be >= success (${finalBspSuccess})`
+        bspPendingGauge <= 5,
+        `BSP pending gauge (${bspPendingGauge}) should be low after handlers complete`
       );
     });
 
-    it("Histogram metrics are populated after storage operations", async () => {
-      // After the previous test ran storage requests, check histogram metrics
-
+    it("Event handler metrics are tracked", async () => {
       // Event handler duration histogram - check metrics for events that occurred during the test
       // These events should have been triggered by the batch file uploads:
       // - new_storage_request: Initial storage request handling (BSP and MSP)
@@ -220,20 +187,13 @@ await describeMspNet(
       ];
 
       let totalEventCount = 0;
-      console.log("Event handler histograms:");
 
       for (const event of eventsToCheck) {
         const count = await userApi.prometheus.getMetricValue(
           `storagehub_event_handler_seconds_count{event="${event}"}`
         );
-        const sum = await userApi.prometheus.getMetricValue(
-          `storagehub_event_handler_seconds_sum{event="${event}"}`
-        );
         if (count > 0) {
           totalEventCount += count;
-          console.log(
-            `  ${event}: count=${count}, sum=${sum.toFixed(3)}s, avg=${(sum / count).toFixed(3)}s`
-          );
         }
       }
 
@@ -241,30 +201,80 @@ await describeMspNet(
         totalEventCount > 0,
         "Expected event_handler_seconds to have recorded observations for at least one event type"
       );
-      console.log(`Total event handler observations: ${totalEventCount}`);
 
-      // File transfer duration histogram
-      // Note: file_transfer_seconds is only recorded when send_chunks() is called for peer-to-peer
-      // transfers. Direct uploads via batchStorageRequests may not trigger this metric.
-      const fileTransferCount = await userApi.prometheus.getMetricValue(
-        "storagehub_file_transfer_seconds_count"
+      // Verify pending gauge exists (should be low since handlers completed)
+      const pendingGauge = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_pending{event="new_storage_request"}'
       );
-      const fileTransferSum = await userApi.prometheus.getMetricValue(
-        "storagehub_file_transfer_seconds_sum"
+      assert(
+        pendingGauge >= 0,
+        `Event handler pending gauge should exist and be >= 0, got ${pendingGauge}`
       );
-      console.log(
-        `File transfer histogram - count: ${fileTransferCount}, sum: ${fileTransferSum.toFixed(3)}s`
+    });
+
+    it("Command processing metrics are tracked", async () => {
+      // Command metrics are recorded by BlockchainService and FishermanService
+      // After storage operations, we should see command processing metrics
+
+      // Check command processing histogram has observations
+      // Commands like send_extrinsic, query_earliest_file_volunteer_tick, etc.
+      const commandHistogramCount = await userApi.prometheus.getMetricValue(
+        "storagehub_command_processing_seconds_count"
       );
-      // Only log informational - this metric may be 0 for direct uploads
-      if (fileTransferCount > 0) {
-        console.log(
-          `  Average file transfer time: ${(fileTransferSum / fileTransferCount).toFixed(
-            3
-          )} seconds`
-        );
-      } else {
-        console.log("  (No peer-to-peer file transfers occurred in this test)");
+
+      assert(
+        commandHistogramCount > 0,
+        `Expected command_processing_seconds to have observations, got ${commandHistogramCount}`
+      );
+
+      // Verify command pending gauge exists and is low (operations completed)
+      const commandPendingResult = await userApi.prometheus.query("storagehub_command_pending");
+      assert.strictEqual(
+        commandPendingResult.status,
+        "success",
+        "Command pending gauge query should succeed"
+      );
+
+      // Sum all pending commands - should be low since operations completed
+      let totalPending = 0;
+      for (const result of commandPendingResult.data.result) {
+        totalPending += Number.parseFloat(result.value?.[1] ?? "0");
       }
+      assert(
+        totalPending <= 10,
+        `Total pending commands (${totalPending}) should be low after operations complete`
+      );
+    });
+
+    it("Block processing metrics are tracked", async () => {
+      // Block processing metrics track block_import and finalized_block operations
+      // These should be populated as the chain produces and finalizes blocks
+
+      // Check block_import histogram has observations
+      const blockImportCount = await userApi.prometheus.getMetricValue(
+        'storagehub_block_processing_seconds_count{operation="block_import"}'
+      );
+
+      // Check finalized_block histogram has observations
+      const finalizedBlockCount = await userApi.prometheus.getMetricValue(
+        'storagehub_block_processing_seconds_count{operation="finalized_block"}'
+      );
+
+      // At least one of the block processing operations should have been recorded
+      const totalBlockProcessing = blockImportCount + finalizedBlockCount;
+      assert(
+        totalBlockProcessing > 0,
+        `Expected block_processing_seconds to have observations (block_import: ${blockImportCount}, finalized_block: ${finalizedBlockCount})`
+      );
+
+      // Verify we can query block processing sum (for average calculation)
+      const blockProcessingSum = await userApi.prometheus.getMetricValue(
+        "storagehub_block_processing_seconds_sum"
+      );
+      assert(
+        blockProcessingSum >= 0,
+        `Block processing sum should be >= 0, got ${blockProcessingSum}`
+      );
     });
 
     it("All StorageHub metric types are queryable", async () => {
@@ -272,31 +282,6 @@ await describeMspNet(
       const result = await userApi.prometheus.query('{__name__=~"storagehub_.*"}');
 
       assert.strictEqual(result.status, "success", "Failed to query StorageHub metrics");
-
-      // Group metrics by type
-      const counters: string[] = [];
-      const histograms: string[] = [];
-      const gauges: string[] = [];
-
-      for (const metric of result.data.result) {
-        const name = metric.metric.__name__;
-        if (name.endsWith("_total")) {
-          if (!counters.includes(name)) counters.push(name);
-        } else if (name.endsWith("_bucket") || name.endsWith("_sum") || name.endsWith("_count")) {
-          const baseName = name.replace(/_bucket$|_sum$|_count$/, "");
-          if (!histograms.includes(baseName)) histograms.push(baseName);
-        } else {
-          if (!gauges.includes(name)) gauges.push(name);
-        }
-      }
-
-      console.log("\nStorageHub Metrics Summary:");
-      console.log(`  Counters (${counters.length}): ${counters.join(", ") || "none"}`);
-      console.log(`  Histograms (${histograms.length}): ${histograms.join(", ") || "none"}`);
-      console.log(`  Gauges (${gauges.length}): ${gauges.join(", ") || "none"}`);
-
-      const totalMetrics = counters.length + histograms.length + gauges.length;
-      console.log(`  Total unique metrics: ${totalMetrics}`);
     });
 
     it("Prometheus can aggregate metrics across nodes", async () => {
@@ -305,26 +290,6 @@ await describeMspNet(
       const sumResult = await userApi.prometheus.query(
         'sum(storagehub_event_handler_total{event="new_storage_request",job=~"storagehub-msp.*"}) by (status)'
       );
-      const bspSumResult = await userApi.prometheus.query(
-        'sum(storagehub_event_handler_total{event="new_storage_request",job="storagehub-bsp"}) by (status)'
-      );
-
-      console.log("\nAggregated metrics:");
-      if (sumResult.data.result.length > 0) {
-        for (const item of sumResult.data.result) {
-          console.log(
-            `  MSP storage requests (${item.metric.status || "total"}): ${item.value?.[1]}`
-          );
-        }
-      }
-      if (bspSumResult.data.result.length > 0) {
-        for (const item of bspSumResult.data.result) {
-          console.log(
-            `  BSP storage requests (${item.metric.status || "total"}): ${item.value?.[1]}`
-          );
-        }
-      }
-
       assert.strictEqual(sumResult.status, "success", "Aggregation query should succeed");
     });
   }

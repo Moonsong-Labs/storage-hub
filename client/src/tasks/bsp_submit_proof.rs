@@ -24,10 +24,10 @@ use shc_common::{
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
+use shc_telemetry::{observe_histogram, STATUS_FAILURE, STATUS_SUCCESS};
+
 use crate::{
     handler::StorageHubHandler,
-    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
-    observe_histogram,
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
