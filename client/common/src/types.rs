@@ -1,7 +1,33 @@
 use std::{
-    fmt::Debug,
+    fmt::{Debug, LowerHex},
     sync::atomic::{AtomicU64, Ordering},
 };
+
+/// Extension trait for displaying slices of hex-formattable items as a comma-separated list.
+///
+/// This is useful for logging file keys, hashes, or any other types implementing [`LowerHex`].
+///
+/// # Example
+/// ```ignore
+/// use shc_common::types::DisplayHexListExt;
+/// use sp_core::H256;
+///
+/// let keys = vec![H256::zero(), H256::repeat_byte(0xff)];
+/// println!("File keys: [{}]", keys.display_hex_list());
+/// // Output: File keys: [0x0000...0000, 0xffff...ffff]
+/// ```
+pub trait DisplayHexListExt {
+    fn display_hex_list(&self) -> String;
+}
+
+impl<T: LowerHex> DisplayHexListExt for [T] {
+    fn display_hex_list(&self) -> String {
+        self.iter()
+            .map(|k| format!("{:x}", k))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
 
 use codec::{Decode, Encode};
 use sc_executor::WasmExecutor;
