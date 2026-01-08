@@ -44,7 +44,6 @@ const RANDOM_PEERS_TO_SELECT: usize = 3;
 const MAX_CONCURRENT_BUCKET_DOWNLOADS: usize = 2;
 
 /// Configuration for file download limits and parallelism settings.
-#[derive(Copy)]
 pub struct FileDownloadLimits {
     /// Maximum number of files to download in parallel
     pub max_concurrent_file_downloads: usize,
