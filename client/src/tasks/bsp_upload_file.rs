@@ -313,7 +313,15 @@ where
             .iter()
             .filter(|req| {
                 let file_key: FileKey = req.file_key.as_ref().into();
-                pending_file_keys_set.contains(&file_key)
+                let is_pending = pending_file_keys_set.contains(&file_key);
+                if !is_pending {
+                    info!(
+                        target: LOG_TARGET,
+                        "Filtering out file key [{:x}]: no volunteer registered on chain (not pending confirmation)",
+                        req.file_key
+                    );
+                }
+                is_pending
             })
             .cloned()
             .collect();
