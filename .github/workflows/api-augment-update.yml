@@ -33,9 +33,13 @@ jobs:
       - uses: ./.github/workflow-templates/setup-pnpm
       - name: Install libpq-dev
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
-      - uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Protoc
+        run: |
+          PROTOC_VERSION=28.3
+          curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          unzip -q "protoc-${PROTOC_VERSION}-linux-x86_64.zip" -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          rm "protoc-${PROTOC_VERSION}-linux-x86_64.zip"
       - name: Build All
         run: cargo build --release
       - name: Check Built By Mold

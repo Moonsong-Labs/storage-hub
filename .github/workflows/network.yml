@@ -147,9 +147,12 @@ jobs:
       - name: Install build deps
         run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev binutils
       - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PROTOC_VERSION=28.3
+          curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          unzip -q "protoc-${PROTOC_VERSION}-linux-x86_64.zip" -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          rm "protoc-${PROTOC_VERSION}-linux-x86_64.zip"
       - name: Build node binary
         if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         run: cargo build -p storage-hub-node --release --locked
@@ -206,9 +209,12 @@ jobs:
       - name: Install libpq-dev
         run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev
       - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PROTOC_VERSION=28.3
+          curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          unzip -q "protoc-${PROTOC_VERSION}-linux-x86_64.zip" -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          rm "protoc-${PROTOC_VERSION}-linux-x86_64.zip"
       - name: Build backend
         if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         run: cargo build -p sh-msp-backend --release --locked
@@ -663,9 +669,12 @@ jobs:
       - name: Install libpq-dev
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
       - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PROTOC_VERSION=28.3
+          curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          unzip -q "protoc-${PROTOC_VERSION}-linux-x86_64.zip" -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          rm "protoc-${PROTOC_VERSION}-linux-x86_64.zip"
       - run: mkdir -p target/release/
       - name: Get backend binary from artefacts if changed
         if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
@@ -955,9 +964,12 @@ jobs:
       - name: Install libpq-dev
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
       - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PROTOC_VERSION=28.3
+          curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          unzip -q "protoc-${PROTOC_VERSION}-linux-x86_64.zip" -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          rm "protoc-${PROTOC_VERSION}-linux-x86_64.zip"
       - run: mkdir -p target/release/
       - name: Get backend binary from artefacts if changed
         if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
