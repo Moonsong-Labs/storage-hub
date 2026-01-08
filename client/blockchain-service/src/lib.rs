@@ -24,8 +24,8 @@ use shc_common::types::StorageHubClient;
 
 pub use self::{
     forest_write_lock::{
-        ForestRootWriteLock, ForestRootWriteLockGuard, ForestWriteLockManager,
-        LockReleaseReceiver, LockReleaseSender, TakeForestWriteLock,
+        ForestRootWriteLock, ForestRootWriteLockGuard, ForestWriteLockManager, LockReleaseReceiver,
+        LockReleaseSender, TakeForestWriteLock,
     },
     handler::BlockchainService,
     types::{FileKeyStatus, FileKeyStatusUpdate},
