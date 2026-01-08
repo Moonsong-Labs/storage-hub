@@ -20,7 +20,9 @@ use shc_common::{
     types::{BlockNumber, OpaqueBlock, StorageEnableEvents, StorageHubClient},
 };
 use shc_indexer_db::models::FileDeletionType;
-use shc_telemetry::{dec_gauge, inc_counter, observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
+use shc_telemetry::{
+    dec_gauge, inc_counter, observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS,
+};
 use shp_types::Hash;
 
 use crate::{
@@ -527,7 +529,11 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
             }
 
             // Record command completion
-            let status = if command_succeeded { STATUS_SUCCESS } else { STATUS_FAILURE };
+            let status = if command_succeeded {
+                STATUS_SUCCESS
+            } else {
+                STATUS_FAILURE
+            };
             dec_gauge!(metrics: metrics.as_ref(), command_pending, command_name);
             observe_histogram!(metrics: metrics.as_ref(), command_processing_seconds, labels: &[command_name, status], start.elapsed().as_secs_f64());
         }

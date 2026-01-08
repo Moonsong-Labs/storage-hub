@@ -6,7 +6,6 @@ use tokio::sync::RwLock;
 
 use shc_actors_derive::{subscribe_actor_event, subscribe_actor_event_map};
 
-use shc_telemetry::{MetricsLink, StorageHubMetrics};
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::EventHandler,
@@ -36,6 +35,7 @@ use shc_file_transfer_service::{
 use shc_fisherman_service::events::BatchFileDeletions;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
+use shc_telemetry::{MetricsLink, StorageHubMetrics};
 
 use crate::{
     bsp_peer_manager::BspPeerManager,

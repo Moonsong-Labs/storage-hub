@@ -423,7 +423,6 @@ where
         self.blockchain_service_config = Some(blockchain_service_config);
         self
     }
-
 }
 
 /// Abstraction trait to build the Storage Layer of a [`ShNodeType`].
