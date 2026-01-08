@@ -271,7 +271,7 @@ where
         RoleOptions::Fisherman(_) => "fisherman-service",
     };
     let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), task_spawner_name);
-    let mut builder = StorageHubBuilder::<R, S, Runtime>::new(task_spawner);
+    let mut builder = StorageHubBuilder::<R, S, Runtime>::new(task_spawner, prometheus_registry);
 
     // Setup file transfer service (common to all roles)
     let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
@@ -285,10 +285,6 @@ where
             network.clone(),
         )
         .await;
-
-    // Set the Prometheus metrics registry BEFORE spawning services
-    // so that services like fisherman can access metrics during initialization
-    builder.with_metrics(prometheus_registry);
 
     // Role-specific configuration
     let rpc_config = match role_options {

@@ -84,7 +84,11 @@ where
     (R, S): ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(task_spawner: TaskSpawner) -> Self {
+    /// Create a new StorageHubBuilder.
+    ///
+    /// If the Prometheus registry is provided, metrics will be registered and available for all services.
+    /// If `None`, metrics will be disabled (no-op).
+    pub fn new(task_spawner: TaskSpawner, prometheus_registry: Option<&Registry>) -> Self {
         Self {
             task_spawner: Some(task_spawner),
             file_transfer: None,
@@ -104,7 +108,7 @@ where
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
             peer_manager: None,
-            metrics: MetricsLink::default(),
+            metrics: MetricsLink::new(prometheus_registry),
             trusted_file_transfer_server_config: None,
         }
     }
@@ -420,14 +424,6 @@ where
         self
     }
 
-    /// Set the Prometheus metrics registry.
-    ///
-    /// If the registry is provided, metrics will be registered and available for tasks.
-    /// If `None`, metrics will be disabled (no-op).
-    pub fn with_metrics(&mut self, registry: Option<&Registry>) -> &mut Self {
-        self.metrics = MetricsLink::new(registry);
-        self
-    }
 }
 
 /// Abstraction trait to build the Storage Layer of a [`ShNodeType`].
