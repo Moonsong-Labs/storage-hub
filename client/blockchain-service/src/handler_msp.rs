@@ -25,12 +25,12 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     events::{
-        DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
-        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
-        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        StartMovedBucketDownload,
+        CheckBucketFileStorage, DistributeFileToBsp, FinalisedBucketMovedAway,
+        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected, ForestWriteLockTaskData,
+        MoveBucketRequestedForMsp, NewStorageRequest, ProcessMspRespondStoringRequest,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
     types::{FileDistributionInfo, FileKeyStatus, ManagedProvider, MultiInstancesNodeRole},
@@ -1071,6 +1071,7 @@ where
                         "Bucket [{:?}] root verified: {:?}",
                         bucket_id, local_root
                 );
+                self.emit(CheckBucketFileStorage { bucket_id });
                 verified += 1;
             }
         }

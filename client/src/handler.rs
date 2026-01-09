@@ -12,13 +12,13 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBspConfirmStoppedStoring,
-        FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
-        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedStorageRequestRejected, FinalisedTrieRemoveMutationsAppliedForBsp,
-        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, CheckBucketFileStorage, DistributeFileToBsp,
+        FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
+        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected,
+        FinalisedTrieRemoveMutationsAppliedForBsp, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
+        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
@@ -47,6 +47,7 @@ use crate::{
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
         fisherman_process_batch_deletions::FishermanTask,
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
+        msp_check_bucket_file_storage::MspCheckBucketFileStorageTask,
         msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask,
         msp_distribute_file::MspDistributeFileTask,
@@ -315,13 +316,13 @@ where
                 StartMovedBucketDownload<Runtime> => MspRespondMoveBucketTask,
                 // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
                 UserWithoutFunds<Runtime> => MspStopStoringInsolventUserTask,
-                FinalisedMspStopStoringBucketInsolventUser<Runtime> =>
-                    MspStopStoringInsolventUserTask,
+                FinalisedMspStopStoringBucketInsolventUser<Runtime> => MspStopStoringInsolventUserTask,
                 NotifyPeriod => MspChargeFeesTask,
                 DistributeFileToBsp<Runtime> => MspDistributeFileTask,
                 // MspRemoveFinalisedFilesTask handles events for removing files from file storage after mutations are finalised.
                 FinalisedBucketMutationsApplied<Runtime> => MspDeleteFileTask,
                 FinalisedStorageRequestRejected<Runtime> => MspDeleteFileTask,
+                CheckBucketFileStorage<Runtime> => MspCheckBucketFileStorageTask,
             ]
         );
     }
