@@ -31,11 +31,11 @@ await describeBspNet(
         sealBlock: false
       });
 
-      await assertDockerLog("storage-hub-sh-bsp-1", "attempt #1", 40000);
+      await assertDockerLog("storage-hub-sh-bsp-1", "attempt 1/", 40000);
 
-      await assertDockerLog("storage-hub-sh-bsp-1", "attempt #2", 40000);
+      await assertDockerLog("storage-hub-sh-bsp-1", "attempt 2/", 40000);
 
-      await assertDockerLog("storage-hub-sh-bsp-1", "attempt #3", 40000);
+      await assertDockerLog("storage-hub-sh-bsp-1", "attempt 3/", 40000);
 
       await assertDockerLog(
         "storage-hub-sh-bsp-1",
