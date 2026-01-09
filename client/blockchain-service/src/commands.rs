@@ -3,9 +3,11 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use shc_common::{
+    blockchain_utils::decode_module_error,
     traits::{KeyTypeOperations, StorageEnableRuntime},
     types::StorageEnableEvents,
 };
+use sp_runtime::DispatchError;
 use sp_api::ApiError;
 
 use pallet_file_system_runtime_api::{
@@ -314,12 +316,50 @@ where
 
             match result {
                 Ok(block_hash) => {
-                    debug!(target: LOG_TARGET, "Transaction with hash {:?} succeeded", submitted_ext_info.hash);
+                    // Always fetch the extrinsic to check if it succeeded or failed on-chain
+                    let extrinsic = self
+                        .get_extrinsic_from_block(block_hash, submitted_ext_info.hash)
+                        .await?;
+
+                    // Check the extrinsic result and log appropriately
+                    match Self::extrinsic_result(extrinsic.clone()) {
+                        Ok(ExtrinsicResult::Success { .. }) => {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Transaction {:?} succeeded in block {:?}",
+                                call,
+                                block_hash
+                            );
+                        }
+                        Ok(ExtrinsicResult::Failure { dispatch_error, .. }) => {
+                            // Try to decode module errors to get human-readable error names
+                            let error_description = match &dispatch_error {
+                                DispatchError::Module(module_error) => {
+                                    match decode_module_error::<Runtime>(module_error.clone()) {
+                                        Ok(decoded) => format!("{:?}", decoded),
+                                        Err(_) => format!("{:?}", dispatch_error),
+                                    }
+                                }
+                                _ => format!("{:?}", dispatch_error),
+                            };
+                            warn!(
+                                target: LOG_TARGET,
+                                "Transaction {:?} failed on-chain with dispatch error: {}",
+                                call,
+                                error_description
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Transaction {:?} included in block but could not determine result: {:?}",
+                                call,
+                                e
+                            );
+                        }
+                    }
 
                     if with_events {
-                        let extrinsic = self
-                            .get_extrinsic_from_block(block_hash, submitted_ext_info.hash)
-                            .await?;
                         return Ok(Some(extrinsic.events));
                     } else {
                         return Ok(None);
