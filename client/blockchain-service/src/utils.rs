@@ -1872,6 +1872,14 @@ where
                     })?;
 
                 debug!(target: LOG_TARGET, "Inserted file keys: {:?}", inserted_file_keys);
+
+                // MSP Follower: Track FileKeys to retrieve from Leader
+                if matches!(self.role, crate::types::MultiInstancesNodeRole::Follower) {
+                    if let Some(crate::types::ManagedProvider::Msp(msp_handler)) = self.maybe_managed_provider.as_mut() {
+                        msp_handler.follower_file_keys_to_retrieve.insert(*file_key);
+                        debug!(target: LOG_TARGET, "MSP Follower: Tracked file key {:x} for retrieval from Leader", file_key);
+                    }
+                }
             }
             TrieMutation::Remove(_) => {
                 fs.write().await.delete_file_key(file_key).map_err(|e| {
