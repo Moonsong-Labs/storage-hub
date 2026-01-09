@@ -291,6 +291,7 @@ where
             rpc_config,
             provider_type,
             storage_path,
+            max_open_forests,
             max_storage_capacity,
             jump_capacity,
             msp_charging_period,
@@ -314,7 +315,10 @@ where
 
             // Setup the storage layer and capacity config
             builder
-                .setup_storage_layer(storage_path.clone())
+                .setup_storage_layer(
+                    storage_path.clone(),
+                    max_open_forests.expect("max_open_forests has a default value"),
+                )
                 .with_capacity_config(Some(CapacityConfig::new(
                     max_storage_capacity.unwrap_or_default().saturated_into(),
                     jump_capacity.unwrap_or_default().saturated_into(),
@@ -379,7 +383,7 @@ where
             );
 
             // Setup the storage layer (ephemeral for fisherman)
-            builder.setup_storage_layer(None);
+            builder.setup_storage_layer(None, 0);
 
             // Set the indexer db pool
             builder.with_indexer_db_pool(Some(db_pool));
