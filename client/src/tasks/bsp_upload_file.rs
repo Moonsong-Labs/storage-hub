@@ -896,7 +896,6 @@ where
                 "BSP not registered as a volunteer for file {:x}",
                 file_key
             );
-            self.unvolunteer_file(file_key.into()).await;
             return Err(anyhow!(
                 "BSP not registered as a volunteer for file {:x}",
                 file_key
