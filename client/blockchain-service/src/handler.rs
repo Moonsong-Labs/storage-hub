@@ -2059,9 +2059,6 @@ where
     }
 
     /// Queue one or more confirm storing requests to the pending deque.
-    ///
-    /// This is a helper to avoid duplicate code when queueing requests from
-    /// different command handlers.
     pub(crate) fn queue_confirm_storing_requests(
         &self,
         requests: impl IntoIterator<Item = crate::types::ConfirmStoringRequest<Runtime>>,

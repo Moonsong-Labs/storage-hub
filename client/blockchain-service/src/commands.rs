@@ -383,8 +383,9 @@ where
                 Err(err) => {
                     warn!(
                         target: LOG_TARGET,
-                        "Transaction {:?} failed on attempt {}/{}: {:?}",
+                        "Transaction {:?} (hash: {:?}) failed on attempt {}/{}: {:?}",
                         call,
+                        submitted_ext_info.hash,
                         retry_count + 1,
                         retry_strategy.max_retries + 1,
                         err
