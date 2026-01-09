@@ -435,12 +435,12 @@ where
     fn setup_storage_layer(
         &mut self,
         _storage_path: Option<String>,
-        max_open_forests: usize,
+        _max_open_forests: usize,
     ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler = Some(<(BspProvider, InMemoryStorageLayer) as ShNodeType<
             Runtime,
-        >>::FSH::new(max_open_forests));
+        >>::FSH::new());
 
         self
     }
@@ -484,12 +484,12 @@ where
     fn setup_storage_layer(
         &mut self,
         _storage_path: Option<String>,
-        max_open_forests: usize,
+        _max_open_forests: usize,
     ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler = Some(<(MspProvider, InMemoryStorageLayer) as ShNodeType<
             Runtime,
-        >>::FSH::new(max_open_forests));
+        >>::FSH::new());
 
         self
     }

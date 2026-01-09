@@ -248,12 +248,10 @@ where
     ///
     /// # Arguments
     /// * `max_open_forests` - Maximum number of forests to keep open simultaneously.
-    pub fn new(max_open_forests: usize) -> Self {
+    pub fn new() -> Self {
         Self {
             storage_path: None,
-            open_forests: Arc::new(RwLock::new(LruCache::new(
-                NonZeroUsize::new(max_open_forests).expect("max_open_forests must be > 0"),
-            ))),
+            open_forests: Arc::new(RwLock::new(LruCache::unbounded())),
             known_forests: Arc::new(RwLock::new(HashSet::new())),
             _runtime: PhantomData,
         }
