@@ -8,6 +8,7 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
 use lru::LruCache;
@@ -331,7 +332,7 @@ where
                 }
             }
             Err(e) => {
-                debug!(
+                error!(
                     target: LOG_TARGET,
                     "Forest base path not found or unreadable ({}): {}",
                     base.to_string_lossy(),
@@ -351,14 +352,17 @@ where
     }
 
     /// Opens a forest from disk and returns it.
-    /// Returns None if the forest cannot be opened.
+    /// Returns an error if the forest cannot be opened.
     fn open_forest_from_disk(
         &self,
         key: &K,
-    ) -> Option<
+    ) -> Result<
         Arc<RwLock<RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>>>,
     > {
-        let storage_path = self.storage_path.as_ref()?;
+        let storage_path = self
+            .storage_path
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Storage path not set"))?;
 
         let mut db_path = PathBuf::new();
         db_path.push(storage_path);
@@ -368,19 +372,13 @@ where
         let db_path_str = db_path.to_string_lossy().to_string();
         debug!(target: LOG_TARGET, "Lazy-loading forest from disk: {}", db_path_str);
 
-        match rocksdb::create_db::<StorageProofsMerkleTrieLayout>(db_path_str) {
-            Ok(storage_db) => match RocksDBForestStorage::new(storage_db) {
-                Ok(fs) => Some(Arc::new(RwLock::new(fs))),
-                Err(e) => {
-                    warn!(target: LOG_TARGET, "Failed to initialise forest {:?}: {:?}", key, e);
-                    None
-                }
-            },
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Failed to open RocksDB for forest {:?}: {:?}", key, e);
-                None
-            }
-        }
+        let storage_db = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(db_path_str)
+            .map_err(|e| anyhow::anyhow!("Failed to open RocksDB for forest [{}]: {:?}", key, e))?;
+
+        let fs = RocksDBForestStorage::new(storage_db)
+            .map_err(|e| anyhow::anyhow!("Failed to initialise forest [{}]: {:?}", key, e))?;
+
+        Ok(Arc::new(RwLock::new(fs)))
     }
 
     /// Creates a new forest on disk and returns it.
@@ -520,23 +518,32 @@ where
         }
 
         // Check if the forest exists on disk
-        let known = self.known_forests.read().await;
-        if !known.contains(key) {
-            return None;
+        {
+            let known = self.known_forests.read().await;
+            if !known.contains(key) {
+                return None;
+            }
         }
-        drop(known);
 
         // Open the forest from disk if it exists but is not in the cache
-        let fs = self.open_forest_from_disk(key)?;
+        let fs = match self.open_forest_from_disk(key) {
+            Ok(fs) => fs,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to open forest [{}]: {}", key, e);
+                return None;
+            }
+        };
 
         // Add the forest to the LRU cache
-        let mut cache = self.open_forests.write().await;
+        {
+            let mut cache = self.open_forests.write().await;
 
-        // Check if the forest is already in the cache after acquiring the write lock (another thread might have loaded the forest)
-        if let Some(existing) = cache.get(key) {
-            return Some(existing.clone());
+            // Check if the forest is already in the cache after acquiring the write lock (another thread might have loaded the forest)
+            if let Some(existing) = cache.get(key) {
+                return Some(existing.clone());
+            }
+            cache.put(key.clone(), fs.clone());
         }
-        cache.put(key.clone(), fs.clone());
 
         Some(fs)
     }
