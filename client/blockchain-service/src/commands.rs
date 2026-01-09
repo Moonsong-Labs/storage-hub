@@ -326,15 +326,20 @@ where
                     }
                 }
                 Err(err) => {
-                    warn!(target: LOG_TARGET, "Transaction failed: {:?}", err);
+                    warn!(
+                        target: LOG_TARGET,
+                        "Transaction {:?} failed on attempt {}/{}: {:?}",
+                        call,
+                        retry_count + 1,
+                        retry_strategy.max_retries + 1,
+                        err
+                    );
 
                     if let Some(ref should_retry) = retry_strategy.should_retry {
                         if !should_retry(err.clone()).await {
                             return Err(anyhow::anyhow!("Exhausted retry strategy"));
                         }
                     }
-
-                    warn!(target: LOG_TARGET, "Failed to submit transaction with hash {:?}, attempt #{}", submitted_ext_info.hash, retry_count + 1);
 
                     if let WatchTransactionError::Timeout = err {
                         // Increase the tip to incentivise the collators to include the transaction in a block with priority
