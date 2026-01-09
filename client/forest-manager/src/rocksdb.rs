@@ -65,11 +65,7 @@ where
 
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
-    let mut db_config = kvdb_rocksdb::DatabaseConfig::with_columns(1);
-    // Limit file descriptors per RocksDB instance to prevent FD exhaustion
-    // when managing many forests. With 10K open forests and 10 FDs each,
-    // total usage stays around 100K FDs.
-    db_config.max_open_files = 10;
+    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(1);
 
     std::fs::create_dir_all(&db_path)?;
     let db = kvdb_rocksdb::Database::open(&db_config, &db_path)?;

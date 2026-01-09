@@ -158,9 +158,11 @@ pub struct ProviderConfigurations {
     pub storage_path: Option<String>,
 
     /// Maximum number of forest storage instances to keep open simultaneously.
-    /// Controls memory usage and file descriptor consumption for large providers.
-    /// Default: 10000. Lower values reduce resource usage but may impact performance.
-    #[arg(long, value_name = "COUNT", default_value = "10000")]
+    /// MSPs have one forest per bucket; this controls how many can be open at once.
+    /// BSPs only have one forest, so this setting is ignored for them.
+    /// Default: 512. With RocksDB's default of 512 open files per instance,
+    /// this results in a maximum of ~262K file descriptors.
+    #[arg(long, value_name = "COUNT", default_value = "512")]
     pub max_open_forests: Option<usize>,
 
     /// Extrinsic retry timeout in seconds.
