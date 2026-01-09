@@ -1396,22 +1396,24 @@ where
                     confirm_storing_requests,
                     callback,
                 } => {
-                    let (managed_bsp_id, pending_volunteer_file_keys) =
-                        match &self.maybe_managed_provider {
-                            Some(ManagedProvider::Bsp(bsp_handler)) => {
-                                (bsp_handler.bsp_id.clone(), &bsp_handler.pending_volunteer_file_keys)
-                            }
-                            _ => {
-                                error!(target: LOG_TARGET, "`QueryPendingBspConfirmStorageRequests` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                                match callback.send(Err(anyhow!("Node is not managing a BSP"))) {
-                                    Ok(_) => {}
-                                    Err(e) => {
-                                        error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
-                                    }
+                    let (managed_bsp_id, pending_volunteer_file_keys) = match &self
+                        .maybe_managed_provider
+                    {
+                        Some(ManagedProvider::Bsp(bsp_handler)) => (
+                            bsp_handler.bsp_id.clone(),
+                            &bsp_handler.pending_volunteer_file_keys,
+                        ),
+                        _ => {
+                            error!(target: LOG_TARGET, "`QueryPendingBspConfirmStorageRequests` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                            match callback.send(Err(anyhow!("Node is not managing a BSP"))) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
                                 }
-                                return;
                             }
-                        };
+                            return;
+                        }
+                    };
 
                     // Pre-filter: separate requests with pending volunteer transactions from those ready to query.
                     let (requests_to_requeue, requests_to_query): (Vec<_>, Vec<_>) =
@@ -1474,7 +1476,8 @@ where
                     }
                 }
                 BlockchainServiceCommand::AddPendingVolunteerFileKey { file_key } => {
-                    if let Some(ManagedProvider::Bsp(bsp_handler)) = &mut self.maybe_managed_provider
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
                     {
                         debug!(target: LOG_TARGET, "Adding file key [{:?}] to pending volunteer tracking", file_key);
                         bsp_handler.pending_volunteer_file_keys.insert(file_key);
@@ -1483,7 +1486,8 @@ where
                     }
                 }
                 BlockchainServiceCommand::RemovePendingVolunteerFileKey { file_key } => {
-                    if let Some(ManagedProvider::Bsp(bsp_handler)) = &mut self.maybe_managed_provider
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
                     {
                         debug!(target: LOG_TARGET, "Removing file key [{:?}] from pending volunteer tracking", file_key);
                         bsp_handler.pending_volunteer_file_keys.remove(&file_key);
