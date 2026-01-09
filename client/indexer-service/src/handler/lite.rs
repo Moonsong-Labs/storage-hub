@@ -120,6 +120,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             // System and error events
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => true,
             pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => true,
+            // User operation pause flags events
+            pallet_file_system::Event::UserOperationPauseFlagsUpdated { .. } => true,
 
             pallet_file_system::Event::__Ignore(_, _) => true,
         };

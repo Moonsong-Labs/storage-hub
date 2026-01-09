@@ -454,7 +454,7 @@ where
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
         // Generate a proof of non-inclusion (executed in closure to drop the read lock on the forest storage).
-        let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };
+        let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys.clone())? };
 
         // Build extrinsic.
         let call: Runtime::Call =
@@ -555,8 +555,13 @@ where
             .await?;
 
         Ok(format!(
-            "Processed ProcessConfirmStoringRequest for BSP [{:x}]",
-            own_bsp_id
+            "Processed ProcessConfirmStoringRequest for BSP [0x{:x}] for file keys: [{}]",
+            own_bsp_id,
+            file_keys
+                .iter()
+                .map(|file_key| format!("0x{:x}", file_key))
+                .collect::<Vec<_>>()
+                .join(", ")
         ))
     }
 }
