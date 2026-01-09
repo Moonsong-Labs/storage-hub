@@ -428,18 +428,16 @@ where
         }
         drop(known);
 
-        // Get the forest from the cache or put it in the cache if it's not there
+        // Get the forest from the cache (only place it can be in the InMemoryForestStorage implementation)
         let mut cache = self.open_forests.write().await;
         cache.get(key).cloned()
     }
 
     async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
-        // Check if the forest is already in the cache
-        {
-            let mut cache = self.open_forests.write().await;
-            if let Some(fs) = cache.get(key) {
-                return fs.clone();
-            }
+        // Return potentially existing instance since we have to wait for the lock.
+        // This is for the case where many threads called `create` at the same time with the same `key`.
+        if let Some(fs) = self.get(key).await {
+            return fs;
         }
 
         // Create a new in-memory forest
@@ -465,19 +463,14 @@ where
         src_key: &Self::Key,
         dest_key: &Self::Key,
     ) -> Option<Arc<RwLock<Self::FS>>> {
-        // Check if the destination forest is already in the cache
-        {
-            let mut cache = self.open_forests.write().await;
-            if let Some(fs) = cache.get(dest_key) {
-                return Some(fs.clone());
-            }
+        // Return potentially existing instance since we have to wait for the lock.
+        // This is for the case where many threads called `snapshot` at the same time with the same `dest_key`.
+        if let Some(fs) = self.get(dest_key).await {
+            return Some(fs);
         }
 
         // Get the source forest from the cache
-        let forest_storage_src = {
-            let mut cache = self.open_forests.write().await;
-            cache.get(src_key)?.clone()
-        };
+        let forest_storage_src = self.get(src_key).await?;
 
         // Create a copy of the Forest Storage
         let forest_storage_dest = forest_storage_src.read().await.clone();
@@ -570,22 +563,21 @@ where
         self.open_forests.write().await.pop(key);
         // Remove the forest from the known set
         self.known_forests.write().await.remove(key);
-        // Note: We intentionally don't delete the directory from disk here.
-        // The forest data remains on disk but is no longer tracked.
+        // TODO: Delete the forest from disk.
     }
 
+    // TODO: This implementation is very expensive. It copies the entire forest from disk to disk,
+    // TODO: and holds a read lock on the source forest during the copy.
+    // TODO: Consider using RocksDB's native checkpoint feature.
     async fn snapshot(
         &self,
         src_key: &Self::Key,
         dest_key: &Self::Key,
     ) -> Option<Arc<RwLock<Self::FS>>> {
-        // Return potentially existing instance since we waited for the lock.
+        // Return potentially existing instance since we have to wait for the lock.
         // This is for the case where many threads called `snapshot` at the same time with the same `dest_key`.
-        {
-            let mut cache = self.open_forests.write().await;
-            if let Some(fs) = cache.get(dest_key) {
-                return Some(fs.clone());
-            }
+        if let Some(fs) = self.get(dest_key).await {
+            return Some(fs);
         }
 
         // Get the source forest (loads it into cache if not present).
