@@ -549,7 +549,8 @@ where
     }
 
     async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
-        // Check if the forest already exists (in cache or on disk)
+        // Return potentially existing instance since we waited for the lock.
+        // This is for the case where many threads called `insert` at the same time with the same `key`.
         if let Some(fs) = self.get(key).await {
             return fs;
         }
@@ -578,7 +579,8 @@ where
         src_key: &Self::Key,
         dest_key: &Self::Key,
     ) -> Option<Arc<RwLock<Self::FS>>> {
-        // Check if the destination forest is already in the cache
+        // Return potentially existing instance since we waited for the lock.
+        // This is for the case where many threads called `snapshot` at the same time with the same `dest_key`.
         {
             let mut cache = self.open_forests.write().await;
             if let Some(fs) = cache.get(dest_key) {
@@ -624,7 +626,6 @@ where
 
         // Release the locks
         drop(src_fs);
-        drop(cache);
 
         // Create a new forest storage instance
         let forest_storage =
