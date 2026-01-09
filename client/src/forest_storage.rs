@@ -588,8 +588,9 @@ where
             }
         }
 
-        // Ensure the source forest is loaded
-        let _src_fs = self.get(src_key).await?;
+        // Get the source forest (loads it into cache if not present).
+        // We keep the Arc to prevent the forest from being dropped even if evicted from cache.
+        let src_fs_arc = self.get(src_key).await?;
 
         let storage_path = self
             .storage_path
@@ -610,9 +611,7 @@ where
         let src = src_path.to_string_lossy().to_string();
         let dest = dest_path.to_string_lossy().to_string();
 
-        // Get a write lock on the cache (LruCache::get requires mutable access for LRU update)
-        let mut cache = self.open_forests.write().await;
-        let src_fs_arc = cache.get(src_key)?;
+        // Hold a read lock on the source forest during copy to ensure consistency.
         let src_fs = src_fs_arc.read().await;
 
         // Copy the full source forest files to the destination
@@ -624,7 +623,7 @@ where
             }
         };
 
-        // Release the locks
+        // Release the source forest lock
         drop(src_fs);
 
         // Create a new forest storage instance
