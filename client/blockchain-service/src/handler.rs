@@ -954,12 +954,7 @@ where
                 }
                 BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
                     if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
-                        let state_store_context =
-                            self.persistent_state.open_rw_context_with_overlay();
-                        state_store_context
-                            .pending_confirm_storing_request_deque::<Runtime>()
-                            .push_back(request);
-                        state_store_context.commit();
+                        self.queue_confirm_storing_requests(std::iter::once(request));
                         // We check right away if we can process the request so we don't waste time.
                         self.bsp_assign_forest_root_write_lock();
                         match callback.send(Ok(())) {
@@ -1398,28 +1393,48 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueryPendingBspConfirmStorageRequests {
-                    file_keys,
+                    confirm_storing_requests,
                     callback,
                 } => {
-                    let managed_bsp_id = match &self.maybe_managed_provider {
-                        Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id.clone(),
-                        _ => {
-                            error!(target: LOG_TARGET, "`QueryPendingBspConfirmStorageRequests` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                            match callback.send(Err(anyhow!("Node is not managing a BSP"))) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
-                                }
+                    let (managed_bsp_id, pending_volunteer_file_keys) =
+                        match &self.maybe_managed_provider {
+                            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                                (bsp_handler.bsp_id.clone(), &bsp_handler.pending_volunteer_file_keys)
                             }
-                            return;
-                        }
-                    };
+                            _ => {
+                                error!(target: LOG_TARGET, "`QueryPendingBspConfirmStorageRequests` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                                match callback.send(Err(anyhow!("Node is not managing a BSP"))) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                    }
+                                }
+                                return;
+                            }
+                        };
+
+                    // Pre-filter: separate requests with pending volunteer transactions from those ready to query.
+                    let (requests_to_requeue, requests_to_query): (Vec<_>, Vec<_>) =
+                        confirm_storing_requests.into_iter().partition(|request| {
+                            let file_key: FileKey = request.file_key.as_ref().into();
+                            pending_volunteer_file_keys.contains(&file_key)
+                        });
+
+                    // Re-queue pending volunteer requests for later processing.
+                    for request in &requests_to_requeue {
+                        info!(
+                            target: LOG_TARGET,
+                            "Volunteer pending for file key [{:?}], re-queuing confirm request",
+                            request.file_key
+                        );
+                    }
+                    self.queue_confirm_storing_requests(requests_to_requeue);
 
                     let current_block_hash = self.client.info().best_hash;
 
-                    let file_keys = file_keys
+                    let file_keys: Vec<H256> = requests_to_query
                         .iter()
-                        .map(|k| H256::from_slice(k.as_ref()))
+                        .map(|r| H256::from_slice(r.file_key.as_ref()))
                         .collect();
 
                     // Query the runtime API to filter file keys to only those pending confirmation
@@ -1456,6 +1471,24 @@ where
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send pending BSP confirm storage requests: {:?}", e);
                         }
+                    }
+                }
+                BlockchainServiceCommand::AddPendingVolunteerFileKey { file_key } => {
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) = &mut self.maybe_managed_provider
+                    {
+                        debug!(target: LOG_TARGET, "Adding file key [{:?}] to pending volunteer tracking", file_key);
+                        bsp_handler.pending_volunteer_file_keys.insert(file_key);
+                    } else {
+                        error!(target: LOG_TARGET, "AddPendingVolunteerFileKey received while not managing a BSP. This should never happen.");
+                    }
+                }
+                BlockchainServiceCommand::RemovePendingVolunteerFileKey { file_key } => {
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) = &mut self.maybe_managed_provider
+                    {
+                        debug!(target: LOG_TARGET, "Removing file key [{:?}] from pending volunteer tracking", file_key);
+                        bsp_handler.pending_volunteer_file_keys.remove(&file_key);
+                    } else {
+                        error!(target: LOG_TARGET, "RemovePendingVolunteerFileKey received while not managing a BSP. This should never happen.");
                     }
                 }
                 BlockchainServiceCommand::SetFileKeyStatus { file_key, status } => {
@@ -2019,5 +2052,21 @@ where
         };
 
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {:x} processed successfully", block_number, block_hash);
+    }
+
+    /// Queue one or more confirm storing requests to the pending deque.
+    ///
+    /// This is a helper to avoid duplicate code when queueing requests from
+    /// different command handlers.
+    pub(crate) fn queue_confirm_storing_requests(
+        &self,
+        requests: impl IntoIterator<Item = crate::types::ConfirmStoringRequest<Runtime>>,
+    ) {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let mut deque = state_store_context.pending_confirm_storing_request_deque::<Runtime>();
+        for request in requests {
+            deque.push_back(request);
+        }
+        state_store_context.commit();
     }
 }

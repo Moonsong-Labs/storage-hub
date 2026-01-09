@@ -291,17 +291,11 @@ where
         // Filter out already-confirmed or stale (i.e. fulfilled, revoked or expired) storage requests.
         // This avoids expensive proof generation since the runtime API `query_bsp_confirm_chunks_to_prove_for_file` does
         // not return an error for already-confirmed.
-        let file_keys: Vec<FileKey> = event
-            .data
-            .confirm_storing_requests
-            .iter()
-            .map(|req| req.file_key.as_ref().into())
-            .collect();
-
+        // Also re-queues requests with pending volunteer transactions (not yet on-chain).
         let pending_file_keys_set: HashSet<FileKey> = self
             .storage_hub_handler
             .blockchain
-            .query_pending_bsp_confirm_storage_requests(file_keys)
+            .query_pending_bsp_confirm_storage_requests(event.data.confirm_storing_requests.clone())
             .await?
             .into_iter()
             .collect();
@@ -848,6 +842,12 @@ where
             )) as Pin<Box<dyn Future<Output = bool> + Send>>
         };
 
+        // Track as pending before submitting volunteer tx.
+        self.storage_hub_handler
+            .blockchain
+            .add_pending_volunteer_file_key(file_key.into())
+            .await;
+
         // Try to send the volunteer extrinsic
         if let Err(e) = self
             .storage_hub_handler
@@ -890,12 +890,22 @@ where
                 "🍾 BSP successfully volunteered for file {:x}",
                 file_key
             );
+            // Remove from pending - volunteer is now verified on-chain.
+            self.storage_hub_handler
+                .blockchain
+                .remove_pending_volunteer_file_key(file_key.into())
+                .await;
         } else {
             error!(
                 target: LOG_TARGET,
                 "BSP not registered as a volunteer for file {:x}",
                 file_key
             );
+            // Remove from pending - volunteer failed.
+            self.storage_hub_handler
+                .blockchain
+                .remove_pending_volunteer_file_key(file_key.into())
+                .await;
             return Err(anyhow!(
                 "BSP not registered as a volunteer for file {:x}",
                 file_key
@@ -1246,6 +1256,12 @@ where
 
     async fn unvolunteer_file(&self, file_key: Runtime::Hash) {
         warn!(target: LOG_TARGET, "Unvolunteering file {:?}", file_key);
+
+        // Remove from pending tracking (in case volunteer failed/abandoned).
+        self.storage_hub_handler
+            .blockchain
+            .remove_pending_volunteer_file_key(file_key.as_ref().into())
+            .await;
 
         // Unregister the file from the file transfer service.
         // The error is ignored, as the file might already be unregistered.
