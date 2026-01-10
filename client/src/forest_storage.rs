@@ -500,14 +500,6 @@ where
     type FS = RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
 
     async fn get(&self, key: &Self::Key) -> Option<Arc<RwLock<Self::FS>>> {
-        // Check if the forest is already in the LRU cache
-        {
-            let mut cache = self.open_forests.write().await;
-            if let Some(fs) = cache.get(key) {
-                return Some(fs.clone());
-            }
-        }
-
         // Check if the forest exists on disk
         {
             let known = self.known_forests.read().await;
@@ -516,7 +508,16 @@ where
             }
         }
 
-        // Open the forest from disk if it exists but is not in the cache
+        // Hold the cache write lock across the entire check-and-open operation.
+        // This prevents multiple threads from trying to open the same RocksDB file simultaneously.
+        let mut cache = self.open_forests.write().await;
+
+        // Check if the forest is already in the cache
+        if let Some(fs) = cache.get(key) {
+            return Some(fs.clone());
+        }
+
+        // Open the forest from disk
         let fs = match self.open_forest_from_disk(key) {
             Ok(fs) => fs,
             Err(e) => {
@@ -526,24 +527,19 @@ where
         };
 
         // Add the forest to the LRU cache
-        {
-            let mut cache = self.open_forests.write().await;
-
-            // Check if the forest is already in the cache after acquiring the write lock (another thread might have loaded the forest)
-            if let Some(existing) = cache.get(key) {
-                return Some(existing.clone());
-            }
-            cache.put(key.clone(), fs.clone());
-        }
+        cache.put(key.clone(), fs.clone());
 
         Some(fs)
     }
 
     async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
-        // Return potentially existing instance since we waited for the lock.
-        // This is for the case where many threads called `insert` at the same time with the same `key`.
-        if let Some(fs) = self.get(key).await {
-            return fs;
+        // Hold the cache write lock across the entire check-and-create operation.
+        // This prevents multiple threads from trying to create the same RocksDB file simultaneously.
+        let mut cache = self.open_forests.write().await;
+
+        // Check if the forest is already in the cache
+        if let Some(fs) = cache.get(key) {
+            return fs.clone();
         }
 
         // Create a new forest on disk
@@ -551,7 +547,7 @@ where
 
         // Register the forest as known and add to the cache
         self.known_forests.write().await.insert(key.clone());
-        self.open_forests.write().await.put(key.clone(), fs.clone());
+        cache.put(key.clone(), fs.clone());
 
         fs
     }
