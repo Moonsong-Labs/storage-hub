@@ -121,12 +121,12 @@ where
         Some(self.fs_instance.clone())
     }
 
-    async fn create(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, _key: &Self::Key) -> Result<Arc<RwLock<Self::FS>>> {
         let fs: InMemoryForestStorage<StorageProofsMerkleTrieLayout> = InMemoryForestStorage::new();
 
         let fs = Arc::new(RwLock::new(fs));
         self.fs_instance = fs.clone();
-        fs
+        Ok(fs)
     }
 
     async fn remove_forest_storage(&mut self, _key: &Self::Key) {}
@@ -156,7 +156,7 @@ where
         Some(self.fs_instance.clone())
     }
 
-    async fn create(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, _key: &Self::Key) -> Result<Arc<RwLock<Self::FS>>> {
         let mut path = PathBuf::new();
         path.push(
             self.storage_path
@@ -169,13 +169,14 @@ where
         debug!(target: LOG_TARGET, "Creating RocksDB at path: {}", path_str);
 
         let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(path_str)
-            .expect("Failed to create RocksDB");
+            .map_err(|e| anyhow::anyhow!("Failed to create RocksDB: {:?}", e))?;
 
-        let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
+        let fs = RocksDBForestStorage::new(fs)
+            .map_err(|e| anyhow::anyhow!("Failed to create Forest Storage: {:?}", e))?;
 
         let fs = Arc::new(RwLock::new(fs));
         self.fs_instance = fs.clone();
-        fs
+        Ok(fs)
     }
 
     async fn remove_forest_storage(&mut self, _key: &Self::Key) {}
@@ -391,11 +392,12 @@ where
     fn create_new_forest_on_disk(
         &self,
         key: &K,
-    ) -> Arc<RwLock<RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>>>
-    {
+    ) -> Result<
+        Arc<RwLock<RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>>>,
+    > {
         let storage_path = self
             .storage_path
-            .clone()
+            .as_ref()
             .expect("Storage path should be set for RocksDB implementation");
 
         let mut path = PathBuf::new();
@@ -406,13 +408,20 @@ where
         let path_str = path.to_string_lossy().to_string();
         debug!(target: LOG_TARGET, "Creating new forest at: {}", path_str);
 
-        let underlying_db = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(path_str)
-            .expect("Failed to create RocksDB");
+        let underlying_db =
+            rocksdb::create_db::<StorageProofsMerkleTrieLayout>(path_str).map_err(|e| {
+                anyhow::anyhow!("Failed to create RocksDB for forest [{}]: {:?}", key, e)
+            })?;
 
-        let forest_storage =
-            RocksDBForestStorage::new(underlying_db).expect("Failed to create Forest Storage");
+        let forest_storage = RocksDBForestStorage::new(underlying_db).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to create Forest Storage for forest [{}]: {:?}",
+                key,
+                e
+            )
+        })?;
 
-        Arc::new(RwLock::new(forest_storage))
+        Ok(Arc::new(RwLock::new(forest_storage)))
     }
 }
 
@@ -439,12 +448,14 @@ where
         cache.get(key).cloned()
     }
 
-    async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, key: &Self::Key) -> Result<Arc<RwLock<Self::FS>>> {
         // Return potentially existing instance since we have to wait for the lock.
         // This is for the case where many threads called `create` at the same time with the same `key`.
         if let Some(fs) = self.get(key).await {
-            return fs;
+            return Ok(fs);
         }
+
+        // TODO: FIX RACE CONDITION HERE TOO.
 
         // Create a new in-memory forest
         let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
@@ -456,7 +467,7 @@ where
             .await
             .put(key.clone(), forest_storage.clone());
 
-        forest_storage
+        Ok(forest_storage)
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
@@ -540,7 +551,7 @@ where
         Some(fs)
     }
 
-    async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, key: &Self::Key) -> Result<Arc<RwLock<Self::FS>>> {
         // Acquire the known forests write lock to prevent concurrent threads trying to create the same forest.
         // ! IMPORTANT: We will later have to acquire the `open_forests` write lock, but first we acquire the
         // ! `known_forests` write lock to prevent race conditions resulting in deadlocks.
@@ -557,29 +568,27 @@ where
 
             // Check if the forest is already in the cache
             if let Some(fs) = cache.get(key) {
-                return fs.clone();
+                return Ok(fs.clone());
             }
 
             // Open the forest from disk
-            let fs = self
-                .open_forest_from_disk(key)
-                .expect("Failed to open forest from disk");
+            let fs = self.open_forest_from_disk(key)?;
 
             // Add the forest to the LRU cache
             cache.put(key.clone(), fs.clone());
 
-            return fs;
+            return Ok(fs);
         }
 
         // Now we know this thread is the first and only one trying to create the forest.
         // Create a new forest on disk
-        let fs = self.create_new_forest_on_disk(key);
+        let fs = self.create_new_forest_on_disk(key)?;
 
         // Register the forest as known and add to the cache
         known_forest_write_lock.insert(key.clone());
         self.open_forests.write().await.put(key.clone(), fs.clone());
 
-        fs
+        Ok(fs)
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {

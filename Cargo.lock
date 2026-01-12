@@ -16928,6 +16928,7 @@ dependencies = [
 name = "shc-forest-manager"
 version = "0.3.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "bincode",
  "hash-db",
