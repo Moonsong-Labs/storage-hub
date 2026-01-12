@@ -65,27 +65,47 @@ pub struct MspService {
 impl MspService {
     /// Create a new MSP service
     ///
-    /// This function tries to discover the MSP's provider ID and, if the node is not yet
-    /// registered as an MSP, it retries indefinitely with a stepped backoff strategy.
-    ///
-    /// Note: Keep in mind that if the node is never registered as an MSP, this function
-    /// will keep retrying indefinitely and the backend will fail to start. Monitor the
-    /// retry attempt count in logs to detect potential configuration issues.
+    /// The `msp_id` will be fetched once at startup using [`Self::discover_provider_id`]
+    /// and cached for the lifetime of the backend service.
     pub async fn new(
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_config: MspConfig,
-    ) -> Result<Self, Error> {
+    ) -> Self {
+        let msp_id = Self::discover_provider_id(&rpc)
+            .await
+            .expect("MSP must be available when starting the backend's services");
+        Self {
+            msp_id,
+            postgres,
+            rpc,
+            msp_config,
+        }
+    }
+
+    /// Discover the MSP provider ID from the connected node
+    ///
+    /// This function tries to discover the MSP's provider ID and, if the node is not yet
+    /// registered as an MSP, it retries indefinitely with a stepped backoff strategy.
+    ///
+    /// The provider ID is queried once at startup and should be cached for the lifetime
+    /// of the backend service. If the provider needs to change, the backend must be restarted.
+    ///
+    /// Note: Keep in mind that if the node is never registered as an MSP, this function
+    /// will keep retrying indefinitely and the backend will fail to start. Monitor the
+    /// retry attempt count in logs to detect potential configuration issues.
+    pub async fn discover_provider_id(rpc: &StorageHubRpcClient) -> Result<OnchainMspId, Error> {
         let mut attempt = 0;
 
-        // Discover the Provider ID of the connected node.
-        let msp_id = loop {
+        loop {
             let provider_id: RpcProviderId = rpc.get_provider_id().await.map_err(|e| {
                 Error::BadRequest(format!("Failed to get provider ID from RPC: {}", e))
             })?;
 
             match provider_id {
-                RpcProviderId::Msp(id) => break OnchainMspId::new(Hash::from_slice(id.as_ref())),
+                RpcProviderId::Msp(id) => {
+                    return Ok(OnchainMspId::new(Hash::from_slice(id.as_ref())))
+                }
                 RpcProviderId::Bsp(_) => {
                     return Err(Error::BadRequest(
                         "Connected node is a BSP; expected an MSP".to_string(),
@@ -95,9 +115,9 @@ impl MspService {
                     // Calculate the retry delay before the next attempt based on the attempt number
                     let delay_secs = get_retry_delay(attempt);
                     warn!(
-                        target: "msp_service::new",
-                                                delay_secs = delay_secs,
-                                                attempt = attempt + 1,
+                        target: "msp_service::discover_provider_id",
+                        delay_secs = delay_secs,
+                        attempt = attempt + 1,
                         "Connected node is not yet a registered MSP; retrying provider discovery in {delay_secs} seconds... (attempt {attempt})"
                     );
                     tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
@@ -105,14 +125,7 @@ impl MspService {
                     continue;
                 }
             }
-        };
-
-        Ok(Self {
-            msp_id,
-            postgres,
-            rpc,
-            msp_config,
-        })
+        }
     }
 
     /// Get MSP information

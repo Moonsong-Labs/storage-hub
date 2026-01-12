@@ -7,7 +7,6 @@ use axum::{
     Json,
 };
 use serde::Serialize;
-use shc_rpc::RpcProviderId;
 use tracing::{debug, error};
 
 use crate::data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
@@ -144,33 +143,13 @@ impl HealthService {
     async fn check_rpc(&self) -> ComponentHealth {
         debug!(target: "health_service::check_rpc", "Checking RPC health");
 
-        let (status, message) = match self.rpc.get_provider_id().await {
-            Ok(RpcProviderId::Msp(_)) => (Self::HEALTHY, None),
-            Ok(RpcProviderId::Bsp(_)) => {
-                error!(target: "health_service::check_rpc", "RPC health check failed - connected to BSP instead of MSP");
-                (
-                    Self::UNHEALTHY,
-                    Some("The node that we are connected to is a BSP, expected an MSP".to_string()),
-                )
-            }
-            Ok(RpcProviderId::NotAProvider) => {
-                error!(target: "health_service::check_rpc", "RPC health check failed - node is not a storage provider");
-                (
-                    Self::UNHEALTHY,
-                    Some("The node that we are connected to is not a storage provider".to_string()),
-                )
-            }
-            Err(e) => {
-                let connected = self.rpc.is_connected().await;
-                let message = if connected {
-                    format!("RPC call failed: {}", e)
-                } else {
-                    "RPC connection not established".to_string()
-                };
-
-                error!(target: "health_service::check_rpc", error = %e, %connected, "RPC health check failed - RPC call error");
-                (Self::UNHEALTHY, Some(message))
-            }
+        // Verify the RPC connection is alive
+        let (status, message) = match self.rpc.is_connected().await {
+            true => (Self::HEALTHY, None),
+            false => (
+                Self::UNHEALTHY,
+                Some("RPC connection not established".to_string()),
+            ),
         };
 
         ComponentHealth {
