@@ -37,9 +37,9 @@ use shc_blockchain_service::{
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        BackupStorageProviderId, BucketId, DisplayHexListExt, FileDeletionRequest,
-        ForestProof as CommonForestProof, OffchainSignature, StorageProofsMerkleTrieLayout,
-        StorageProviderId,
+        BackupStorageProviderId, BucketId, DisplayHexListExt, FileDeletionRequest, FileMetadata,
+        Fingerprint, ForestProof as CommonForestProof, OffchainSignature,
+        StorageProofsMerkleTrieLayout, StorageProviderId,
     },
 };
 use shc_fisherman_service::{
@@ -468,71 +468,55 @@ where
 
         // Fetch all file keys for the deletion target from finalized data
         let fetch_keys_start = Instant::now();
-        let all_file_keys = match &deletion_target {
+        // Fetch all files for the deletion target from finalized data (single query)
+        let all_files = match &deletion_target {
             FileDeletionTarget::BspId(bsp_id) => {
                 // Convert H256 to OnchainBspId for database query
                 let onchain_bsp_id = shc_indexer_db::OnchainBspId::from(*bsp_id);
-                shc_indexer_db::models::BspFile::get_all_file_keys_for_bsp(
-                    &mut conn,
-                    onchain_bsp_id,
-                )
-                .await
-                .map_err(|e| anyhow!("Failed to get all file keys for BSP: {:?}", e))?
+                shc_indexer_db::models::BspFile::get_all_files_for_bsp(&mut conn, onchain_bsp_id)
+                    .await
+                    .map_err(|e| anyhow!("Failed to get all files for BSP: {:?}", e))?
             }
             FileDeletionTarget::BucketId(bucket_id) => {
                 // Only get files that are in the bucket's forest
-                shc_indexer_db::models::file::File::get_all_file_keys_for_bucket(
+                shc_indexer_db::models::file::File::get_all_files_for_bucket(
                     &mut conn,
                     bucket_id.as_ref(),
                     Some(true),
                 )
                 .await
-                .map_err(|e| anyhow!("Failed to get all file keys for bucket: {:?}", e))?
+                .map_err(|e| anyhow!("Failed to get all files for bucket: {:?}", e))?
             }
         };
 
-        info!(
-            target: LOG_TARGET,
-            "🎣 [TIMING] Fetching all file keys for target took {:?} - found {} keys",
-            fetch_keys_start.elapsed(),
-            all_file_keys.len()
-        );
-
-        // Fetch all files and convert to FileMetadata
-        let metadata_loop_start = Instant::now();
-        let mut all_file_metadatas = Vec::new();
-        for key in &all_file_keys {
-            let file_records = shc_indexer_db::models::File::get_by_file_key(&mut conn, key)
-                .await
-                .map_err(|e| anyhow!("Failed to get file records: {:?}", e))?;
-
-            // There can be multiple file records for a given file key if there were multiple
-            // storage requests for the same file key. Any of them is good to use to get the file metadata,
-            // so we just pick the first one.
-            let file = file_records
-                .first()
-                .ok_or_else(|| anyhow!("No file records found for file key: {:?}", key))?;
-
-            let metadata = file
-                .to_file_metadata(file.onchain_bucket_id.clone())
-                .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
-
-            all_file_metadatas.push(metadata);
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "🎣 [TIMING] Metadata query loop took {:?} for {} file keys",
-            metadata_loop_start.elapsed(),
-            all_file_keys.len()
-        );
+        // Convert to file metadata for forest operations
+        let all_file_metadatas: Vec<_> = all_files
+            .iter()
+            .map(|f| {
+                FileMetadata::new(
+                    f.account.clone(),
+                    f.onchain_bucket_id.clone(),
+                    f.location.clone(),
+                    f.size as u64,
+                    Fingerprint::from(f.fingerprint.as_slice()),
+                )
+            })
+            .collect::<Result<_, _>>()
+            .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
 
         drop(conn);
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Fetching all files for target took {:?} - found {} files",
+            fetch_keys_start.elapsed(),
+            all_files.len()
+        );
 
         trace!(
             target: LOG_TARGET,
             "Building ephemeral trie with {} file keys from finalized data",
-            all_file_keys.len(),
+            all_file_metadatas.len(),
         );
 
         // Create ephemeral in-memory forest storage

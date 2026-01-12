@@ -113,6 +113,18 @@ pub struct File {
     pub tx_hash: Option<Vec<u8>>,
 }
 
+/// Lightweight struct containing only the fields needed for [`FileMetadata`](shc_common::types::FileMetadata) construction.
+#[derive(Debug, Clone, Queryable, Selectable)]
+#[diesel(table_name = file)]
+pub struct FileMetadataQuery {
+    pub file_key: Vec<u8>,
+    pub account: Vec<u8>,
+    pub onchain_bucket_id: Vec<u8>,
+    pub location: Vec<u8>,
+    pub size: i64,
+    pub fingerprint: Vec<u8>,
+}
+
 /// Association table between File and PeerId
 #[derive(Debug, Queryable, Insertable, Associations)]
 #[diesel(table_name = file_peer_id)]
@@ -510,11 +522,19 @@ impl File {
         Ok(files)
     }
 
-    pub async fn get_all_file_keys_for_bucket<'a>(
+    /// Get all file metadata for a bucket.
+    ///
+    /// Returns lightweight [`FileMetadataQuery`] records containing only the columns
+    /// required for [`FileMetadata`](shc_common::types::FileMetadata) construction.
+    ///
+    /// # Arguments
+    /// * `onchain_bucket_id` - The bucket's onchain ID
+    /// * `is_in_bucket` - Optional filter by whether files are in the bucket's forest
+    pub async fn get_all_files_for_bucket<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bucket_id: &[u8],
         is_in_bucket: Option<bool>,
-    ) -> Result<Vec<Vec<u8>>, diesel::result::Error> {
+    ) -> Result<Vec<FileMetadataQuery>, diesel::result::Error> {
         let mut query = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
             .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
@@ -525,9 +545,12 @@ impl File {
             query = query.filter(file::is_in_bucket.eq(is_in_bucket_value));
         }
 
-        let file_keys: Vec<Vec<u8>> = query.select(file::file_key).load::<Vec<u8>>(conn).await?;
+        let files = query
+            .select(FileMetadataQuery::as_select())
+            .load::<FileMetadataQuery>(conn)
+            .await?;
 
-        Ok(file_keys)
+        Ok(files)
     }
 
     /// Get all files pending user deletion (deletion_status = InProgress with signature).
