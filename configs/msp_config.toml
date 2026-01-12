@@ -28,6 +28,9 @@ trusted_file_transfer_server = true
 trusted_file_transfer_server_host = "127.0.0.1"
 # Port for trusted file transfer HTTP server (default: 7070)
 trusted_file_transfer_server_port = 7070
+# Maximum number of forest storage instances to keep open simultaneously (default: 512)
+# With RocksDB's default of 512 open files per instance, this results in ~262K max file descriptors.
+max_open_forests = 512
 
 # Configuration for the MSP Charge Fees task
 [provider.msp_charge_fees]
