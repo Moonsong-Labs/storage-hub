@@ -24,6 +24,7 @@ hex = { workspace = true, default-features = true }
 kvdb = { workspace = true }
 kvdb-rocksdb = { workspace = true }
 lazy-static = { workspace = true }
+lru = { workspace = true }
 ordered-float = { workspace = true }
 priority-queue = { workspace = true }
 rand = { workspace = true }

@@ -9,6 +9,9 @@ jump_capacity = 1073741824
 storage_layer = "memory"
 # Storage location in the file system
 storage_path = "/tmp/msp"
+# Maximum number of forest storage instances to keep open simultaneously (default: 512)
+# With RocksDB's default of 512 open files per instance, this results in ~262K max file descriptors.
+max_open_forests = 512
 # Extrinsic retry timeout in seconds
 extrinsic_retry_timeout = 60
 # The minimum number of blocks behind the current best block to consider the node out of sync.
