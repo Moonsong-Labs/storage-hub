@@ -1832,11 +1832,30 @@ where
         file_key: &Runtime::Hash,
         mutation: &TrieMutation,
     ) -> Result<()> {
-        let fs = self
-            .forest_storage_handler
-            .get(&forest_key.into())
-            .await
-            .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+        let forest_key = forest_key.into();
+        let fs = match self.forest_storage_handler.get(&forest_key).await {
+            Some(existing) => existing,
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "Forest storage for key [{:?}] not found while applying mutation; creating new instance",
+                    forest_key
+                );
+                // `create` requires a mutable receiver, so we create via a mutable clone.
+                // This is safe because the handler's internal state is shared via `Arc`s.
+                let mut forest_storage_handler = self.forest_storage_handler.clone();
+                forest_storage_handler
+                    .create(&forest_key)
+                    .await
+                    .map_err(|e| {
+                        anyhow!(
+                            "CRITICAL ❗️❗️❗️: Failed to create forest storage for key [{:?}] while applying mutation: {:?}",
+                            forest_key,
+                            e
+                        )
+                    })?
+            }
+        };
 
         // Write lock is released when exiting the scope of this `match` statement.
         match mutation {

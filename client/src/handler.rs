@@ -337,7 +337,8 @@ where
         let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
         self.forest_storage_handler
             .create(&current_forest_key)
-            .await;
+            .await
+            .expect("Failed to create initial BSP forest storage instance");
     }
 
     fn start_bsp_tasks(&self) {
