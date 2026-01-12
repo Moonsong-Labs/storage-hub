@@ -449,25 +449,44 @@ where
     }
 
     async fn create(&mut self, key: &Self::Key) -> Result<Arc<RwLock<Self::FS>>> {
-        // Return potentially existing instance since we have to wait for the lock.
-        // This is for the case where many threads called `create` at the same time with the same `key`.
-        if let Some(fs) = self.get(key).await {
+        // Acquire the known forests write lock to prevent concurrent threads trying to create the same forest.
+        // ! IMPORTANT: We will later have to acquire the `open_forests` write lock, but first we acquire the
+        // ! `known_forests` write lock to prevent race conditions resulting in deadlocks.
+        let mut known_forest_write_lock = self.known_forests.write().await;
+
+        // Now that we have the write lock, check if the forest is already known.
+        // This would be the case if there were more than one thread trying to create the same forest
+        // at the same time, and this thread got the write lock only after another thread had already
+        // created the forest.
+        if known_forest_write_lock.contains(key) {
+            // Hold the cache write lock across the entire check-and-open operation.
+            // This prevents multiple threads from trying to create the same in-memory forest simultaneously.
+            let mut cache = self.open_forests.write().await;
+
+            // Check if the forest is already in the cache
+            if let Some(fs) = cache.get(key) {
+                return Ok(fs.clone());
+            }
+
+            // The forest is known, but missing from the cache (should be rare).
+            // Re-create it in memory and insert it into the cache.
+            let fs = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+
+            // Add the forest to the LRU cache
+            cache.put(key.clone(), fs.clone());
+
             return Ok(fs);
         }
 
-        // TODO: FIX RACE CONDITION HERE TOO.
-
+        // Now we know this thread is the first and only one trying to create the forest.
         // Create a new in-memory forest
-        let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+        let fs = Arc::new(RwLock::new(InMemoryForestStorage::new()));
 
         // Register the forest as known and add to the cache
-        self.known_forests.write().await.insert(key.clone());
-        self.open_forests
-            .write()
-            .await
-            .put(key.clone(), forest_storage.clone());
+        known_forest_write_lock.insert(key.clone());
+        self.open_forests.write().await.put(key.clone(), fs.clone());
 
-        Ok(forest_storage)
+        Ok(fs)
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
