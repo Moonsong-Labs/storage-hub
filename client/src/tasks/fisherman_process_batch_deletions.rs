@@ -48,7 +48,7 @@ use shc_fisherman_service::{
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::{
     handler::StorageHubHandler,
@@ -147,6 +147,7 @@ where
 
         // Query pending deletions with configured batch limit
         // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
+        let query_start = Instant::now();
         let grouped_deletions = self
             .get_pending_deletions(
                 event.deletion_type,
@@ -157,9 +158,10 @@ where
             )
             .await?;
 
-        debug!(
+        info!(
             target: LOG_TARGET,
-            "🎣 Found {} BSP groups and {} bucket groups to process",
+            "🎣 [TIMING] get_pending_deletions took {:?} - Found {} BSP groups and {} bucket groups",
+            query_start.elapsed(),
             grouped_deletions.bsp_deletions.len(),
             grouped_deletions.bucket_deletions.len()
         );
@@ -300,6 +302,8 @@ where
         files: Vec<BatchFileDeletionData<Runtime>>,
         deletion_type: shc_indexer_db::models::FileDeletionType,
     ) -> anyhow::Result<()> {
+        let target_start = Instant::now();
+
         info!(
             target: LOG_TARGET,
             "🎣 Processing {} files for target {:?}",
@@ -313,9 +317,17 @@ where
         // Generate forest proof for all files in this target's batch
         // Returns only the file_keys that actually exist in the forest after catch-up
         // and generated a proof of inclusion for.
+        let proof_start = Instant::now();
         let (remaining_file_keys, forest_proof) = self
             .build_forest_proof_for_deletions(&file_keys, target.clone())
             .await?;
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Forest proof build for {:?} took {:?}",
+            target,
+            proof_start.elapsed()
+        );
 
         // Filter files to only include those with valid file keys
         // This ensures we only submit extrinsics for files that can be proven
@@ -353,6 +365,7 @@ where
         };
 
         // Submit extrinsic for the deletion type with only valid files
+        let extrinsic_start = Instant::now();
         match deletion_type {
             shc_indexer_db::models::FileDeletionType::User => {
                 self.submit_user_deletion_extrinsic(&remaining_files, provider_id, forest_proof)
@@ -367,6 +380,21 @@ where
                 .await?;
             }
         }
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Extrinsic submission for {:?} took {:?}",
+            target,
+            extrinsic_start.elapsed()
+        );
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Target {:?} completed: total={:?}, files_processed={}",
+            target,
+            target_start.elapsed(),
+            remaining_files.len()
+        );
 
         info!(
             target: LOG_TARGET,
@@ -403,6 +431,7 @@ where
         );
 
         // Get indexer database connection
+        let conn_start = Instant::now();
         let indexer_db_pool = self
             .storage_hub_handler
             .indexer_db_pool
@@ -421,6 +450,12 @@ where
         let last_indexed_finalized_block =
             (service_state.last_indexed_finalized_block as u64).saturated_into();
 
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] DB connection + service state fetch took {:?}",
+            conn_start.elapsed()
+        );
+
         trace!(
             target: LOG_TARGET,
             "Building ephemeral trie from indexer data at last processed block {}",
@@ -428,6 +463,7 @@ where
         );
 
         // Fetch all file keys for the deletion target from finalized data
+        let fetch_keys_start = Instant::now();
         let all_file_keys = match &deletion_target {
             FileDeletionTarget::BspId(bsp_id) => {
                 // Convert H256 to OnchainBspId for database query
@@ -451,7 +487,15 @@ where
             }
         };
 
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Fetching all file keys for target took {:?} - found {} keys",
+            fetch_keys_start.elapsed(),
+            all_file_keys.len()
+        );
+
         // Fetch all files and convert to FileMetadata
+        let metadata_loop_start = Instant::now();
         let mut all_file_metadatas = Vec::new();
         for key in &all_file_keys {
             let file_records = shc_indexer_db::models::File::get_by_file_key(&mut conn, key)
@@ -472,6 +516,13 @@ where
             all_file_metadatas.push(metadata);
         }
 
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Metadata query loop took {:?} for {} file keys",
+            metadata_loop_start.elapsed(),
+            all_file_keys.len()
+        );
+
         drop(conn);
 
         trace!(
@@ -481,6 +532,7 @@ where
         );
 
         // Create ephemeral in-memory forest storage
+        let trie_build_start = Instant::now();
         let mut ephemeral_forest = InMemoryForestStorage::<StorageProofsMerkleTrieLayout>::new();
 
         // Insert all file keys from finalized data
@@ -489,6 +541,13 @@ where
             Runtime,
         >>::insert_files_metadata(&mut ephemeral_forest, &all_file_metadatas)
         .map_err(|e| anyhow!("Failed to insert file keys into ephemeral trie: {:?}", e))?;
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Ephemeral trie construction took {:?} for {} file keys",
+            trie_build_start.elapsed(),
+            all_file_metadatas.len()
+        );
 
         trace!(
             target: LOG_TARGET,
@@ -503,6 +562,7 @@ where
         );
 
         // Get file key changes since finalized block
+        let catchup_start = Instant::now();
         let fisherman_service = self
             .storage_hub_handler
             .fisherman
@@ -513,6 +573,13 @@ where
             .await
             .map_err(|e| anyhow!("Failed to get file key changes: {:?}", e))?;
 
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Get file key changes (catch-up query) took {:?} - found {} changes",
+            catchup_start.elapsed(),
+            file_key_changes.len()
+        );
+
         trace!(
             target: LOG_TARGET,
             "Applying {} file key changes from catch-up",
@@ -520,6 +587,7 @@ where
         );
 
         // Collect adds and removes in a single pass
+        let apply_catchup_start = Instant::now();
         let (metadata_to_add, file_keys_to_remove) = file_key_changes.into_iter().fold(
             (Vec::new(), Vec::new()),
             |(mut adds, mut removes), change| {
@@ -541,13 +609,21 @@ where
         }
 
         // Process all Remove operations
-        for file_key in file_keys_to_remove {
+        for file_key in file_keys_to_remove.iter() {
             <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<
                 StorageProofsMerkleTrieLayout,
                 Runtime,
-            >>::delete_file_key(&mut ephemeral_forest, &file_key.into())
+            >>::delete_file_key(&mut ephemeral_forest, &(*file_key).into())
             .map_err(|e| anyhow!("Failed to remove file key during catch-up: {:?}", e))?;
         }
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Applying catch-up changes took {:?} ({} adds, {} removes)",
+            apply_catchup_start.elapsed(),
+            metadata_to_add.len(),
+            file_keys_to_remove.len()
+        );
 
         trace!(
             target: LOG_TARGET,
@@ -556,6 +632,7 @@ where
         );
 
         // Filter non-existent file keys from the original file keys list so we only generate a proof for the files that actually exist in the forest
+        let filter_start = Instant::now();
         let mut remaining_file_keys = Vec::new();
         for file_key in file_keys {
             match <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<
@@ -584,6 +661,14 @@ where
             }
         }
 
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Filtering file keys took {:?} - {} of {} keys exist in forest",
+            filter_start.elapsed(),
+            remaining_file_keys.len(),
+            file_keys.len()
+        );
+
         // If no valid files remain, return error
         if remaining_file_keys.is_empty() {
             return Err(anyhow!(
@@ -606,12 +691,21 @@ where
             remaining_file_keys.len()
         );
 
+        let proof_gen_start = Instant::now();
         let forest_proof_result =
             <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<
                 StorageProofsMerkleTrieLayout,
                 Runtime,
             >>::generate_proof(&ephemeral_forest, remaining_file_keys.clone())
             .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 [TIMING] Proof generation took {:?} for {} keys ({} encoded nodes)",
+            proof_gen_start.elapsed(),
+            remaining_file_keys.len(),
+            forest_proof_result.proof.encoded_nodes.len()
+        );
 
         debug!(
             target: LOG_TARGET,
