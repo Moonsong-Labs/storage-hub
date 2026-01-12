@@ -203,8 +203,16 @@ where
     /// Path to the storage directory.
     storage_path: Option<String>,
     /// LRU cache of currently-open forest instances.
+    ///
+    /// ! IMPORTANT: If you need to get a write lock on `open_forests` and
+    /// `write_forests` together, you must acquire the write lock on `known_forests` first.
+    /// This is necessary to prevent race conditions resulting in deadlocks.
     open_forests: Arc<RwLock<LruCache<K, Arc<RwLock<FS>>>>>,
     /// Set of all known forest keys that exist on disk.
+    ///
+    /// ! IMPORTANT: If you need to get a write lock on `open_forests` and
+    /// `write_forests` together, you must acquire the write lock on `known_forests` first.
+    /// This is necessary to prevent race conditions resulting in deadlocks.
     known_forests: Arc<RwLock<HashSet<K>>>,
     _runtime: PhantomData<Runtime>,
 }
@@ -452,8 +460,8 @@ where
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
-        self.open_forests.write().await.pop(key);
         self.known_forests.write().await.remove(key);
+        self.open_forests.write().await.pop(key);
     }
 
     async fn snapshot(
@@ -533,30 +541,52 @@ where
     }
 
     async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
-        // Hold the cache write lock across the entire check-and-create operation.
-        // This prevents multiple threads from trying to create the same RocksDB file simultaneously.
-        let mut cache = self.open_forests.write().await;
+        // Acquire the known forests write lock to prevent concurrent threads trying to create the same forest.
+        // ! IMPORTANT: We will later have to acquire the `open_forests` write lock, but first we acquire the
+        // ! `known_forests` write lock to prevent race conditions resulting in deadlocks.
+        let mut known_forest_write_lock = self.known_forests.write().await;
 
-        // Check if the forest is already in the cache
-        if let Some(fs) = cache.get(key) {
-            return fs.clone();
+        // Now that we have the write lock, check if the forest is already known.
+        // This would be the case if there were more than one thread trying to create the same forest
+        // at the same time, and this thread got the write lock only after another thread had already
+        // created the forest.
+        if known_forest_write_lock.contains(key) {
+            // Hold the cache write lock across the entire check-and-open operation.
+            // This prevents multiple threads from trying to open the same RocksDB file simultaneously.
+            let mut cache = self.open_forests.write().await;
+
+            // Check if the forest is already in the cache
+            if let Some(fs) = cache.get(key) {
+                return fs.clone();
+            }
+
+            // Open the forest from disk
+            let fs = self
+                .open_forest_from_disk(key)
+                .expect("Failed to open forest from disk");
+
+            // Add the forest to the LRU cache
+            cache.put(key.clone(), fs.clone());
+
+            return fs;
         }
 
+        // Now we know this thread is the first and only one trying to create the forest.
         // Create a new forest on disk
         let fs = self.create_new_forest_on_disk(key);
 
         // Register the forest as known and add to the cache
-        self.known_forests.write().await.insert(key.clone());
-        cache.put(key.clone(), fs.clone());
+        known_forest_write_lock.insert(key.clone());
+        self.open_forests.write().await.put(key.clone(), fs.clone());
 
         fs
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
-        // Remove the forest from the LRU cache (this closes the RocksDB instance)
-        self.open_forests.write().await.pop(key);
         // Remove the forest from the known set
         self.known_forests.write().await.remove(key);
+        // Remove the forest from the LRU cache (this closes the RocksDB instance)
+        self.open_forests.write().await.pop(key);
         // TODO: Delete the forest from disk.
     }
 
