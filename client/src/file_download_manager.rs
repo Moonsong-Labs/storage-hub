@@ -43,7 +43,7 @@ const BEST_PEERS_TO_SELECT: usize = 2;
 const RANDOM_PEERS_TO_SELECT: usize = 3;
 const MAX_CONCURRENT_BUCKET_DOWNLOADS: usize = 2;
 
-/// Configuration for file download limits and parallelism settings
+/// Configuration for file download limits and parallelism settings.
 pub struct FileDownloadLimits {
     /// Maximum number of files to download in parallel
     pub max_concurrent_file_downloads: usize,
@@ -167,19 +167,21 @@ pub struct FileDownloadManager<Runtime: StorageEnableRuntime> {
 }
 
 impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
-    /// Create a new FileDownloadManager with default limits
+    /// Create a new [`FileDownloadManager`] with default limits.
     ///
     /// # Arguments
     /// * `peer_manager` - The peer manager to use for peer selection and tracking
+    /// * `data_dir` - The directory to store download state
     pub fn new(peer_manager: Arc<BspPeerManager>, data_dir: PathBuf) -> Result<Self> {
         Self::with_limits(FileDownloadLimits::default(), peer_manager, data_dir)
     }
 
-    /// Create a new FileDownloadManager with specified limits
+    /// Create a new [`FileDownloadManager`] with specified limits.
     ///
     /// # Arguments
     /// * `limits` - The download limits to use
     /// * `peer_manager` - The peer manager to use for peer selection and tracking
+    /// * `data_dir` - The directory to store download state
     pub fn with_limits(
         limits: FileDownloadLimits,
         peer_manager: Arc<BspPeerManager>,

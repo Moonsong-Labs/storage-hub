@@ -8,6 +8,7 @@ use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::SaturatedConversion;
 use std::{path::PathBuf, sync::Arc};
+use substrate_prometheus_endpoint::Registry;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
@@ -22,6 +23,8 @@ use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
+
+use shc_telemetry::MetricsLink;
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
@@ -71,6 +74,7 @@ where
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig<Runtime>>,
     peer_manager: Option<Arc<BspPeerManager>>,
+    metrics: MetricsLink,
     trusted_file_transfer_server_config: Option<trusted_file_transfer::server::Config>,
 }
 
@@ -80,7 +84,11 @@ where
     (R, S): ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(task_spawner: TaskSpawner) -> Self {
+    /// Create a new StorageHubBuilder.
+    ///
+    /// If the Prometheus registry is provided, metrics will be registered and available for all services.
+    /// If `None`, metrics will be disabled (no-op).
+    pub fn new(task_spawner: TaskSpawner, prometheus_registry: Option<&Registry>) -> Self {
         Self {
             task_spawner: Some(task_spawner),
             file_transfer: None,
@@ -100,6 +108,7 @@ where
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
             peer_manager: None,
+            metrics: MetricsLink::new(prometheus_registry),
             trusted_file_transfer_server_config: None,
         }
     }
@@ -191,6 +200,7 @@ where
                 self.notify_period,
                 capacity_config,
                 maintenance_mode,
+                self.metrics.clone(),
             )
             .await;
 
@@ -244,6 +254,7 @@ where
             client,
             fisherman_options.batch_interval_seconds,
             fisherman_options.batch_deletion_limit,
+            self.metrics.clone(),
         )
         .await;
 
@@ -421,14 +432,22 @@ where
 ///
 /// This trait is implemented for `StorageHubBuilder<R, S>` where `R` is a [`ShRole`] and `S` is a [`ShStorageLayer`].
 pub trait StorageLayerBuilder {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
+    fn setup_storage_layer(
+        &mut self,
+        storage_path: Option<String>,
+        max_open_forests: usize,
+    ) -> &mut Self;
 }
 
 impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer, Runtime>
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler = Some(<(BspProvider, InMemoryStorageLayer) as ShNodeType<
             Runtime,
@@ -442,7 +461,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStor
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        storage_path: Option<String>,
+        max_open_forests: usize,
+    ) -> &mut Self {
         self.storage_path = storage_path.clone();
 
         let storage_path = storage_path.expect("Storage path not set");
@@ -459,7 +482,7 @@ where
 
         self.forest_storage_handler = Some(<(BspProvider, RocksDbStorageLayer) as ShNodeType<
             Runtime,
-        >>::FSH::new(storage_path));
+        >>::FSH::new(storage_path, max_open_forests));
 
         self
     }
@@ -469,7 +492,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, InMemorySto
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler = Some(<(MspProvider, InMemoryStorageLayer) as ShNodeType<
             Runtime,
@@ -483,7 +510,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStor
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        storage_path: Option<String>,
+        max_open_forests: usize,
+    ) -> &mut Self {
         let storage_path = storage_path.expect("Storage path not set");
 
         let mut path = PathBuf::new();
@@ -500,7 +531,7 @@ where
 
         self.forest_storage_handler = Some(<(MspProvider, RocksDbStorageLayer) as ShNodeType<
             Runtime,
-        >>::FSH::new(storage_path));
+        >>::FSH::new(storage_path, max_open_forests));
 
         self
     }
@@ -510,7 +541,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler =
             Some(<(UserRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH::new());
@@ -522,7 +557,11 @@ where
 impl<Runtime: StorageEnableRuntime> StorageLayerBuilder
     for StorageHubBuilder<FishermanRole, NoStorageLayer, Runtime>
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         // Fisherman only needs forest storage for proof construction
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         // Ephemeral storage layer
@@ -584,6 +623,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            self.metrics.clone(),
         )
     }
 }
@@ -630,6 +670,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            self.metrics.clone(),
         )
     }
 }
@@ -677,6 +718,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            self.metrics.clone(),
         )
     }
 }
@@ -732,6 +774,7 @@ where
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
+            self.metrics.clone(),
         )
     }
 }

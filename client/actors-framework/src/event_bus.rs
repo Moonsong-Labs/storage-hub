@@ -7,6 +7,9 @@ use crate::{
     actor::{Actor, ActorHandle, TaskSpawner},
     constants::{MAX_PENDING_EVENTS, MAX_TASKS_SPAWNED_PER_QUEUE},
 };
+use shc_telemetry::{
+    dec_gauge, inc_counter, observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS,
+};
 
 pub trait EventBusMessage: Clone + Send + 'static {}
 
@@ -62,12 +65,19 @@ pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
         task_spawner: &TaskSpawner,
         provider: &EP,
         critical: bool,
+        metrics_config: Option<EventMetricsConfig>,
     ) -> EventBusListener<E, Self>
     where
         Self: Sized + Send,
     {
         let receiver = provider.event_bus().subscribe();
-        EventBusListener::new(task_spawner.clone(), self, receiver, critical)
+        EventBusListener::new(
+            task_spawner.clone(),
+            self,
+            receiver,
+            critical,
+            metrics_config,
+        )
     }
 
     fn subscribe_to<A: Actor>(
@@ -75,12 +85,18 @@ pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
         task_spawner: &TaskSpawner,
         actor_handle: &ActorHandle<A>,
         critical: bool,
+        metrics_config: Option<EventMetricsConfig>,
     ) -> EventBusListener<E, Self>
     where
         Self: Sized + Send,
         <A as Actor>::EventBusProvider: ProvidesEventBus<E>,
     {
-        self.subscribe_to_provider(task_spawner, &actor_handle.event_bus_provider, critical)
+        self.subscribe_to_provider(
+            task_spawner,
+            &actor_handle.event_bus_provider,
+            critical,
+            metrics_config,
+        )
     }
 }
 
@@ -91,6 +107,7 @@ pub struct EventBusListener<T: EventBusMessage, E: EventHandler<T>> {
     semaphore: Arc<Semaphore>,
     // Indicate if the event is critical or not and if the receiver can drop it safely or have to panic.
     critical: bool,
+    metrics_config: Option<EventMetricsConfig>,
 }
 
 impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T, E> {
@@ -99,6 +116,7 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
         event_handler: E,
         receiver: broadcast::Receiver<T>,
         critical: bool,
+        metrics_config: Option<EventMetricsConfig>,
     ) -> Self {
         Self {
             spawner: spawner.with_group("event-handler-worker"),
@@ -106,6 +124,7 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
             receiver,
             semaphore: Arc::new(Semaphore::new(MAX_TASKS_SPAWNED_PER_QUEUE)),
             critical,
+            metrics_config,
         }
     }
 
@@ -113,17 +132,33 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
         loop {
             match self.receiver.recv().await {
                 Ok(event) => {
+                    // Record pending and start timer BEFORE spawning
+                    if let Some(ref config) = self.metrics_config {
+                        config.record_pending();
+                    }
+                    let start_time = std::time::Instant::now();
+
+                    let metrics_config = self.metrics_config.clone();
                     let mut cloned_event_handler = self.event_handler.clone();
                     let permit = Arc::clone(&self.semaphore)
                         .acquire_owned()
                         .await
                         .expect("To acquire the permit");
                     self.spawner.spawn(async move {
-                        match cloned_event_handler.handle_event(event).await {
+                        let result = cloned_event_handler.handle_event(event).await;
+                        let duration_secs = start_time.elapsed().as_secs_f64();
+
+                        match result {
                             Ok(msg) => {
+                                if let Some(ref config) = metrics_config {
+                                    config.record_success(duration_secs);
+                                }
                                 info!("Task completed successfully: {}", msg);
                             }
                             Err(error) => {
+                                if let Some(ref config) = metrics_config {
+                                    config.record_failure(duration_secs);
+                                }
                                 warn!("Task ended with error: {:?}", error);
                             }
                         };
@@ -152,5 +187,43 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
     pub fn start(mut self) {
         let spawner = self.spawner.with_group("event-bus-listener");
         spawner.spawn(async move { self.run().await });
+    }
+}
+
+/// Configuration for event metrics recording.
+///
+/// Holds the metrics link and the event name for recording event handler metrics.
+#[derive(Clone)]
+pub struct EventMetricsConfig {
+    metrics: MetricsLink,
+    event_name: &'static str,
+}
+
+impl EventMetricsConfig {
+    /// Creates a new event metrics configuration.
+    pub fn new(metrics: MetricsLink, event_name: &'static str) -> Self {
+        Self {
+            metrics,
+            event_name,
+        }
+    }
+
+    /// Record that an event handler has started (pending state).
+    pub fn record_pending(&self) {
+        inc_counter!(metrics: self.metrics.as_ref(), event_handler_pending, self.event_name);
+    }
+
+    /// Record that an event handler completed successfully.
+    pub fn record_success(&self, duration_secs: f64) {
+        dec_gauge!(metrics: self.metrics.as_ref(), event_handler_pending, self.event_name);
+        inc_counter!(metrics: self.metrics.as_ref(), event_handler_total, labels: &[self.event_name, STATUS_SUCCESS]);
+        observe_histogram!(metrics: self.metrics.as_ref(), event_handler_seconds, labels: &[self.event_name, STATUS_SUCCESS], duration_secs);
+    }
+
+    /// Record that an event handler failed.
+    pub fn record_failure(&self, duration_secs: f64) {
+        dec_gauge!(metrics: self.metrics.as_ref(), event_handler_pending, self.event_name);
+        inc_counter!(metrics: self.metrics.as_ref(), event_handler_total, labels: &[self.event_name, STATUS_FAILURE]);
+        observe_histogram!(metrics: self.metrics.as_ref(), event_handler_seconds, labels: &[self.event_name, STATUS_FAILURE], duration_secs);
     }
 }
