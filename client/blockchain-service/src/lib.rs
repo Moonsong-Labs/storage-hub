@@ -21,6 +21,7 @@ use sp_keystore::KeystorePtr;
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::types::StorageHubClient;
+use shc_telemetry::MetricsLink;
 
 pub use self::{
     forest_write_lock::{
@@ -42,6 +43,7 @@ pub async fn spawn_blockchain_service<FSH, Runtime>(
     notify_period: Option<u32>,
     capacity_config: Option<CapacityConfig<Runtime>>,
     maintenance_mode: bool,
+    metrics: MetricsLink,
 ) -> ActorHandle<BlockchainService<FSH, Runtime>>
 where
     FSH: shc_forest_manager::traits::ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
@@ -61,6 +63,7 @@ where
         notify_period,
         capacity_config.map(CapacityRequestQueue::new),
         maintenance_mode,
+        metrics,
     );
 
     task_spawner.spawn_actor(blockchain_service)

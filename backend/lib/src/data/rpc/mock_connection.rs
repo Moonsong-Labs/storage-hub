@@ -159,17 +159,19 @@ impl MockConnection {
         // Match against the runtime API method names
         let current_price_method =
             runtime_apis::RuntimeApiCalls::GetCurrentPricePerGigaUnitPerTick.method_name();
-        let users_of_provider_method =
-            runtime_apis::RuntimeApiCalls::GetUsersOfPaymentStreamsOfProvider.method_name();
+        let active_users_count_method =
+            runtime_apis::RuntimeApiCalls::GetNumberOfActiveUsersOfProvider.method_name();
 
         match method.as_str() {
             m if m == current_price_method => {
                 let price = format!("0x{}", hex::encode(MOCK_PRICE_PER_GIGA_UNIT.encode()));
                 serde_json::json!(price)
             }
-            m if m == users_of_provider_method => {
-                // SCALE-encoded DUMMY MSP users list
-                serde_json::json!("0x040b17ca3a1454cd058b231090c6fd635dd348659a")
+            m if m == active_users_count_method => {
+                // SCALE-encoded u32 count of active users (e.g., 1 user)
+                let count: u32 = 1;
+                let encoded = format!("0x{}", hex::encode(count.encode()));
+                serde_json::json!(encoded)
             }
             api => {
                 error!(api = %api, "no mock registered for requested runtime api");

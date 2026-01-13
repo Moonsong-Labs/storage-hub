@@ -1010,9 +1010,18 @@ where
                             "❌ Bucket [{:?}] forest storage not found locally after sync, created it.",
                             bucket_id
                     );
-                    self.forest_storage_handler
+                    if let Err(e) = self
+                        .forest_storage_handler
                         .create(&forest_key.clone().into())
-                        .await;
+                        .await
+                    {
+                        error!(
+                            target: LOG_TARGET,
+                            "CRITICAL ❗️❗️❗️: Failed to create forest storage for bucket [{:?}] after sync: {}",
+                            bucket_id,
+                            e
+                        );
+                    }
                     missing += 1;
                     continue;
                 }
