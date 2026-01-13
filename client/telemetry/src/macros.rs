@@ -104,7 +104,7 @@ macro_rules! observe_histogram {
 ///
 /// ```ignore
 /// // With direct metrics reference (Option<&StorageHubMetrics>)
-/// dec_gauge!(metrics: self.metrics.as_ref(), command_pending, "SomeCommand");
+/// dec_gauge!(metrics: self.metrics.as_ref(), event_handler_pending, "some_event");
 /// ```
 #[macro_export]
 macro_rules! dec_gauge {

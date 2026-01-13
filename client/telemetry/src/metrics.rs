@@ -42,10 +42,6 @@ pub struct StorageHubMetrics {
     /// - `"block_import"` - Blockchain service processing imported blocks (post-sync)
     /// - `"finalized_block"` - Blockchain service processing finalized blocks
     pub block_processing_seconds: HistogramVec,
-    /// Currently in-flight commands by command type (pending gauge).
-    /// Labels: `["command"]`
-    /// Incremented when command received, decremented on completion.
-    pub command_pending: GaugeVec<U64>,
     /// Command processing duration by command type and status.
     /// Labels: `["command", "status"]`
     /// Tracks time from command receipt to completion.
@@ -150,16 +146,6 @@ impl StorageHubMetrics {
                 registry,
             )?,
             // Command processing metrics (across all services)
-            command_pending: register(
-                GaugeVec::new(
-                    Opts::new(
-                        "storagehub_command_pending",
-                        "Currently in-flight commands by command type",
-                    ),
-                    &["command"],
-                )?,
-                registry,
-            )?,
             command_processing_seconds: register(
                 HistogramVec::new(
                     HistogramOpts::new(

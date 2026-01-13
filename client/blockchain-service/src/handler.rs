@@ -42,9 +42,7 @@ use shc_common::{
     types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use shc_telemetry::{
-    dec_gauge, inc_counter, observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS,
-};
+use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
 
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
@@ -388,8 +386,7 @@ where
         let metrics = self.metrics.clone();
 
         async move {
-            // Record pending and start timer
-            inc_counter!(metrics: metrics.as_ref(), command_pending, command_name);
+            // Start timer for command processing
             let start = std::time::Instant::now();
 
             // Track command success/failure for metrics
@@ -1522,7 +1519,6 @@ where
             } else {
                 STATUS_FAILURE
             };
-            dec_gauge!(metrics: metrics.as_ref(), command_pending, command_name);
             observe_histogram!(metrics: metrics.as_ref(), command_processing_seconds, labels: &[command_name, status], start.elapsed().as_secs_f64());
         }
     }

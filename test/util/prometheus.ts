@@ -127,12 +127,6 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
   },
 
   // === Command Processing Metrics ===
-  command_pending: {
-    name: "storagehub_command_pending",
-    type: "gauge",
-    labels: ["command"],
-    description: "Currently in-flight commands by command type"
-  },
   command_processing_seconds: {
     name: "storagehub_command_processing_seconds",
     type: "histogram",

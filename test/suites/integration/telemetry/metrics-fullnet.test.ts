@@ -226,24 +226,6 @@ await describeMspNet(
         commandHistogramCount > 0,
         `Expected command_processing_seconds to have observations, got ${commandHistogramCount}`
       );
-
-      // Verify command pending gauge exists and is low (operations completed)
-      const commandPendingResult = await userApi.prometheus.query("storagehub_command_pending");
-      assert.strictEqual(
-        commandPendingResult.status,
-        "success",
-        "Command pending gauge query should succeed"
-      );
-
-      // Sum all pending commands - should be low since operations completed
-      let totalPending = 0;
-      for (const result of commandPendingResult.data.result) {
-        totalPending += Number.parseFloat(result.value?.[1] ?? "0");
-      }
-      assert(
-        totalPending <= 10,
-        `Total pending commands (${totalPending}) should be low after operations complete`
-      );
     });
 
     it("Block processing metrics are tracked", async () => {
