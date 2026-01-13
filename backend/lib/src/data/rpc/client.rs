@@ -160,14 +160,11 @@ impl StorageHubRpcClient {
     }
 
     /// Retrieve the current number of active users
-    pub async fn get_number_of_active_users(&self, provider: OnchainMspId) -> RpcResult<usize> {
-        debug!(target: "rpc::client::get_number_of_active_users", "Runtime API: get_users_of_payment_streams_of_provider");
+    pub async fn get_number_of_active_users(&self, provider: OnchainMspId) -> RpcResult<u32> {
+        debug!(target: "rpc::client::get_number_of_active_users", "Runtime API: get_number_of_active_users_of_provider");
 
-        self.call_runtime_api::<runtime_apis::GetUsersOfPaymentStreamsOfProvider>(
-            *provider.as_h256(),
-        )
-        .await
-        .map(|users| users.len())
+        self.call_runtime_api::<runtime_apis::GetNumberOfActiveUsersOfProvider>(*provider.as_h256())
+            .await
     }
 
     /// Retrieve the MSP information for the given provider

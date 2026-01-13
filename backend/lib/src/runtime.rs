@@ -10,7 +10,6 @@ cfg_if::cfg_if! {
     }
 }
 
-pub type AccountId = shc_common::types::AccountId<Runtime>;
 pub type ProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 
