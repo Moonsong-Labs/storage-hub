@@ -30,6 +30,7 @@ lru = { workspace = true }
 ordered-float = { workspace = true }
 priority-queue = { workspace = true }
 rand = { workspace = true }
+sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
@@ -55,6 +56,7 @@ shc-forest-manager = { workspace = true }
 shc-indexer-db = { workspace = true }
 shc-indexer-service = { workspace = true }
 shc-rpc = { workspace = true }
+shc-telemetry = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
@@ -78,6 +80,7 @@ sc-network = { workspace = true }
 sc-network-types = { workspace = true }
 sc-service = { workspace = true }
 sc-tracing = { workspace = true }
+substrate-prometheus-endpoint = { workspace = true }
 
 sp-core = { workspace = true, default-features = true }
 sp-keystore = { workspace = true }
