@@ -152,6 +152,8 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::{Chunk, ChunkId, Leaf};
 
+use shc_telemetry::{inc_counter_by, STATUS_SUCCESS};
+
 use crate::{
     handler::StorageHubHandler,
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
@@ -816,6 +818,9 @@ where
             }
         };
 
+        // Calculate total bytes received for metrics before processing
+        let total_bytes_received: u64 = proven.iter().map(|chunk| chunk.data.len() as u64).sum();
+
         // Process chunks within a scoped block to ensure the file storage lock is dropped before handling rejections
         let result = {
             let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
@@ -829,7 +834,16 @@ where
 
         // Handle the result after the file storage lock is dropped
         match result {
-            Ok(file_complete) => Ok(file_complete),
+            Ok(file_complete) => {
+                // Record MSP bytes received from user on successful chunk processing
+                inc_counter_by!(
+                    handler: self.storage_hub_handler,
+                    msp_bytes_received_total,
+                    STATUS_SUCCESS,
+                    total_bytes_received
+                );
+                Ok(file_complete)
+            }
             Err(rejection) => {
                 self.handle_rejected_storage_request(
                     &rejection.file_key,

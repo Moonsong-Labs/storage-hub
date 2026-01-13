@@ -8,6 +8,7 @@ use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::SaturatedConversion;
 use std::{path::PathBuf, sync::Arc};
+use substrate_prometheus_endpoint::Registry;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
@@ -22,6 +23,8 @@ use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
+
+use shc_telemetry::MetricsLink;
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
@@ -71,6 +74,7 @@ where
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig<Runtime>>,
     peer_manager: Option<Arc<BspPeerManager>>,
+    metrics: MetricsLink,
     trusted_file_transfer_server_config: Option<trusted_file_transfer::server::Config>,
 }
 
@@ -80,7 +84,11 @@ where
     (R, S): ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(task_spawner: TaskSpawner) -> Self {
+    /// Create a new StorageHubBuilder.
+    ///
+    /// If the Prometheus registry is provided, metrics will be registered and available for all services.
+    /// If `None`, metrics will be disabled (no-op).
+    pub fn new(task_spawner: TaskSpawner, prometheus_registry: Option<&Registry>) -> Self {
         Self {
             task_spawner: Some(task_spawner),
             file_transfer: None,
@@ -100,6 +108,7 @@ where
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
             peer_manager: None,
+            metrics: MetricsLink::new(prometheus_registry),
             trusted_file_transfer_server_config: None,
         }
     }
@@ -191,6 +200,7 @@ where
                 self.notify_period,
                 capacity_config,
                 maintenance_mode,
+                self.metrics.clone(),
             )
             .await;
 
@@ -244,6 +254,7 @@ where
             client,
             fisherman_options.batch_interval_seconds,
             fisherman_options.batch_deletion_limit,
+            self.metrics.clone(),
         )
         .await;
 
@@ -612,6 +623,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            self.metrics.clone(),
         )
     }
 }
@@ -658,6 +670,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            self.metrics.clone(),
         )
     }
 }
@@ -705,6 +718,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            self.metrics.clone(),
         )
     }
 }
@@ -760,6 +774,7 @@ where
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
+            self.metrics.clone(),
         )
     }
 }
