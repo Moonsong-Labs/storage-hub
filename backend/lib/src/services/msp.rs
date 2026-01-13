@@ -1027,9 +1027,7 @@ mod tests {
         pub async fn build(self) -> MspService {
             let cfg = Config::default();
 
-            MspService::new(self.postgres, self.rpc, cfg.msp)
-                .await
-                .expect("Mocked MSP service builder should succeed")
+            MspService::new(self.postgres, self.rpc, cfg.msp).await
         }
     }
 
