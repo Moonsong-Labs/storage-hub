@@ -432,14 +432,22 @@ where
 ///
 /// This trait is implemented for `StorageHubBuilder<R, S>` where `R` is a [`ShRole`] and `S` is a [`ShStorageLayer`].
 pub trait StorageLayerBuilder {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
+    fn setup_storage_layer(
+        &mut self,
+        storage_path: Option<String>,
+        max_open_forests: usize,
+    ) -> &mut Self;
 }
 
 impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer, Runtime>
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler = Some(<(BspProvider, InMemoryStorageLayer) as ShNodeType<
             Runtime,
@@ -453,7 +461,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStor
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        storage_path: Option<String>,
+        max_open_forests: usize,
+    ) -> &mut Self {
         self.storage_path = storage_path.clone();
 
         let storage_path = storage_path.expect("Storage path not set");
@@ -470,7 +482,7 @@ where
 
         self.forest_storage_handler = Some(<(BspProvider, RocksDbStorageLayer) as ShNodeType<
             Runtime,
-        >>::FSH::new(storage_path));
+        >>::FSH::new(storage_path, max_open_forests));
 
         self
     }
@@ -480,7 +492,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, InMemorySto
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler = Some(<(MspProvider, InMemoryStorageLayer) as ShNodeType<
             Runtime,
@@ -494,7 +510,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStor
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        storage_path: Option<String>,
+        max_open_forests: usize,
+    ) -> &mut Self {
         let storage_path = storage_path.expect("Storage path not set");
 
         let mut path = PathBuf::new();
@@ -511,7 +531,7 @@ where
 
         self.forest_storage_handler = Some(<(MspProvider, RocksDbStorageLayer) as ShNodeType<
             Runtime,
-        >>::FSH::new(storage_path));
+        >>::FSH::new(storage_path, max_open_forests));
 
         self
     }
@@ -521,7 +541,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler =
             Some(<(UserRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH::new());
@@ -533,7 +557,11 @@ where
 impl<Runtime: StorageEnableRuntime> StorageLayerBuilder
     for StorageHubBuilder<FishermanRole, NoStorageLayer, Runtime>
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         // Fisherman only needs forest storage for proof construction
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         // Ephemeral storage layer

@@ -3200,12 +3200,12 @@ where
                 result
             );
             mutations.push((*file_key, TrieRemoveMutation::default().into()));
-            total_size = total_size.saturating_add(*size);
+            total_size.saturating_accrue(*size);
 
             // Aggregate sizes per owner for payment stream updates.
             owner_sizes
                 .entry(owner.clone())
-                .and_modify(|s| *s = s.saturating_add(*size))
+                .and_modify(|s| s.saturating_accrue(*size))
                 .or_insert(*size);
 
             // Check if there's an open storage request for this file key

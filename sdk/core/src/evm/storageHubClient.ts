@@ -120,11 +120,15 @@ export class StorageHubClient {
   /**
    * Build transaction options with gas and fee settings.
    * Handles both legacy and EIP-1559 fee structures.
+   *
+   * Note: `chain: null` is set to ensure compatibility with wallet clients that don't
+   * properly expose chain information (e.g., Reown's Social Login). This tells viem
+   * to use the wallet's currently selected chain rather than trying to fetch chainId.
    */
   private buildTxOptions(gasLimit: bigint, options?: EvmWriteOptions): Record<string, unknown> {
     const useEip1559 =
       options?.maxFeePerGas !== undefined || options?.maxPriorityFeePerGas !== undefined;
-    const txOpts: Record<string, unknown> = { gas: gasLimit };
+    const txOpts: Record<string, unknown> = { gas: gasLimit, chain: null };
 
     if (useEip1559) {
       // User wants EIP-1559 fees

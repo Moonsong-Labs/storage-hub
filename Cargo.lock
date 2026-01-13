@@ -5748,6 +5748,11 @@ name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash 0.2.0",
+]
 
 [[package]]
 name = "hashlink"
@@ -7863,6 +7868,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
 dependencies = [
  "hashbrown 0.15.5",
+]
+
+[[package]]
+name = "lru"
+version = "0.16.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1dc47f592c06f33f8e3aea9591776ec7c9f9e4124778ff8a3c3b87159f7e593"
+dependencies = [
+ "hashbrown 0.16.1",
 ]
 
 [[package]]
@@ -16747,6 +16761,7 @@ dependencies = [
  "kvdb-rocksdb",
  "lazy_static",
  "log",
+ "lru 0.16.3",
  "ordered-float",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
@@ -16947,6 +16962,7 @@ dependencies = [
 name = "shc-forest-manager"
 version = "0.3.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "bincode",
  "hash-db",
