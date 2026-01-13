@@ -513,7 +513,13 @@ where
             .storage_hub_handler
             .forest_storage_handler
             .get_or_create(&ForestStorageKey::from(event.bucket_id.as_ref().to_vec()))
-            .await;
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "CRITICAL ❗️❗️❗️: Failed to get or create forest storage: {:?}",
+                    e
+                )
+            })?;
 
         // If we do not have the file already in forest storage, we must take into account the
         // available storage capacity.
@@ -1005,7 +1011,13 @@ where
                 .storage_hub_handler
                 .forest_storage_handler
                 .get_or_create(&ForestStorageKey::from(bucket_id.as_ref().to_vec()))
-                .await;
+                .await
+                .map_err(|e| {
+                    anyhow!(
+                        "CRITICAL ❗️❗️❗️: Failed to get or create forest storage: {:?}",
+                        e
+                    )
+                })?;
 
             let accept = if !accept.is_empty() {
                 let file_keys: Vec<_> = accept

@@ -457,6 +457,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       UserNotInsolvent: AugmentedError<ApiType>;
       /**
+       * Operation is currently paused.
+       **/
+      UserOperationPaused: AugmentedError<ApiType>;
+      /**
        * The selected value proposition is not available in the MSP.
        **/
       ValuePropositionNotAvailable: AugmentedError<ApiType>;

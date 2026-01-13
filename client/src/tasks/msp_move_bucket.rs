@@ -318,7 +318,13 @@ where
             .storage_hub_handler
             .forest_storage_handler
             .get_or_create(&ForestStorageKey::from(bucket))
-            .await;
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "CRITICAL ❗️❗️❗️: Failed to get or create forest storage: {:?}",
+                    e
+                )
+            })?;
 
         // Calculate total size to check capacity
         let total_size = files
