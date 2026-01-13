@@ -556,6 +556,7 @@ where
                             }
                         }
                         Err(e) => {
+                            command_succeeded = false;
                             // If there is an API error, we notify the task about it immediately.
                             match tx.send(Err(e)) {
                                 Ok(_) => {}
@@ -583,6 +584,7 @@ where
                         .runtime_api()
                         .query_earliest_change_capacity_block(current_block_hash, &bsp_id)
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "Failed to query earliest block to change capacity");
                             Err(QueryEarliestChangeCapacityBlockError::InternalError)
                         });
@@ -607,6 +609,7 @@ where
                         .runtime_api()
                         .is_storage_request_open_to_volunteers(current_block_hash, file_key)
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             Err(IsStorageRequestOpenToVolunteersError::InternalError)
                         });
 
@@ -635,6 +638,7 @@ where
                             file_key,
                         )
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             Err(QueryFileEarliestVolunteerTickError::InternalError)
                         });
 
@@ -674,6 +678,7 @@ where
                             file_key,
                         )
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             Err(QueryBspConfirmChunksToProveForFileError::InternalError)
                         });
 
@@ -702,6 +707,7 @@ where
                             file_key,
                         )
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             Err(QueryMspConfirmChunksToProveForFileError::InternalError)
                         });
 
@@ -725,7 +731,10 @@ where
                         .client
                         .runtime_api()
                         .query_bsps_volunteered_for_file(current_block_hash, file_key)
-                        .unwrap_or_else(|_| Err(QueryBspsVolunteeredForFileError::InternalError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(QueryBspsVolunteeredForFileError::InternalError)
+                        });
 
                     let volunteered = bsps_volunteered.map(|bsps| bsps.contains(&bsp_id));
 
@@ -749,6 +758,7 @@ where
                         .runtime_api()
                         .query_provider_multiaddresses(current_block_hash, &provider_id)
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "Failed to query provider multiaddresses");
                             Err(QueryProviderMultiaddressesError::InternalError)
                         })
@@ -819,7 +829,10 @@ where
                         .client
                         .runtime_api()
                         .get_last_tick_provider_submitted_proof(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| Err(GetProofSubmissionRecordError::InternalApiError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(GetProofSubmissionRecordError::InternalApiError)
+                        });
 
                     match callback.send(last_tick) {
                         Ok(_) => {
@@ -841,6 +854,7 @@ where
                         .runtime_api()
                         .get_challenge_period(current_block_hash, &provider_id)
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "Failed to query challenge period for provider [{:?}]", provider_id);
                             Err(GetChallengePeriodError::InternalApiError)
                         });
@@ -894,7 +908,10 @@ where
                         .client
                         .runtime_api()
                         .get_checkpoint_challenges(current_block_hash, tick)
-                        .unwrap_or_else(|_| Err(GetCheckpointChallengesError::InternalApiError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(GetCheckpointChallengesError::InternalApiError)
+                        });
 
                     match callback.send(checkpoint_challenges) {
                         Ok(_) => {
@@ -915,7 +932,10 @@ where
                         .client
                         .runtime_api()
                         .get_bsp_info(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| Err(GetBspInfoError::InternalApiError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(GetBspInfoError::InternalApiError)
+                        });
 
                     let root = bsp_info.map(|bsp_info| bsp_info.root);
 
@@ -938,7 +958,10 @@ where
                         .client
                         .runtime_api()
                         .query_storage_provider_capacity(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| Err(QueryStorageProviderCapacityError::InternalError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(QueryStorageProviderCapacityError::InternalError)
+                        });
 
                     match callback.send(capacity) {
                         Ok(_) => {
@@ -959,7 +982,10 @@ where
                         .client
                         .runtime_api()
                         .query_available_storage_capacity(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| Err(QueryAvailableStorageCapacityError::InternalError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(QueryAvailableStorageCapacityError::InternalError)
+                        });
 
                     match callback.send(capacity) {
                         Ok(_) => {
@@ -987,6 +1013,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a QueueConfirmBspRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a QueueConfirmBspRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team."))) {
                         Ok(_) => {}
@@ -1035,6 +1062,7 @@ where
                             );
                         }
                     } else {
+                        command_succeeded = false;
                         // Log the invariant violation but don't fail - this is fire-and-forget
                         error!(
                             target: LOG_TARGET,
@@ -1066,6 +1094,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a QueueSubmitProofRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a QueueSubmitProofRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
@@ -1111,6 +1140,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a QueueStopStoringForInsolventUserRequest command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a QueueStopStoringForInsolventUserRequest command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
@@ -1134,7 +1164,10 @@ where
                         .client
                         .runtime_api()
                         .get_storage_provider_id(current_block_hash, &node_pub_key)
-                        .map_err(|_| anyhow!("Internal API error"));
+                        .map_err(|_| {
+                            command_succeeded = false;
+                            anyhow!("Internal API error")
+                        });
 
                     match callback.send(provider_id) {
                         Ok(_) => {}
@@ -1159,6 +1192,7 @@ where
                             min_debt,
                         )
                         .unwrap_or_else(|e| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "{}", e);
                             Err(GetUsersWithDebtOverThresholdError::InternalApiError)
                         });
@@ -1230,6 +1264,7 @@ where
                         .runtime_api()
                         .query_msp_id_of_bucket_id(current_block_hash, &bucket_id)
                         .unwrap_or_else(|e| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "{}", e);
                             Err(QueryMspIdOfBucketIdError::BucketNotFound)
                         });
@@ -1253,6 +1288,7 @@ where
                         .runtime_api()
                         .query_buckets_of_user_stored_by_msp(current_block_hash, &msp_id, &user)
                         .unwrap_or_else(|e| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "{}", e);
                             Err(QueryBucketsOfUserStoredByMspError::InternalError)
                         });
@@ -1280,6 +1316,7 @@ where
                         // Register BSP as one for which the file is being distributed already.
                         // Error if the BSP is already registered.
                         if !entry.bsps_distributing.insert(bsp_id) {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "BSP {:?} is already registered as distributing file [{:x}]", bsp_id, file_key);
                             match callback.send(Err(anyhow!(
                                 "BSP {:?} is already registered as distributing file [{:x}]",
@@ -1291,16 +1328,16 @@ where
                                     error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
                                 }
                             }
-                            return;
-                        }
-
-                        match callback.send(Ok(())) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        } else {
+                            match callback.send(Ok(())) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                }
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a RegisterBspDistributing command while not managing a MSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a RegisterBspDistributing command while not managing a MSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
@@ -1329,6 +1366,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received an UnregisterBspDistributing command while not managing an MSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received an UnregisterBspDistributing command while not managing an MSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
@@ -1342,76 +1380,71 @@ where
                     maybe_file_keys,
                     callback,
                 } => {
-                    let managed_msp_id = match &self.maybe_managed_provider {
-                        Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
-                        _ => {
-                            error!(target: LOG_TARGET, "`QueryPendingStorageRequests` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                            match callback.send(Err(anyhow!("Node is not managing an MSP"))) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                    if let Some(ManagedProvider::Msp(msp_handler)) = &self.maybe_managed_provider {
+                        let managed_msp_id = msp_handler.msp_id.clone();
+                        let current_block_hash = self.client.info().best_hash;
+
+                        // Query pending storage requests (not yet accepted by MSP)
+                        match self
+                            .client
+                            .runtime_api()
+                            .pending_storage_requests_by_msp(current_block_hash, managed_msp_id)
+                        {
+                            Ok(mut sr) => {
+                                // If specific file keys provided, filter to only those keys
+                                if let Some(file_keys) = maybe_file_keys {
+                                    let file_keys_set: HashSet<_> = file_keys
+                                        .into_iter()
+                                        .map(|k| sp_core::H256::from_slice(k.as_ref()))
+                                        .collect();
+
+                                    // From the pending storage requests for this MSP, only keep the ones that
+                                    // are in the provided file keys.
+                                    sr.retain(|file_key, _| file_keys_set.contains(file_key));
                                 }
-                            }
-                            return;
-                        }
-                    };
 
-                    let current_block_hash = self.client.info().best_hash;
-
-                    // Query pending storage requests (not yet accepted by MSP)
-                    let storage_requests = match self
-                        .client
-                        .runtime_api()
-                        .pending_storage_requests_by_msp(current_block_hash, managed_msp_id)
-                    {
-                        Ok(mut sr) => {
-                            // If specific file keys provided, filter to only those keys
-                            if let Some(file_keys) = maybe_file_keys {
-                                let file_keys_set: HashSet<_> = file_keys
+                                let new_storage_requests: Vec<NewStorageRequest<Runtime>> = sr
                                     .into_iter()
-                                    .map(|k| sp_core::H256::from_slice(k.as_ref()))
+                                    .map(|(file_key, sr)| NewStorageRequest {
+                                        who: sr.owner,
+                                        file_key: file_key.into(),
+                                        bucket_id: sr.bucket_id,
+                                        location: sr.location,
+                                        fingerprint: sr.fingerprint.as_ref().into(),
+                                        size: sr.size,
+                                        user_peer_ids: sr.user_peer_ids,
+                                        expires_at: sr.expires_at,
+                                    })
                                     .collect();
 
-                                // From the pending storage requests for this MSP, only keep the ones that
-                                // are in the provided file keys.
-                                sr.retain(|file_key, _| file_keys_set.contains(file_key));
-                            }
-
-                            // Return the filtered pending storage requests.
-                            sr
-                        }
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to get pending storage requests: {:?}", e);
-                            match callback
-                                .send(Err(anyhow!("Failed to get pending storage requests")))
-                            {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    error!(target: LOG_TARGET, "Failed to send empty result: {:?}", e);
+                                match callback.send(Ok(new_storage_requests)) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Failed to send pending storage requests: {:?}", e);
+                                    }
                                 }
                             }
-                            return;
+                            Err(e) => {
+                                command_succeeded = false;
+                                error!(target: LOG_TARGET, "Failed to get pending storage requests: {:?}", e);
+                                match callback
+                                    .send(Err(anyhow!("Failed to get pending storage requests")))
+                                {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                    }
+                                }
+                            }
                         }
-                    };
-
-                    let new_storage_requests: Vec<NewStorageRequest<Runtime>> = storage_requests
-                        .into_iter()
-                        .map(|(file_key, sr)| NewStorageRequest {
-                            who: sr.owner,
-                            file_key: file_key.into(),
-                            bucket_id: sr.bucket_id,
-                            location: sr.location,
-                            fingerprint: sr.fingerprint.as_ref().into(),
-                            size: sr.size,
-                            user_peer_ids: sr.user_peer_ids,
-                            expires_at: sr.expires_at,
-                        })
-                        .collect();
-
-                    match callback.send(Ok(new_storage_requests)) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send pending storage requests: {:?}", e);
+                    } else {
+                        command_succeeded = false;
+                        error!(target: LOG_TARGET, "`QueryPendingStorageRequests` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                        match callback.send(Err(anyhow!("Node is not managing an MSP"))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                            }
                         }
                     }
                 }
@@ -1429,6 +1462,7 @@ where
                             .file_key_statuses
                             .insert(file_key, status.into());
                     } else {
+                        command_succeeded = false;
                         // Fire-and-forget command, just log the invariant violation
                         error!(
                             target: LOG_TARGET,
@@ -1448,6 +1482,7 @@ where
                         );
                         msp_handler.file_key_statuses.remove(&file_key);
                     } else {
+                        command_succeeded = false;
                         // Fire-and-forget command, just log the invariant violation
                         error!(
                             target: LOG_TARGET,
@@ -1487,6 +1522,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
