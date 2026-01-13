@@ -22,6 +22,7 @@ use rustls_platform_verifier::ConfigVerifierExt;
 use thiserror::Error;
 
 pub mod leadership;
+pub use leadership::NodeAdvertisedEndpoints;
 pub mod models;
 pub mod schema;
 pub mod store;

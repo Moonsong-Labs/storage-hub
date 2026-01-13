@@ -179,6 +179,10 @@ where
     pub enable_msp_distribute_files: bool,
     /// Optional Postgres URL for the pending transactions DB. If None, DB is disabled.
     pub pending_db_url: Option<String>,
+    /// Advertised RPC URL for leader registration (optional).
+    pub advertised_rpc_url: Option<String>,
+    /// Advertised trusted file transfer server URL for leader registration (optional).
+    pub advertised_trusted_file_transfer_server_url: Option<String>,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -192,6 +196,8 @@ where
             peer_id: None,
             enable_msp_distribute_files: false,
             pending_db_url: None,
+            advertised_rpc_url: None,
+            advertised_trusted_file_transfer_server_url: None,
         }
     }
 }

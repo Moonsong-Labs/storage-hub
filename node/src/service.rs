@@ -340,20 +340,32 @@ where
                 }
             }
 
-            if *trusted_file_transfer_server {
+            // Prepare trusted file transfer server URL for leader registration
+            let trusted_file_transfer_url = if *trusted_file_transfer_server {
                 let file_transfer_config = shc_client::trusted_file_transfer::server::Config {
                     host: trusted_file_transfer_server_host
                         .clone()
                         .unwrap_or_else(|| "127.0.0.1".to_string()),
                     port: trusted_file_transfer_server_port.unwrap_or(7070),
                 };
-                builder.with_trusted_file_transfer_server(file_transfer_config);
-            }
+                builder.with_trusted_file_transfer_server(file_transfer_config.clone());
+                Some(format!(
+                    "http://{}:{}",
+                    file_transfer_config.host, file_transfer_config.port
+                ))
+            } else {
+                None
+            };
 
             if let Some(c) = blockchain_service {
                 let peer_id = network.local_peer_id().to_bytes();
                 let mut c = c.clone();
                 c.peer_id = Some(peer_id);
+
+                if c.advertised_trusted_file_transfer_server_url.is_none() {
+                    c.advertised_trusted_file_transfer_server_url = trusted_file_transfer_url;
+                }
+
                 builder.with_blockchain_service_config(c);
             }
 

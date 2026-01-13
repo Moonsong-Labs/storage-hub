@@ -15,9 +15,12 @@ use sc_network::Multiaddr;
 use sc_transaction_pool_api::TransactionStatus;
 use shc_actors_framework::actor::Actor;
 use shc_blockchain_service_db::{
-    leadership::{open_leadership_connection, try_acquire_leadership, LEADERSHIP_LOCK_KEY},
+    leadership::{
+        open_leadership_connection, try_acquire_leadership, update_leader_info, LEADERSHIP_LOCK_KEY,
+    },
     setup_db_pool,
     store::PendingTxStore,
+    NodeAdvertisedEndpoints,
 };
 use shc_common::{
     blockchain_utils::{
@@ -142,8 +145,30 @@ where
                     "This node acquired the leadership advisory lock; running as LEADER"
                 );
                 self.pending_tx_store = Some(PendingTxStore::new(pool));
-                self.leadership_conn = Some(client);
+                self.leadership_conn = Some(client.clone());
                 self.role = MultiInstancesNodeRole::Leader;
+
+                // Register this node's advertised endpoints as leader metadata so followers can find us
+                let endpoints = NodeAdvertisedEndpoints {
+                    rpc_url: self.config.advertised_rpc_url.clone().expect("RPC URL should be set for leader registration"),
+                    trusted_file_transfer_server_url: self.config.advertised_trusted_file_transfer_server_url.clone().expect("Trusted file transfer server URL should be set for leader registration"),
+                };
+
+                if let Err(e) = update_leader_info(&client, &endpoints).await {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Failed to register leader info in database: {:?}. Followers may not be able to discover this leader.",
+                        e
+                    );
+                } else {
+                    info!(
+                        target: LOG_TARGET,
+                        "✅ Leader endpoints registered in database: rpc={}, trusted_file_transfer={}",
+                        endpoints.rpc_url,
+                        endpoints.trusted_file_transfer_server_url
+                    );
+                }
+
                 info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
             }
             Ok(false) => {
@@ -152,7 +177,7 @@ where
                     "Leadership advisory lock already held by another instance; running as FOLLOWER"
                 );
                 self.pending_tx_store = Some(PendingTxStore::new(pool));
-                self.leadership_conn = Some(client);
+                self.leadership_conn = Some(client.clone());
                 self.role = MultiInstancesNodeRole::Follower;
                 info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
             }
@@ -1875,8 +1900,12 @@ where
 
                 // MSP Follower: Track FileKeys to retrieve from Leader
                 if matches!(self.role, crate::types::MultiInstancesNodeRole::Follower) {
-                    if let Some(crate::types::ManagedProvider::Msp(msp_handler)) = self.maybe_managed_provider.as_mut() {
-                        msp_handler.follower_file_keys_to_retrieve.insert(*file_key);
+                    if let Some(crate::types::ManagedProvider::Msp(msp_handler)) =
+                        self.maybe_managed_provider.as_mut()
+                    {
+                        msp_handler
+                            .follower_file_keys_to_retrieve
+                            .insert(*file_key));
                         debug!(target: LOG_TARGET, "MSP Follower: Tracked file key {:x} for retrieval from Leader", file_key);
                     }
                 }
