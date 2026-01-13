@@ -1,11 +1,13 @@
 //! MSP service implementation
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use alloy_core::{hex::ToHexExt, primitives::Address};
 use axum_extra::extract::multipart::Field;
 use bigdecimal::{BigDecimal, RoundingMode};
 use std::collections::HashSet;
+use tokio::sync::RwLock;
 
 use bytes::Bytes;
 use codec::{Decode, Encode};
@@ -30,7 +32,7 @@ use shp_types::Hash;
 
 use crate::{
     config::MspConfig,
-    constants::retry::get_retry_delay,
+    constants::{retry::get_retry_delay, stats::STATS_CACHE_TTL_SECS},
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
@@ -52,6 +54,12 @@ pub struct FileDownloadResult {
     pub fingerprint: [u8; 32],
 }
 
+/// Cache entry for MSP stats
+struct StatsCacheEntry {
+    stats: StatsResponse,
+    last_refreshed: Instant,
+}
+
 /// Service for handling MSP-related operations
 #[derive(Clone)]
 pub struct MspService {
@@ -60,6 +68,7 @@ pub struct MspService {
     postgres: Arc<DBClient>,
     rpc: Arc<StorageHubRpcClient>,
     msp_config: MspConfig,
+    stats_cache: Arc<RwLock<Option<StatsCacheEntry>>>,
 }
 
 impl MspService {
@@ -80,6 +89,7 @@ impl MspService {
             postgres,
             rpc,
             msp_config,
+            stats_cache: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -153,9 +163,25 @@ impl MspService {
     }
 
     /// Get MSP statistics
+    ///
+    /// This method caches the stats to avoid repeated RPC calls.
+    /// The cache is automatically refreshed after the configured TTL expires.
     pub async fn get_stats(&self) -> Result<StatsResponse, Error> {
         debug!(target: "msp_service::get_stats", "Getting MSP stats");
 
+        // Check if we have a valid cached entry
+        {
+            let cache = self.stats_cache.read().await;
+            if let Some(entry) = &*cache {
+                let cache_ttl = std::time::Duration::from_secs(STATS_CACHE_TTL_SECS);
+                if entry.last_refreshed.elapsed() < cache_ttl {
+                    debug!(target: "msp_service::get_stats", "Returning cached stats");
+                    return Ok(entry.stats.clone());
+                }
+            }
+        }
+
+        // Cache miss or expired, fetch fresh data
         let info = self
             .rpc
             .get_msp_info(self.msp_id)
@@ -177,7 +203,7 @@ impl MspService {
 
         debug!(?info, %active_users, "msp stats");
 
-        Ok(StatsResponse {
+        let stats = StatsResponse {
             capacity: Capacity {
                 total_bytes: BigDecimal::from(info.capacity).to_string(),
                 available_bytes: BigDecimal::from(info.capacity - info.capacity_used).to_string(),
@@ -187,7 +213,18 @@ impl MspService {
             last_capacity_change: BigDecimal::from(info.last_capacity_change).to_string(),
             value_props_amount: BigDecimal::from(info.amount_of_value_props).to_string(),
             buckets_amount: BigDecimal::from(info.amount_of_buckets).to_string(),
-        })
+        };
+
+        // Update cache with the new value
+        {
+            let mut cache = self.stats_cache.write().await;
+            *cache = Some(StatsCacheEntry {
+                stats: stats.clone(),
+                last_refreshed: Instant::now(),
+            });
+        }
+
+        Ok(stats)
     }
 
     /// Get MSP value propositions
@@ -1123,6 +1160,70 @@ mod tests {
             !buckets_amount.is_negative(),
             "Buckets amount should be non-negative"
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_stats_caching() {
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                Box::pin(async move {
+                    // Create MSP with the ID that matches the default config
+                    let _ = client
+                        .create_msp(
+                            &MOCK_ADDRESS.to_string(),
+                            OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
+                        )
+                        .await
+                        .expect("should create MSP");
+                })
+            })
+            .await
+            .build()
+            .await;
+
+        // 1. Verify cache is empty before first call
+        {
+            let cache = service.stats_cache.read().await;
+            assert!(cache.is_none(), "Cache should be empty before first call");
+        }
+
+        // 2. First call should populate the cache
+        let stats1 = service.get_stats().await.unwrap();
+
+        // 3. Verify cache is now populated and capture the timestamp
+        let first_timestamp = {
+            let cache = service.stats_cache.read().await;
+            assert!(
+                cache.is_some(),
+                "Cache should be populated after first call"
+            );
+            cache.as_ref().unwrap().last_refreshed
+        };
+
+        // 4. Second call should return cached data
+        let stats2 = service.get_stats().await.unwrap();
+
+        // 5. Verify cache timestamp hasn't changed (proving it was a cache hit)
+        {
+            let cache = service.stats_cache.read().await;
+            let entry = cache.as_ref().unwrap();
+            assert_eq!(
+                entry.last_refreshed, first_timestamp,
+                "Cache timestamp should not change on cache hit"
+            );
+        }
+
+        // 6. Verify both calls return the same data
+        assert_eq!(stats1.active_users, stats2.active_users);
+        assert_eq!(stats1.capacity.total_bytes, stats2.capacity.total_bytes);
+        assert_eq!(stats1.capacity.used_bytes, stats2.capacity.used_bytes);
+        assert_eq!(
+            stats1.capacity.available_bytes,
+            stats2.capacity.available_bytes
+        );
+        assert_eq!(stats1.last_capacity_change, stats2.last_capacity_change);
+        assert_eq!(stats1.value_props_amount, stats2.value_props_amount);
+        assert_eq!(stats1.buckets_amount, stats2.buckets_amount);
     }
 
     #[tokio::test]

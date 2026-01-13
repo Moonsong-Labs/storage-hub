@@ -75,6 +75,12 @@ pub mod api {
     pub const MAX_PAGE_SIZE: usize = 100;
 }
 
+/// Stats endpoint configuration
+pub mod stats {
+    /// Stats cache time-to-live in seconds
+    pub const STATS_CACHE_TTL_SECS: u64 = 300; // 5 minutes
+}
+
 /// Auth configuration constants
 pub mod auth {
     /// The endpoint for the nonce authentication
