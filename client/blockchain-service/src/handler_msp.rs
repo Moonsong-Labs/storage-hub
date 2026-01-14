@@ -6,6 +6,7 @@ use sc_client_api::HeaderBackend;
 use sc_network_types::PeerId;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
+use sp_core::Get;
 use sp_runtime::traits::Block as BlockT;
 
 use pallet_file_system_runtime_api::FileSystemApi;
@@ -16,8 +17,8 @@ use shc_common::{
     traits::StorageEnableRuntime,
     typed_store::CFDequeAPI,
     types::{
-        BackupStorageProviderId, BlockHash, BlockNumber, BucketId, FileKey, MainStorageProviderId,
-        ProviderId, StorageEnableEvents, TrieMutation,
+        BackupStorageProviderId, BlockHash, BlockNumber, BucketId, DefaultMerkleRoot, FileKey,
+        MainStorageProviderId, ProviderId, StorageEnableEvents, TrieMutation,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -955,7 +956,7 @@ where
     /// This is a sanity check after coming out of sync to ensure mutations were
     /// correctly applied during the sync process.
     ///
-    /// This function creates the forest storage under a key if it doesn't exist. This is because a user could have
+    /// If a forest doesn't exist locally, it checks that it should be an empty bucket. This is because a user could have
     /// created a bucket during the downtime, and since the MSP didn't confirm any storage request for it, no mutations
     /// were applied and as such the forest storage was not created previously during the initial sync.
     ///
@@ -997,34 +998,16 @@ where
         for bucket_id in buckets {
             let forest_key = bucket_id.as_ref().to_vec();
 
-            // Check if the forest exists locally, or log a warning and create it if it doesn't
-            let local_root = match self
+            // Get the local root of the bucket.
+            // Not having the bucket is valid, so long as the bucket on-chain is empty,
+            // i.e. it's on-chain root is the default root.
+            let maybe_local_root = match self
                 .forest_storage_handler
                 .get(&forest_key.clone().into())
                 .await
             {
-                Some(fs) => fs.read().await.root(),
-                None => {
-                    warn!(
-                            target: LOG_TARGET,
-                            "❌ Bucket [{:?}] forest storage not found locally after sync, created it.",
-                            bucket_id
-                    );
-                    if let Err(e) = self
-                        .forest_storage_handler
-                        .create(&forest_key.clone().into())
-                        .await
-                    {
-                        error!(
-                            target: LOG_TARGET,
-                            "CRITICAL ❗️❗️❗️: Failed to create forest storage for bucket [{:?}] after sync: {}",
-                            bucket_id,
-                            e
-                        );
-                    }
-                    missing += 1;
-                    continue;
-                }
+                Some(fs) => Some(fs.read().await.root()),
+                None => None,
             };
 
             // Get the on-chain root of the bucket
@@ -1035,30 +1018,37 @@ where
             {
                 Ok(Ok(root)) => root,
                 Ok(Err(e)) => {
-                    error!(target: LOG_TARGET, "Failed to query bucket root for [{:?}]: {:?}", bucket_id, e);
+                    error!(target: LOG_TARGET, "Failed to query bucket root for [0x{:x}]: {:?}", bucket_id, e);
                     continue;
                 }
                 Err(e) => {
-                    error!(target: LOG_TARGET, "Runtime API call failed for query_bucket_root [{:?}]: {:?}", bucket_id, e);
+                    error!(target: LOG_TARGET, "Runtime API call failed for query_bucket_root [0x{:x}]: {:?}", bucket_id, e);
                     continue;
                 }
             };
 
             // Compare the roots
-            if local_root != onchain_root {
-                error!(
-                        target: LOG_TARGET,
-                        "❌ CRITICAL: Bucket [{:?}] root mismatch after sync! Local: {:?}, On-chain: {:?}",
-                        bucket_id, local_root, onchain_root
-                );
-                mismatches += 1;
-            } else {
-                trace!(
-                        target: LOG_TARGET,
-                        "Bucket [{:?}] root verified: {:?}",
-                        bucket_id, local_root
-                );
-                verified += 1;
+            match maybe_local_root {
+                // Failure Case: Local forest exists and its root does not match the on-chain root.
+                Some(local_root) if local_root != onchain_root => {
+                    error!(target: LOG_TARGET, "❌ CRITICAL: Bucket [0x{:x}] root mismatch after sync! Local: [0x{:x}], On-chain: [0x{:x}]", bucket_id, local_root, onchain_root);
+                    mismatches += 1;
+                }
+                // Failure Case: Local forest does not exist and the on-chain root is not the default root (bucket is not empty)
+                None if onchain_root != DefaultMerkleRoot::<Runtime>::get() => {
+                    error!(target: LOG_TARGET, "❌ CRITICAL: Bucket [0x{:x}] forest storage not found locally after sync, and on-chain root is not the default root (bucket is not empty). On-chain root: [0x{:x}]", bucket_id, onchain_root);
+                    missing += 1;
+                }
+                // Success Case: Local forest exists and its root matches the on-chain root.
+                Some(_) => {
+                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] root verified: [0x{:x}]", bucket_id, onchain_root);
+                    verified += 1;
+                }
+                // Success Case: Local forest does not exist and the on-chain root is the default root (bucket is empty).
+                None => {
+                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] root verified: [0x{:x}]", bucket_id, onchain_root);
+                    verified += 1;
+                }
             }
         }
 

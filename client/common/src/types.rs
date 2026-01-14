@@ -133,6 +133,8 @@ pub type MaxBatchConfirmStorageRequests<Runtime> =
 pub type ValuePropositionWithId<Runtime> =
     pallet_storage_providers::types::ValuePropositionWithId<Runtime>;
 pub type MerkleTrieHash<Runtime> = <Runtime as pallet_proofs_dealer::Config>::MerkleTrieHash;
+pub type DefaultMerkleRoot<Runtime> =
+    <Runtime as pallet_storage_providers::Config>::DefaultMerkleRoot;
 
 /// Type alias for the events vector.
 ///
