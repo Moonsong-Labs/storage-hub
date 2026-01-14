@@ -228,6 +228,47 @@ where
         }
     }
 
+    /// Spawn the follower download task for MSP followers
+    ///
+    /// This is a helper function that can be called manually or via a startup script
+    /// to initiate file downloading from the leader for MSP followers.
+    ///
+    /// # Parameters
+    /// * `leader_url` - The base URL of the leader's trusted file transfer server
+    /// * `file_keys` - Arc<RwLock<HashSet<FileKey>>> of files to download
+    ///
+    /// NOTE: In practice, this needs access to the MSP handler's file_keys_to_retrieve field.
+    /// The recommended approach is to call this from application code once the blockchain
+    /// service has initialized and you've confirmed the node is running as an MSP Follower.
+    pub fn spawn_msp_follower_download_task(
+        &self,
+        leader_url: String,
+        file_keys: std::sync::Arc<
+            std::sync::RwLock<std::collections::HashSet<shc_common::types::FileKey>>,
+        >,
+    ) where
+        <(R, S) as ShNodeType<Runtime>>::FL: shc_file_manager::traits::FileStorage<shc_common::types::StorageProofsMerkleTrieLayout>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let file_storage = self
+            .file_storage
+            .clone()
+            .expect("File Storage not initialized");
+
+        log::info!(
+            "Spawning MSP Follower download task with leader URL: {}",
+            leader_url
+        );
+
+        crate::trusted_file_transfer::follower_downloader::spawn_follower_download_task(
+            file_keys,
+            leader_url,
+            file_storage,
+        );
+    }
+
     /// Spawn the Fisherman Service.
     ///
     /// The Fisherman Service monitors the blockchain for file deletion requests
@@ -875,7 +916,8 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
             enable_msp_distribute_files: self.enable_msp_distribute_files.unwrap_or(false),
             pending_db_url: self.pending_db_url,
             advertised_rpc_url: self.advertised_rpc_url,
-            advertised_trusted_file_transfer_server_url: self.advertised_trusted_file_transfer_server_url,
+            advertised_trusted_file_transfer_server_url: self
+                .advertised_trusted_file_transfer_server_url,
         }
     }
 }

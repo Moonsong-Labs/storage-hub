@@ -1905,7 +1905,9 @@ where
                     {
                         msp_handler
                             .follower_file_keys_to_retrieve
-                            .insert(*file_key));
+                            .write()
+                            .unwrap()
+                            .insert(*file_key);
                         debug!(target: LOG_TARGET, "MSP Follower: Tracked file key {:x} for retrieval from Leader", file_key);
                     }
                 }

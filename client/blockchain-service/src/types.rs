@@ -4,6 +4,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     future::Future,
     pin::Pin,
+    sync::{Arc, RwLock},
     time::Duration,
 };
 
@@ -919,7 +920,8 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// data from the Leader node.
     ///
     /// This is only populated when the node is running as an MSP Follower.
-    pub(crate) follower_file_keys_to_retrieve: HashSet<FileKey>,
+    /// Wrapped in Arc<RwLock> to allow concurrent access from the polling task.
+    pub(crate) follower_file_keys_to_retrieve: Arc<RwLock<HashSet<FileKey>>>,
 }
 
 impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
@@ -932,7 +934,7 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
             file_key_statuses: HashMap::new(),
             pending_respond_storage_requests: VecDeque::new(),
             pending_respond_storage_request_file_keys: HashSet::new(),
-            follower_file_keys_to_retrieve: HashSet::new(),
+            follower_file_keys_to_retrieve: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 }

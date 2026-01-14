@@ -18,6 +18,7 @@ workspace = true
 anyhow = { workspace = true }
 array-bytes = { workspace = true }
 async-channel = { workspace = true }
+async-stream = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }
