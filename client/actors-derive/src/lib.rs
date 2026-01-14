@@ -97,10 +97,12 @@ use quote::{quote, ToTokens};
 use std::sync::Mutex;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input,
+    parse_macro_input, parse_quote,
+    punctuated::Punctuated,
     spanned::Spanned,
     token::Comma,
-    Attribute, DeriveInput, Generics, Ident, LitStr, Token, Type,
+    Attribute, DeriveInput, Field, Fields, FieldsNamed, Generics, Ident, ItemStruct, LitStr, Token,
+    Type,
 };
 
 /// Parser for the `#[actor(actor = "...", forest_root_write_lock)]` attribute that accompanies the `ActorEvent` derive macro.
@@ -530,6 +532,224 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
     };
 
     let expanded = quote! {
+        #event_bus_message_impl
+        #forest_lock_impl
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Parser for the `#[actor_event(...)]` attribute macro arguments.
+///
+/// Supports the same format as the derive macro's `#[actor(...)]` attribute.
+struct ActorEventAttrArgs {
+    actor: LitStr,
+    has_forest_root_write_lock: bool,
+}
+
+impl Parse for ActorEventAttrArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name: Ident = input.parse()?;
+        if name != "actor" {
+            return Err(syn::Error::new(
+                name.span(),
+                "Expected `actor` as the first parameter",
+            ));
+        }
+
+        let _: Token![=] = input.parse()?;
+        let actor: LitStr = input.parse()?;
+
+        let has_forest_root_write_lock = if input.peek(Token![,]) {
+            let _: Token![,] = input.parse()?;
+            let flag: Ident = input.parse()?;
+            if flag != "forest_root_write_lock" {
+                return Err(syn::Error::new(
+                    flag.span(),
+                    "Expected `forest_root_write_lock` after comma",
+                ));
+            }
+            true
+        } else {
+            false
+        };
+
+        Ok(ActorEventAttrArgs {
+            actor,
+            has_forest_root_write_lock,
+        })
+    }
+}
+
+/// An attribute macro for defining actor events with automatic field injection.
+///
+/// This macro is an alternative to the `#[derive(ActorEvent)]` derive macro that can
+/// automatically add the `forest_root_write_lock` field when needed, eliminating
+/// boilerplate.
+///
+/// # Usage
+///
+/// ## Basic Event (equivalent to derive macro)
+///
+/// ```ignore
+/// #[actor_event(actor = "blockchain_service")]
+/// pub struct NewStorageRequest<Runtime: StorageEnableRuntime> {
+///     pub file_key: FileKey,
+///     pub bucket_id: BucketId<Runtime>,
+/// }
+/// ```
+///
+/// ## Event with Forest Root Write Lock (field auto-added)
+///
+/// ```ignore
+/// #[actor_event(actor = "blockchain_service", forest_root_write_lock)]
+/// pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntime> {
+///     pub data: ProcessSubmitProofRequestData<Runtime>,
+///     // forest_root_write_lock field is automatically added!
+/// }
+/// ```
+///
+/// The macro will automatically:
+/// - Add `Debug` and `Clone` derives, merging with any user-provided derives
+/// - Add the `forest_root_write_lock: ForestRootWriteLock<Runtime>` field when the flag is present
+/// - Implement `EventBusMessage` for the struct
+/// - Implement `TakeForestWriteLock` when the flag is present
+/// - Register the event with the specified actor
+///
+/// ## Additional Derives
+///
+/// You can add additional derives and they will be merged with `Debug` and `Clone`:
+///
+/// ```ignore
+/// #[derive(Encode, Decode)]
+/// #[actor_event(actor = "blockchain_service")]
+/// pub struct MyEvent {
+///     pub data: SomeData,
+/// }
+/// // Generates: #[derive(Debug, Clone, Encode, Decode)]
+/// ```
+#[proc_macro_attribute]
+pub fn actor_event(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as ActorEventAttrArgs);
+    let mut input_struct = parse_macro_input!(input as ItemStruct);
+
+    let name = &input_struct.ident;
+    let generics = &input_struct.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let vis = &input_struct.vis;
+
+    // Get the Runtime type parameter (first type param, or default to "Runtime")
+    let runtime_param = generics
+        .type_params()
+        .next()
+        .map(|p| p.ident.clone())
+        .unwrap_or_else(|| Ident::new("Runtime", Span::call_site()));
+
+    // If forest_root_write_lock is enabled, add the field to the struct
+    if args.has_forest_root_write_lock {
+        match &mut input_struct.fields {
+            Fields::Named(fields) => {
+                // Create the forest_root_write_lock field
+                let new_field: Field = parse_quote! {
+                    pub forest_root_write_lock: crate::forest_write_lock::ForestRootWriteLock<#runtime_param>
+                };
+                fields.named.push(new_field);
+            }
+            Fields::Unit => {
+                // Convert unit struct to named struct with the field
+                let new_field: Field = parse_quote! {
+                    pub forest_root_write_lock: crate::forest_write_lock::ForestRootWriteLock<#runtime_param>
+                };
+                let mut named_fields: Punctuated<Field, Comma> = Punctuated::new();
+                named_fields.push(new_field);
+                input_struct.fields = Fields::Named(FieldsNamed {
+                    brace_token: syn::token::Brace::default(),
+                    named: named_fields,
+                });
+            }
+            Fields::Unnamed(_) => {
+                return syn::Error::new(
+                    input_struct.fields.span(),
+                    "forest_root_write_lock is not supported for tuple structs",
+                )
+                .to_compile_error()
+                .into();
+            }
+        }
+    }
+
+    // Register this event with the actor
+    get_registry().register_event_with_generics(
+        &args.actor.value(),
+        &name.to_string(),
+        ty_generics.to_token_stream().to_string(),
+        where_clause.to_token_stream().to_string(),
+    );
+
+    // Generate EventBusMessage implementation
+    let event_bus_message_impl = quote! {
+        impl #impl_generics ::shc_actors_framework::event_bus::EventBusMessage for #name #ty_generics #where_clause {}
+    };
+
+    // Optionally generate TakeForestWriteLock implementation
+    let forest_lock_impl = if args.has_forest_root_write_lock {
+        quote! {
+            impl #impl_generics crate::forest_write_lock::TakeForestWriteLock<#runtime_param> for #name #ty_generics #where_clause {
+                fn take_forest_root_write_lock(&self) -> anyhow::Result<crate::forest_write_lock::ForestRootWriteLockGuard<#runtime_param>> {
+                    self.forest_root_write_lock
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("forest root write lock mutex poisoned"))?
+                        .take()
+                        .ok_or_else(|| anyhow::anyhow!("forest root write lock guard already taken"))
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    // Collect existing derive traits and merge with our required ones (Debug, Clone)
+    let mut derive_traits: Vec<syn::Path> = vec![parse_quote!(Debug), parse_quote!(Clone)];
+
+    for attr in &input_struct.attrs {
+        if attr.path().is_ident("derive") {
+            // Parse the derive attribute to extract trait paths
+            if let Ok(meta) = attr.meta.require_list() {
+                let nested = meta.parse_args_with(Punctuated::<syn::Path, Comma>::parse_terminated);
+                if let Ok(paths) = nested {
+                    for path in paths {
+                        // Avoid duplicates (check last segment for simplicity)
+                        let is_duplicate = derive_traits.iter().any(|existing| {
+                            existing.segments.last().map(|s| &s.ident)
+                                == path.segments.last().map(|s| &s.ident)
+                        });
+                        if !is_duplicate {
+                            derive_traits.push(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Remove derive attributes from the struct (we'll generate a merged one)
+    input_struct
+        .attrs
+        .retain(|attr| !attr.path().is_ident("derive"));
+
+    // Get the fields for output
+    let fields = &input_struct.fields;
+
+    // Get remaining attributes (non-derive ones like doc comments)
+    let attrs = &input_struct.attrs;
+
+    // Generate the output with the struct definition and implementations
+    let expanded = quote! {
+        #[derive(#(#derive_traits),*)]
+        #(#attrs)*
+        #vis struct #name #generics #where_clause
+        #fields
+
         #event_bus_message_impl
         #forest_lock_impl
     };

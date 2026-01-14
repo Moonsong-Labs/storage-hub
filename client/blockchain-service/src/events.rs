@@ -1,7 +1,7 @@
 use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 
-use shc_actors_derive::{ActorEvent, ActorEventBus};
+use shc_actors_derive::{actor_event, ActorEvent, ActorEventBus};
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
@@ -11,12 +11,8 @@ use shc_common::{
     },
 };
 
-use crate::{
-    forest_write_lock::ForestRootWriteLock,
-    types::{
-        ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType,
-        RespondStorageRequest,
-    },
+use crate::types::{
+    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest,
 };
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
@@ -146,11 +142,9 @@ pub struct ProcessSubmitProofRequestData<Runtime: StorageEnableRuntime> {
     pub checkpoint_challenges: Vec<CustomChallenge<Runtime>>,
 }
 
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service", forest_root_write_lock)]
+#[actor_event(actor = "blockchain_service", forest_root_write_lock)]
 pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessSubmitProofRequestData<Runtime>,
-    pub forest_root_write_lock: ForestRootWriteLock<Runtime>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -158,11 +152,9 @@ pub struct ProcessConfirmStoringRequestData<Runtime: StorageEnableRuntime> {
     pub confirm_storing_requests: Vec<ConfirmStoringRequest<Runtime>>,
 }
 
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service", forest_root_write_lock)]
+#[actor_event(actor = "blockchain_service", forest_root_write_lock)]
 pub struct ProcessConfirmStoringRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessConfirmStoringRequestData<Runtime>,
-    pub forest_root_write_lock: ForestRootWriteLock<Runtime>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -170,11 +162,9 @@ pub struct ProcessMspRespondStoringRequestData<Runtime: StorageEnableRuntime> {
     pub respond_storing_requests: Vec<RespondStorageRequest<Runtime>>,
 }
 
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service", forest_root_write_lock)]
+#[actor_event(actor = "blockchain_service", forest_root_write_lock)]
 pub struct ProcessMspRespondStoringRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessMspRespondStoringRequestData<Runtime>,
-    pub forest_root_write_lock: ForestRootWriteLock<Runtime>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -182,11 +172,9 @@ pub struct ProcessStopStoringForInsolventUserRequestData<Runtime: StorageEnableR
     pub who: Runtime::AccountId,
 }
 
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service", forest_root_write_lock)]
+#[actor_event(actor = "blockchain_service", forest_root_write_lock)]
 pub struct ProcessStopStoringForInsolventUserRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessStopStoringForInsolventUserRequestData<Runtime>,
-    pub forest_root_write_lock: ForestRootWriteLock<Runtime>,
 }
 
 /// Slashable Provider event.
