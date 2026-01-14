@@ -131,7 +131,11 @@ export const cleardownTest = async (cleardownOptions: {
           name.includes(ShConsts.NODE_INFOS.pendingDb.containerName)
         ) ||
         container.Names.some((name) => name.includes("storage-hub-sh-copyparty")) ||
-        container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
+        container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName)) ||
+        container.Names.some((name) =>
+          name.includes(ShConsts.NODE_INFOS.prometheus.containerName)
+        ) ||
+        container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.grafana.containerName))
     );
 
     if (relevantContainers.length > 0) {
