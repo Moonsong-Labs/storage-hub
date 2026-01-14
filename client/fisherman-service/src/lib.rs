@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::{traits::StorageEnableRuntime, types::StorageHubClient};
+use shc_telemetry::MetricsLink;
 
 pub use self::commands::{
     FishermanServiceCommand, FishermanServiceCommandInterface, FishermanServiceError,
@@ -34,6 +35,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     batch_interval_seconds: u64,
     batch_deletion_limit: u64,
+    metrics: MetricsLink,
 ) -> ActorHandle<FishermanService<Runtime>> {
     // Create a named task spawner for the fisherman service
     let task_spawner = task_spawner
@@ -41,8 +43,12 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
         .with_group("monitoring");
 
     // Create the fisherman service instance
-    let fisherman_service =
-        FishermanService::new(client, batch_interval_seconds, batch_deletion_limit);
+    let fisherman_service = FishermanService::new(
+        client,
+        batch_interval_seconds,
+        batch_deletion_limit,
+        metrics,
+    );
 
     // Spawn the actor and return the handle
     task_spawner.spawn_actor(fisherman_service)

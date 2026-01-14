@@ -1789,6 +1789,15 @@ where
         payment_streams
     }
 
+    /// This function is called by the runtime API that allows anyone to get the count of users that have
+    /// at least one payment stream with a provider.
+    /// It returns the count as a u32, avoiding vector allocation and serialization overhead.
+    pub fn get_number_of_active_users_of_provider(provider_id: &ProviderIdFor<T>) -> u32 {
+        let fixed_count = FixedRatePaymentStreams::<T>::iter_prefix(provider_id).count();
+        let dynamic_count = DynamicRatePaymentStreams::<T>::iter_prefix(provider_id).count();
+        (fixed_count + dynamic_count) as u32
+    }
+
     /// This function is called by the runtime API that allows anyone to get the list of Providers that have a
     /// at least one payment stream with a user.
     /// It returns a vector of Provider IDs, without duplicates.

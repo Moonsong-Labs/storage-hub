@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'storagehub-bsp'
+    static_configs:
+      - targets: ['sh-bsp:9615']
+        labels:
+          role: 'bsp'
+
+  - job_name: 'storagehub-user'
+    static_configs:
+      - targets: ['sh-user:9615']
+        labels:
+          role: 'user'

@@ -181,6 +181,7 @@ struct SubscribeActorEventArgs {
     context: Option<syn::Expr>,
     critical: Option<syn::LitBool>,
     task_instance: Option<syn::Expr>,
+    metrics: Option<syn::Expr>,
 }
 
 impl Default for SubscribeActorEventArgs {
@@ -193,6 +194,7 @@ impl Default for SubscribeActorEventArgs {
             context: None,
             critical: None,
             task_instance: None,
+            metrics: None,
         }
     }
 }
@@ -228,6 +230,8 @@ impl Parse for SubscribeActorEventArgs {
                 args.context = Some(input.parse()?);
             } else if key == "critical" {
                 args.critical = Some(input.parse()?);
+            } else if key == "metrics" {
+                args.metrics = Some(input.parse()?);
             } else {
                 return Err(syn::Error::new(
                     key.span(),
@@ -661,12 +665,17 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     let critical = args.critical.map_or(false, |lit| lit.value);
     let critical_lit = syn::LitBool::new(critical, Span::call_site());
 
+    // Use the provided metrics or None
+    let metric_recorder = args
+        .metrics
+        .map_or_else(|| quote! { None }, |expr| quote! { #expr });
+
     // If a task instance is provided, use it
     // Otherwise, create a new task using the task type and context
     let result = if let Some(task) = args.task_instance {
         quote! {{
             let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
-                #task.subscribe_to(#task_spawner, #service, #critical_lit);
+                #task.subscribe_to(#task_spawner, #service, #critical_lit, #metric_recorder);
             event_bus_listener.start();
         }}
     } else {
@@ -676,7 +685,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
             quote! {{
                 let task = #task_type::new(#context.clone());
                 let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
-                    task.subscribe_to(#task_spawner, #service, #critical_lit);
+                    task.subscribe_to(#task_spawner, #service, #critical_lit, #metric_recorder);
                 event_bus_listener.start();
             }}
         } else {
@@ -702,6 +711,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 /// - `service`: The service that provides the event bus (required)
 /// - `spawner`: The task spawner for spawning event handlers (required)
 /// - `context`: The context to create new tasks (required)
+/// - `metrics`: Optional MetricsLink for automatic lifecycle metrics (pending/success/failure + timing)
 /// - `critical`: Default critical value for all mappings (optional, defaults to false)
 /// - An array of mappings, where each mapping is either:
 ///   - `EventType => TaskType`: Uses default critical value
@@ -715,6 +725,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 ///     service: &self.blockchain,
 ///     spawner: &self.task_spawner,
 ///     context: self.clone(),
+///     metrics: self.metrics.clone(),
 ///     critical: true,
 ///     [
 ///         // Override critical for specific mapping
@@ -725,12 +736,16 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 ///     ]
 /// );
 /// ```
+///
+/// When `metrics` is provided, the macro auto-generates a `MetricRecorder` for each mapping
+/// with the `event` label derived from the event type name (converted to snake_case).
 #[proc_macro]
 pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
     struct ActorEventMapArgs {
         service: syn::Expr,
         spawner: syn::Expr,
         context: syn::Expr,
+        metrics: Option<syn::Expr>,
         critical: Option<syn::LitBool>,
         mappings: Vec<EventTaskMapping>,
     }
@@ -746,6 +761,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             let mut service = None;
             let mut spawner = None;
             let mut context = None;
+            let mut metrics = None;
             let mut critical = None;
             let mut mappings = Vec::new();
 
@@ -760,6 +776,8 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                     spawner = Some(input.parse()?);
                 } else if key == "context" {
                     context = Some(input.parse()?);
+                } else if key == "metrics" {
+                    metrics = Some(input.parse()?);
                 } else if key == "critical" {
                     critical = Some(input.parse()?);
                 } else {
@@ -859,6 +877,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                 service,
                 spawner,
                 context,
+                metrics,
                 critical,
                 mappings,
             })
@@ -886,6 +905,28 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             .as_ref()
             .unwrap_or(&default_critical);
 
+        // Only generate metrics parameter when metrics are provided
+        let metrics_tokens = args.metrics.as_ref().map(|metrics_expr| {
+            // Extract base type name, stripping any generics (e.g., NewStorageRequest<Runtime> -> NewStorageRequest)
+            let base_type_name = match event_type {
+                syn::Type::Path(type_path) => type_path
+                    .path
+                    .segments
+                    .last()
+                    .map(|seg| seg.ident.to_string())
+                    .unwrap_or_else(|| event_type.to_token_stream().to_string()),
+                _ => event_type.to_token_stream().to_string(),
+            };
+            let event_name = to_snake_case(&base_type_name);
+            // Create EventMetricsConfig with the MetricsLink and event name
+            quote! {
+                metrics: Some(::shc_actors_framework::event_bus::EventMetricsConfig::new(
+                    #metrics_expr,
+                    #event_name,
+                )),
+            }
+        });
+
         quote! {
             subscribe_actor_event!(
                 event: #event_type,
@@ -894,6 +935,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                 spawner: #spawner,
                 context: #context,
                 critical: #critical,
+                #metrics_tokens
             );
         }
     });
@@ -1387,6 +1429,7 @@ fn generate_method_impl(
 /// - Adds appropriate callback fields to each command variant based on the specified mode
 /// - Generates an interface trait with methods for each command variant
 /// - Implements the interface trait for ActorHandle<ServiceType>
+/// - Generates a `command_name(&self) -> &'static str` method on the enum for logging/metrics
 ///
 /// # Parameters
 ///
@@ -1449,6 +1492,17 @@ fn generate_method_impl(
 ///
 /// The generated interface trait will have method names in snake_case derived from the variant names.
 /// For example, a variant named `SendExtrinsic` will generate a method named `send_extrinsic`.
+///
+/// # Generated `command_name` Method
+///
+/// The macro also generates a `command_name(&self) -> &'static str` method on the enum itself.
+/// This method returns the snake_case name of the command variant, which is useful for logging,
+/// metrics, and debugging purposes.
+///
+/// ```ignore
+/// let cmd = BlockchainServiceCommand::SendExtrinsic { ... };
+/// assert_eq!(cmd.command_name(), "send_extrinsic");
+/// ```
 #[proc_macro_attribute]
 pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as ActorCommandArgs);
@@ -1504,9 +1558,16 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut updated_variants = Vec::new();
     let mut trait_method_signatures = Vec::new();
     let mut trait_method_implementations = Vec::new();
+    let mut command_name_arms = Vec::new();
 
     for variant in &input.variants {
         let variant_name = &variant.ident;
+
+        // Generate command_name match arm for this variant
+        let variant_name_snake = to_snake_case(&variant_name.to_string());
+        command_name_arms.push(quote! {
+            Self::#variant_name { .. } => #variant_name_snake
+        });
         let variant_args = extract_command_variant_args(&variant.attrs);
 
         // Get mode and types
@@ -1656,7 +1717,7 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
         _service_where_bounds,
     ) = process_service_type(service_type);
 
-    let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     // Generate the interface trait and implementation
     let trait_def = quote! {
@@ -1675,12 +1736,28 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
+    // Generate command_name method
+    let command_name_impl = quote! {
+        impl #impl_generics #enum_name #ty_generics
+        #where_clause
+        {
+            /// Returns the snake_case name of this command variant.
+            pub fn command_name(&self) -> &'static str {
+                match self {
+                    #(#command_name_arms),*
+                }
+            }
+        }
+    };
+
     // Output the result
     let result = quote! {
         #vis enum #enum_name #generics
         {
             #(#updated_variants,)*
         }
+
+        #command_name_impl
 
         #trait_def
     };
