@@ -4,10 +4,10 @@ This crate provides procedural macros to reduce boilerplate code in the StorageH
 
 ## Features
 
-- `ActorEvent` derive macro: Implements `EventBusMessage` for event structs and registers them with a specific actor.
+- `actor` attribute macro: Implements `EventBusMessage` for event structs, auto-derives `Debug` and `Clone`, and registers them with a specific actor. Optionally injects a `forest_root_write_lock` field and implements `TakeForestWriteLock`.
 - `ActorEventBus` attribute macro: Generates the event bus provider struct and implements all the required methods and traits.
-- `subscribe_actor_event` macro: Simplifies event subscription code with named parameters for better readability.
-- `subscribe_actor_event_map` macro: Simplifies subscribing multiple events to tasks with shared parameters and per-mapping overrides.
+- `subscribe_actor` macro: Simplifies event subscription code with named parameters for better readability.
+- `subscribe_actor_map` macro: Simplifies subscribing multiple events to tasks with shared parameters and per-mapping overrides.
 
 ## Usage
 
@@ -20,12 +20,11 @@ shc-actors-derive = { workspace = true }
 
 ### 1. Defining Event Messages
 
-Import the macros directly and use the `ActorEvent` derive macro:
+Use the `actor` attribute macro:
 
 ```rust
-use shc_actors_derive::ActorEvent;
+use shc_actors_derive::actor;
 
-#[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct NewChallengeSeed {
     pub provider_id: String,
@@ -35,8 +34,23 @@ pub struct NewChallengeSeed {
 ```
 
 This will:
+- Automatically derive `Debug` and `Clone` for the struct
 - Implement `EventBusMessage` for the struct
 - Register the event with the specified actor ID (`blockchain_service` in this example)
+
+For events that need additional derives (like `Encode`, `Decode`), add them before the macro:
+
+```rust
+use codec::{Encode, Decode};
+use shc_actors_derive::actor;
+
+#[derive(Encode, Decode)]
+#[actor(actor = "blockchain_service")]
+pub struct MultipleNewChallengeSeeds {
+    pub provider_id: String,
+    pub seeds: Vec<(u32, Vec<u8>)>,
+}
+```
 
 ### 2. Creating Event Bus Providers
 
@@ -56,13 +70,13 @@ This will generate:
 
 ### 3. Subscribing to Events
 
-Use the `subscribe_actor_event` macro to simplify event subscription code:
+Use the `subscribe_actor` macro to simplify event subscription code:
 
 ```rust
-use shc_actors_derive::subscribe_actor_event;
+use shc_actors_derive::subscribe_actor;
 
 // Creating a new task instance and subscribing
-subscribe_actor_event!(
+subscribe_actor!(
     event: FinalisedBspConfirmStoppedStoring,
     task: BspDeleteFileTask,
     service: &self.blockchain,
@@ -73,7 +87,7 @@ subscribe_actor_event!(
 
 // Using an existing task instance
 let task = BspDeleteFileTask::new(self.clone());
-subscribe_actor_event!(
+subscribe_actor!(
     event: FinalisedBspConfirmStoppedStoring,
     task: task,
     service: &self.blockchain,
@@ -82,7 +96,7 @@ subscribe_actor_event!(
 );
 ```
 
-#### Parameters for `subscribe_actor_event`:
+#### Parameters for `subscribe_actor`:
 
 - `event`: The event type to subscribe to (required)
 - `task`: Either a task type (if creating a new task) or a task instance (required)
@@ -93,7 +107,7 @@ subscribe_actor_event!(
 
 #### Equivalent Code
 
-The `subscribe_actor_event` macro expands to code equivalent to:
+The `subscribe_actor` macro expands to code equivalent to:
 
 ```rust
 // When using a task type:
@@ -110,12 +124,12 @@ event_bus_listener.start();
 
 ### 4. Mapping Multiple Events to Tasks
 
-Use the `subscribe_actor_event_map` macro to simplify subscribing multiple events to tasks with shared parameters:
+Use the `subscribe_actor_map` macro to simplify subscribing multiple events to tasks with shared parameters:
 
 ```rust
-use shc_actors_derive::subscribe_actor_event_map;
+use shc_actors_derive::subscribe_actor_map;
 
-subscribe_actor_event_map!(
+subscribe_actor_map!(
     service: &self.blockchain,
     spawner: &self.task_spawner,
     context: self.clone(),
@@ -130,7 +144,7 @@ subscribe_actor_event_map!(
 );
 ```
 
-#### Parameters for `subscribe_actor_event_map`:
+#### Parameters for `subscribe_actor_map`:
 
 - `service`: The service that provides the event bus (required)
 - `spawner`: The task spawner for spawning event handlers (required)
@@ -182,9 +196,8 @@ impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
 ### After
 
 ```rust
-use shc_actors_derive::{ActorEvent, ActorEventBus};
+use shc_actors_derive::{actor, ActorEventBus};
 
-#[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct NewChallengeSeed {
     pub provider_id: String,
