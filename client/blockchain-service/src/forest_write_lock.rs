@@ -117,9 +117,11 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
     /// The guard will automatically release the lock when dropped.
     pub fn try_acquire(&mut self) -> Option<ForestRootWriteLockGuard<Runtime>> {
         if self.locked {
+            log::debug!(target: LOG_TARGET, "🔒 try_acquire: BLOCKED - lock is already held");
             None
         } else {
             self.locked = true;
+            log::debug!(target: LOG_TARGET, "🔓 try_acquire: SUCCESS - acquired forest write lock");
             Some(ForestRootWriteLockGuard::new(self.release_tx.clone()))
         }
     }
@@ -135,6 +137,7 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
                 "Received lock release while not locked - possible spurious release"
             );
         }
+        log::debug!(target: LOG_TARGET, "🔓 mark_released: Lock marked as released");
         self.locked = false;
     }
 
@@ -201,6 +204,7 @@ impl<Runtime: StorageEnableRuntime> std::fmt::Debug for ForestRootWriteLockGuard
 
 impl<Runtime: StorageEnableRuntime> Drop for ForestRootWriteLockGuard<Runtime> {
     fn drop(&mut self) {
+        log::debug!(target: LOG_TARGET, "🔓 Guard DROP: Sending release signal");
         // Send () to notify the BlockchainService that the lock is released.
         // We use unbounded_send since Drop is sync and we can't await.
         // If the channel is closed (BlockchainService shut down), the send fails silently.

@@ -354,9 +354,10 @@ where
             Some(ManagedProvider::Bsp(bsp_handler)) => {
                 // If the lock is currently held, wait for it to be released.
                 if bsp_handler.lock_manager.is_locked() {
-                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
+                    info!(target: LOG_TARGET, "🔒 bsp_assign_forest_root_write_lock: Lock is held, waiting for release");
                     return;
                 }
+                info!(target: LOG_TARGET, "🔓 bsp_assign_forest_root_write_lock: Lock is available, proceeding");
                 bsp_handler.bsp_id
             }
             _ => {

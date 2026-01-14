@@ -1032,6 +1032,7 @@ where
                 }
                 BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
                     if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
+                        info!(target: LOG_TARGET, "📥 QueueConfirmBspRequest: Queueing request for file key [{:?}]", request.file_key);
                         let state_store_context =
                             self.persistent_state.open_rw_context_with_overlay();
                         state_store_context
