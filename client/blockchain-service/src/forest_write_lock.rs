@@ -1,6 +1,6 @@
 //! Forest Write Lock Manager
 //!
-//! This module provides the `ForestWriteLockManager` for coordinating exclusive access
+//! This module provides the [`ForestWriteLockManager`] for coordinating exclusive access
 //! to the runtime Forest root.
 //!
 //! ## Design Overview
@@ -55,7 +55,7 @@ pub type LockReleaseReceiver = mpsc::UnboundedReceiver<()>;
 ///
 /// ## Thread Safety
 ///
-/// The manager is designed to be owned by a single thread (the BlockchainService).
+/// The manager is designed to be owned by a single thread.
 /// The guard can be dropped from any thread, and the release notification will
 /// be sent to the BlockchainService event loop.
 pub struct ForestWriteLockManager<Runtime: StorageEnableRuntime> {
@@ -204,7 +204,9 @@ impl<Runtime: StorageEnableRuntime> Drop for ForestRootWriteLockGuard<Runtime> {
         // Send () to notify the BlockchainService that the lock is released.
         // We use unbounded_send since Drop is sync and we can't await.
         // If the channel is closed (BlockchainService shut down), the send fails silently.
-        let _ = self.release_tx.send(());
+        if let Err(e) = self.release_tx.send(()) {
+            log::error!(target: LOG_TARGET, "Failed to send release signal: {}", e);
+        }
     }
 }
 
@@ -220,7 +222,7 @@ pub trait TakeForestWriteLock<Runtime: StorageEnableRuntime>: Send + 'static {
     ///
     /// Returns an error if:
     /// - The mutex is poisoned (a thread panicked while holding the lock)
-    /// - The guard has already been taken (indicates a bug - events should only be processed once)
+    /// - The guard has already been taken
     fn take_forest_root_write_lock(&self) -> anyhow::Result<ForestRootWriteLockGuard<Runtime>>;
 }
 

@@ -6,8 +6,8 @@ This crate provides procedural macros to reduce boilerplate code in the StorageH
 
 - `actor` attribute macro: Implements `EventBusMessage` for event structs, auto-derives `Debug` and `Clone`, and registers them with a specific actor. Optionally injects a `forest_root_write_lock` field and implements `TakeForestWriteLock`.
 - `ActorEventBus` attribute macro: Generates the event bus provider struct and implements all the required methods and traits.
-- `subscribe_actor` macro: Simplifies event subscription code with named parameters for better readability.
-- `subscribe_actor_map` macro: Simplifies subscribing multiple events to tasks with shared parameters and per-mapping overrides.
+- `subscribe_actor_event` macro: Simplifies event subscription code with named parameters for better readability.
+- `subscribe_actor_event_map` macro: Simplifies subscribing multiple events to tasks with shared parameters and per-mapping overrides.
 
 ## Usage
 
@@ -70,13 +70,13 @@ This will generate:
 
 ### 3. Subscribing to Events
 
-Use the `subscribe_actor` macro to simplify event subscription code:
+Use the `subscribe_actor_event` macro to simplify event subscription code:
 
 ```rust
-use shc_actors_derive::subscribe_actor;
+use shc_actors_derive::subscribe_actor_event;
 
 // Creating a new task instance and subscribing
-subscribe_actor!(
+subscribe_actor_event!(
     event: FinalisedBspConfirmStoppedStoring,
     task: BspDeleteFileTask,
     service: &self.blockchain,
@@ -87,7 +87,7 @@ subscribe_actor!(
 
 // Using an existing task instance
 let task = BspDeleteFileTask::new(self.clone());
-subscribe_actor!(
+subscribe_actor_event!(
     event: FinalisedBspConfirmStoppedStoring,
     task: task,
     service: &self.blockchain,
@@ -96,7 +96,7 @@ subscribe_actor!(
 );
 ```
 
-#### Parameters for `subscribe_actor`:
+#### Parameters for `subscribe_actor_event`:
 
 - `event`: The event type to subscribe to (required)
 - `task`: Either a task type (if creating a new task) or a task instance (required)
@@ -107,7 +107,7 @@ subscribe_actor!(
 
 #### Equivalent Code
 
-The `subscribe_actor` macro expands to code equivalent to:
+The `subscribe_actor_event` macro expands to code equivalent to:
 
 ```rust
 // When using a task type:
@@ -124,12 +124,12 @@ event_bus_listener.start();
 
 ### 4. Mapping Multiple Events to Tasks
 
-Use the `subscribe_actor_map` macro to simplify subscribing multiple events to tasks with shared parameters:
+Use the `subscribe_actor_event_map` macro to simplify subscribing multiple events to tasks with shared parameters:
 
 ```rust
-use shc_actors_derive::subscribe_actor_map;
+use shc_actors_derive::subscribe_actor_event_map;
 
-subscribe_actor_map!(
+subscribe_actor_event_map!(
     service: &self.blockchain,
     spawner: &self.task_spawner,
     context: self.clone(),
@@ -144,7 +144,7 @@ subscribe_actor_map!(
 );
 ```
 
-#### Parameters for `subscribe_actor_map`:
+#### Parameters for `subscribe_actor_event_map`:
 
 - `service`: The service that provides the event bus (required)
 - `spawner`: The task spawner for spawning event handlers (required)
