@@ -145,9 +145,6 @@ where
                     target: LOG_TARGET,
                     "This node acquired the leadership advisory lock; running as LEADER"
                 );
-                self.pending_tx_store = Some(PendingTxStore::new(pool));
-                self.leadership_conn = Some(client.clone());
-                self.role = MultiInstancesNodeRole::Leader;
 
                 // Register this node's advertised endpoints as leader metadata so followers can find us
                 let endpoints = NodeAdvertisedEndpoints {
@@ -156,7 +153,11 @@ where
                 };
 
                 if let Err(e) = update_leader_info(&client, &endpoints).await {
-                    warn!(
+                    // TODO: See how to handle this. One option is to wrap lock
+                    // adquisition and info submission within a transaction (so lock
+                    // is only given if info is submitted correctly), the
+                    // other is a retry with backoff and dropping after N retries
+                    error!(
                         target: LOG_TARGET,
                         "Failed to register leader info in database: {:?}. Followers may not be able to discover this leader.",
                         e
@@ -170,6 +171,10 @@ where
                     );
                 }
 
+                self.pending_tx_store = Some(PendingTxStore::new(pool));
+                self.leadership_conn = Some(client);
+                self.role = MultiInstancesNodeRole::Leader;
+
                 info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
             }
             Ok(false) => {
@@ -178,7 +183,7 @@ where
                     "Leadership advisory lock already held by another instance; running as FOLLOWER"
                 );
                 self.pending_tx_store = Some(PendingTxStore::new(pool));
-                self.leadership_conn = Some(client.clone());
+                self.leadership_conn = Some(client);
                 self.role = MultiInstancesNodeRole::Follower;
                 info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
             }
@@ -1907,7 +1912,7 @@ where
                         debug!(target: LOG_TARGET, "MSP Follower: Tracked file key {:x} for retrieval from Leader", file_key);
                         // Emit event to trigger download task
                         self.emit(FollowerFileKeyToDownload {
-                            file_key: *file_key.into(),
+                            file_key: FileKey::from(file_key.as_ref()),
                         });
                     }
                 }
