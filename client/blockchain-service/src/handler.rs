@@ -1498,6 +1498,26 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::GetLeaderInfo { callback } => {
+                    use shc_blockchain_service_db::leadership::get_leader_info;
+
+                    let result = match &self.leadership_conn {
+                        Some(client) => get_leader_info(client).await,
+                        None => {
+                            // No leadership connection available, return None
+                            Ok(None)
+                        }
+                    };
+
+                    match callback.send(result) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Leader info sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send leader info: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }

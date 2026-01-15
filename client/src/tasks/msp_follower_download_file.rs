@@ -33,13 +33,6 @@ use crate::{
 
 const LOG_TARGET: &str = "msp-follower-download-file-task";
 
-/// Configuration for the MSP follower download file task
-#[derive(Debug, Clone)]
-pub struct MspFollowerDownloadFileConfig {
-    /// URL of the leader's trusted file transfer server (optional, can be queried from DB)
-    pub leader_url: Option<String>,
-}
-
 /// Handles the file download flow for MSP Followers.
 ///
 /// This task processes events to download files from the leader MSP.
@@ -51,7 +44,6 @@ where
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
-    config: MspFollowerDownloadFileConfig,
     /// Internal list of file keys to download
     file_keys_to_download: Arc<RwLock<HashSet<FileKey>>>,
 }
@@ -65,7 +57,6 @@ where
     fn clone(&self) -> MspFollowerDownloadFileTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
-            config: self.config.clone(),
             file_keys_to_download: self.file_keys_to_download.clone(),
         }
     }
@@ -80,14 +71,8 @@ where
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler,
-            config: MspFollowerDownloadFileConfig { leader_url: None },
             file_keys_to_download: Arc::new(RwLock::new(HashSet::new())),
         }
-    }
-
-    pub fn with_config(mut self, config: MspFollowerDownloadFileConfig) -> Self {
-        self.config = config;
-        self
     }
 }
 
@@ -158,21 +143,23 @@ where
             file_keys_to_download.len()
         );
 
-        // Get peer URL (from config or query from blockchain service)
+        // Get peer URL from blockchain service leadership DB
         // Note: In the follower scenario, this is the leader's URL, but the function
         // is generic and can download from any peer
-        let peer_url = match &self.config.leader_url {
-            Some(url) => url.clone(),
+        let peer_url = match self
+            .storage_hub_handler
+            .blockchain_service
+            .get_leader_info()
+            .await?
+        {
+            Some(endpoints) => endpoints.trusted_file_transfer_server_url,
             None => {
-                // Try to get peer URL from blockchain service config
-                // For now, return error if not configured
-                // TODO: Query from leadership DB if available
                 error!(
                     target: LOG_TARGET,
-                    "Peer URL not configured for follower download task"
+                    "No leader info found in database. Leader may not be available yet."
                 );
                 return Err(anyhow!(
-                    "Peer URL not configured for follower download task"
+                    "No leader info found in database. Leader may not be available yet."
                 ));
             }
         };
