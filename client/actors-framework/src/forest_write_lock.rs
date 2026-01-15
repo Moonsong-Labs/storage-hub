@@ -15,31 +15,6 @@ use tokio::sync::broadcast;
 
 use crate::event_bus::{EventBusMessage, EventHandler};
 
-#[derive(Debug)]
-pub enum ForestRootWriteError {
-    LockNotPresent,
-    MutexPoisoned,
-    GuardAlreadyTaken,
-}
-
-impl std::fmt::Display for ForestRootWriteError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::LockNotPresent => write!(f, "forest root write lock not present on event"),
-            Self::MutexPoisoned => write!(f, "forest root write lock mutex poisoned"),
-            Self::GuardAlreadyTaken => write!(f, "forest root write lock guard already taken"),
-        }
-    }
-}
-
-impl std::error::Error for ForestRootWriteError {}
-
-impl From<ForestRootWriteError> for anyhow::Error {
-    fn from(err: ForestRootWriteError) -> Self {
-        anyhow::Error::msg(err.to_string())
-    }
-}
-
 const LOG_TARGET: &str = "forest-write-lock";
 
 /// RAII guard for the forest root write lock.
@@ -121,7 +96,7 @@ where
     H: EventHandler<E>,
 {
     async fn handle_event(&mut self, event: E) -> anyhow::Result<String> {
-        let _guard = event.take_lock()?;
+        let _guard = event.take_lock().map_err(anyhow::Error::new)?;
         self.inner.handle_event(event).await
     }
 }
@@ -216,4 +191,12 @@ impl std::fmt::Debug for ForestRootWriteGate {
             .field("is_held", &self.is_locked())
             .finish()
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ForestRootWriteError {
+    #[error("forest root write lock not present on event")]
+    LockNotPresent,
+    #[error("forest root write lock guard already taken")]
+    GuardAlreadyTaken,
 }
