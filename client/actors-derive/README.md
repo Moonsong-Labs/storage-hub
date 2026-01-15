@@ -4,7 +4,7 @@ This crate provides procedural macros to reduce boilerplate code in the StorageH
 
 ## Features
 
-- `actor` attribute macro: Implements `EventBusMessage` for event structs, auto-derives `Debug` and `Clone`, and registers them with a specific actor. Optionally injects a `forest_root_write_lock` field and implements `TakeForestWriteLock`.
+- `actor` attribute macro: Implements `EventBusMessage` for event structs, auto-derives `Debug` and `Clone`, and registers them with a specific actor. Optionally injects a `forest_root_write_lock` field and implements `ForestRootWriteAccess`.
 - `ActorEventBus` attribute macro: Generates the event bus provider struct and implements all the required methods and traits.
 - `subscribe_actor_event` macro: Simplifies event subscription code with named parameters for better readability.
 - `subscribe_actor_event_map` macro: Simplifies subscribing multiple events to tasks with shared parameters and per-mapping overrides.

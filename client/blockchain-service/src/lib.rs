@@ -1,7 +1,6 @@
 pub mod capacity_manager;
 pub mod commands;
 pub mod events;
-pub mod forest_write_lock;
 pub mod handler;
 pub mod handler_bsp;
 pub mod handler_msp;
@@ -23,11 +22,12 @@ use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::types::StorageHubClient;
 use shc_telemetry::MetricsLink;
 
+// Re-export forest write lock types from actors-framework
+pub use shc_actors_framework::forest_write_lock::{
+    ForestRootWriteAccess, ForestRootWriteGate, ForestRootWriteGuard, ForestRootWriteGuardSlot,
+};
+
 pub use self::{
-    forest_write_lock::{
-        ForestRootWriteLock, ForestRootWriteLockGuard, ForestWriteLockManager, LockReleaseReceiver,
-        LockReleaseSender, TakeForestWriteLock,
-    },
     handler::BlockchainService,
     types::{FileKeyStatus, FileKeyStatusUpdate},
 };
@@ -43,6 +43,7 @@ pub async fn spawn_blockchain_service<FSH, Runtime>(
     notify_period: Option<u32>,
     capacity_config: Option<CapacityConfig<Runtime>>,
     maintenance_mode: bool,
+    forest_lock_manager: Arc<ForestRootWriteGate>,
     metrics: MetricsLink,
 ) -> ActorHandle<BlockchainService<FSH, Runtime>>
 where
@@ -63,6 +64,7 @@ where
         notify_period,
         capacity_config.map(CapacityRequestQueue::new),
         maintenance_mode,
+        forest_lock_manager,
         metrics,
     );
 

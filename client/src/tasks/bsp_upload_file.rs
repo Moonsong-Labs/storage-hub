@@ -264,7 +264,6 @@ where
             event.data.confirm_storing_requests,
         );
 
-        // NOTE: The forest root write lock is now automatically managed by the ForestWriteHandler wrapper.
         // The lock guard is extracted before this handler is called and released when it completes.
 
         // Get the BSP ID of the Provider running this node and its current Forest root.
@@ -448,7 +447,7 @@ where
                 )
             })?;
 
-        // NOTE: The forest root write lock is automatically released when the ForestWriteHandler
+        // NOTE: The forest root write lock is automatically released when the ForestRootWriteGuardedHandler
         // wrapper's guard is dropped after this handler returns.
 
         Ok(format!(

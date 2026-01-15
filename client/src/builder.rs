@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
-    BlockchainService,
+    BlockchainService, ForestRootWriteGate,
 };
 use shc_common::{traits::StorageEnableRuntime, types::StorageHubClient};
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
@@ -76,6 +76,8 @@ where
     peer_manager: Option<Arc<BspPeerManager>>,
     metrics: MetricsLink,
     trusted_file_transfer_server_config: Option<trusted_file_transfer::server::Config>,
+    /// Shared forest write lock manager that need to coordinate forest write access.
+    forest_lock_manager: Arc<ForestRootWriteGate>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -110,6 +112,7 @@ where
             peer_manager: None,
             metrics: MetricsLink::new(prometheus_registry),
             trusted_file_transfer_server_config: None,
+            forest_lock_manager: Arc::new(ForestRootWriteGate::new()),
         }
     }
 
@@ -200,6 +203,7 @@ where
                 self.notify_period,
                 capacity_config,
                 maintenance_mode,
+                self.forest_lock_manager.clone(),
                 self.metrics.clone(),
             )
             .await;

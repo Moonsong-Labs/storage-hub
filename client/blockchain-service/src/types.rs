@@ -4,6 +4,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     future::Future,
     pin::Pin,
+    sync::Arc,
     time::Duration,
 };
 
@@ -11,6 +12,7 @@ use codec::{Decode, Encode};
 use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
 use sc_transaction_pool_api::TransactionStatus;
+use shc_actors_framework::forest_write_lock::ForestRootWriteGate;
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
@@ -30,8 +32,6 @@ use crate::{
     commands::BlockchainServiceCommandInterfaceExt, handler::LOG_TARGET,
     transaction_manager::wait_for_transaction_status,
 };
-
-use crate::forest_write_lock::{ForestWriteLockManager, LockReleaseSender};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -783,11 +783,11 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
     /// various edge cases when restarting the node.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest<Runtime>>,
-    /// Forest root write lock manager.
+    /// Shared forest root write lock manager.
     ///
     /// Manages the lock to prevent multiple tasks from writing to the runtime Forest root
-    /// at the same time.
-    pub(crate) lock_manager: ForestWriteLockManager<Runtime>,
+    /// at the same time. Shared across all services via Arc.
+    pub(crate) lock_manager: Arc<ForestRootWriteGate>,
     /// A set of Forest Storage snapshots, ordered by block number and block hash.
     ///
     /// A BSP can have multiple Forest Storage snapshots.
@@ -797,16 +797,18 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
 }
 
 impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
-    /// Creates a new BspHandler with the given lock release sender.
+    /// Creates a new BspHandler with the given shared lock manager.
     ///
-    /// The sender is used by the lock manager to notify the BlockchainService
-    /// when the lock is released. The BlockchainService should pass the sender
-    /// from its own lock release channel (created at event loop startup).
-    pub fn new(bsp_id: BackupStorageProviderId<Runtime>, release_tx: LockReleaseSender) -> Self {
+    /// The lock manager is shared across all services and handles release notifications
+    /// via broadcast channel.
+    pub fn new(
+        bsp_id: BackupStorageProviderId<Runtime>,
+        lock_manager: Arc<ForestRootWriteGate>,
+    ) -> Self {
         Self {
             bsp_id,
             pending_submit_proof_requests: BTreeSet::new(),
-            lock_manager: ForestWriteLockManager::with_sender(release_tx),
+            lock_manager,
             forest_root_snapshots: BTreeSet::new(),
         }
     }
@@ -897,13 +899,13 @@ impl From<FileKeyStatusUpdate> for FileKeyStatus {
 pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// The MSP ID.
     pub(crate) msp_id: MainStorageProviderId<Runtime>,
-    /// Forest root write lock manager.
+    /// Shared forest root write lock manager.
     ///
     /// TODO: CHANGE THIS INTO MULTIPLE LOCKS, ONE FOR EACH BUCKET.
     ///
     /// Manages the lock to prevent multiple tasks from writing to the runtime Forest root
-    /// at the same time.
-    pub(crate) lock_manager: ForestWriteLockManager<Runtime>,
+    /// at the same time. Shared across all services via Arc.
+    pub(crate) lock_manager: Arc<ForestRootWriteGate>,
     /// A map of [`BucketId`] to the Forest Storage snapshots.
     ///
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
@@ -931,15 +933,17 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
 }
 
 impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
-    /// Creates a new MspHandler with the given lock release sender.
+    /// Creates a new MspHandler with the given shared lock manager.
     ///
-    /// The sender is used by the lock manager to notify the BlockchainService
-    /// when the lock is released. The BlockchainService should pass the sender
-    /// from its own lock release channel (created at event loop startup).
-    pub fn new(msp_id: MainStorageProviderId<Runtime>, release_tx: LockReleaseSender) -> Self {
+    /// The lock manager is shared across all services and handles release notifications
+    /// via broadcast channel.
+    pub fn new(
+        msp_id: MainStorageProviderId<Runtime>,
+        lock_manager: Arc<ForestRootWriteGate>,
+    ) -> Self {
         Self {
             msp_id,
-            lock_manager: ForestWriteLockManager::with_sender(release_tx),
+            lock_manager,
             forest_root_snapshots: BTreeMap::new(),
             files_to_distribute: HashMap::new(),
             file_key_statuses: HashMap::new(),
@@ -974,18 +978,20 @@ pub enum ManagedProvider<Runtime: StorageEnableRuntime> {
 }
 
 impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
-    /// Creates a new ManagedProvider with the given lock release sender.
+    /// Creates a new ManagedProvider with the given shared lock manager.
     ///
-    /// The sender is used by the lock manager to notify the BlockchainService
-    /// when the lock is released. The BlockchainService should pass the sender
-    /// from its own lock release channel (created at event loop startup).
-    pub fn new(provider_id: StorageProviderId<Runtime>, release_tx: LockReleaseSender) -> Self {
+    /// The lock manager is shared across all services and handles release notifications
+    /// via broadcast channel.
+    pub fn new(
+        provider_id: StorageProviderId<Runtime>,
+        lock_manager: Arc<ForestRootWriteGate>,
+    ) -> Self {
         match provider_id {
             StorageProviderId::BackupStorageProvider(bsp_id) => {
-                Self::Bsp(BspHandler::new(bsp_id, release_tx))
+                Self::Bsp(BspHandler::new(bsp_id, lock_manager))
             }
             StorageProviderId::MainStorageProvider(msp_id) => {
-                Self::Msp(MspHandler::new(msp_id, release_tx))
+                Self::Msp(MspHandler::new(msp_id, lock_manager))
             }
         }
     }

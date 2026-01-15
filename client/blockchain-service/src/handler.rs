@@ -44,11 +44,12 @@ use shc_common::{
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
 
+use shc_actors_framework::forest_write_lock::ForestRootWriteGate;
+
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
     events::{BlockchainServiceEventBusProvider, NewStorageRequest},
-    forest_write_lock::{lock_release_channel, LockReleaseReceiver, LockReleaseSender},
     state::BlockchainServiceStateStore,
     transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{
@@ -157,11 +158,11 @@ where
     pub(crate) role: MultiInstancesNodeRole,
     /// Dedicated leadership connection used to hold advisory locks when DB is enabled.
     pub(crate) leadership_conn: Option<LeadershipClient>,
-    /// Sender for forest root write lock releases.
+    /// Shared forest root write lock manager.
     ///
-    /// Used when creating `ForestRootWriteLockGuard` instances. The guard uses this sender
-    /// to notify the BlockchainService when the lock should be released on drop.
-    pub(crate) lock_release_sender: LockReleaseSender,
+    /// Used for acquiring forest write locks. The manager handles lock acquisition
+    /// and broadcasts release notifications to all subscribers.
+    pub(crate) forest_lock_manager: Arc<ForestRootWriteGate>,
     /// Metrics link for recording telemetry.
     ///
     /// Used for recording command lifecycle metrics (pending count, processing duration)
@@ -221,8 +222,8 @@ where
         Runtime::Hash,
         TransactionStatus<Runtime::Hash, Runtime::Hash>,
     )>,
-    /// Receiver for forest root write lock releases.
-    lock_release_receiver: LockReleaseReceiver,
+    /// Receiver for forest root write lock release notifications.
+    lock_release_receiver: tokio::sync::broadcast::Receiver<()>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
@@ -262,12 +263,12 @@ where
         // Create transaction status channel and wire sender into actor
         let (tx_status_sender, tx_status_receiver) = tokio::sync::mpsc::unbounded_channel();
 
-        // Create lock release channel and wire sender into actor
-        let (lock_release_sender, lock_release_receiver) = lock_release_channel();
+        // Subscribe to lock release notifications from the shared manager
+        // (the manager is already set in the actor from spawn_blockchain_service)
+        let lock_release_receiver = actor.forest_lock_manager.subscribe();
 
         let mut actor = actor;
         actor.tx_status_sender = tx_status_sender;
-        actor.lock_release_sender = lock_release_sender;
 
         Self {
             actor,
@@ -339,11 +340,18 @@ where
         });
 
         // Lock release stream for forest root write lock auto-release.
+        // Uses broadcast receiver which can lag - we just skip lagged messages.
         let lock_release_stream =
             futures::stream::unfold(self.lock_release_receiver, |mut rx| async {
-                match rx.recv().await {
-                    Some(item) => Some((item, rx)),
-                    None => None,
+                loop {
+                    match rx.recv().await {
+                        Ok(item) => return Some((item, rx)),
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                            // Skip lagged messages, continue receiving
+                            continue;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+                    }
                 }
             });
 
@@ -1574,6 +1582,7 @@ where
         notify_period: Option<u32>,
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
+        forest_lock_manager: Arc<ForestRootWriteGate>,
         metrics: MetricsLink,
     ) -> Self {
         let genesis_hash = client.info().genesis_hash;
@@ -1610,11 +1619,7 @@ where
             pending_tx_store: None,
             role: MultiInstancesNodeRole::Standalone,
             leadership_conn: None,
-            // Temporary sender, will be replaced by the event loop during startup
-            lock_release_sender: {
-                let (tx, _rx) = lock_release_channel();
-                tx
-            },
+            forest_lock_manager,
             metrics,
         }
     }

@@ -296,7 +296,6 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.data.who;
 
-        // NOTE: The forest root write lock is now automatically managed by the ForestWriteHandler wrapper.
         // The lock guard is extracted before this handler is called and released when it completes.
 
         // Get the current Forest key of the Provider running this node.
@@ -403,7 +402,7 @@ where
             }
         }
 
-        // NOTE: The forest root write lock is automatically released when the ForestWriteHandler
+        // NOTE: The forest root write lock is automatically released when the ForestRootWriteGuardedHandler
         // wrapper's guard is dropped after this handler returns.
 
         Ok(format!(

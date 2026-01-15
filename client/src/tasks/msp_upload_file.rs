@@ -860,7 +860,6 @@ where
         &mut self,
         event: ProcessMspRespondStoringRequest<Runtime>,
     ) -> anyhow::Result<String> {
-        // NOTE: The forest root write lock is now automatically managed by the ForestWriteHandler wrapper.
         // The lock guard is extracted before this handler is called and released when it completes.
 
         let own_provider_id = self
@@ -1114,7 +1113,7 @@ where
                 self.handle_extrinsic_submission_failure(&all_file_keys)
                     .await;
 
-                // NOTE: The forest root write lock is automatically released by the ForestWriteHandler guard.
+                // NOTE: The forest root write lock is automatically released by the ForestRootWriteGuardedHandler guard.
                 return Err(e);
             }
             Ok(Some(events)) => {
@@ -1123,7 +1122,7 @@ where
                     .await
                 {
                     error!(target: LOG_TARGET, "Failed to handle extrinsic dispatch result: {:?}", err);
-                    // NOTE: The forest root write lock is automatically released by the ForestWriteHandler guard.
+                    // NOTE: The forest root write lock is automatically released by the ForestRootWriteGuardedHandler guard.
                     return Err(err);
                 }
             }
@@ -1150,7 +1149,7 @@ where
             }
         }
 
-        // NOTE: The forest root write lock is automatically released when the ForestWriteHandler
+        // NOTE: The forest root write lock is automatically released when the ForestRootWriteGuardedHandler
         // wrapper's guard is dropped after this handler returns.
 
         Ok(format!(

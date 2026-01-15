@@ -180,7 +180,6 @@ where
             );
         }
 
-        // NOTE: The forest root write lock is now automatically managed by the ForestWriteHandler wrapper.
         // The lock guard is extracted before this handler is called and released when it completes.
 
         // Check if this proof is the next one to be submitted.
@@ -348,7 +347,7 @@ where
 
         trace!(target: LOG_TARGET, "Proof submitted successfully");
 
-        // NOTE: The forest root write lock is automatically released when the ForestWriteHandler
+        // NOTE: The forest root write lock is automatically released when the ForestRootWriteGuardedHandler
         // wrapper's guard is dropped after this handler returns.
 
         Ok(format!(
