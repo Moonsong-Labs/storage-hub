@@ -15,6 +15,31 @@ use tokio::sync::broadcast;
 
 use crate::event_bus::{EventBusMessage, EventHandler};
 
+#[derive(Debug)]
+pub enum ForestRootWriteError {
+    LockNotPresent,
+    MutexPoisoned,
+    GuardAlreadyTaken,
+}
+
+impl std::fmt::Display for ForestRootWriteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LockNotPresent => write!(f, "forest root write lock not present on event"),
+            Self::MutexPoisoned => write!(f, "forest root write lock mutex poisoned"),
+            Self::GuardAlreadyTaken => write!(f, "forest root write lock guard already taken"),
+        }
+    }
+}
+
+impl std::error::Error for ForestRootWriteError {}
+
+impl From<ForestRootWriteError> for anyhow::Error {
+    fn from(err: ForestRootWriteError) -> Self {
+        anyhow::Error::msg(err.to_string())
+    }
+}
+
 const LOG_TARGET: &str = "forest-write-lock";
 
 /// RAII guard for the forest root write lock.
@@ -29,7 +54,10 @@ pub struct ForestRootWriteGuard {
 impl ForestRootWriteGuard {
     /// Creates a new guard.
     pub fn new(is_held: Arc<AtomicBool>, release_tx: broadcast::Sender<()>) -> Self {
-        Self { is_held, release_tx }
+        Self {
+            is_held,
+            release_tx,
+        }
     }
 }
 
@@ -66,12 +94,10 @@ impl From<ForestRootWriteGuard> for ForestRootWriteGuardSlot {
 /// Trait for events that may carry a forest root write lock.
 pub trait ForestRootWriteAccess: Send + 'static {
     /// Whether the event requires a forest root write lock to be present.
-    const REQUIRES_LOCK: bool = false;
+    const REQUIRES_LOCK: bool;
 
     /// Attempts to take the forest root write lock guard from the event.
-    fn maybe_take_lock(&self) -> Option<ForestRootWriteGuard> {
-        None
-    }
+    fn take_lock(&self) -> Result<ForestRootWriteGuard, ForestRootWriteError>;
 }
 
 /// Wrapper handler that automatically manages the forest root write lock.
@@ -95,17 +121,7 @@ where
     H: EventHandler<E>,
 {
     async fn handle_event(&mut self, event: E) -> anyhow::Result<String> {
-        let _guard = if E::REQUIRES_LOCK {
-            let guard = event.maybe_take_lock();
-            if guard.is_none() {
-                return Err(anyhow::anyhow!(
-                    "forest root write lock required but not available"
-                ));
-            }
-            guard
-        } else {
-            None
-        };
+        let _guard = event.take_lock()?;
         self.inner.handle_event(event).await
     }
 }

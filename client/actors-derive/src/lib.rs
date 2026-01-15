@@ -454,8 +454,24 @@ pub fn actor(args: TokenStream, input: TokenStream) -> TokenStream {
             impl #impl_generics shc_actors_framework::forest_write_lock::ForestRootWriteAccess for #name #ty_generics #where_clause {
                 const REQUIRES_LOCK: bool = true;
 
-                fn maybe_take_lock(&self) -> Option<shc_actors_framework::forest_write_lock::ForestRootWriteGuard> {
-                    self.forest_root_write_lock.lock().ok()?.take()
+                fn take_lock(&self) -> Result<
+                    shc_actors_framework::forest_write_lock::ForestRootWriteGuard,
+                    shc_actors_framework::forest_write_lock::ForestRootWriteError,
+                > {
+                    let mut guard_slot = match self.forest_root_write_lock.lock() {
+                        Ok(slot) => slot,
+                        Err(poisoned) => {
+                            ::log::error!(
+                                "forest root write lock mutex poisoned; continuing with inner state"
+                            );
+                            poisoned.into_inner()
+                        }
+                    };
+                    guard_slot
+                        .take()
+                        .ok_or(
+                            shc_actors_framework::forest_write_lock::ForestRootWriteError::GuardAlreadyTaken,
+                        )
                 }
             }
         }
@@ -464,8 +480,11 @@ pub fn actor(args: TokenStream, input: TokenStream) -> TokenStream {
             impl #impl_generics shc_actors_framework::forest_write_lock::ForestRootWriteAccess for #name #ty_generics #where_clause {
                 const REQUIRES_LOCK: bool = false;
 
-                fn maybe_take_lock(&self) -> Option<shc_actors_framework::forest_write_lock::ForestRootWriteGuard> {
-                    None
+                fn take_lock(&self) -> Result<
+                    shc_actors_framework::forest_write_lock::ForestRootWriteGuard,
+                    shc_actors_framework::forest_write_lock::ForestRootWriteError,
+                > {
+                    Err(shc_actors_framework::forest_write_lock::ForestRootWriteError::LockNotPresent)
                 }
             }
         }
@@ -814,8 +833,8 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 ///
 /// # Forest Write Lock
 ///
-/// All event handlers are automatically wrapped in `ForestRootWriteGuardedHandler`, which extracts
-/// and holds the forest root write lock guard (if present) for the duration of event handling.
+/// Event handlers are wrapped in `ForestRootWriteGuardedHandler` only when the event type declares
+/// `ForestRootWriteAccess::REQUIRES_LOCK = true`. Lock-free events use the task handler directly.
 /// Events that carry a lock implement the `ForestRootWriteAccess` trait via the `#[actor]` macro.
 /// This ensures the lock is always released when the handler completes, regardless of success or failure.
 ///
@@ -1029,20 +1048,31 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             }
         });
 
-        // All handlers are wrapped in ForestRootWriteGuardedHandler to automatically
-        // extract and hold any forest root write lock from the event.
+        // Wrap handlers only when the event requires the forest root write lock.
         let task_expr = quote! {
             shc_actors_framework::forest_write_lock::ForestRootWriteGuardedHandler::new(#task_type::new(#context.clone()))
         };
         quote! {
-            subscribe_actor_event!(
-                event: #event_type,
-                task: (#task_expr),
-                service: #service,
-                spawner: #spawner,
-                critical: #critical,
-                #metrics_tokens
-            );
+            if <#event_type as shc_actors_framework::forest_write_lock::ForestRootWriteAccess>::REQUIRES_LOCK {
+                subscribe_actor_event!(
+                    event: #event_type,
+                    task: (#task_expr),
+                    service: #service,
+                    spawner: #spawner,
+                    critical: #critical,
+                    #metrics_tokens
+                );
+            } else {
+                subscribe_actor_event!(
+                    event: #event_type,
+                    task: #task_type,
+                    service: #service,
+                    spawner: #spawner,
+                    context: #context,
+                    critical: #critical,
+                    #metrics_tokens
+                );
+            }
         }
     });
 
