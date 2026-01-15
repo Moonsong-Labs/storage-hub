@@ -389,7 +389,7 @@ pub struct DistributeFileToBsp<Runtime: StorageEnableRuntime> {
 /// This event is emitted when a file key is added to the follower's download list.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FollowerFileKeyToDownload<Runtime: StorageEnableRuntime> {
+pub struct FollowerFileKeyToDownload {
     pub file_key: FileKey,
 }
 
