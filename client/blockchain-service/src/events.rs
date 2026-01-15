@@ -385,6 +385,20 @@ pub struct DistributeFileToBsp<Runtime: StorageEnableRuntime> {
     pub bsp_id: BackupStorageProviderId<Runtime>,
 }
 
+/// Event emitted when a follower MSP needs to download a file key from the leader.
+/// This event is emitted when a file key is added to the follower's download list.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct FollowerFileKeyToDownload<Runtime: StorageEnableRuntime> {
+    pub file_key: FileKey,
+}
+
+/// Event emitted to trigger processing one iteration of follower downloads.
+/// This event can be emitted periodically or when there are pending downloads.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct ProcessFollowerDownloads {}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor

@@ -51,8 +51,9 @@ use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{
     events::{
-        AcceptedBspVolunteer, LastChargeableInfoUpdated, NewStorageRequest, NotifyPeriod,
-        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        AcceptedBspVolunteer, FollowerFileKeyToDownload, LastChargeableInfoUpdated,
+        NewStorageRequest, NotifyPeriod, SlashableProvider, SpStopStoringInsolventUser,
+        UserWithoutFunds,
     },
     handler::LOG_TARGET,
     state::LastProcessedBlockCf,
@@ -1909,6 +1910,10 @@ where
                             .unwrap()
                             .insert(*file_key);
                         debug!(target: LOG_TARGET, "MSP Follower: Tracked file key {:x} for retrieval from Leader", file_key);
+                        // Emit event to trigger download task
+                        self.emit(FollowerFileKeyToDownload {
+                            file_key: *file_key,
+                        });
                     }
                 }
             }
