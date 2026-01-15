@@ -913,15 +913,6 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// HashSet tracking file keys currently in the pending respond storage request queue.
     /// Used for O(1) deduplication when queueing new requests.
     pub(crate) pending_respond_storage_request_file_keys: HashSet<MerkleTrieHash<Runtime>>,
-    /// MSP Follower: FileKeys from TrieMutation::Add that need to be retrieved from Leader.
-    ///
-    /// When an MSP Follower processes TrieMutation::Add mutations in apply_forest_mutation,
-    /// it tracks the FileKeys here. Later, these will be used to request the actual file
-    /// data from the Leader node.
-    ///
-    /// This is only populated when the node is running as an MSP Follower.
-    /// Wrapped in Arc<RwLock> to allow concurrent access from the polling task.
-    pub(crate) follower_file_keys_to_retrieve: Arc<RwLock<HashSet<FileKey>>>,
 }
 
 impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
@@ -934,7 +925,6 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
             file_key_statuses: HashMap::new(),
             pending_respond_storage_requests: VecDeque::new(),
             pending_respond_storage_request_file_keys: HashSet::new(),
-            follower_file_keys_to_retrieve: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 }

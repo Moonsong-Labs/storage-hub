@@ -1904,15 +1904,10 @@ where
                     if let Some(crate::types::ManagedProvider::Msp(msp_handler)) =
                         self.maybe_managed_provider.as_mut()
                     {
-                        msp_handler
-                            .follower_file_keys_to_retrieve
-                            .write()
-                            .unwrap()
-                            .insert(*file_key);
                         debug!(target: LOG_TARGET, "MSP Follower: Tracked file key {:x} for retrieval from Leader", file_key);
                         // Emit event to trigger download task
                         self.emit(FollowerFileKeyToDownload {
-                            file_key: *file_key,
+                            file_key: *file_key.into(),
                         });
                     }
                 }
