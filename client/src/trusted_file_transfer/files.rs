@@ -1,6 +1,6 @@
 //! File encoding/decoding utilities
 
-use axum::body::Body;
+use futures::Stream;
 use log::{error, info};
 use shc_common::{
     trusted_file_transfer::{read_chunk_with_id_from_buffer, CHUNK_ID_SIZE},
@@ -14,28 +14,39 @@ use tokio_stream::StreamExt;
 
 use crate::{trusted_file_transfer::server::LOG_TARGET, types::FileStorageT};
 
-/// Get chunks from a request body as a stream and write them to storage
-pub(crate) async fn process_chunk_stream<FL>(
+/// Get chunks from a stream and write them to storage.
+///
+/// This generic function works with any stream that yields `Result<Bytes, E>`.
+/// The stream format is:
+/// [ChunkId: 8 bytes (u64, little-endian)][Chunk data: FILE_CHUNK_SIZE bytes]...
+/// [ChunkId: 8 bytes (u64, little-endian)][Chunk data: remaining bytes for last chunk]
+///
+/// # Type Parameters
+/// * `FL` - File storage type implementing `FileStorageT`
+/// * `S` - Stream type that yields byte chunks
+/// * `E` - Error type from the stream that can be converted to `anyhow::Error`
+pub(crate) async fn process_chunk_stream<FL, S, E>(
     file_storage: &RwLock<FL>,
     file_key: &sp_core::H256,
-    request_body: Body,
+    mut stream: S,
 ) -> anyhow::Result<()>
 where
     FL: FileStorageT,
+    S: Stream<Item = Result<bytes::Bytes, E>> + Unpin,
+    E: Into<anyhow::Error>,
 {
-    let mut request_stream = request_body.into_data_stream();
     let mut buffer = Vec::new();
     let mut last_write_outcome = FileStorageWriteOutcome::FileIncomplete;
 
-    // Process request stream, storing chunks as they are received
-    while let Some(try_bytes) = request_stream.next().await {
-        let bytes = try_bytes?;
+    // Process stream, storing chunks as they are received
+    while let Some(try_bytes) = stream.next().await {
+        let bytes = try_bytes.map_err(|e| e.into())?;
         buffer.extend_from_slice(&bytes);
 
         while buffer.len() >= CHUNK_ID_SIZE + (FILE_CHUNK_SIZE as usize) {
             // Here we call with cap_at_file_chunk_size = true because we want to read chunk by chunk.
             // If there are remaining bytes in the buffer, they could belong to half a chunk that will be
-            // filled in the next iteration of the `while let Some(try_bytes) = request_stream.next().await` loop.
+            // filled in the next iteration of the `while let Some(try_bytes) = stream.next().await` loop.
             let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, true)?;
             last_write_outcome =
                 write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
@@ -96,6 +107,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
     use shc_common::{
         trusted_file_transfer::encode_chunk_with_id,
         types::{FileMetadata, StorageProofsMerkleTrieLayout},
@@ -144,7 +156,8 @@ mod tests {
         file_storage.insert_file(file_key, metadata).unwrap();
         let file_storage = Arc::new(RwLock::new(file_storage));
 
-        process_chunk_stream(&file_storage, &file_key, body)
+        let stream = body.into_data_stream();
+        process_chunk_stream(&file_storage, &file_key, stream)
             .await
             .unwrap();
 
@@ -205,7 +218,8 @@ mod tests {
         file_storage.insert_file(file_key, metadata).unwrap();
         let file_storage = Arc::new(RwLock::new(file_storage));
 
-        process_chunk_stream(&file_storage, &file_key, body)
+        let stream = body.into_data_stream();
+        process_chunk_stream(&file_storage, &file_key, stream)
             .await
             .unwrap();
 

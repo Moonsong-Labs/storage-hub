@@ -22,6 +22,7 @@ codec = { workspace = true }
 futures = { workspace = true }
 lazy-static = { workspace = true }
 log = { workspace = true }
+reqwest = { workspace = true }
 rocksdb = { workspace = true }
 serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use codec::{Decode, Encode};
 use sc_network::Multiaddr;
+use sp_core::H256;
 use tokio::sync::{oneshot, Mutex};
 
 use shc_actors_derive::{ActorEvent, ActorEventBus};
@@ -384,6 +385,20 @@ pub struct DistributeFileToBsp<Runtime: StorageEnableRuntime> {
     pub file_key: FileKey,
     pub bsp_id: BackupStorageProviderId<Runtime>,
 }
+
+/// Event emitted when a follower MSP needs to download a file key from the leader.
+/// This event is emitted when a file key is added to the follower's download list.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct FollowerFileKeyToDownload {
+    pub file_key: H256,
+}
+
+/// Event emitted to trigger processing one iteration of follower downloads.
+/// This event can be emitted periodically or when there are pending downloads.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct ProcessFollowerDownloads {}
 
 /// The event bus provider for the BlockchainService actor.
 ///

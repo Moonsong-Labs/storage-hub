@@ -17,12 +17,12 @@ use shc_blockchain_service::{
         FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
         FinalisedStorageRequestRejected, FinalisedTrieRemoveMutationsAppliedForBsp,
-        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
-        ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
-        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
-        StartMovedBucketDownload, UserWithoutFunds,
+        FollowerFileKeyToDownload, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
+        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod,
+        ProcessConfirmStoringRequest, ProcessFollowerDownloads, ProcessMspRespondStoringRequest,
+        ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
+        SpStopStoringInsolventUser, StartMovedBucketDownload, UserWithoutFunds,
     },
     handler::BlockchainServiceConfig,
     BlockchainService,
@@ -52,6 +52,7 @@ use crate::{
         msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask,
         msp_distribute_file::MspDistributeFileTask,
+        msp_follower_download_file::MspFollowerDownloadFileTask,
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
         msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
@@ -336,6 +337,11 @@ where
                     MspStopStoringInsolventUserTask,
                 NotifyPeriod => MspChargeFeesTask,
                 DistributeFileToBsp<Runtime> => MspDistributeFileTask,
+                // MspFollowerDownloadFileTask handles file downloads for MSP followers:
+                // - FollowerFileKeyToDownload events are emitted when a file key needs to be downloaded.
+                // - ProcessFollowerDownloads events trigger processing one download iteration.
+                FollowerFileKeyToDownload => MspFollowerDownloadFileTask,
+                ProcessFollowerDownloads => MspFollowerDownloadFileTask,
                 // MspRemoveFinalisedFilesTask handles events for removing files from file storage after mutations are finalised.
                 FinalisedBucketMutationsApplied<Runtime> => MspDeleteFileTask,
                 FinalisedStorageRequestRejected<Runtime> => MspDeleteFileTask,

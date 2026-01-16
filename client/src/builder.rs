@@ -237,7 +237,6 @@ where
             }
         }
     }
-
     /// Spawn the Fisherman Service.
     ///
     /// The Fisherman Service monitors the blockchain for file deletion requests
@@ -890,6 +889,13 @@ pub struct BlockchainServiceOptions {
     pub enable_msp_distribute_files: Option<bool>,
     /// Postgres database URL for pending transactions persistence. If not provided, pending transactions will not be persisted.
     pub pending_db_url: Option<String>,
+    /// Advertised RPC URL for leader registration. If not set, will be derived from actual RPC server configuration.
+    /// Example: "ws://192.168.1.100:9944"
+    pub advertised_rpc_url: Option<String>,
+    /// Advertised trusted file transfer server URL for leader registration.
+    /// If not set, will be derived from actual trusted file transfer server configuration.
+    /// Example: "http://192.168.1.100:7070"
+    pub advertised_trusted_file_transfer_server_url: Option<String>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
@@ -910,6 +916,9 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
             peer_id,
             enable_msp_distribute_files: self.enable_msp_distribute_files.unwrap_or(false),
             pending_db_url: self.pending_db_url,
+            advertised_rpc_url: self.advertised_rpc_url,
+            advertised_trusted_file_transfer_server_url: self
+                .advertised_trusted_file_transfer_server_url,
         }
     }
 }

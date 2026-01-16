@@ -18,9 +18,11 @@ workspace = true
 anyhow = { workspace = true }
 array-bytes = { workspace = true }
 async-channel = { workspace = true }
+async-stream = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }
+bytes = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true, default-features = true }
 kvdb = { workspace = true }
@@ -30,6 +32,7 @@ lru = { workspace = true }
 ordered-float = { workspace = true }
 priority-queue = { workspace = true }
 rand = { workspace = true }
+reqwest = { workspace = true }
 sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

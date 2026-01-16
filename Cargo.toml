@@ -46,6 +46,7 @@ anyhow = "1.0.81"
 array-bytes = "6.1"
 async-channel = "1.8.0"
 async-io = "2.3.2"
+async-stream = "0.3"
 async-trait = "0.1.42"
 axum = "0.8"
 axum-extra = { version = "0.10", features = [
@@ -59,6 +60,7 @@ http = "1.1"
 base64 = "0.21"
 bigdecimal = { version = "0.4.5", features = ["serde"] }
 bincode = "1.3.3"
+bytes = "1"
 cfg-if = { version = "1.0.4" }
 clap = { version = "4.5.3", features = ["derive", "env"] }
 chrono = "0.4"
@@ -95,7 +97,8 @@ prost = "0.12"
 prost-build = "0.12.3"
 rand = "0.8.5"
 reference-trie = "0.29.1"
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
+reqwest = { version = "0.12", features = ["stream"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "tls12"] }
 rustls-platform-verifier = "0.5"
 rustls-pemfile = "2.2"
 scale-info = { version = "2.11.0", default-features = false, features = [

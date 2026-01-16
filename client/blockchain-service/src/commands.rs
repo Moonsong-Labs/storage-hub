@@ -214,6 +214,12 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// - After extrinsic submission failures (may be transient)
     #[command(mode = "FireAndForget")]
     RemoveFileKeyStatus { file_key: FileKey },
+    /// Get the current leader's advertised endpoints from the leadership database.
+    ///
+    /// Returns the leader's RPC URL and trusted file transfer server URL.
+    /// Returns None if no leader info is available or if leadership is not enabled.
+    #[command(success_type = Option<shc_blockchain_service_db::leadership::NodeAdvertisedEndpoints>, error_type = shc_blockchain_service_db::DbSetupError)]
+    GetLeaderInfo,
 }
 
 /// Interface for interacting with the BlockchainService actor.
