@@ -11,10 +11,13 @@ use std::{path::PathBuf, sync::Arc};
 use substrate_prometheus_endpoint::Registry;
 use tokio::sync::RwLock;
 
-use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
+use shc_actors_framework::{
+    actor::{ActorHandle, TaskSpawner},
+    forest_write_lock::ForestRootWriteGate,
+};
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
-    BlockchainService, ForestRootWriteGate,
+    BlockchainService,
 };
 use shc_common::{traits::StorageEnableRuntime, types::StorageHubClient};
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};

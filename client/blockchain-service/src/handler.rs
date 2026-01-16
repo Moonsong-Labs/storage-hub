@@ -264,7 +264,6 @@ where
         let (tx_status_sender, tx_status_receiver) = tokio::sync::mpsc::unbounded_channel();
 
         // Subscribe to lock release notifications from the shared manager
-        // (the manager is already set in the actor from spawn_blockchain_service)
         let lock_release_receiver = actor.forest_lock_manager.subscribe();
 
         let mut actor = actor;

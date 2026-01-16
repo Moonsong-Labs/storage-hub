@@ -18,14 +18,12 @@ use shc_common::traits::StorageEnableRuntime;
 use sp_keystore::KeystorePtr;
 
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};
-use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
+use shc_actors_framework::{
+    actor::{ActorHandle, ActorSpawner, TaskSpawner},
+    forest_write_lock::ForestRootWriteGate,
+};
 use shc_common::types::StorageHubClient;
 use shc_telemetry::MetricsLink;
-
-// Re-export forest write lock types from actors-framework
-pub use shc_actors_framework::forest_write_lock::{
-    ForestRootWriteAccess, ForestRootWriteGate, ForestRootWriteGuard, ForestRootWriteGuardSlot,
-};
 
 pub use self::{
     handler::BlockchainService,

@@ -11,7 +11,7 @@ use sp_runtime::traits::Block as BlockT;
 
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
-use shc_actors_framework::actor::Actor;
+use shc_actors_framework::{actor::Actor, forest_write_lock::ForestRootWriteGuard};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     traits::StorageEnableRuntime,
@@ -415,12 +415,27 @@ where
         }
     }
 
-    /// TODO: UPDATE THIS FUNCTION TO HANDLE FOREST WRITE LOCKS PER-BUCKET, AND UPDATE DOCS.
-    /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
+    /// Atomically acquires the forest root write lock and processes pending requests.
     ///
-    /// The priority is given by:
-    /// 1. `RespondStorageRequest` over...
-    /// 2. `StopStoringForInsolventUserRequest`.
+    /// TODO: UPDATE THIS FUNCTION TO HANDLE FOREST WRITE LOCKS PER-BUCKET.
+    ///
+    /// ## Request Priority
+    ///
+    /// When the lock is acquired, requests are processed in priority order:
+    /// 1. `RespondStorageRequest` (highest priority)
+    /// 2. `StopStoringForInsolventUserRequest` (lowest priority)
+    ///
+    /// ## Locking Behavior
+    ///
+    /// This function attempts to acquire the forest root write lock **before** dequeuing any state.
+    /// If the lock is unavailable (held by another task), the function returns immediately without
+    /// modifying any queues. This prevents TOCTOU race conditions where requests could be lost if
+    /// dequeued before lock acquisition fails.
+    ///
+    /// The lock is held until the event is emitted and processing begins. It will be automatically
+    /// released when the handler completes (via RAII guard drop), regardless of success or failure.
+    ///
+    /// ## Invocation
     ///
     /// This function is called every time a new block is imported and after each request is queued.
     ///
@@ -436,13 +451,20 @@ where
             return;
         }
 
-        // Verify we have an MSP handler and check if the lock is available.
-        match &self.maybe_managed_provider {
+        // Try to acquire the forest root write lock BEFORE dequeuing any state.
+        // This prevents TOCTOU race: if we checked availability first then dequeued,
+        // another thread could acquire the lock between check and dequeue, causing data loss.
+        let guard = match &mut self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => {
-                // If the lock is currently held, wait for it to be released.
-                if msp_handler.lock_manager.is_locked() {
-                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
-                    return;
+                match msp_handler.lock_manager.try_acquire() {
+                    Some(guard) => {
+                        trace!(target: LOG_TARGET, "🔓 msp_assign_forest_root_write_lock: Acquired lock, proceeding with dequeue");
+                        guard
+                    }
+                    None => {
+                        trace!(target: LOG_TARGET, "🔒 msp_assign_forest_root_write_lock: Lock unavailable, will retry on next release notification");
+                        return;
+                    }
                 }
             }
             _ => {
@@ -451,16 +473,12 @@ where
             }
         };
 
-        // At this point we know that the lock is released and we can start processing new requests.
+        // Lock acquired - now safely dequeue state and process requests.
         let mut next_event_data: Option<ForestWriteLockTaskData<Runtime>> = None;
 
         let msp_handler = match &mut self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
-            _ => {
-                // If there's no MSP being managed, there's no point in checking for pending requests.
-                error!(target: LOG_TARGET, "`msp_assign_forest_root_write_lock` called but node is not managing an MSP");
-                return;
-            }
+            _ => unreachable!("We just acquired lock from MSP handler above"),
         };
 
         // Check for pending respond storing requests from in-memory queue.
@@ -525,13 +543,14 @@ where
             state_store_context.commit();
         }
 
-        // If there is any event data to process, emit the event.
+        // If there is any event data to process, emit the event with the acquired guard.
         if let Some(event_data) = next_event_data {
             trace!(target: LOG_TARGET, "Emitting forest write event");
-            self.msp_emit_forest_write_event(event_data);
+            self.msp_emit_forest_write_event(event_data, guard);
         } else {
             trace!(target: LOG_TARGET, "No event data to emit");
         }
+        // If no event data, guard drops here and lock is released.
     }
 
     pub(crate) async fn msp_process_forest_root_changing_events(
@@ -612,26 +631,14 @@ where
         }
     }
 
-    fn msp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
-        // Acquire the forest root write lock from the lock manager.
-        let guard = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => {
-                match msp_handler.lock_manager.try_acquire() {
-                    Some(guard) => guard,
-                    None => {
-                        error!(target: LOG_TARGET, "Failed to acquire forest root write lock - lock is already held.");
-                        return;
-                    }
-                }
-            }
-            _ => {
-                error!(target: LOG_TARGET, "`msp_emit_forest_write_event` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
-            }
-        };
-
-        // Convert the guard into Arc<Mutex<Option<...>>> so the event can implement Clone
-        // (required by the event bus for multiple subscribers).
+    /// Emits a [`ForestWriteLockTaskData`] event with the acquired forest root write lock guard [`ForestRootWriteGuard`].
+    fn msp_emit_forest_write_event(
+        &mut self,
+        data: impl Into<ForestWriteLockTaskData<Runtime>>,
+        guard: ForestRootWriteGuard,
+    ) {
+        // Guard already acquired by caller. Convert it into Arc<Mutex<Option<...>>>
+        // so the event can implement Clone (required by the event bus for multiple subscribers).
         let forest_root_write_lock = guard.into();
         match data.into() {
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {

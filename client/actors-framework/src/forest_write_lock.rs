@@ -1,5 +1,166 @@
 //! Forest write lock types for the actors framework.
 //!
+//!
+//! ## Architecture Overview
+//!
+//! The forest root write lock system coordinates write access to the forest root across
+//! multiple services (BlockchainService, FishermanService, etc.) using a single-permit
+//! semaphore and RAII guards. Lock lifecycle is tied to event processing, ensuring
+//! automatic release on both success and failure paths.
+//!
+//! ```text
+//! ┌───────────────────────────────────────────────────────────────────────────────┐
+//! │                         FOREST ROOT WRITE LOCK SYSTEM                         │
+//! │                                                                               │
+//! │  ┌──────────────────┐         ┌──────────────────┐                            │
+//! │  │ Service A        │         │ Service B        │                            │
+//! │  │ (BSP/Fisherman)  │         │ (Blockchain)     │                            │
+//! │  └────────┬─────────┘         └────────┬─────────┘                            │
+//! │           │                            │                                      │
+//! │           │  Arc<ForestRootWriteGate>  │  (Shared manager)                    │
+//! │           └──────────┬─────────────────┘                                      │
+//! │                      │                                                        │
+//! │                      ▼                                                        │
+//! │           ┌──────────────────────┐                                            │
+//! │           │ ForestRootWriteGate  │                                            │
+//! │           │ ┌──────────────────┐ │                                            │
+//! │           │ │semaphore: Semaphore│ ◄─── Single-permit for mutual exclusion    │
+//! │           │ └──────────────────┘ │                                            │
+//! │           │ ┌──────────────────┐ │                                            │
+//! │           │ │ release_tx: Sender │ ◄─── Broadcast channel for notifications   │
+//! │           │ └──────────────────┘ │                                            │
+//! │           └──────────┬───────────┘                                            │
+//! │                      │                                                        │
+//! └──────────────────────┼────────────────────────────────────────────────────────┘
+//!                        │
+//!                        │ try_acquire()
+//!                        │ (try_acquire_owned on semaphore)
+//!                        ▼
+//!         ┌──────────────────────────────┐
+//!         │ Some(ForestRootWriteGuard)   │  None if already locked
+//!         │  ┌─────────────────────────┐ │
+//!         │  │ _permit: OwnedPermit    │ │  ◄─── Auto-releases on drop
+//!         │  │ release_tx: Sender      │ │  ◄─── Broadcast sender clone
+//!         │  └─────────────────────────┘ │
+//!         └───────────────┬──────────────┘
+//!                         │
+//!                         │ .into()
+//!                         ▼
+//!         ┌─────────────────────────────────────────┐
+//!         │ ForestRootWriteGuardSlot                │
+//!         │ Arc<Mutex<Option<ForestRootWriteGuard>>>│
+//!         └───────────────┬─────────────────────────┘
+//!                         │
+//!                         │ Embedded in event
+//!                         ▼
+//! ┌──────────────────────────────────────────────────────────────────────────────┐
+//! │                              EVENT EMISSION                                  │
+//! │                                                                              │
+//! │  #[actor(actor = "blockchain_service", forest_root_write_lock)]              │
+//! │  pub struct ProcessSubmitProofRequest<Runtime> {                             │
+//! │      pub data: ProcessSubmitProofRequestData<Runtime>,                       │
+//! │      pub forest_root_write_lock: ForestRootWriteGuardSlot,  ◄─── Auto-added  │
+//! │  }                                                                           │
+//! │                                                                              │
+//! │  emit_event(ProcessSubmitProofRequest {                                      │
+//! │      data: proof_data,                                                       │
+//! │      forest_root_write_lock: guard.into(),  ◄─── Lock travels with event     │
+//! │  });                                                                         │
+//! └───────────────────────┬──────────────────────────────────────────────────────┘
+//!                         │
+//!                         │ Event bus (Clone propagation)
+//!                         ▼
+//! ┌──────────────────────────────────────────────────────────────────────────────┐
+//! │                         EVENT HANDLER PROCESSING                             │
+//! │                                                                              │
+//! │  ForestRootWriteGuardedHandler<ActualHandler>                                │
+//! │                                                                              │
+//! │  async fn handle_event(&mut self, event: E) {                                │
+//! │      let _guard = event.take_lock()?;  ◄─── Extract guard from slot          │
+//! │      │                                      (Mutex::lock + Option::take)     │
+//! │      │                                                                       │
+//! │      │  Lock held during handler execution                                   │
+//! │      ├─► self.inner.handle_event(event).await  ◄─── Process with lock held   │
+//! │      │                                                                       │
+//! │      │  ┌─────────────────────────────────────┐                              │
+//! │      │  │ Handler completes (success/error)   │                              │
+//! │      │  │ OR panic occurs                     │                              │
+//! │      │  └───────────────┬─────────────────────┘                              │
+//! │      │                  │                                                    │
+//! │      ▼                  ▼                                                    │
+//! │  }  _guard dropped (RAII)  ◄─── Guaranteed cleanup                           │
+//! └──────────┬───────────────────────────────────────────────────────────────────┘
+//!            │
+//!            │ Drop implementation
+//!            ▼
+//! ┌─────────────────────────────────────────────────────────────────────────────┐
+//! │                         LOCK RELEASE (RAII)                                 │
+//! │                                                                             │
+//! │  impl Drop for ForestRootWriteGuard {                                       │
+//! │      fn drop(&mut self) {                                                   │
+//! │          // _permit auto-releases semaphore  ◄─── RAII permit release       │
+//! │          let _ = self.release_tx.send(());   ◄─── Notify all subscribers    │
+//! │      }                                                                      │
+//! │  }                                                                          │
+//! └──────────┬──────────────────────────────────────────────────────────────────┘
+//!            │
+//!            │ Broadcast notification
+//!            ▼
+//! ┌─────────────────────────────────────────────────────────────────────────────┐
+//! │                      WAITING SERVICES (EVENT LOOPS)                         │
+//! │                                                                             │
+//! │  let mut lock_release_rx = forest_lock_manager.subscribe();                 │
+//! │                                                                             │
+//! │  loop {                                                                     │
+//! │      select! {                                                              │
+//! │          _ = lock_release_rx.recv() => {                                    │
+//! │              // Lock released! Atomically try to acquire and process        │
+//! │              bsp_assign_forest_root_write_lock();  // Calls try_acquire()   │
+//! │          }                                                                  │
+//! │          msg = command_rx.recv() => { /* ... */ }                           │
+//! │      }                                                                      │
+//! │  }                                                                          │
+//! └─────────────────────────────────────────────────────────────────────────────┘
+//!
+//! ## Lock Acquisition Flow (TOCTOU-Safe)
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────────────────────────────┐
+//! │  bsp_assign_forest_root_write_lock() / msp_assign_forest_root_write_lock()  │
+//! │                                                                             │
+//! │  Step 1: Atomically try to acquire lock FIRST                               │
+//! │  ┌───────────────────────────────────────────────────────────────┐          │
+//! │  │ let Some(guard) = lock_manager.try_acquire() else { return; } │          │
+//! │  └───────────────────────┬───────────────────────────────────────┘          │
+//! │                          │                                                  │
+//! │                          │ Lock acquired ✓                                  │
+//! │                          ▼                                                  │
+//! │  Step 2: Now safely dequeue state (protected by lock)                       │
+//! │  ┌─────────────────────────────────────────────────────────────┐            │
+//! │  │ let request = queue.pop_front();  // Safe: lock held        │            │
+//! │  │ msp_handler.pending_requests.remove(...);  // Safe          │            │
+//! │  └───────────────────────┬─────────────────────────────────────┘            │
+//! │                          │                                                  │
+//! │                          ▼                                                  │
+//! │  Step 3: Emit event with guard                                              │
+//! │  ┌─────────────────────────────────────────────────────────────┐            │
+//! │  │ bsp_emit_forest_write_event(event_data, guard);             │            │
+//! │  │    // Guard passed as parameter (NOT acquired inside)       │            │
+//! │  └───────────────────────┬─────────────────────────────────────┘            │
+//! │                          │                                                  │
+//! │                          ▼                                                  │
+//! │  ┌─────────────────────────────────────────────────────────────┐            │
+//! │  │ emit(ProcessSubmitProofRequest {                            │            │
+//! │  │     data,                                                   │            │
+//! │  │     forest_root_write_lock: guard.into(),  // Guard moves   │            │
+//! │  │ });                                                         │            │
+//! │  └─────────────────────────────────────────────────────────────┘            │
+//! │                                                                             │
+//! │  KEY: Lock acquired BEFORE any state mutation                               │
+//! │  → No TOCTOU race: if try_acquire() fails, nothing is dequeued              │
+//! │  → No data loss: failed acquisition = queues untouched                      │
+//! └─────────────────────────────────────────────────────────────────────────────┘
+//!
 //! This module provides the core types for forest root write lock management:
 //! - [`ForestRootWriteGuard`]: RAII guard that releases on drop
 //! - [`ForestRootWriteGuardSlot`]: Cloneable wrapper for use in events
@@ -7,11 +168,8 @@
 //! - [`ForestRootWriteGuardedHandler`]: Wrapper that auto-extracts locks during event handling
 //! - [`ForestRootWriteGate`]: Thread-safe lock manager for shared access across services
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
-};
-use tokio::sync::broadcast;
+use std::sync::{Arc, Mutex};
+use tokio::sync::{broadcast, OwnedSemaphorePermit, Semaphore};
 
 use crate::event_bus::{EventBusMessage, EventHandler};
 
@@ -19,18 +177,19 @@ const LOG_TARGET: &str = "forest-write-lock";
 
 /// RAII guard for the forest root write lock.
 ///
-/// When dropped, atomically releases the lock and broadcasts a notification
-/// to all subscribers waiting for the lock to become available.
+/// When dropped, the semaphore permit is automatically released and
+/// a broadcast notification is sent to all subscribers.
 pub struct ForestRootWriteGuard {
-    is_held: Arc<AtomicBool>,
+    /// Owned permit - automatically releases on drop.
+    _permit: OwnedSemaphorePermit,
+    /// Broadcast sender for release notification.
     release_tx: broadcast::Sender<()>,
 }
 
 impl ForestRootWriteGuard {
-    /// Creates a new guard.
-    pub fn new(is_held: Arc<AtomicBool>, release_tx: broadcast::Sender<()>) -> Self {
+    fn new(permit: OwnedSemaphorePermit, release_tx: broadcast::Sender<()>) -> Self {
         Self {
-            is_held,
+            _permit: permit,
             release_tx,
         }
     }
@@ -38,10 +197,9 @@ impl ForestRootWriteGuard {
 
 impl Drop for ForestRootWriteGuard {
     fn drop(&mut self) {
-        log::debug!(target: LOG_TARGET, "🔓 Guard DROP: Releasing lock and sending notification");
-        // Atomically mark as released
-        self.is_held.store(false, Ordering::Release);
-        // Notify all subscribers (ignore if no receivers)
+        log::debug!(target: LOG_TARGET, "🔓 Guard DROP: Permit releasing, sending notification");
+        // Permit is automatically released when _permit is dropped.
+        // We only need to send the broadcast notification.
         let _ = self.release_tx.send(());
     }
 }
@@ -101,10 +259,10 @@ where
     }
 }
 
-/// Thread-safe forest write lock manager for shared access across services.
+/// Thread-safe forest write lock manager using Semaphore.
 ///
-/// Uses atomic operations for lock state, allowing it to be shared via `Arc`
-/// across multiple services (BlockchainService, FishermanService, etc.).
+/// Uses a single-permit semaphore for mutual exclusion and broadcast
+/// channel for release notifications to waiting services.
 ///
 /// ## Usage
 ///
@@ -112,21 +270,33 @@ where
 /// // Create shared manager (typically in StorageHubBuilder)
 /// let manager = Arc::new(ForestRootWriteGate::new());
 ///
-/// // Any service can acquire the lock via shared reference
-/// if let Some(guard) = manager.try_acquire() {
-///     // Lock held until guard is dropped
-///     emit_event(ProcessRequest { data, forest_root_write_lock: guard.into() });
+/// // TOCTOU-safe pattern: acquire lock BEFORE dequeuing state
+/// fn assign_forest_root_write_lock(&mut self) {
+///     // Step 1: Try to acquire lock FIRST
+///     let Some(guard) = manager.try_acquire() else {
+///         return; // Lock busy, queues untouched
+///     };
+///
+///     // Step 2: Now safely dequeue (lock held)
+///     let request = queue.pop_front()?;
+///
+///     // Step 3: Emit with guard
+///     emit_event(ProcessRequest {
+///         data: request,
+///         forest_root_write_lock: guard.into()
+///     });
 /// }
 ///
 /// // Subscribe to release notifications in event loops
 /// let mut rx = manager.subscribe();
 /// loop {
 ///     rx.recv().await;  // Notified when any guard is dropped
+///     assign_forest_root_write_lock(); // Retry
 /// }
 /// ```
 pub struct ForestRootWriteGate {
-    /// Atomic lock state - true if held, false if available.
-    is_held: Arc<AtomicBool>,
+    /// Single-permit semaphore for mutual exclusion.
+    semaphore: Arc<Semaphore>,
     /// Broadcast sender for release notifications.
     release_tx: broadcast::Sender<()>,
 }
@@ -137,31 +307,23 @@ impl ForestRootWriteGate {
         // Buffer of 16 is sufficient - release notifications are transient signals
         let (release_tx, _) = broadcast::channel(16);
         Self {
-            is_held: Arc::new(AtomicBool::new(false)),
+            semaphore: Arc::new(Semaphore::new(1)),
             release_tx,
         }
     }
 
-    /// Tries to acquire the forest root write lock.
+    /// Tries to acquire the forest root write lock (non-blocking).
     ///
     /// Returns `Some(guard)` if the lock was acquired, `None` if already held.
-    /// The returned guard will atomically release the lock when dropped.
     pub fn try_acquire(&self) -> Option<ForestRootWriteGuard> {
-        // Atomic compare-and-swap: if is_held==false, set to true and return success
-        if self
-            .is_held
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-            .is_ok()
-        {
-            log::debug!(target: LOG_TARGET, "🔓 ForestRootWriteGate: acquired lock");
-            Some(ForestRootWriteGuard::new(
-                Arc::clone(&self.is_held),
-                self.release_tx.clone(),
-            ))
-        } else {
-            log::debug!(target: LOG_TARGET, "🔒 ForestRootWriteGate: lock already held");
-            None
-        }
+        self.semaphore
+            .clone()
+            .try_acquire_owned()
+            .ok()
+            .map(|permit| {
+                log::debug!(target: LOG_TARGET, "🔓 ForestRootWriteGate: acquired lock");
+                ForestRootWriteGuard::new(permit, self.release_tx.clone())
+            })
     }
 
     /// Creates a new subscriber to lock release notifications.
@@ -171,11 +333,6 @@ impl ForestRootWriteGate {
     /// when the lock becomes available.
     pub fn subscribe(&self) -> broadcast::Receiver<()> {
         self.release_tx.subscribe()
-    }
-
-    /// Returns whether the lock is currently held.
-    pub fn is_locked(&self) -> bool {
-        self.is_held.load(Ordering::Acquire)
     }
 }
 
@@ -188,7 +345,7 @@ impl Default for ForestRootWriteGate {
 impl std::fmt::Debug for ForestRootWriteGate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ForestRootWriteGate")
-            .field("is_held", &self.is_locked())
+            .field("available_permits", &self.semaphore.available_permits())
             .finish()
     }
 }
