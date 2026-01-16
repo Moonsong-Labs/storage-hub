@@ -44,6 +44,8 @@ use shc_common::{
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
 
+use shc_actors_framework::forest_write_lock::ForestRootWriteGate;
+
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
@@ -156,6 +158,11 @@ where
     pub(crate) role: MultiInstancesNodeRole,
     /// Dedicated leadership connection used to hold advisory locks when DB is enabled.
     pub(crate) leadership_conn: Option<LeadershipClient>,
+    /// Shared forest root write lock manager.
+    ///
+    /// Used for acquiring forest write locks. The manager handles lock acquisition
+    /// and broadcasts release notifications to all subscribers.
+    pub(crate) forest_lock_manager: Arc<ForestRootWriteGate>,
     /// Metrics link for recording telemetry.
     ///
     /// Used for recording command lifecycle metrics (pending count, processing duration)
@@ -215,6 +222,8 @@ where
         Runtime::Hash,
         TransactionStatus<Runtime::Hash, Runtime::Hash>,
     )>,
+    /// Receiver for forest root write lock release notifications.
+    lock_release_receiver: tokio::sync::broadcast::Receiver<()>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
@@ -233,6 +242,11 @@ where
             TransactionStatus<Runtime::Hash, Runtime::Hash>,
         ),
     ),
+    /// Forest root write lock release notification.
+    ///
+    /// Sent by the RAII guard when it is dropped, signaling that the lock
+    /// has been released and a new task can be assigned the lock.
+    LockRelease,
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
@@ -248,6 +262,10 @@ where
     ) -> Self {
         // Create transaction status channel and wire sender into actor
         let (tx_status_sender, tx_status_receiver) = tokio::sync::mpsc::unbounded_channel();
+
+        // Subscribe to lock release notifications from the shared manager
+        let lock_release_receiver = actor.forest_lock_manager.subscribe();
+
         let mut actor = actor;
         actor.tx_status_sender = tx_status_sender;
 
@@ -255,6 +273,7 @@ where
             actor,
             receiver,
             tx_status_receiver,
+            lock_release_receiver,
         }
     }
 
@@ -319,6 +338,22 @@ where
             }
         });
 
+        // Lock release stream for forest root write lock auto-release.
+        // Uses broadcast receiver which can lag - we just skip lagged messages.
+        let lock_release_stream =
+            futures::stream::unfold(self.lock_release_receiver, |mut rx| async {
+                loop {
+                    match rx.recv().await {
+                        Ok(item) => return Some((item, rx)),
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                            // Skip lagged messages, continue receiving
+                            continue;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            });
+
         let mut merged_stream = stream::select_all(vec![
             self.receiver
                 .map(MergedEventLoopMessage::<Runtime>::Command)
@@ -334,6 +369,9 @@ where
                 .boxed(),
             tx_status_stream
                 .map(MergedEventLoopMessage::<Runtime>::TxStatusUpdate)
+                .boxed(),
+            lock_release_stream
+                .map(|_| MergedEventLoopMessage::<Runtime>::LockRelease)
                 .boxed(),
         ]);
 
@@ -360,6 +398,9 @@ where
                     self.actor
                         .handle_transaction_status_update(nonce, tx_hash, status)
                         .await;
+                }
+                MergedEventLoopMessage::LockRelease => {
+                    self.actor.handle_lock_release().await;
                 }
             };
         }
@@ -998,6 +1039,7 @@ where
                 }
                 BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
                     if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
+                        info!(target: LOG_TARGET, "📥 QueueConfirmBspRequest: Queueing request for file key [{:?}]", request.file_key);
                         let state_store_context =
                             self.persistent_state.open_rw_context_with_overlay();
                         state_store_context
@@ -1491,47 +1533,6 @@ where
                         );
                     }
                 }
-                BlockchainServiceCommand::ReleaseForestRootWriteLock {
-                    forest_root_write_tx,
-                    callback,
-                } => {
-                    if let Some(managed_bsp_or_msp) = &self.maybe_managed_provider {
-                        // Release the forest root write "lock".
-                        let forest_root_write_result = forest_root_write_tx.send(()).map_err(|e| {
-                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team. \nError while sending the release message: {:?}", e);
-                            anyhow!("CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.")
-                        });
-
-                        // Check if there are any pending requests to use the forest root write lock.
-                        // If so, we give them the lock right away.
-                        if forest_root_write_result.is_ok() {
-                            match managed_bsp_or_msp {
-                                ManagedProvider::Msp(_) => {
-                                    self.msp_assign_forest_root_write_lock();
-                                }
-                                ManagedProvider::Bsp(_) => {
-                                    self.bsp_assign_forest_root_write_lock();
-                                }
-                            }
-                        }
-
-                        match callback.send(forest_root_write_result) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send forest write lock release result: {:?}", e);
-                            }
-                        }
-                    } else {
-                        command_succeeded = false;
-                        error!(target: LOG_TARGET, "Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
-                        match callback.send(Err(anyhow!("Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team."))) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
-                    }
-                }
                 BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
@@ -1580,6 +1581,7 @@ where
         notify_period: Option<u32>,
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
+        forest_lock_manager: Arc<ForestRootWriteGate>,
         metrics: MetricsLink,
     ) -> Self {
         let genesis_hash = client.info().genesis_hash;
@@ -1616,6 +1618,7 @@ where
             pending_tx_store: None,
             role: MultiInstancesNodeRole::Standalone,
             leadership_conn: None,
+            forest_lock_manager,
             metrics,
         }
     }

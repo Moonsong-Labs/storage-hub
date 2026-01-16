@@ -4,7 +4,7 @@ This crate provides procedural macros to reduce boilerplate code in the StorageH
 
 ## Features
 
-- `ActorEvent` derive macro: Implements `EventBusMessage` for event structs and registers them with a specific actor.
+- `actor` attribute macro: Implements `EventBusMessage` for event structs, auto-derives `Debug` and `Clone`, and registers them with a specific actor. Optionally injects a `forest_root_write_lock` field and implements `ForestRootWriteAccess`.
 - `ActorEventBus` attribute macro: Generates the event bus provider struct and implements all the required methods and traits.
 - `subscribe_actor_event` macro: Simplifies event subscription code with named parameters for better readability.
 - `subscribe_actor_event_map` macro: Simplifies subscribing multiple events to tasks with shared parameters and per-mapping overrides.
@@ -20,12 +20,11 @@ shc-actors-derive = { workspace = true }
 
 ### 1. Defining Event Messages
 
-Import the macros directly and use the `ActorEvent` derive macro:
+Use the `actor` attribute macro:
 
 ```rust
-use shc_actors_derive::ActorEvent;
+use shc_actors_derive::actor;
 
-#[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct NewChallengeSeed {
     pub provider_id: String,
@@ -35,8 +34,23 @@ pub struct NewChallengeSeed {
 ```
 
 This will:
+- Automatically derive `Debug` and `Clone` for the struct
 - Implement `EventBusMessage` for the struct
 - Register the event with the specified actor ID (`blockchain_service` in this example)
+
+For events that need additional derives (like `Encode`, `Decode`), add them before the macro:
+
+```rust
+use codec::{Encode, Decode};
+use shc_actors_derive::actor;
+
+#[derive(Encode, Decode)]
+#[actor(actor = "blockchain_service")]
+pub struct MultipleNewChallengeSeeds {
+    pub provider_id: String,
+    pub seeds: Vec<(u32, Vec<u8>)>,
+}
+```
 
 ### 2. Creating Event Bus Providers
 
@@ -182,9 +196,8 @@ impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
 ### After
 
 ```rust
-use shc_actors_derive::{ActorEvent, ActorEventBus};
+use shc_actors_derive::{actor, ActorEventBus};
 
-#[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct NewChallengeSeed {
     pub provider_id: String,

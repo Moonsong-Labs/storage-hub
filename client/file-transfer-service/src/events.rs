@@ -1,5 +1,5 @@
 use sc_network::PeerId;
-use shc_actors_derive::{ActorEvent, ActorEventBus};
+use shc_actors_derive::{actor, ActorEventBus};
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{BucketId, ChunkId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId},
@@ -14,7 +14,6 @@ use std::collections::HashSet;
 /// `BspUploadFileTask`) enforce their own chunk count restrictions.
 ///
 /// The proof must contain at least one chunk to be considered valid.
-#[derive(Clone, ActorEvent)]
 #[actor(actor = "file_transfer_service")]
 pub struct RemoteUploadRequest<Runtime: StorageEnableRuntime> {
     /// The peer ID of the receiver node.
@@ -30,8 +29,7 @@ pub struct RemoteUploadRequest<Runtime: StorageEnableRuntime> {
 }
 
 /// A request to download chunks from a remote peer
-#[derive(Clone, ActorEvent)]
-#[actor(actor = "file_transfer_service", generics(Runtime: StorageEnableRuntime))]
+#[actor(actor = "file_transfer_service")]
 pub struct RemoteDownloadRequest<Runtime: StorageEnableRuntime> {
     /// The key of the file to download chunks from
     pub file_key: FileKey,
@@ -46,7 +44,6 @@ pub struct RemoteDownloadRequest<Runtime: StorageEnableRuntime> {
 /// Event triggered to retry pending bucket move downloads.
 /// This is emitted on startup and will be periodically emitted later to ensure
 /// any interrupted downloads can be resumed.
-#[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "file_transfer_service")]
 pub struct RetryBucketMoveDownload;
 

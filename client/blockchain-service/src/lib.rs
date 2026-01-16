@@ -18,7 +18,10 @@ use shc_common::traits::StorageEnableRuntime;
 use sp_keystore::KeystorePtr;
 
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};
-use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
+use shc_actors_framework::{
+    actor::{ActorHandle, ActorSpawner, TaskSpawner},
+    forest_write_lock::ForestRootWriteGate,
+};
 use shc_common::types::StorageHubClient;
 use shc_telemetry::MetricsLink;
 
@@ -38,6 +41,7 @@ pub async fn spawn_blockchain_service<FSH, Runtime>(
     notify_period: Option<u32>,
     capacity_config: Option<CapacityConfig<Runtime>>,
     maintenance_mode: bool,
+    forest_lock_manager: Arc<ForestRootWriteGate>,
     metrics: MetricsLink,
 ) -> ActorHandle<BlockchainService<FSH, Runtime>>
 where
@@ -58,6 +62,7 @@ where
         notify_period,
         capacity_config.map(CapacityRequestQueue::new),
         maintenance_mode,
+        forest_lock_manager,
         metrics,
     );
 

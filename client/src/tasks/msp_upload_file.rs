@@ -860,14 +860,7 @@ where
         &mut self,
         event: ProcessMspRespondStoringRequest<Runtime>,
     ) -> anyhow::Result<String> {
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
+        // The lock guard is extracted before this handler is called and released when it completes.
 
         let own_provider_id = self
             .storage_hub_handler
@@ -1120,12 +1113,7 @@ where
                 self.handle_extrinsic_submission_failure(&all_file_keys)
                     .await;
 
-                // Release the forest root write lock before returning error
-                self.storage_hub_handler
-                    .blockchain
-                    .release_forest_root_write_lock(forest_root_write_tx)
-                    .await?;
-
+                // NOTE: The forest root write lock is automatically released by the ForestRootWriteGuardedHandler guard.
                 return Err(e);
             }
             Ok(Some(events)) => {
@@ -1134,12 +1122,7 @@ where
                     .await
                 {
                     error!(target: LOG_TARGET, "Failed to handle extrinsic dispatch result: {:?}", err);
-                    // Release the forest root write lock before returning error
-                    self.storage_hub_handler
-                        .blockchain
-                        .release_forest_root_write_lock(forest_root_write_tx)
-                        .await?;
-
+                    // NOTE: The forest root write lock is automatically released by the ForestRootWriteGuardedHandler guard.
                     return Err(err);
                 }
             }
@@ -1166,11 +1149,8 @@ where
             }
         }
 
-        // Release the forest root write "lock" and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await?;
+        // NOTE: The forest root write lock is automatically released when the ForestRootWriteGuardedHandler
+        // wrapper's guard is dropped after this handler returns.
 
         Ok(format!(
             "Processed ProcessMspRespondStoringRequest for MSP [{:x}]",

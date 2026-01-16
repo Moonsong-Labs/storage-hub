@@ -5,7 +5,8 @@ This crate provides procedural macros to reduce boilerplate code in the StorageH
 
 ## Features
 
-- `ActorEvent` derive macro: Implements `EventBusMessage` for event structs and registers them with a specific actor.
+- `actor` attribute macro: Implements `EventBusMessage` for event structs and registers them with a specific actor.
+  Optionally injects a `forest_root_write_lock` field and implements `ForestRootWriteAccess`.
 - `ActorEventBus` attribute macro: Generates the event bus provider struct and implements all the required methods and traits.
 - `subscribe_actor_event` macro: Creates and starts an event bus listener for a specific event type and task.
 - `subscribe_actor_event_map` macro: Simplifies subscribing multiple events to tasks with shared parameters.
@@ -21,18 +22,18 @@ shc-actors-derive = { workspace = true }
 
 ### 1. Defining Event Messages
 
-Import the macros directly and use the `ActorEvent` derive macro:
+Use the `actor` attribute macro:
 
 ```rust
-use shc_actors_derive::ActorEvent;
+use shc_actors_derive::actor;
 
-#[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct NewChallengeSeed {
     pub provider_id: String,
     pub tick: u32,
     pub seed: Vec<u8>,
 }
+// Automatically derives Debug, Clone and implements EventBusMessage
 ```
 
 ### 2. Creating Event Bus Providers
@@ -79,7 +80,7 @@ subscribe_actor_event_map!(
 
 ## How It Works
 
-1. The `ActorEvent` derive macro registers each event type with an actor ID in a global registry.
+1. The `actor` attribute macro registers each event type with an actor ID in a global registry.
 2. The `ActorEventBus` attribute macro looks up all the event types registered for the specified actor ID and generates the required code.
 
 This approach greatly reduces boilerplate code while maintaining type safety and performance.
@@ -97,52 +98,13 @@ use quote::{quote, ToTokens};
 use std::sync::Mutex;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input,
+    parse_macro_input, parse_quote,
+    punctuated::Punctuated,
     spanned::Spanned,
     token::Comma,
-    Attribute, DeriveInput, Generics, Ident, LitStr, Token, Type,
+    Attribute, DeriveInput, Field, Fields, FieldsNamed, Generics, Ident, ItemStruct, LitStr, Token,
+    Type,
 };
-
-/// Parser for the `#[actor(actor = "...")]` attribute that accompanies the `ActorEvent` derive macro.
-///
-/// # Usage
-///
-/// ```ignore
-/// #[derive(Debug, Clone, ActorEvent)]
-/// #[actor(actor = "blockchain_service")]
-/// pub struct MyEvent {
-///     // fields...
-/// }
-/// ```
-///
-/// The `actor` parameter specifies which actor this event is registered with.
-/// This is used by the `ActorEventBus` macro to automatically generate the appropriate
-/// event bus implementations. All events with the same actor ID will be included in the
-/// corresponding event bus provider.
-#[allow(dead_code)]
-struct ActorEventArgs {
-    /// The actor ID string (e.g., "blockchain_service") that this event is associated with.
-    /// This ID is used to register the event with a specific actor's event bus.
-    actor: LitStr,
-}
-
-impl Parse for ActorEventArgs {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        // The format we're trying to parse is: actor = "actor_id"
-        let name: Ident = input.parse()?;
-        if name != "actor" {
-            return Err(syn::Error::new(
-                name.span(),
-                "Expected `actor` as the attribute key",
-            ));
-        }
-
-        let _: Token![=] = input.parse()?;
-        let actor: LitStr = input.parse()?;
-
-        Ok(ActorEventArgs { actor })
-    }
-}
 
 /// Parser for the `#[ActorEventBus("...")]` attribute macro.
 ///
@@ -337,109 +299,261 @@ fn get_registry() -> std::sync::MutexGuard<'static, ActorRegistry> {
     ACTOR_REGISTRY.lock().unwrap()
 }
 
-// Extract actor ID from attribute using a simple approach with string operations
-fn get_actor_id_from_attr(attr: &Attribute) -> Option<String> {
-    // Convert the meta to a string and parse manually
-    let meta_str = attr.meta.to_token_stream().to_string();
-
-    // Expected format: actor(actor = "actor_id")
-    if !meta_str.starts_with("actor") {
-        return None;
-    }
-
-    // Check if it contains the parameters
-    if !meta_str.contains('(') || !meta_str.contains(')') {
-        return None;
-    }
-
-    // Extract the part between parentheses
-    let start_idx = meta_str.find('(').unwrap() + 1;
-    let end_idx = meta_str.rfind(')').unwrap();
-    let params = &meta_str[start_idx..end_idx];
-
-    // Extract the actor value
-    if !params.contains("actor") || !params.contains('=') {
-        return None;
-    }
-
-    // Find the quoted value
-    let quote_start = params.find('"').unwrap() + 1;
-    let quote_end = params.rfind('"').unwrap();
-    let actor_id = &params[quote_start..quote_end];
-
-    Some(actor_id.to_string())
+/// Parser for the `#[actor(...)]` attribute macro arguments.
+struct ActorEventAttrArgs {
+    actor: LitStr,
+    has_forest_root_write_lock: bool,
 }
 
-/// A derive macro for implementing `EventBusMessage` for event structs.
+impl Parse for ActorEventAttrArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name: Ident = input.parse()?;
+        if name != "actor" {
+            return Err(syn::Error::new(
+                name.span(),
+                "Expected `actor` as the first parameter",
+            ));
+        }
+
+        let _: Token![=] = input.parse()?;
+        let actor: LitStr = input.parse()?;
+
+        let mut has_forest_root_write_lock = false;
+
+        // Parse optional forest_root_write_lock flag
+        if input.peek(Token![,]) {
+            let _: Token![,] = input.parse()?;
+            let flag: Ident = input.parse()?;
+
+            if flag == "forest_root_write_lock" {
+                has_forest_root_write_lock = true;
+            } else {
+                return Err(syn::Error::new(
+                    flag.span(),
+                    format!(
+                        "Unknown parameter `{}`. Expected `forest_root_write_lock`",
+                        flag
+                    ),
+                ));
+            }
+        }
+
+        Ok(ActorEventAttrArgs {
+            actor,
+            has_forest_root_write_lock,
+        })
+    }
+}
+
+/// An attribute macro for defining actor event structs.
 ///
-/// This macro automatically:
-/// - Implements `EventBusMessage` for the struct
-/// - Registers the event with the specified actor ID
+/// This macro can automatically add the `forest_root_write_lock` field when needed,
+/// eliminating boilerplate.
 ///
 /// # Usage
 ///
-/// ```rust
-/// use shc_actors_derive::ActorEvent;
+/// ## Basic Event
 ///
-/// #[derive(Debug, Clone, ActorEvent)]
+/// ```ignore
 /// #[actor(actor = "blockchain_service")]
-/// pub struct NewChallengeSeed {
-///     pub provider_id: String,
-///     pub tick: u32,
-///     pub seed: Vec<u8>,
+/// pub struct NewStorageRequest<Runtime: StorageEnableRuntime> {
+///     pub file_key: FileKey,
+///     pub bucket_id: BucketId<Runtime>,
 /// }
 /// ```
 ///
-/// # Attributes
+/// ## Event with Forest Root Write Lock (field auto-added)
 ///
-/// - `#[actor(actor = "actor_id")]`: Required. Specifies which actor this event is registered with.
-///   The `actor_id` is a string identifier for the actor.
-#[proc_macro_derive(ActorEvent, attributes(actor))]
-pub fn derive_actor_event(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let name = &input.ident;
+/// ```ignore
+/// #[actor(actor = "blockchain_service", forest_root_write_lock)]
+/// pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntime> {
+///     pub data: ProcessSubmitProofRequestData<Runtime>,
+///     // forest_root_write_lock field is automatically added!
+/// }
+/// ```
+///
+/// The macro will automatically:
+/// - Add `Debug` and `Clone` derives, merging with any user-provided derives
+/// - Add the `forest_root_write_lock: ForestRootWriteGuardSlot` field when the flag is present
+/// - Implement `EventBusMessage` for the struct
+/// - Implement `ForestRootWriteAccess` when the flag is present
+/// - Register the event with the specified actor
+///
+/// ## Additional Derives
+///
+/// You can add additional derives and they will be merged with `Debug` and `Clone`:
+///
+/// ```ignore
+/// #[derive(Encode, Decode)]
+/// #[actor(actor = "blockchain_service")]
+/// pub struct MyEvent {
+///     pub data: SomeData,
+/// }
+/// // Generates: #[derive(Debug, Clone, Encode, Decode)]
+/// ```
+#[proc_macro_attribute]
+pub fn actor(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as ActorEventAttrArgs);
+    let mut input_struct = parse_macro_input!(input as ItemStruct);
 
-    // Find the actor attribute
-    let actor_attr = input
-        .attrs
-        .iter()
-        .find(|attr| attr.path().is_ident("actor"));
-    let actor_id = match actor_attr {
-        Some(attr) => match get_actor_id_from_attr(attr) {
-            Some(id) => id,
-            None => {
-                return syn::Error::new(
-                        attr.span(),
-                        "Failed to parse actor attribute: expected format #[actor(actor = \"actor_id\")]",
-                    )
-                    .to_compile_error()
-                    .into();
+    let name = &input_struct.ident;
+    let generics = &input_struct.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let vis = &input_struct.vis;
+
+    // If forest_root_write_lock is enabled, add the field to the struct
+    if args.has_forest_root_write_lock {
+        match &mut input_struct.fields {
+            Fields::Named(fields) => {
+                // Create the forest_root_write_lock field
+                let new_field: Field = parse_quote! {
+                    pub forest_root_write_lock: shc_actors_framework::forest_write_lock::ForestRootWriteGuardSlot
+                };
+                fields.named.push(new_field);
             }
-        },
-        None => {
-            return syn::Error::new(
-                Span::call_site(),
-                "Missing actor attribute. Use #[actor(actor=\"actor_id\")]",
-            )
-            .to_compile_error()
-            .into();
+            Fields::Unit => {
+                // Convert unit struct to named struct with the field
+                let new_field: Field = parse_quote! {
+                    pub forest_root_write_lock: shc_actors_framework::forest_write_lock::ForestRootWriteGuardSlot
+                };
+                let mut named_fields: Punctuated<Field, Comma> = Punctuated::new();
+                named_fields.push(new_field);
+                input_struct.fields = Fields::Named(FieldsNamed {
+                    brace_token: syn::token::Brace::default(),
+                    named: named_fields,
+                });
+            }
+            Fields::Unnamed(_) => {
+                return syn::Error::new(
+                    input_struct.fields.span(),
+                    "forest_root_write_lock is not supported for tuple structs",
+                )
+                .to_compile_error()
+                .into();
+            }
+        }
+    }
+
+    // Register this event with the actor
+    let where_clause_str = where_clause.to_token_stream().to_string();
+    get_registry().register_event_with_generics(
+        &args.actor.value(),
+        &name.to_string(),
+        ty_generics.to_token_stream().to_string(),
+        where_clause_str,
+    );
+
+    // Generate EventBusMessage implementation
+    let event_bus_message_impl = quote! {
+        impl #impl_generics ::shc_actors_framework::event_bus::EventBusMessage for #name #ty_generics #where_clause {}
+    };
+
+    // Generate ForestRootWriteAccess implementation based on the presence of the forest_root_write_lock flag
+    let forest_lock_impl = if args.has_forest_root_write_lock {
+        quote! {
+            impl #impl_generics shc_actors_framework::forest_write_lock::ForestRootWriteAccess for #name #ty_generics #where_clause {
+                const REQUIRES_LOCK: bool = true;
+
+                fn take_lock(&self) -> Result<
+                    shc_actors_framework::forest_write_lock::ForestRootWriteGuard,
+                    shc_actors_framework::forest_write_lock::ForestRootWriteError,
+                > {
+                    let mut guard_slot = match self.forest_root_write_lock.lock() {
+                        Ok(slot) => slot,
+                        Err(poisoned) => {
+                            ::log::error!(
+                                "forest root write lock mutex poisoned; continuing with inner state"
+                            );
+                            poisoned.into_inner()
+                        }
+                    };
+                    guard_slot
+                        .take()
+                        .ok_or(
+                            shc_actors_framework::forest_write_lock::ForestRootWriteError::GuardAlreadyTaken,
+                        )
+                }
+            }
+        }
+    } else {
+        quote! {
+            impl #impl_generics shc_actors_framework::forest_write_lock::ForestRootWriteAccess for #name #ty_generics #where_clause {
+                const REQUIRES_LOCK: bool = false;
+
+                fn take_lock(&self) -> Result<
+                    shc_actors_framework::forest_write_lock::ForestRootWriteGuard,
+                    shc_actors_framework::forest_write_lock::ForestRootWriteError,
+                > {
+                    Err(shc_actors_framework::forest_write_lock::ForestRootWriteError::LockNotPresent)
+                }
+            }
         }
     };
 
-    // Generate the implementation of EventBusMessage with proper generic support
-    let generics = &input.generics;
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    // Collect existing derive traits and merge with our required ones (Debug, Clone)
+    let mut derive_traits: Vec<syn::Path> = vec![parse_quote!(Debug), parse_quote!(Clone)];
 
-    // Register this event with the actor, including generic information
-    get_registry().register_event_with_generics(
-        &actor_id,
-        &name.to_string(),
-        ty_generics.to_token_stream().to_string(),
-        where_clause.to_token_stream().to_string(),
-    );
+    for attr in &input_struct.attrs {
+        if attr.path().is_ident("derive") {
+            // Parse the derive attribute to extract trait paths
+            if let Ok(meta) = attr.meta.require_list() {
+                let nested = meta.parse_args_with(Punctuated::<syn::Path, Comma>::parse_terminated);
+                if let Ok(paths) = nested {
+                    for path in paths {
+                        // Avoid duplicates (check last segment for simplicity)
+                        let is_duplicate = derive_traits.iter().any(|existing| {
+                            existing.segments.last().map(|s| &s.ident)
+                                == path.segments.last().map(|s| &s.ident)
+                        });
+                        if !is_duplicate {
+                            derive_traits.push(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
+    // Remove derive attributes from the struct (we'll generate a merged one)
+    input_struct
+        .attrs
+        .retain(|attr| !attr.path().is_ident("derive"));
+
+    // Get remaining attributes (non-derive ones like doc comments)
+    let attrs = &input_struct.attrs;
+
+    // Generate the struct definition based on the type of fields
+    // Unit structs need a semicolon, named structs use braces
+    let struct_def = match &input_struct.fields {
+        Fields::Named(fields) => {
+            quote! {
+                #[derive(#(#derive_traits),*)]
+                #(#attrs)*
+                #vis struct #name #generics #where_clause #fields
+            }
+        }
+        Fields::Unit => {
+            quote! {
+                #[derive(#(#derive_traits),*)]
+                #(#attrs)*
+                #vis struct #name #generics #where_clause;
+            }
+        }
+        Fields::Unnamed(fields) => {
+            quote! {
+                #[derive(#(#derive_traits),*)]
+                #(#attrs)*
+                #vis struct #name #generics #fields #where_clause;
+            }
+        }
+    };
+
+    // Generate the output with the struct definition and implementations
     let expanded = quote! {
-        impl #impl_generics ::shc_actors_framework::event_bus::EventBusMessage for #name #ty_generics #where_clause {}
+        #struct_def
+
+        #event_bus_message_impl
+        #forest_lock_impl
     };
 
     TokenStream::from(expanded)
@@ -717,6 +831,13 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 ///   - `EventType => TaskType`: Uses default critical value
 ///   - `EventType => { task: TaskType, critical: bool }`: Overrides critical value for this mapping
 ///
+/// # Forest Write Lock
+///
+/// Event handlers are wrapped in `ForestRootWriteGuardedHandler` only when the event type declares
+/// `ForestRootWriteAccess::REQUIRES_LOCK = true`. Lock-free events use the task handler directly.
+/// Events that carry a lock implement the `ForestRootWriteAccess` trait via the `#[actor]` macro.
+/// This ensures the lock is always released when the handler completes, regardless of success or failure.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -730,7 +851,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 ///     [
 ///         // Override critical for specific mapping
 ///         NewStorageRequest => { task: MspUploadFileTask, critical: false },
-///         // Use default critical value
+///         // Events with forest_root_write_lock field are automatically handled
 ///         ProcessMspRespondStoringRequest => MspUploadFileTask,
 ///         FinalisedMspStoppedStoringBucket => MspDeleteBucketTask,
 ///     ]
@@ -927,16 +1048,31 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             }
         });
 
+        // Wrap handlers only when the event requires the forest root write lock.
+        let task_expr = quote! {
+            shc_actors_framework::forest_write_lock::ForestRootWriteGuardedHandler::new(#task_type::new(#context.clone()))
+        };
         quote! {
-            subscribe_actor_event!(
-                event: #event_type,
-                task: #task_type,
-                service: #service,
-                spawner: #spawner,
-                context: #context,
-                critical: #critical,
-                #metrics_tokens
-            );
+            if <#event_type as shc_actors_framework::forest_write_lock::ForestRootWriteAccess>::REQUIRES_LOCK {
+                subscribe_actor_event!(
+                    event: #event_type,
+                    task: (#task_expr),
+                    service: #service,
+                    spawner: #spawner,
+                    critical: #critical,
+                    #metrics_tokens
+                );
+            } else {
+                subscribe_actor_event!(
+                    event: #event_type,
+                    task: #task_type,
+                    service: #service,
+                    spawner: #spawner,
+                    context: #context,
+                    critical: #critical,
+                    #metrics_tokens
+                );
+            }
         }
     });
 

@@ -163,9 +163,6 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QuerySlashAmountPerMaxFileSize,
     #[command(success_type = Option<MainStorageProviderId<Runtime>>, error_type = QueryMspIdOfBucketIdError)]
     QueryMspIdOfBucketId { bucket_id: BucketId<Runtime> },
-    ReleaseForestRootWriteLock {
-        forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
-    },
     QueueFileDeletionRequest {
         request: FileDeletionRequest<Runtime>,
     },

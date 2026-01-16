@@ -1,4 +1,4 @@
-use shc_actors_derive::{ActorEvent, ActorEventBus};
+use shc_actors_derive::{actor, ActorEventBus};
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{BackupStorageProviderId, BucketId},
@@ -19,7 +19,6 @@ pub enum FileDeletionTarget<Runtime: StorageEnableRuntime> {
 ///
 /// The semaphore permit is automatically released when the event handler completes or fails,
 /// ensuring only one batch deletion cycle runs at a time.
-#[derive(Clone, Debug, ActorEvent)]
 #[actor(actor = "fisherman_service")]
 pub struct BatchFileDeletions {
     /// Type of deletion to process in this batch cycle (User or Incomplete)

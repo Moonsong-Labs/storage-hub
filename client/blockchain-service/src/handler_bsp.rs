@@ -1,7 +1,5 @@
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
-use std::{sync::Arc, u32};
-use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
@@ -13,7 +11,7 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
-use shc_actors_framework::actor::Actor;
+use shc_actors_framework::{actor::Actor, forest_write_lock::ForestRootWriteGuard};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     consts::CURRENT_FOREST_KEY,
@@ -329,12 +327,26 @@ where
         }
     }
 
-    /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
+    /// Atomically acquires the forest root write lock and processes pending requests.
     ///
-    /// The priority is given by:
-    /// 1. `SubmitProofRequest` over...
-    /// 2. `ConfirmStoringRequest` over...
-    /// 3. `StopStoringForInsolventUserRequest`.
+    /// ## Request Priority
+    ///
+    /// When the lock is acquired, requests are processed in priority order:
+    /// 1. `SubmitProofRequest` (highest priority)
+    /// 2. `ConfirmStoringRequest`
+    /// 3. `StopStoringForInsolventUserRequest` (lowest priority)
+    ///
+    /// ## Locking Behavior
+    ///
+    /// This function checks for pending work and only acquires the forest root write lock when
+    /// there is work to process. This prevents a busy-loop that would occur if we acquired the
+    /// lock first: when queues are empty, the guard would drop immediately, sending a notification
+    /// that triggers this function again.
+    ///
+    /// The lock is held until the event is emitted and processing begins. It will be automatically
+    /// released when the handler completes (via RAII guard drop), regardless of success or failure.
+    ///
+    /// ## Invocation
     ///
     /// This function is called every time a new block is imported and after each request is queued.
     ///
@@ -351,46 +363,41 @@ where
             return;
         }
 
-        // Verify we have a BSP handler.
-        let managed_bsp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id,
+        let (bsp_handler, managed_bsp_id) = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => (bsp_handler, bsp_handler.bsp_id),
             _ => {
-                error!(target: LOG_TARGET, "`bsp_check_pending_forest_root_writes` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                error!(target: LOG_TARGET, "`bsp_assign_forest_root_write_lock` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
             }
         };
 
-        // This is done in a closure to avoid borrowing `self` immutably and then mutably.
-        // Inside of this closure, we borrow `self` mutably when taking ownership of the lock.
+        // Early return if no pending work (prevents busy-loop when guard drops with no work).
         {
-            let forest_root_write_lock = match &mut self.maybe_managed_provider {
-                Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
-                _ => unreachable!("We just checked this is a BSP"),
-            };
-            if let Some(rx) = forest_root_write_lock.as_mut() {
-                // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
-                match rx.try_recv() {
-                    // If the channel is empty, means we still need to wait for the current task to finish.
-                    Err(TryRecvError::Empty) => {
-                        trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
-                        return;
-                    }
-                    Ok(_) => {
-                        trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
-                    }
-                    Err(TryRecvError::Closed) => {
-                        error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
-                    }
+            let is_pending_submit_proof_requests_empty =
+                bsp_handler.pending_submit_proof_requests.is_empty();
+            if is_pending_submit_proof_requests_empty {
+                let ctx = self.persistent_state.open_rw_context_with_overlay();
+                if ctx
+                    .pending_confirm_storing_request_deque::<Runtime>()
+                    .size()
+                    == 0
+                    && ctx
+                        .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                        .size()
+                        == 0
+                {
+                    return;
                 }
-            } else {
-                info!(target: LOG_TARGET, "Forest root write lock not assigned to any task");
             }
-
-            // Clear the lock, given that at this point we know that the lock is released.
-            *forest_root_write_lock = None;
         }
 
-        // At this point we know that the lock is released and we can start processing new requests.
+        // Acquire lock.
+        let Some(guard) = bsp_handler.lock_manager.try_acquire() else {
+            trace!(target: LOG_TARGET, "Lock unavailable, will retry on next release notification");
+            return;
+        };
+
+        // Lock acquired - now safely dequeue state and process requests.
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let mut next_event_data = None;
 
@@ -488,10 +495,11 @@ where
         // Commit the state store context.
         state_store_context.commit();
 
-        // If there is any event data to process, emit the event.
+        // If there is any event data to process, emit the event with the acquired guard.
         if let Some(event_data) = next_event_data {
-            self.bsp_emit_forest_write_event(event_data);
+            self.bsp_emit_forest_write_event(event_data, guard);
         }
+        // If no event data, guard drops here and lock is released.
     }
 
     pub(crate) async fn bsp_process_forest_root_changing_events(
@@ -727,42 +735,32 @@ where
         }
     }
 
-    fn bsp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
-        // Get the BSP's Forest root write lock.
-        let forest_root_write_lock = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
-            _ => {
-                error!(target: LOG_TARGET, "`bsp_emit_forest_write_event` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
-            }
-        };
-
-        // Create a new channel to assign ownership of the BSP's Forest root write lock.
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        *forest_root_write_lock = Some(rx);
-
-        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
-        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
-        // event. Clone is required because there is no constraint on the number of listeners that can
-        // subscribe to the event (and each is guaranteed to receive all emitted events).
-        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+    /// Emits a [`ForestWriteLockTaskData`] event with the acquired forest root write lock guard [`ForestRootWriteGuard`].
+    fn bsp_emit_forest_write_event(
+        &mut self,
+        data: impl Into<ForestWriteLockTaskData<Runtime>>,
+        guard: ForestRootWriteGuard,
+    ) {
+        // Guard already acquired by caller. Convert it into Arc<Mutex<Option<...>>>
+        // so the event can implement Clone.
+        let forest_root_write_lock = guard.into();
         match data.into() {
             ForestWriteLockTaskData::SubmitProofRequest(data) => {
                 self.emit(ProcessSubmitProofRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_lock,
                 });
             }
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
                 self.emit(ProcessConfirmStoringRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_lock,
                 });
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 self.emit(ProcessStopStoringForInsolventUserRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_lock,
                 });
             }
             ForestWriteLockTaskData::MspRespondStorageRequest(_) => {
