@@ -6,6 +6,7 @@ services:
     ports:
       - "9666:9944"
       - "30350:30350"
+      - "9615:9615"
     volumes:
       - ./dev-keystores/bsp:/keystore:rw
     command:
@@ -33,6 +34,7 @@ services:
     ports:
       - "9888:9944"
       - "30444:30444"
+      - "9618:9615"
     volumes:
       - ./dev-keystores/user:/keystore:rw
       - ./resource:/res:ro
@@ -67,3 +69,33 @@ services:
       storage-hub-network:
         aliases:
           - toxiproxy
+
+  sh-prometheus:
+    image: prom/prometheus:latest
+    container_name: storage-hub-sh-prometheus-1
+    platform: linux/amd64
+    ports:
+      - "9099:9090"
+    volumes:
+      - ./bspnet-prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-lifecycle"
+
+  sh-grafana:
+    image: grafana/grafana:latest
+    container_name: storage-hub-sh-grafana-1
+    platform: linux/amd64
+    ports:
+      - "3030:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - sh-prometheus

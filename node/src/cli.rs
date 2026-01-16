@@ -157,6 +157,14 @@ pub struct ProviderConfigurations {
     #[arg(long, required_if_eq("storage_layer", "rocks-db"))]
     pub storage_path: Option<String>,
 
+    /// Maximum number of forest storage instances to keep open simultaneously.
+    /// MSPs have one forest per bucket; this controls how many can be open at once.
+    /// BSPs only have one forest, so this setting is ignored for them.
+    /// Default: 512. With RocksDB's default of 512 open files per instance,
+    /// this results in a maximum of ~262K file descriptors.
+    #[arg(long, value_name = "COUNT", default_value = "512")]
+    pub max_open_forests: Option<usize>,
+
     /// Extrinsic retry timeout in seconds.
     #[arg(long, default_value = "60")]
     pub extrinsic_retry_timeout: Option<u64>,
@@ -523,6 +531,7 @@ impl ProviderConfigurations {
                 .clone()
                 .expect("Storage layer is required"),
             storage_path: self.storage_path.clone(),
+            max_open_forests: self.max_open_forests,
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
             rpc_config: rpc_config,

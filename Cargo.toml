@@ -22,6 +22,7 @@ members = [
 	"node",
 	"client",
 	"client/actors-framework",
+	"client/telemetry",
 	"client/blockchain-service",
 	"client/common",
 	"client/file-manager",
@@ -87,6 +88,7 @@ rocksdb = "0.21.0"
 futures = "0.3.30"
 lazy-static = { package = "lazy_static", version = "1.4.0" }
 log = { version = "0.4.21", default-features = false }
+lru = "0.16.3"
 num-bigint = { version = "0.4.3", default-features = false }
 ordered-float = "3.9.1"
 parking_lot = "0.12.4"
@@ -106,6 +108,7 @@ serde = { version = "1.0.210", default-features = false }
 serde_json = { version = "1.0.121", default-features = false }
 smallvec = "1.11.0"
 strum = { version = "0.26.3", features = ["derive"] }
+sysinfo = "0.37"
 thiserror = "1.0.48"
 tokio = "1.36.0"
 tokio-postgres = "0.7"
@@ -294,6 +297,7 @@ pallet-evm-precompile-file-system = { path = "precompiles/pallet-file-system", d
 
 # Local - StorageHub Client (used by the node, can be std or no_std)
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
+shc-telemetry = { path = "client/telemetry", default-features = false }
 shc-actors-derive = { path = "client/actors-derive", default-features = false }
 shc-blockchain-service = { path = "client/blockchain-service", default-features = false }
 shc-blockchain-service-db = { path = "client/blockchain-service-db", default-features = false }

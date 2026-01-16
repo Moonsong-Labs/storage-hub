@@ -24,6 +24,8 @@ use shc_common::{
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
+use shc_telemetry::{observe_histogram, STATUS_FAILURE, STATUS_SUCCESS};
+
 use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
@@ -250,11 +252,23 @@ where
 
             if should_generate_key_proof {
                 // Generate the key proof for each file key.
-                let key_proof = self
+                let start_time = std::time::Instant::now();
+                let key_proof_result = self
                     .generate_key_proof(*file_key, event.data.seed, event.data.provider_id)
-                    .await?;
+                    .await;
 
-                key_proofs.insert(*file_key, key_proof);
+                observe_histogram!(
+                    handler: self.storage_hub_handler,
+                    bsp_proof_generation_seconds,
+                    if key_proof_result.is_ok() {
+                        STATUS_SUCCESS
+                    } else {
+                        STATUS_FAILURE
+                    },
+                    start_time.elapsed().as_secs_f64()
+                );
+
+                key_proofs.insert(*file_key, key_proof_result?);
             };
         }
 

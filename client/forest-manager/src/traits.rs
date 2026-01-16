@@ -1,5 +1,6 @@
 use std::{fmt::Debug, sync::Arc};
 
+use anyhow::Result;
 use async_trait::async_trait;
 use shc_common::{
     traits::StorageEnableRuntime,
@@ -55,7 +56,7 @@ pub trait ForestStorageHandler<Runtime: StorageEnableRuntime> {
     /// Get forest storage instance.
     async fn get(&self, key: &Self::Key) -> Option<Arc<RwLock<Self::FS>>>;
     /// Create a new forest storage instance.
-    async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>>;
+    async fn create(&mut self, key: &Self::Key) -> Result<Arc<RwLock<Self::FS>>>;
     /// Remove forest storage instance.
     async fn remove_forest_storage(&mut self, key: &Self::Key);
 
@@ -71,9 +72,9 @@ pub trait ForestStorageHandler<Runtime: StorageEnableRuntime> {
     ) -> Option<Arc<RwLock<Self::FS>>>;
 
     /// Get or create forest storage instance.
-    async fn get_or_create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn get_or_create(&mut self, key: &Self::Key) -> Result<Arc<RwLock<Self::FS>>> {
         if let Some(forest_storage) = self.get(key).await {
-            forest_storage
+            Ok(forest_storage)
         } else {
             self.create(key).await
         }
