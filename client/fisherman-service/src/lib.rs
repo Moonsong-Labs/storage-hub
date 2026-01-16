@@ -16,8 +16,12 @@ pub mod handler;
 
 use std::sync::Arc;
 
+use frame_support::traits::Get;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::{traits::StorageEnableRuntime, types::StorageHubClient};
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{MaxFileDeletionsPerExtrinsic, StorageHubClient},
+};
 use shc_telemetry::MetricsLink;
 
 pub use self::commands::{
@@ -30,13 +34,31 @@ pub use events::{BatchFileDeletions, FileDeletionTarget, FishermanServiceEventBu
 ///
 /// This function creates and spawns a new FishermanService actor that will monitor
 /// the StorageHub network for file deletion requests and construct proofs of inclusion to delete file keys from Bucket and BSP forests.
+///
+/// # Panics
+///
+/// Panics if `max_deletions_per_extrinsic` is set to a value greater than the runtime constant
+/// `MaxFileDeletionsPerExtrinsic`. This ensures the fisherman cannot be misconfigured to exceed
+/// the on-chain limit.
 pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
     client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     batch_interval_seconds: u64,
     batch_deletion_limit: u64,
+    max_deletions_per_extrinsic: Option<u32>,
     metrics: MetricsLink,
 ) -> ActorHandle<FishermanService<Runtime>> {
+    // Validate that the configured max deletions per extrinsic doesn't exceed the runtime constant
+    let runtime_max: u32 = <MaxFileDeletionsPerExtrinsic<Runtime> as Get<u32>>::get();
+    if let Some(configured_max) = max_deletions_per_extrinsic {
+        assert!(
+            configured_max <= runtime_max,
+            "Configured fisherman_max_deletions_per_extrinsic ({}) exceeds runtime constant MaxFileDeletionsPerExtrinsic ({})",
+            configured_max,
+            runtime_max
+        );
+    }
+
     // Create a named task spawner for the fisherman service
     let task_spawner = task_spawner
         .with_name("fisherman-service")
@@ -47,6 +69,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
         client,
         batch_interval_seconds,
         batch_deletion_limit,
+        max_deletions_per_extrinsic,
         metrics,
     );
 

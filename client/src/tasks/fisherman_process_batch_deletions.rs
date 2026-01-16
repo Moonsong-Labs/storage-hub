@@ -148,9 +148,13 @@ where
             event.batch_deletion_limit
         );
 
-        // Get the runtime's limit for max file deletions per extrinsic (constant value)
-        let max_deletions_per_extrinsic: usize =
-            <MaxFileDeletionsPerExtrinsic<Runtime> as Get<u32>>::get().saturated_into();
+        // Get max deletions per extrinsic: use config value if provided, otherwise fall back to runtime constant
+        let max_deletions_per_extrinsic: usize = event
+            .max_deletions_per_extrinsic
+            .map(|v| v as usize)
+            .unwrap_or_else(|| {
+                <MaxFileDeletionsPerExtrinsic<Runtime> as Get<u32>>::get().saturated_into()
+            });
 
         // Query pending deletions with configured batch limit
         // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.

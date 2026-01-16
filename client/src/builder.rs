@@ -254,6 +254,7 @@ where
             client,
             fisherman_options.batch_interval_seconds,
             fisherman_options.batch_deletion_limit,
+            fisherman_options.max_deletions_per_extrinsic,
             self.metrics.clone(),
         )
         .await;
@@ -939,6 +940,9 @@ pub struct FishermanOptions {
     /// Maximum number of files to process per batch deletion cycle.
     #[serde(default = "default_batch_deletion_limit")]
     pub batch_deletion_limit: u64,
+    /// Maximum number of file deletions per extrinsic. If None, uses runtime constant.
+    #[serde(default)]
+    pub max_deletions_per_extrinsic: Option<u32>,
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
