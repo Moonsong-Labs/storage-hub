@@ -323,7 +323,7 @@ where
                 // MspFollowerDownloadFileTask handles file downloads for MSP followers:
                 // - FollowerFileKeyToDownload events are emitted when a file key needs to be downloaded.
                 // - ProcessFollowerDownloads events trigger processing one download iteration.
-                FollowerFileKeyToDownload<Runtime> => MspFollowerDownloadFileTask,
+                FollowerFileKeyToDownload => MspFollowerDownloadFileTask,
                 ProcessFollowerDownloads => MspFollowerDownloadFileTask,
                 // MspRemoveFinalisedFilesTask handles events for removing files from file storage after mutations are finalised.
                 FinalisedBucketMutationsApplied<Runtime> => MspDeleteFileTask,

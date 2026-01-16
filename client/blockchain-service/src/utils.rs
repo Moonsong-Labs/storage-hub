@@ -1912,7 +1912,7 @@ where
                         debug!(target: LOG_TARGET, "MSP Follower: Tracked file key {:x} for retrieval from Leader", file_key);
                         // Emit event to trigger download task
                         self.emit(FollowerFileKeyToDownload {
-                            file_key: FileKey::from(file_key.as_ref()),
+                            file_key: (*file_key).into(),
                         });
                     }
                 }

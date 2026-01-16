@@ -16850,6 +16850,7 @@ dependencies = [
  "polkadot-primitives 17.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "priority-queue",
  "rand 0.8.5",
+ "reqwest",
  "rocksdb",
  "sc-client-api",
  "sc-network",

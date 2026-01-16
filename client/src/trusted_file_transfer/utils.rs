@@ -4,9 +4,9 @@
 //! via the trusted file transfer server.
 
 use anyhow::{anyhow, Result};
-use log::{debug, error, info};
-use shc_common::types::FileKey;
+use sc_tracing::tracing::info;
 use shc_file_manager::traits::FileStorage;
+use sp_core::H256;
 
 use super::files::process_chunk_stream;
 
@@ -24,7 +24,7 @@ const LOG_TARGET: &str = "trusted-file-transfer-utils";
 /// * `Err` if there was an error downloading or storing the file
 pub async fn download_file_from_peer<FL>(
     peer_url: &str,
-    file_key: &FileKey,
+    file_key: &H256,
     file_storage: &tokio::sync::RwLock<FL>,
 ) -> Result<()>
 where

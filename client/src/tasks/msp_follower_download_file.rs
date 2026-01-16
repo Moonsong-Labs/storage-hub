@@ -21,8 +21,9 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface,
     events::{FollowerFileKeyToDownload, ProcessFollowerDownloads},
 };
-use shc_common::{traits::StorageEnableRuntime, types::FileKey};
+use shc_common::traits::StorageEnableRuntime;
 use shc_file_manager::traits::FileStorage;
+use sp_core::H256;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -45,7 +46,7 @@ where
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
     /// Internal list of file keys to download
-    file_keys_to_download: Arc<RwLock<HashSet<FileKey>>>,
+    file_keys_to_download: Arc<RwLock<HashSet<H256>>>,
 }
 
 impl<NT, Runtime> Clone for MspFollowerDownloadFileTask<NT, Runtime>
@@ -80,32 +81,32 @@ where
 ///
 /// This event is emitted when a file key needs to be downloaded from the leader.
 /// The handler adds the file key to the internal download list.
-impl<NT, Runtime> EventHandler<FollowerFileKeyToDownload<Runtime>>
+impl<NT, Runtime> EventHandler<FollowerFileKeyToDownload>
     for MspFollowerDownloadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(
-        &mut self,
-        event: FollowerFileKeyToDownload<Runtime>,
-    ) -> anyhow::Result<String> {
-        let file_key = event.file_key;
+    async fn handle_event(&mut self, event: FollowerFileKeyToDownload) -> anyhow::Result<String> {
+        let file_key_hash = event.file_key;
 
         info!(
             target: LOG_TARGET,
             "Adding file key [{:x}] to download list",
-            file_key
+            file_key_hash
         );
 
         // Add file key to the download list
         {
             let mut keys = self.file_keys_to_download.write().await;
-            keys.insert(file_key);
+            keys.insert(file_key_hash);
         }
 
-        Ok(format!("Added file key [{:x}] to download list", file_key))
+        Ok(format!(
+            "Added file key [{:x}] to download list",
+            file_key_hash
+        ))
     }
 }
 
@@ -124,7 +125,7 @@ where
 {
     async fn handle_event(&mut self, _event: ProcessFollowerDownloads) -> anyhow::Result<String> {
         // Get a snapshot of all file keys to download
-        let file_keys_to_download: Vec<FileKey> = {
+        let file_keys_to_download: Vec<H256> = {
             let keys = self.file_keys_to_download.read().await;
             if keys.is_empty() {
                 trace!(
