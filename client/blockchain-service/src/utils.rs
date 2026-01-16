@@ -1906,7 +1906,7 @@ where
 
                 // MSP Follower: Track FileKeys to retrieve from Leader
                 if matches!(self.role, crate::types::MultiInstancesNodeRole::Follower) {
-                    if let Some(crate::types::ManagedProvider::Msp(msp_handler)) =
+                    if let Some(crate::types::ManagedProvider::Msp(_msp_handler)) =
                         self.maybe_managed_provider.as_mut()
                     {
                         debug!(target: LOG_TARGET, "MSP Follower: Tracked file key {:x} for retrieval from Leader", file_key);

@@ -8,7 +8,7 @@ use sc_tracing::tracing::info;
 use shc_file_manager::traits::FileStorage;
 use sp_core::H256;
 
-use super::files::process_chunk_stream;
+use crate::{trusted_file_transfer::files::process_chunk_stream, types::FileStorageT};
 
 const LOG_TARGET: &str = "trusted-file-transfer-utils";
 
@@ -22,7 +22,7 @@ const LOG_TARGET: &str = "trusted-file-transfer-utils";
 /// # Returns
 /// * `Ok(())` if the file was downloaded and stored successfully
 /// * `Err` if there was an error downloading or storing the file
-pub async fn download_file_from_peer<FL>(
+pub async fn download_file_from_peer<FL: FileStorageT>(
     peer_url: &str,
     file_key: &H256,
     file_storage: &tokio::sync::RwLock<FL>,

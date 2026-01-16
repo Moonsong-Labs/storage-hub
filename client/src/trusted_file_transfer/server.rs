@@ -18,12 +18,16 @@ use shc_blockchain_service::{
     types::{MspRespondStorageRequest, RespondStorageRequest},
     BlockchainService,
 };
-use shc_common::traits::StorageEnableRuntime;
+use shc_common::{traits::StorageEnableRuntime, types::ChunkId};
 use shc_file_transfer_service::{
     commands::FileTransferServiceCommandInterface, FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use tokio::{net::TcpListener, sync::RwLock};
+use tokio::{
+    net::TcpListener,
+    sync::{mpsc, RwLock},
+};
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{trusted_file_transfer::files::process_chunk_stream, types::FileStorageT};
 
@@ -330,11 +334,6 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
-    use shc_common::types::ChunkId;
-    use shc_file_manager::traits::FileStorage;
-    use tokio::sync::mpsc;
-    use tokio_stream::wrappers::ReceiverStream;
-
     // Parse file key from hex string
     let file_key = match sp_core::H256::from_slice(&hex::decode(&file_key_str).unwrap_or_default())
     {

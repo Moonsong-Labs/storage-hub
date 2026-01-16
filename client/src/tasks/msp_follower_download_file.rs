@@ -22,7 +22,6 @@ use shc_blockchain_service::{
     events::{FollowerFileKeyToDownload, ProcessFollowerDownloads},
 };
 use shc_common::traits::StorageEnableRuntime;
-use shc_file_manager::traits::FileStorage;
 use sp_core::H256;
 use tokio::sync::RwLock;
 
@@ -149,7 +148,7 @@ where
         // is generic and can download from any peer
         let peer_url = match self
             .storage_hub_handler
-            .blockchain_service
+            .blockchain
             .get_leader_info()
             .await?
         {
@@ -198,13 +197,13 @@ where
                 }
                 Err(e) => {
                     error_count += 1;
-                    last_error = Some(e.clone());
                     warn!(
                         target: LOG_TARGET,
                         file_key = %file_key,
                         error = %e,
                         "Failed to download file from peer, will retry on next block"
                     );
+                    last_error = Some(e);
                     // Keep the file in the download list for retry on next block
                 }
             }
