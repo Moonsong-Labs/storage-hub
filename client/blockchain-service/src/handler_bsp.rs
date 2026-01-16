@@ -338,10 +338,10 @@ where
     ///
     /// ## Locking Behavior
     ///
-    /// This function attempts to acquire the forest root write lock **before** dequeuing any state.
-    /// If the lock is unavailable (held by another task), the function returns immediately without
-    /// modifying any queues. This prevents TOCTOU race conditions where requests could be lost if
-    /// dequeued before lock acquisition fails.
+    /// This function checks for pending work and only acquires the forest root write lock when
+    /// there is work to process. This prevents a busy-loop that would occur if we acquired the
+    /// lock first: when queues are empty, the guard would drop immediately, sending a notification
+    /// that triggers this function again.
     ///
     /// The lock is held until the event is emitted and processing begins. It will be automatically
     /// released when the handler completes (via RAII guard drop), regardless of success or failure.
@@ -363,26 +363,38 @@ where
             return;
         }
 
-        // Try to acquire the forest root write lock BEFORE dequeuing any state.
-        // This prevents TOCTOU race: if we checked availability first then dequeued,
-        // another thread could acquire the lock between check and dequeue, causing data loss.
-        let (guard, managed_bsp_id) = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => {
-                match bsp_handler.lock_manager.try_acquire() {
-                    Some(guard) => {
-                        trace!(target: LOG_TARGET, "🔓 bsp_assign_forest_root_write_lock: Acquired lock, proceeding with dequeue");
-                        (guard, bsp_handler.bsp_id)
-                    }
-                    None => {
-                        trace!(target: LOG_TARGET, "🔒 bsp_assign_forest_root_write_lock: Lock unavailable, will retry on next release notification");
-                        return;
-                    }
-                }
-            }
+        let (bsp_handler, managed_bsp_id) = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => (bsp_handler, bsp_handler.bsp_id),
             _ => {
-                error!(target: LOG_TARGET, "`bsp_check_pending_forest_root_writes` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                error!(target: LOG_TARGET, "`bsp_assign_forest_root_write_lock` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
             }
+        };
+
+        // Early return if no pending work (prevents busy-loop when guard drops with no work).
+        {
+            let is_pending_submit_proof_requests_empty =
+                bsp_handler.pending_submit_proof_requests.is_empty();
+            if is_pending_submit_proof_requests_empty {
+                let ctx = self.persistent_state.open_rw_context_with_overlay();
+                if ctx
+                    .pending_confirm_storing_request_deque::<Runtime>()
+                    .size()
+                    == 0
+                    && ctx
+                        .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                        .size()
+                        == 0
+                {
+                    return;
+                }
+            }
+        }
+
+        // Acquire lock.
+        let Some(guard) = bsp_handler.lock_manager.try_acquire() else {
+            trace!(target: LOG_TARGET, "Lock unavailable, will retry on next release notification");
+            return;
         };
 
         // Lock acquired - now safely dequeue state and process requests.
