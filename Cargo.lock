@@ -16825,6 +16825,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-extra",
+ "bytes",
  "chrono",
  "frame-benchmarking 39.1.0",
  "frame-benchmarking-cli",
