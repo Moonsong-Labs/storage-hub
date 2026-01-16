@@ -325,8 +325,6 @@ where
             critical: true,
             [
                 NewStorageRequest<Runtime> => MspUploadFileTask,
-                // ProcessMspRespondStoringRequest carries the forest root write lock.
-                // The ForestRootWriteGuardedHandler wrapper extracts and holds the lock guard automatically.
                 ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
                 FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
                 FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
@@ -383,8 +381,6 @@ where
             critical: true,
             [
                 NewStorageRequest<Runtime> => BspUploadFileTask,
-                // ProcessConfirmStoringRequest carries the forest root write lock.
-                // The ForestRootWriteGuardedHandler wrapper extracts and holds the lock guard automatically.
                 ProcessConfirmStoringRequest<Runtime> => BspUploadFileTask,
                 // BspSubmitProofTask is triggered by a MultipleNewChallengeSeeds event emitted by the BlockchainService.
                 // It responds by computing challenges derived from the seeds, taking also into account
@@ -393,16 +389,12 @@ where
                 // BlockchainService when it is time to actually submit the proof of storage.
                 // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
                 MultipleNewChallengeSeeds<Runtime> => BspSubmitProofTask,
-                // ProcessSubmitProofRequest carries the forest root write lock.
-                // The ForestRootWriteGuardedHandler wrapper extracts and holds the lock guard automatically.
                 ProcessSubmitProofRequest<Runtime> => BspSubmitProofTask,
                 // Slash your own kin or potentially commit seppuku on your own stake.
                 // Running this is as a BSP is very honourable and shows a great sense of justice.
                 SlashableProvider<Runtime> => SlashProviderTask,
                 // Collect debt from users after a BSP proof is accepted.
                 LastChargeableInfoUpdated<Runtime> => BspChargeFeesTask,
-                // ProcessStopStoringForInsolventUserRequest carries the forest root write lock.
-                // The ForestRootWriteGuardedHandler wrapper extracts and holds the lock guard automatically.
                 ProcessStopStoringForInsolventUserRequest<Runtime> => BspChargeFeesTask,
                 // Start deletion process for stored files owned by a user that has been declared as without funds and charge
                 // its payment stream afterwards, getting the owed tokens and deleting it.
