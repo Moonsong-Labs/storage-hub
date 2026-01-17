@@ -26,6 +26,8 @@ pub struct BatchFileDeletions {
     pub deletion_type: shc_indexer_db::models::FileDeletionType,
     /// Maximum number of files to process in this batch cycle
     pub batch_deletion_limit: u64,
+    /// Maximum number of file deletions per extrinsic. If None, uses runtime constant.
+    pub max_deletions_per_extrinsic: Option<u32>,
     /// Semaphore permit wrapped in Arc to satisfy Clone requirement for events.
     /// The permit is held by the event handler for its lifetime,
     /// automatically releasing when the handler completes or fails.

@@ -39,8 +39,8 @@ use shc_common::{
     traits::StorageEnableRuntime,
     types::{
         BackupStorageProviderId, BucketId, DisplayHexListExt, FileDeletionRequest, FileMetadata,
-        Fingerprint, ForestProof as CommonForestProof, OffchainSignature,
-        StorageProofsMerkleTrieLayout, StorageProviderId,
+        Fingerprint, ForestProof as CommonForestProof, MaxFileDeletionsPerExtrinsic,
+        OffchainSignature, StorageProofsMerkleTrieLayout, StorageProviderId,
     },
 };
 use shc_fisherman_service::{
@@ -49,6 +49,7 @@ use shc_fisherman_service::{
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
 use sp_core::H256;
+use sp_runtime::traits::Get;
 use sp_runtime::traits::SaturatedConversion;
 use std::time::Duration;
 
@@ -147,6 +148,14 @@ where
             event.batch_deletion_limit
         );
 
+        // Get max deletions per extrinsic: use config value if provided, otherwise fall back to runtime constant
+        let max_deletions_per_extrinsic: usize = event
+            .max_deletions_per_extrinsic
+            .map(|v| v as usize)
+            .unwrap_or_else(|| {
+                <MaxFileDeletionsPerExtrinsic<Runtime> as Get<u32>>::get().saturated_into()
+            });
+
         // Query pending deletions with configured batch limit
         // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
         let grouped_deletions = self
@@ -182,6 +191,7 @@ where
                 deletion_target.clone(),
                 files,
                 event.deletion_type,
+                max_deletions_per_extrinsic,
             );
             target_futures.push((deletion_target, future));
         }
@@ -200,6 +210,7 @@ where
                 deletion_target.clone(),
                 files,
                 event.deletion_type,
+                max_deletions_per_extrinsic,
             );
             target_futures.push((deletion_target, future));
         }
@@ -297,15 +308,29 @@ where
     /// * `target` - The deletion target (BSP ID or Bucket ID)
     /// * `files` - Vector of files to delete for this target
     /// * `deletion_type` - Type of deletion (User or Incomplete)
+    /// * `max_deletions` - Maximum number of file deletions per extrinsic
     ///
     /// # Returns
     /// Result indicating success or failure of processing this target
     async fn batch_delete_files_for_target(
         &self,
         target: FileDeletionTarget<Runtime>,
-        files: Vec<BatchFileDeletionData<Runtime>>,
+        mut files: Vec<BatchFileDeletionData<Runtime>>,
         deletion_type: shc_indexer_db::models::FileDeletionType,
+        max_deletions: usize,
     ) -> anyhow::Result<()> {
+        // Truncate to limit if needed
+        if files.len() > max_deletions {
+            warn!(
+                target: LOG_TARGET,
+                "🎣 Target {:?} has {} files, truncating to {} for this cycle. Remaining files will be processed in subsequent cycles.",
+                target,
+                files.len(),
+                max_deletions
+            );
+            files.truncate(max_deletions);
+        }
+
         let file_keys: Vec<_> = files.iter().map(|f| f.file_key).collect();
 
         info!(
