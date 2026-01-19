@@ -858,7 +858,7 @@ where
         };
 
         // Convert to runtime's expected BoundedVec,
-        // truncating if necessary (should not be needed since we truncate earlier).     let file_keys_vec: Vec<_> = file_keys.to_vec();
+        // truncating if necessary (should not be needed since we truncate earlier).
         let original_len = file_keys.len();
         let file_keys_bounded: BoundedVec<Runtime::Hash, MaxFileDeletionsPerExtrinsic<Runtime>> =
             BoundedVec::truncate_from(file_keys.to_vec());
