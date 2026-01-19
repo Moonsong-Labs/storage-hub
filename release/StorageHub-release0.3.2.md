@@ -22,7 +22,7 @@ Base: ea8181cb71d15b62db766debb025927a40efbbcd
   - **MSP post-sync sanity check no longer creates forests for missing buckets**: when a bucket forest is missing locally after initial sync, MSPs now treat it as valid *only if* the on-chain bucket root is the default/empty root (`DefaultMerkleRoot::<Runtime>::get()`); otherwise it is reported as **CRITICAL** (bucket is not empty but local forest is missing) ([PR #652](https://github.com/Moonsong-Labs/storage-hub/pull/652)).
   - **Fisherman batch deletions always make progress**: the Fisherman now truncates “files to delete” batches to the on-chain `MaxFileDeletionsPerExtrinsic` constant before building extrinsics, avoiding a stuck loop where oversized batches repeatedly fail. The processing pipeline now uses `BoundedVec::truncate_from(...)` (and defensive warnings if later stages still truncate) ([PR #654](https://github.com/Moonsong-Labs/storage-hub/pull/654)).
 
-- Full diff: https://github.com/Moonsong-Labs/storage-hub/compare/ea8181cb71d15b62db766debb025927a40efbbcd...d27e41fb8805c33f63875ef470ebb8c0edc25887
+- Full diff: https://github.com/Moonsong-Labs/storage-hub/compare/ea8181cb71d15b62db766debb025927a40efbbcd...1ec90c1a0a8579f9041011e0799e1126156b2ae2
 - PRs included:
   - #654 fix: Fisherman truncate files to delete based on `MaxFileDeletionsPerExtrinsic` runtime constant
   - #652 fix: :adhesive_bandage: Avoid creating forests locally when not found in initial check after sync
