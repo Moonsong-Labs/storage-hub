@@ -50,7 +50,7 @@ use shc_fisherman_service::{
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
 use sp_core::H256;
-use sp_runtime::traits::{Get, SaturatedConversion};
+use sp_runtime::traits::SaturatedConversion;
 use std::time::Duration;
 
 use crate::{
@@ -729,17 +729,14 @@ where
     /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id`) in the extrinsic call as per the specification of the extrinsic.
     async fn submit_user_deletion_extrinsic(
         &self,
-        files_bounded: BoundedVec<
-            BatchFileDeletionData<Runtime>,
-            MaxFileDeletionsPerExtrinsic<Runtime>,
-        >,
+        files: &[BatchFileDeletionData<Runtime>],
         provider_id: Option<StorageProviderId<Runtime>>,
         forest_proof: CommonForestProof<StorageProofsMerkleTrieLayout>,
     ) -> anyhow::Result<()> {
         debug!(
             target: LOG_TARGET,
             "🎣 Submitting user deletion extrinsic for {} files",
-            files_bounded.len()
+            files.len()
         );
 
         // Determine BSP ID from provider_id
@@ -749,7 +746,7 @@ where
         };
 
         // Build Vec<FileDeletionRequest> for all files in the batch
-        let file_deletion_requests: Vec<FileDeletionRequest<Runtime>> = files_bounded
+        let file_deletion_requests: Vec<FileDeletionRequest<Runtime>> = files
             .iter()
             .map(
                 |file| -> Result<FileDeletionRequest<Runtime>, anyhow::Error> {
@@ -848,15 +845,14 @@ where
     /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id`) in the extrinsic call as per the specification of the extrinsic.
     async fn submit_incomplete_deletion_extrinsic(
         &self,
-        file_keys_bounded: BoundedVec<Runtime::Hash, MaxFileDeletionsPerExtrinsic<Runtime>>,
+        file_keys: &[Runtime::Hash],
         provider_id: Option<StorageProviderId<Runtime>>,
         forest_proof: CommonForestProof<StorageProofsMerkleTrieLayout>,
     ) -> anyhow::Result<()> {
-        let file_keys_bounded_len = file_keys_bounded.len();
         debug!(
             target: LOG_TARGET,
             "🎣 Submitting incomplete deletion extrinsic for {} files",
-            file_keys_bounded_len
+            file_keys.len()
         );
 
         // Determine BSP ID from provider_id
@@ -864,6 +860,21 @@ where
             Some(StorageProviderId::BackupStorageProvider(id)) => Some(id),
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
+
+        // Convert file keys to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
+        let file_keys_vec: Vec<_> = file_keys.to_vec();
+        let original_len = file_keys_vec.len();
+        let file_keys_bounded: BoundedVec<Runtime::Hash, MaxFileDeletionsPerExtrinsic<Runtime>> =
+            BoundedVec::truncate_from(file_keys_vec);
+        let file_keys_bounded_len = file_keys_bounded.len();
+        if file_keys_bounded_len < original_len {
+            warn!(
+                target: LOG_TARGET,
+                "🎣 File keys were truncated from {} to {} - this should not happen as truncation should occur earlier in the processing pipeline",
+                original_len,
+                file_keys_bounded_len
+            );
+        }
 
         // Build the delete_files_for_incomplete_storage_request extrinsic call
         let call =
