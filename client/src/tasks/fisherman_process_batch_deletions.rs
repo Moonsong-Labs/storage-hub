@@ -753,6 +753,7 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
+        // Build Vec<FileDeletionRequest> for all files in the batch
         let file_deletion_requests: Vec<FileDeletionRequest<Runtime>> = files_bounded
             .iter()
             .map(
@@ -790,7 +791,10 @@ where
             )
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Build Vec<FileDeletionRequest> for all files in the batch
+        // Convert to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
+        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
+        // performs only a single comparison and returns early. If equal, it does minimal pointer
+        // arithmetic but no elements are dropped (no-op).
         let original_len = file_deletion_requests.len();
         let file_deletion_requests_bounded: BoundedVec<
             FileDeletionRequest<Runtime>,
