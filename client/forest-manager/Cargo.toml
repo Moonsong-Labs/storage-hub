@@ -1,6 +1,6 @@
 [package]
 name = "shc-forest-manager"
-version = "0.3.0"
+version = "0.3.2"
 description = ""
 homepage = { workspace = true }
 license = { workspace = true }

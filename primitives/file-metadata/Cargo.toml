@@ -1,7 +1,7 @@
 [package]
 name = "shp-file-metadata"
 description = "A crate containing the types and utilities for handling file metadata in StorageHub."
-version = "0.3.0"
+version = "0.3.2"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
