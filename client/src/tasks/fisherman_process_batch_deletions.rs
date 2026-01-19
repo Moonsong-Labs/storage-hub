@@ -309,28 +309,32 @@ where
     async fn batch_delete_files_for_target(
         &self,
         target: FileDeletionTarget<Runtime>,
-        mut files: Vec<BatchFileDeletionData<Runtime>>,
+        files: Vec<BatchFileDeletionData<Runtime>>,
         deletion_type: shc_indexer_db::models::FileDeletionType,
-        max_deletions_per_extrinsic: usize,
     ) -> anyhow::Result<()> {
-        // Truncate to limit if needed
-        if files.len() > max_deletions_per_extrinsic {
+        // Convert to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
+        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
+        // performs only a single comparison and returns early. If equal, it does minimal pointer
+        // arithmetic but no elements are dropped (no-op).
+        let original_len = files.len();
+        let files_bounded: BoundedVec<_, MaxFileDeletionsPerExtrinsic<Runtime>> =
+            BoundedVec::truncate_from(files);
+        if files_bounded.len() < original_len {
             warn!(
                 target: LOG_TARGET,
                 "🎣 Target {:?} has {} files, truncating to {} for this cycle. Remaining files will be processed in subsequent cycles.",
                 target,
-                files.len(),
-                max_deletions_per_extrinsic
+                original_len,
+                files_bounded.len()
             );
-            files.truncate(max_deletions_per_extrinsic);
         }
 
-        let file_keys: Vec<_> = files.iter().map(|f| f.file_key).collect();
+        let file_keys: Vec<_> = files_bounded.iter().map(|f| f.file_key).collect();
 
         info!(
             target: LOG_TARGET,
             "🎣 Processing {} files for target {:?}: [{}]",
-            files.len(),
+            files_bounded.len(),
             target,
             file_keys.display_hex_list()
         );
@@ -344,7 +348,7 @@ where
 
         // Filter files to only include those with valid file keys
         // This ensures we only submit extrinsics for files that can be proven
-        let remaining_files: Vec<_> = files
+        let remaining_files: Vec<_> = files_bounded
             .into_iter()
             .filter(|f| remaining_file_keys.contains(&f.file_key))
             .collect();
@@ -730,14 +734,17 @@ where
     /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id`) in the extrinsic call as per the specification of the extrinsic.
     async fn submit_user_deletion_extrinsic(
         &self,
-        files: &[BatchFileDeletionData<Runtime>],
+        files_bounded: BoundedVec<
+            BatchFileDeletionData<Runtime>,
+            MaxFileDeletionsPerExtrinsic<Runtime>,
+        >,
         provider_id: Option<StorageProviderId<Runtime>>,
         forest_proof: CommonForestProof<StorageProofsMerkleTrieLayout>,
     ) -> anyhow::Result<()> {
         debug!(
             target: LOG_TARGET,
             "🎣 Submitting user deletion extrinsic for {} files",
-            files.len()
+            files_bounded.len()
         );
 
         // Determine BSP ID from provider_id
@@ -746,62 +753,62 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
-        // Build Vec<FileDeletionRequest> for all files in the batch
-        let mut file_deletion_requests = Vec::new();
-        for file in files.iter() {
-            // Extract signature and signed_intention from BatchFileDeletionData
-            let signature = file
-                .signature
-                .clone()
-                .ok_or_else(|| anyhow!("Missing signature for user deletion"))?;
-            let signed_intention = file
-                .signed_intention
-                .clone()
-                .ok_or_else(|| anyhow!("Missing signed intention for user deletion"))?;
+        let file_deletion_requests: Vec<FileDeletionRequest<Runtime>> = files_bounded
+            .iter()
+            .map(
+                |file| -> Result<FileDeletionRequest<Runtime>, anyhow::Error> {
+                    let signature = file
+                        .signature
+                        .clone()
+                        .ok_or_else(|| anyhow!("Missing signature for user deletion"))?;
+                    let signed_intention = file
+                        .signed_intention
+                        .clone()
+                        .ok_or_else(|| anyhow!("Missing signed intention for user deletion"))?;
 
-            // Extract file data from file_metadata
-            let file_owner =
-                <Runtime as frame_system::Config>::AccountId::try_from(file.file_metadata.owner())
+                    let file_owner = <Runtime as frame_system::Config>::AccountId::try_from(
+                        file.file_metadata.owner(),
+                    )
                     .map_err(|_| anyhow!("Failed to convert file account to AccountId"))?;
-            let bucket_id = H256::from_slice(file.file_metadata.bucket_id());
-            let location = file.file_metadata.location().to_vec();
-            let size = file.file_metadata.file_size().saturated_into();
-            let fingerprint = file.file_metadata.fingerprint().clone();
+                    let bucket_id = H256::from_slice(file.file_metadata.bucket_id());
+                    let location = file.file_metadata.location().to_vec();
+                    let size = file.file_metadata.file_size().saturated_into();
+                    let fingerprint = file.file_metadata.fingerprint().clone();
 
-            let file_deletion = FileDeletionRequest {
-                file_owner,
-                signed_intention,
-                signature,
-                bucket_id,
-                location: location
-                    .try_into()
-                    .map_err(|_| anyhow!("Location too long for file {:?}", file.file_key))?,
-                size,
-                fingerprint: H256::from_slice(fingerprint.as_ref()),
-            };
+                    Ok(FileDeletionRequest {
+                        file_owner,
+                        signed_intention,
+                        signature,
+                        bucket_id,
+                        location: location.try_into().map_err(|_| {
+                            anyhow!("Location too long for file {:?}", file.file_key)
+                        })?,
+                        size,
+                        fingerprint: H256::from_slice(fingerprint.as_ref()),
+                    })
+                },
+            )
+            .collect::<Result<Vec<_>, _>>()?;
 
-            file_deletion_requests.push(file_deletion);
-        }
-
-        // Convert to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
-        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
-        // performs only a single comparison and returns early. If equal, it does minimal pointer
-        // arithmetic but no elements are dropped (no-op).
+        // Build Vec<FileDeletionRequest> for all files in the batch
         let original_len = file_deletion_requests.len();
-        let file_deletions: BoundedVec<_, MaxFileDeletionsPerExtrinsic<Runtime>> =
-            BoundedVec::truncate_from(file_deletion_requests);
-        if file_deletions.len() < original_len {
+        let file_deletion_requests_bounded: BoundedVec<
+            FileDeletionRequest<Runtime>,
+            MaxFileDeletionsPerExtrinsic<Runtime>,
+        > = BoundedVec::truncate_from(file_deletion_requests);
+        let file_deletion_requests_bounded_len = file_deletion_requests_bounded.len();
+        if file_deletion_requests_bounded_len < original_len {
             warn!(
                 target: LOG_TARGET,
                 "🎣 File deletion requests were truncated from {} to {} - this should not happen as truncation should occur earlier in the processing pipeline",
                 original_len,
-                file_deletions.len()
+                file_deletion_requests_bounded_len
             );
         }
 
         // Build the delete_files extrinsic call
         let call = pallet_file_system::Call::<Runtime>::delete_files {
-            file_deletions,
+            file_deletions: file_deletion_requests_bounded,
             bsp_id: maybe_bsp_id,
             forest_proof: forest_proof.proof,
         };
@@ -822,7 +829,7 @@ where
                 error!(
                     target: LOG_TARGET,
                     "Failed to submit delete_files extrinsic for {} files: {:?}",
-                    files.len(),
+                    file_deletion_requests_bounded_len,
                     e
                 );
                 anyhow!("Failed to submit delete_files extrinsic: {:?}", e)
@@ -831,7 +838,7 @@ where
         info!(
             target: LOG_TARGET,
             "🎣 Successfully submitted delete_files extrinsic for {} files",
-            files.len()
+            file_deletion_requests_bounded_len
         );
 
         Ok(())
@@ -842,14 +849,15 @@ where
     /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id`) in the extrinsic call as per the specification of the extrinsic.
     async fn submit_incomplete_deletion_extrinsic(
         &self,
-        file_keys: &[Runtime::Hash],
+        file_keys_bounded: BoundedVec<Runtime::Hash, MaxFileDeletionsPerExtrinsic<Runtime>>,
         provider_id: Option<StorageProviderId<Runtime>>,
         forest_proof: CommonForestProof<StorageProofsMerkleTrieLayout>,
     ) -> anyhow::Result<()> {
+        let file_keys_bounded_len = file_keys_bounded.len();
         debug!(
             target: LOG_TARGET,
             "🎣 Submitting incomplete deletion extrinsic for {} files",
-            file_keys.len()
+            file_keys_bounded_len
         );
 
         // Determine BSP ID from provider_id
@@ -857,24 +865,6 @@ where
             Some(StorageProviderId::BackupStorageProvider(id)) => Some(id),
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
-
-        // Convert file keys to the required format and wrap in BoundedVec, truncating if necessary
-        // (should not happen since we truncate earlier).
-        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
-        // performs only a single comparison and returns early. If equal, it does minimal pointer
-        // arithmetic but no elements are dropped (no-op).
-        let file_keys_vec: Vec<_> = file_keys.iter().map(|k| (*k).into()).collect();
-        let original_len = file_keys_vec.len();
-        let file_keys_bounded: BoundedVec<_, MaxFileDeletionsPerExtrinsic<Runtime>> =
-            BoundedVec::truncate_from(file_keys_vec);
-        if file_keys_bounded.len() < original_len {
-            warn!(
-                target: LOG_TARGET,
-                "🎣 File keys were truncated from {} to {} - this should not happen as truncation should occur earlier in the processing pipeline",
-                original_len,
-                file_keys_bounded.len()
-            );
-        }
 
         // Build the delete_files_for_incomplete_storage_request extrinsic call
         let call =
@@ -900,7 +890,7 @@ where
                 error!(
                     target: LOG_TARGET,
                     "Failed to submit delete_files_for_incomplete_storage_request extrinsic for {} files: {:?}",
-                    file_keys.len(),
+                    file_keys_bounded_len,
                     e
                 );
                 anyhow!(
@@ -912,7 +902,7 @@ where
         info!(
             target: LOG_TARGET,
             "🎣 Successfully submitted delete_files_for_incomplete_storage_request extrinsic for {} files",
-            file_keys.len()
+            file_keys_bounded_len
         );
 
         Ok(())
