@@ -16935,7 +16935,6 @@ dependencies = [
  "async-trait",
  "diesel",
  "diesel-async",
- "frame-support 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "futures",
  "log",
  "pallet-file-system",

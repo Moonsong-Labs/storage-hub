@@ -618,10 +618,6 @@ pub struct FishermanConfigurations {
     /// Maximum number of files to process per batch deletion cycle.
     #[arg(long, default_value = "1000", value_parser = clap::value_parser!(u64).range(1..))]
     pub fisherman_batch_deletion_limit: u64,
-
-    /// Maximum number of file deletions per extrinsic. If not set, uses the runtime constant.
-    #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
-    pub fisherman_max_deletions_per_extrinsic: Option<u32>,
 }
 
 impl FishermanConfigurations {
@@ -634,7 +630,6 @@ impl FishermanConfigurations {
                     .expect("Fisherman database URL is required"),
                 batch_interval_seconds: self.fisherman_batch_interval_seconds,
                 batch_deletion_limit: self.fisherman_batch_deletion_limit,
-                max_deletions_per_extrinsic: self.fisherman_max_deletions_per_extrinsic,
                 maintenance_mode,
             })
         } else {

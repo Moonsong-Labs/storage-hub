@@ -29,6 +29,7 @@
 
 use anyhow::anyhow;
 use codec::Decode;
+use frame_support::BoundedVec;
 use futures::future::join_all;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
@@ -148,13 +149,8 @@ where
             event.batch_deletion_limit
         );
 
-        // Get max deletions per extrinsic: use config value if provided, otherwise fall back to runtime constant
-        let max_deletions_per_extrinsic: usize = event
-            .max_deletions_per_extrinsic
-            .map(|v| v as usize)
-            .unwrap_or_else(|| {
-                <MaxFileDeletionsPerExtrinsic<Runtime> as Get<u32>>::get().saturated_into()
-            });
+        let max_deletions_per_extrinsic: usize =
+            <MaxFileDeletionsPerExtrinsic<Runtime> as Get<u32>>::get().saturated_into();
 
         // Query pending deletions with configured batch limit
         // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
@@ -308,7 +304,6 @@ where
     /// * `target` - The deletion target (BSP ID or Bucket ID)
     /// * `files` - Vector of files to delete for this target
     /// * `deletion_type` - Type of deletion (User or Incomplete)
-    /// * `max_deletions` - Maximum number of file deletions per extrinsic
     ///
     /// # Returns
     /// Result indicating success or failure of processing this target
@@ -317,18 +312,18 @@ where
         target: FileDeletionTarget<Runtime>,
         mut files: Vec<BatchFileDeletionData<Runtime>>,
         deletion_type: shc_indexer_db::models::FileDeletionType,
-        max_deletions: usize,
+        max_deletions_per_extrinsic: usize,
     ) -> anyhow::Result<()> {
         // Truncate to limit if needed
-        if files.len() > max_deletions {
+        if files.len() > max_deletions_per_extrinsic {
             warn!(
                 target: LOG_TARGET,
                 "🎣 Target {:?} has {} files, truncating to {} for this cycle. Remaining files will be processed in subsequent cycles.",
                 target,
                 files.len(),
-                max_deletions
+                max_deletions_per_extrinsic
             );
-            files.truncate(max_deletions);
+            files.truncate(max_deletions_per_extrinsic);
         }
 
         let file_keys: Vec<_> = files.iter().map(|f| f.file_key).collect();
@@ -789,10 +784,21 @@ where
             file_deletion_requests.push(file_deletion);
         }
 
-        // Convert to BoundedVec
-        let file_deletions = file_deletion_requests
-            .try_into()
-            .map_err(|_| anyhow!("Batch size exceeds MaxFileDeletionsPerExtrinsic limit"))?;
+        // Convert to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
+        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
+        // performs only a single comparison and returns early. If equal, it does minimal pointer
+        // arithmetic but no elements are dropped (no-op).
+        let original_len = file_deletion_requests.len();
+        let file_deletions: BoundedVec<_, MaxFileDeletionsPerExtrinsic<Runtime>> =
+            BoundedVec::truncate_from(file_deletion_requests);
+        if file_deletions.len() < original_len {
+            warn!(
+                target: LOG_TARGET,
+                "🎣 File deletion requests were truncated from {} to {} - this should not happen as truncation should occur earlier in the processing pipeline",
+                original_len,
+                file_deletions.len()
+            );
+        }
 
         // Build the delete_files extrinsic call
         let call = pallet_file_system::Call::<Runtime>::delete_files {
@@ -853,11 +859,23 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
-        // Convert file keys to the required format and wrap in BoundedVec
+        // Convert file keys to the required format and wrap in BoundedVec, truncating if necessary
+        // (should not happen since we truncate earlier).
+        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
+        // performs only a single comparison and returns early. If equal, it does minimal pointer
+        // arithmetic but no elements are dropped (no-op).
         let file_keys_vec: Vec<_> = file_keys.iter().map(|k| (*k).into()).collect();
-        let file_keys_bounded = file_keys_vec
-            .try_into()
-            .map_err(|_| anyhow!("Batch size exceeds MaxFileDeletionsPerExtrinsic limit"))?;
+        let original_len = file_keys_vec.len();
+        let file_keys_bounded: BoundedVec<_, MaxFileDeletionsPerExtrinsic<Runtime>> =
+            BoundedVec::truncate_from(file_keys_vec);
+        if file_keys_bounded.len() < original_len {
+            warn!(
+                target: LOG_TARGET,
+                "🎣 File keys were truncated from {} to {} - this should not happen as truncation should occur earlier in the processing pipeline",
+                original_len,
+                file_keys_bounded.len()
+            );
+        }
 
         // Build the delete_files_for_incomplete_storage_request extrinsic call
         let call =

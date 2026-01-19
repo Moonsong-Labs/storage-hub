@@ -54,8 +54,6 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     last_batch_time: Option<Instant>,
     /// Maximum number of files to process per batch deletion cycle
     batch_deletion_limit: u64,
-    /// User-configured max deletions per extrinsic (overrides runtime constant if set)
-    max_deletions_per_extrinsic: Option<u32>,
     /// Metrics link for recording command processing
     pub(crate) metrics: MetricsLink,
 }
@@ -84,7 +82,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         batch_interval_seconds: u64,
         batch_deletion_limit: u64,
-        max_deletions_per_extrinsic: Option<u32>,
         metrics: MetricsLink,
     ) -> Self {
         Self {
@@ -95,7 +92,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             batch_interval_duration: Duration::from_secs(batch_interval_seconds),
             last_batch_time: None,
             batch_deletion_limit,
-            max_deletions_per_extrinsic,
             metrics,
         }
     }
@@ -216,7 +212,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     self.emit(crate::events::BatchFileDeletions {
                         deletion_type,
                         batch_deletion_limit: self.batch_deletion_limit,
-                        max_deletions_per_extrinsic: self.max_deletions_per_extrinsic,
                         permit: permit_wrapper,
                     });
                 }
