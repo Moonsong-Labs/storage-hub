@@ -745,43 +745,41 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
-        // Build Vec<FileDeletionRequest> for all files in the batch
-        let file_deletion_requests: Vec<FileDeletionRequest<Runtime>> = files
-            .iter()
-            .map(
-                |file| -> Result<FileDeletionRequest<Runtime>, anyhow::Error> {
-                    let signature = file
-                        .signature
-                        .clone()
-                        .ok_or_else(|| anyhow!("Missing signature for user deletion"))?;
-                    let signed_intention = file
-                        .signed_intention
-                        .clone()
-                        .ok_or_else(|| anyhow!("Missing signed intention for user deletion"))?;
+        let mut file_deletion_requests = Vec::new();
+        for file in files.iter() {
+            // Extract signature and signed_intention from BatchFileDeletionData
+            let signature = file
+                .signature
+                .clone()
+                .ok_or_else(|| anyhow!("Missing signature for user deletion"))?;
+            let signed_intention = file
+                .signed_intention
+                .clone()
+                .ok_or_else(|| anyhow!("Missing signed intention for user deletion"))?;
 
-                    let file_owner = <Runtime as frame_system::Config>::AccountId::try_from(
-                        file.file_metadata.owner(),
-                    )
+            // Extract file data from file_metadata
+            let file_owner =
+                <Runtime as frame_system::Config>::AccountId::try_from(file.file_metadata.owner())
                     .map_err(|_| anyhow!("Failed to convert file account to AccountId"))?;
-                    let bucket_id = H256::from_slice(file.file_metadata.bucket_id());
-                    let location = file.file_metadata.location().to_vec();
-                    let size = file.file_metadata.file_size().saturated_into();
-                    let fingerprint = file.file_metadata.fingerprint().clone();
+            let bucket_id = H256::from_slice(file.file_metadata.bucket_id());
+            let location = file.file_metadata.location().to_vec();
+            let size = file.file_metadata.file_size().saturated_into();
+            let fingerprint = file.file_metadata.fingerprint().clone();
 
-                    Ok(FileDeletionRequest {
-                        file_owner,
-                        signed_intention,
-                        signature,
-                        bucket_id,
-                        location: location.try_into().map_err(|_| {
-                            anyhow!("Location too long for file {:?}", file.file_key)
-                        })?,
-                        size,
-                        fingerprint: H256::from_slice(fingerprint.as_ref()),
-                    })
-                },
-            )
-            .collect::<Result<Vec<_>, _>>()?;
+            let file_deletion = FileDeletionRequest {
+                file_owner,
+                signed_intention,
+                signature,
+                bucket_id,
+                location: location
+                    .try_into()
+                    .map_err(|_| anyhow!("Location too long for file {:?}", file.file_key))?,
+                size,
+                fingerprint: H256::from_slice(fingerprint.as_ref()),
+            };
+
+            file_deletion_requests.push(file_deletion);
+        }
 
         // Convert to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
         // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
