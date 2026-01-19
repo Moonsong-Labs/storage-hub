@@ -307,7 +307,7 @@ where
         files: Vec<BatchFileDeletionData<Runtime>>,
         deletion_type: shc_indexer_db::models::FileDeletionType,
     ) -> anyhow::Result<()> {
-        // Convert to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
+        // Convert to BoundedVec, truncating if necessary.
         // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
         // performs only a single comparison and returns early. If equal, it does minimal pointer
         // arithmetic but no elements are dropped (no-op).
@@ -315,7 +315,7 @@ where
         let files_bounded: BoundedVec<_, MaxFileDeletionsPerExtrinsic<Runtime>> =
             BoundedVec::truncate_from(files);
         if files_bounded.len() < original_len {
-            warn!(
+            info!(
                 target: LOG_TARGET,
                 "🎣 Target {:?} has {} files, truncating to {} for this cycle. Remaining files will be processed in subsequent cycles.",
                 target,
@@ -781,10 +781,8 @@ where
             file_deletion_requests.push(file_deletion);
         }
 
-        // Convert to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
-        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
-        // performs only a single comparison and returns early. If equal, it does minimal pointer
-        // arithmetic but no elements are dropped (no-op).
+        // Convert to runtime's expected BoundedVec,
+        // truncating if necessary (should not be needed since we truncate earlier).
         let original_len = file_deletion_requests.len();
         let file_deletion_requests_bounded: BoundedVec<
             FileDeletionRequest<Runtime>,
@@ -859,10 +857,8 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
-        // Convert to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
-        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
-        // performs only a single comparison and returns early. If equal, it does minimal pointer
-        // arithmetic but no elements are dropped (no-op).        let file_keys_vec: Vec<_> = file_keys.to_vec();
+        // Convert to runtime's expected BoundedVec,
+        // truncating if necessary (should not be needed since we truncate earlier).     let file_keys_vec: Vec<_> = file_keys.to_vec();
         let original_len = file_keys.len();
         let file_keys_bounded: BoundedVec<Runtime::Hash, MaxFileDeletionsPerExtrinsic<Runtime>> =
             BoundedVec::truncate_from(file_keys.to_vec());
