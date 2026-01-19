@@ -148,9 +148,6 @@ where
             event.batch_deletion_limit
         );
 
-        let max_deletions_per_extrinsic: usize =
-            <MaxFileDeletionsPerExtrinsic<Runtime> as Get<u32>>::get().saturated_into();
-
         // Query pending deletions with configured batch limit
         // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
         let grouped_deletions = self
@@ -186,7 +183,6 @@ where
                 deletion_target.clone(),
                 files,
                 event.deletion_type,
-                max_deletions_per_extrinsic,
             );
             target_futures.push((deletion_target, future));
         }
@@ -205,7 +201,6 @@ where
                 deletion_target.clone(),
                 files,
                 event.deletion_type,
-                max_deletions_per_extrinsic,
             );
             target_futures.push((deletion_target, future));
         }
