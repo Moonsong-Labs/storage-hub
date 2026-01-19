@@ -50,8 +50,7 @@ use shc_fisherman_service::{
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
 use sp_core::H256;
-use sp_runtime::traits::Get;
-use sp_runtime::traits::SaturatedConversion;
+use sp_runtime::traits::{Get, SaturatedConversion};
 use std::time::Duration;
 
 use crate::{
