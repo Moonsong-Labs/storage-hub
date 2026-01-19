@@ -6,10 +6,10 @@ StorageHub v0.3.2 is a **small patch release focused on MSP/Fisherman robustness
 
 ## Components
 
-- Client code: v0.3.0
-- Pallets code: v0.3.0
-- Runtime code: v0.3.0 (spec_name/spec_version: parachain `sh-parachain-runtime`/1, solochain-evm `sh-solochain-evm`/1)
-- SH Backend Docker image: v0.3.0 (image: ghcr.io/<org>/storage-hub-msp-backend:v0.3.0)
+- Client code: v0.3.2
+- Pallets code: v0.3.2
+- Runtime code: v0.3.2 (spec_name/spec_version: parachain `sh-parachain-runtime`/1, solochain-evm `sh-solochain-evm`/1)
+- SH Backend Docker image: v0.3.2 (image: ghcr.io/<org>/storage-hub-msp-backend:v0.3.2)
 - SH SDK (npm): v0.4.3 (`@storagehub-sdk/core`, `@storagehub-sdk/msp-client`)
 - types-bundle/api-augment (npm): `@storagehub/types-bundle` v0.3.0, `@storagehub/api-augment` v0.3.1
 
