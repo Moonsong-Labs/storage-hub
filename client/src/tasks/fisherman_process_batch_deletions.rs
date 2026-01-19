@@ -859,11 +859,13 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
-        // Convert file keys to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
-        let file_keys_vec: Vec<_> = file_keys.to_vec();
-        let original_len = file_keys_vec.len();
+        // Convert to BoundedVec, truncating if necessary (should not happen since we truncate earlier).
+        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
+        // performs only a single comparison and returns early. If equal, it does minimal pointer
+        // arithmetic but no elements are dropped (no-op).        let file_keys_vec: Vec<_> = file_keys.to_vec();
+        let original_len = file_keys.len();
         let file_keys_bounded: BoundedVec<Runtime::Hash, MaxFileDeletionsPerExtrinsic<Runtime>> =
-            BoundedVec::truncate_from(file_keys_vec);
+            BoundedVec::truncate_from(file_keys.to_vec());
         let file_keys_bounded_len = file_keys_bounded.len();
         if file_keys_bounded_len < original_len {
             warn!(
