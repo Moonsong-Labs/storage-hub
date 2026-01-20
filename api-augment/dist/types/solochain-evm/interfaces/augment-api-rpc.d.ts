@@ -23,7 +23,7 @@ import type { AccountId, BlockNumber, H160, H256, H64, Hash, Header, Index, Just
 import type { MigrationStatusResult, ReadProof, RuntimeVersion, TraceBlockResponse } from '@polkadot/types/interfaces/state';
 import type { ApplyExtrinsicResult, ChainProperties, ChainType, Health, NetworkState, NodeRole, PeerInfo, SyncState } from '@polkadot/types/interfaces/system';
 import type { IExtrinsic, Observable } from '@polkadot/types/types';
-import type { AddFilesToForestStorageResult, CheckpointChallenge, FileMetadata, GetFileFromFileStorageResult, GetValuePropositionsResult, LoadFileInStorageResult, RemoveFilesFromForestStorageResult, RpcProviderId, SaveFileToDisk } from '@storagehub/api-augment/solochain-evm/interfaces/storagehubclient';
+import type { AddFilesToForestStorageResult, CheckpointChallenge, FileMetadata, GetFileFromFileStorageResult, GetValuePropositionsResult, LoadFileInStorageResult, RemoveFilesFromForestStorageResult, RpcProviderId, SaveFileToDisk, StopStoringFileResult } from '@storagehub/api-augment/solochain-evm/interfaces/storagehubclient';
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 declare module '@polkadot/rpc-core/types/jsonrpc' {
     interface RpcInterface {
@@ -688,6 +688,10 @@ declare module '@polkadot/rpc-core/types/jsonrpc' {
              * Save a file from the local storage to the disk.
              **/
             saveFileToDisk: AugmentedRpc<(file_key: H256 | string | Uint8Array, file_path: Text | string) => Observable<SaveFileToDisk>>;
+            /**
+             * Stop storing a file as a BSP. This initiates the two-phase stop storing process.
+             **/
+            stopStoringFile: AugmentedRpc<(file_key: H256 | string | Uint8Array) => Observable<StopStoringFileResult>>;
         };
         syncstate: {
             /**

@@ -16,8 +16,8 @@ use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{
-    capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
-    BlockchainService,
+    capacity_manager::CapacityConfig, commands::BlockchainServiceCommandInterface,
+    handler::BlockchainServiceConfig, spawn_blockchain_service, BlockchainService,
 };
 use shc_common::{traits::StorageEnableRuntime, types::StorageHubClient};
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
@@ -59,7 +59,7 @@ where
 {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService<Runtime>>>,
-    blockchain:
+    pub blockchain:
         Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType<Runtime>>::FSH, Runtime>>>,
     fisherman: Option<ActorHandle<FishermanService<Runtime>>>,
     storage_path: Option<String>,
@@ -168,11 +168,11 @@ where
     ///
     /// Cannot be called before setting the Forest Storage Handler.
     /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
+    /// The RPC handlers will be set later via [`set_blockchain_rpc_handlers`](StorageHubBuilder::set_blockchain_rpc_handlers).
     pub async fn with_blockchain(
         &mut self,
         client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
-        rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,
         maintenance_mode: bool,
     ) -> &mut Self {
@@ -199,7 +199,7 @@ where
                 blockchain_service_config,
                 client.clone(),
                 keystore.clone(),
-                rpc_handlers.clone(),
+                None, // RPC handlers will be set later
                 forest_storage_handler,
                 rocksdb_root_path,
                 self.notify_period,
@@ -211,6 +211,18 @@ where
 
         self.blockchain = Some(blockchain_service_handle);
         self
+    }
+
+    /// Set the RPC handlers for the Blockchain Service.
+    ///
+    /// This should be called after the RPC server has been initialized.
+    /// If the BlockchainService has been created via [`with_blockchain`](StorageHubBuilder::with_blockchain),
+    /// this will set the RPC handlers. Otherwise, it's a no-op (e.g., for fisherman nodes).
+    pub async fn set_blockchain_rpc_handlers(&mut self, rpc_handlers: Arc<RpcHandlers>) {
+        if let Some(blockchain) = &self.blockchain {
+            blockchain.set_rpc_handlers(rpc_handlers).await;
+        }
+        // If blockchain service doesn't exist (e.g., fisherman), just skip
     }
 
     /// Spawn the trusted file transfer server if configured
@@ -309,6 +321,8 @@ where
     ///
     /// This method is meant to be called after the Storage Layer has been set up.
     /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
+    /// If the Blockchain Service has been created via [`with_blockchain`](StorageHubBuilder::with_blockchain),
+    /// it will be included in the RPC config.
     pub fn create_rpc_config(
         &self,
         keystore: KeystorePtr,
@@ -318,7 +332,7 @@ where
         <(R, S) as ShNodeType<Runtime>>::FSH,
         Runtime,
     > {
-        StorageHubClientRpcConfig::new(
+        let mut rpc_config = StorageHubClientRpcConfig::new(
             self.file_storage
                 .clone()
                 .expect("File Storage not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
@@ -332,7 +346,14 @@ where
                 .as_ref()
                 .expect("File Transfer not set.")
                 .clone(),
-        )
+        );
+
+        // Include the blockchain service handle if available
+        if let Some(blockchain) = &self.blockchain {
+            rpc_config = rpc_config.with_blockchain(blockchain.clone());
+        }
+
+        rpc_config
     }
 
     /// Set configuration options for the MSP charge fees task.

@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
+use sc_service::RpcHandlers;
 use shc_common::{
     blockchain_utils::decode_module_error,
     traits::{KeyTypeOperations, StorageEnableRuntime},
@@ -165,6 +168,8 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QuerySlashAmountPerMaxFileSize,
     #[command(success_type = Option<MainStorageProviderId<Runtime>>, error_type = QueryMspIdOfBucketIdError)]
     QueryMspIdOfBucketId { bucket_id: BucketId<Runtime> },
+    #[command(success_type = BlockNumber<Runtime>, error_type = ApiError)]
+    QueryMinWaitForStopStoring,
     QueueFileDeletionRequest {
         request: FileDeletionRequest<Runtime>,
     },
@@ -226,6 +231,20 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// - After extrinsic submission failures (may be transient)
     #[command(mode = "FireAndForget")]
     RemoveFileKeyStatus { file_key: FileKey },
+    /// Emit the RequestBspStopStoring event to trigger the BSP stop storing flow.
+    ///
+    /// This command is called by the RPC to initiate the two-phase stop storing process.
+    /// The event will be handled by the BspStopStoringTask which will generate proofs
+    /// and call the `bsp_request_stop_storing` extrinsic.
+    #[command(mode = "FireAndForget")]
+    EmitRequestBspStopStoring { file_key: FileKey },
+    /// Set the RPC handlers for the BlockchainService.
+    ///
+    /// This command must be called after the RPC server has been initialized to provide
+    /// the BlockchainService with the RPC handlers needed to submit extrinsics. Otherwise,
+    /// extrinsic submission will fail.
+    #[command(mode = "FireAndForget")]
+    SetRpcHandlers { rpc_handlers: Arc<RpcHandlers> },
     /// Pop up to N storage requests pending confirmation from the pending queue.
     ///
     /// Returns the items without filtering so the task is responsible for filtering stale requests.

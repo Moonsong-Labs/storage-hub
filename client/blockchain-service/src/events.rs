@@ -386,6 +386,28 @@ pub struct DistributeFileToBsp<Runtime: StorageEnableRuntime> {
     pub bsp_id: BackupStorageProviderId<Runtime>,
 }
 
+/// Event triggered by RPC to initiate BSP stop storing flow.
+///
+/// This event is emitted when the RPC method `requestBspStopStoring` is called,
+/// triggering the task to generate proofs and call `bsp_request_stop_storing`.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct RequestBspStopStoring {
+    pub file_key: FileKey,
+}
+
+/// Event emitted when BspRequestedToStopStoring is detected on-chain.
+///
+/// This event is emitted by the blockchain service when it detects a
+/// `BspRequestedToStopStoring` event on-chain for the managed BSP.
+/// The task uses this to schedule the confirmation after the minimum wait period.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct BspRequestedToStopStoringNotification<Runtime: StorageEnableRuntime> {
+    pub bsp_id: Runtime::Hash,
+    pub file_key: FileKey,
+}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor

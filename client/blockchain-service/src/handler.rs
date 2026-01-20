@@ -5,6 +5,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
+use tokio::sync::RwLock;
 
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
@@ -47,7 +48,7 @@ use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCE
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
-    events::{BlockchainServiceEventBusProvider, NewStorageRequest},
+    events::{BlockchainServiceEventBusProvider, NewStorageRequest, RequestBspStopStoring},
     state::BlockchainServiceStateStore,
     transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{
@@ -78,7 +79,7 @@ where
     /// The keystore. Used to sign extrinsics.
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
-    pub(crate) rpc_handlers: Arc<RpcHandlers>,
+    pub(crate) rpc_handlers: Arc<RwLock<Option<Arc<RpcHandlers>>>>,
     /// The Forest Storage handler.
     ///
     /// This is used to manage Forest Storage instances and update their roots when there are
@@ -1338,6 +1339,21 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryMinWaitForStopStoring { callback } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let min_wait = self
+                        .client
+                        .runtime_api()
+                        .query_min_wait_for_stop_storing(current_block_hash);
+
+                    match callback.send(min_wait) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back MinWaitForStopStoring: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueryBucketsOfUserStoredByMsp {
                     msp_id,
                     user,
@@ -1601,6 +1617,32 @@ where
                         );
                     }
                 }
+                BlockchainServiceCommand::EmitRequestBspStopStoring { file_key } => {
+                    if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
+                        info!(
+                            target: LOG_TARGET,
+                            "Emitting RequestBspStopStoring event for file key [{:x}]",
+                            file_key
+                        );
+                        self.emit(RequestBspStopStoring { file_key });
+                    } else {
+                        command_succeeded = false;
+                        // Fire-and-forget command, just log the error
+                        error!(
+                            target: LOG_TARGET,
+                            "EmitRequestBspStopStoring received while not managing a BSP. \
+                             This command is only valid for BSP nodes."
+                        );
+                    }
+                }
+                BlockchainServiceCommand::SetRpcHandlers { rpc_handlers } => {
+                    info!(
+                        target: LOG_TARGET,
+                        "Setting RPC handlers for BlockchainService"
+                    );
+                    let mut rpc_handlers_guard = self.rpc_handlers.write().await;
+                    *rpc_handlers_guard = Some(rpc_handlers);
+                }
                 BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
@@ -1683,7 +1725,7 @@ where
         config: BlockchainServiceConfig<Runtime>,
         client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
-        rpc_handlers: Arc<RpcHandlers>,
+        rpc_handlers: Option<Arc<RpcHandlers>>,
         forest_storage_handler: FSH,
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
@@ -1697,7 +1739,7 @@ where
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             client,
             keystore,
-            rpc_handlers,
+            rpc_handlers: Arc::new(RwLock::new(rpc_handlers)),
             forest_storage_handler,
             current_block: MinimalBlockInfo {
                 number: 0u32.into(),

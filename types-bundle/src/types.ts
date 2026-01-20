@@ -284,6 +284,13 @@ export const SHARED_TYPES: RegistryTypes = {
       Success: "Vec<Vec<u8>>",
       NotAnMsp: null
     }
+  },
+  StopStoringFileResult: {
+    _enum: {
+      Success: null,
+      NotABsp: null,
+      BlockchainServiceNotAvailable: null
+    }
   }
 };
 

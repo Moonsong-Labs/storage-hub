@@ -1525,9 +1525,21 @@ where
         (Runtime::Hash, tokio::sync::mpsc::Receiver<String>),
         SubmitAndWatchError,
     > {
+        // Acquire read lock on rpc_handlers
+        let rpc_handlers_guard = self.rpc_handlers.read().await;
+        let rpc_handlers = rpc_handlers_guard.as_ref().ok_or_else(|| {
+            error!(
+                target: LOG_TARGET,
+                "RPC handlers not yet available for transaction with nonce {}",
+                nonce
+            );
+            SubmitAndWatchError::RpcTransport {
+                message: "RPC handlers not yet available".to_string(),
+            }
+        })?;
+
         // Submit the transaction via RPC
-        let (result, rx) = match self
-            .rpc_handlers
+        let (result, rx) = match rpc_handlers
             .rpc_query(&format!(
                 r#"{{
                     "jsonrpc": "2.0",

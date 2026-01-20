@@ -290,6 +290,17 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       description: "Get the current price per giga unit per tick from the payment streams pallet",
       params: [],
       type: "u128"
+    },
+    stopStoringFile: {
+      description:
+        "Stop storing a file as a BSP. This initiates the two-phase stop storing process.",
+      params: [
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "StopStoringFileResult"
     }
   }
 };
