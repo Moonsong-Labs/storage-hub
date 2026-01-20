@@ -461,6 +461,10 @@ where
         keys
     }
 
+    pub fn query_min_wait_for_stop_storing() -> TickNumber<T> {
+        T::MinWaitForStopStoring::get()
+    }
+
     fn query_confirm_chunks_to_prove_for_file(
         provider_id: ProviderIdFor<T>,
         storage_request_metadata: StorageRequestMetadata<T>,

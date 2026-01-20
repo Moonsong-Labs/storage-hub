@@ -759,6 +759,10 @@ impl_runtime_apis! {
         fn get_max_batch_confirm_storage_requests() -> u32 {
             FileSystem::get_max_batch_confirm_storage_requests()
         }
+
+        fn query_min_wait_for_stop_storing() -> BlockNumber {
+            FileSystem::query_min_wait_for_stop_storing()
+        }
     }
 
     impl pallet_payment_streams_runtime_api::PaymentStreamsApi<Block, ProviderIdFor<Runtime>, Balance, AccountId> for Runtime {
