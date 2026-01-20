@@ -74,7 +74,7 @@ where
 
 /// Handles the [`RequestBspStopStoring`] event.
 ///
-/// This event is triggered by the RPC method `requestBspStopStoring` to initiate
+/// This event is triggered by the RPC method `stopStoringFile` to initiate
 /// the stop storing process for a file.
 ///
 /// This handler performs the following actions:
@@ -106,18 +106,19 @@ where
             .await
             .ok_or_else(|| anyhow!("CRITICAL: Failed to get forest storage."))?;
 
+        // Acquire a read lock on the forest storage.
+        let fs = read_fs.read().await;
+
         // Get file metadata from forest storage.
-        let file_metadata = {
-            let fs = read_fs.read().await;
-            fs.get_file_metadata(&file_key)?
-                .ok_or_else(|| anyhow!("File key [{:x}] not found in forest storage", file_key))?
-        };
+        let file_metadata = fs
+            .get_file_metadata(&file_key)?
+            .ok_or_else(|| anyhow!("File key [{:x}] not found in forest storage", file_key))?;
 
         // Generate forest inclusion proof.
-        let forest_proof = {
-            let fs = read_fs.read().await;
-            fs.generate_proof(vec![file_key])?
-        };
+        let forest_proof = fs.generate_proof(vec![file_key])?;
+
+        // Drop the read lock on the forest storage.
+        drop(fs);
 
         // Parse file metadata fields.
         let owner_bytes = file_metadata.owner();
@@ -167,30 +168,11 @@ where
             .storage_hub_handler
             .blockchain
             .send_extrinsic(call, options)
-            .await;
-
-        match result {
-            Ok(submitted_ext_info) => {
-                info!(
-                    target: LOG_TARGET,
-                    "Successfully submitted bsp_request_stop_storing for file key [{:x}]. Extrinsic hash: {:?}",
-                    file_key,
-                    submitted_ext_info.hash
-                );
-            }
-            Err(e) => {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to submit bsp_request_stop_storing for file key [{:x}]: {:?}",
-                    file_key,
-                    e
-                );
-                return Err(anyhow!(
-                    "Failed to submit bsp_request_stop_storing: {:?}",
-                    e
-                ));
-            }
-        }
+            .await
+            .map_err(|e| anyhow!("Failed to submit BSP request stop storing: {:?}", e))?
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await
+            .map_err(|e| anyhow!("Failed to watch for success: {:?}", e))?;
 
         Ok(format!(
             "Handled RequestBspStopStoring for file key [{:x}]",
