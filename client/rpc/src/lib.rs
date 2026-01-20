@@ -1478,6 +1478,8 @@ where
         }
     }
 
+    // TODO: Make this RPC method more generic so MSPs can also use it.
+    // TODO: For that, we will need to add an extrinsic for MSPs
     async fn stop_storing_file(
         &self,
         ext: &Extensions,
