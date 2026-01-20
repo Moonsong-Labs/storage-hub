@@ -369,6 +369,10 @@ impl_runtime_apis! {
         fn list_incomplete_storage_request_keys(start_after: Option<H256>, limit: u32) -> Vec<H256> {
             FileSystem::list_incomplete_storage_request_keys(start_after, limit)
         }
+
+        fn query_min_wait_for_stop_storing() -> BlockNumber {
+            FileSystem::query_min_wait_for_stop_storing()
+        }
     }
 
     impl pallet_payment_streams_runtime_api::PaymentStreamsApi<Block, ProviderIdFor<Runtime>, Balance, AccountId> for Runtime {
