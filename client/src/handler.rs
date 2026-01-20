@@ -13,16 +13,16 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBspConfirmStoppedStoring,
-        FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
-        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedStorageRequestRejected, FinalisedTrieRemoveMutationsAppliedForBsp,
-        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, BspRequestedToStopStoringNotification, DistributeFileToBsp,
+        FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
+        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected,
+        FinalisedTrieRemoveMutationsAppliedForBsp, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
+        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
-        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
-        StartMovedBucketDownload, UserWithoutFunds,
+        ProcessSubmitProofRequest, RequestBspStopStoring, SlashableProvider,
+        SpStopStoringInsolventUser, StartMovedBucketDownload, UserWithoutFunds,
     },
     handler::BlockchainServiceConfig,
     BlockchainService,
@@ -45,6 +45,7 @@ use crate::{
         bsp_delete_file::BspDeleteFileTask,
         bsp_download_file::BspDownloadFileTask,
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
+        bsp_stop_storing::BspStopStoringTask,
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
         fisherman_process_batch_deletions::FishermanTask,
@@ -409,6 +410,12 @@ where
                 MoveBucketExpired<Runtime> => BspMoveBucketTask,
                 FinalisedBspConfirmStoppedStoring<Runtime> => BspDeleteFileTask,
                 FinalisedTrieRemoveMutationsAppliedForBsp<Runtime> => BspDeleteFileTask,
+                // BspStopStoringTask handles the two-phase stop storing process for BSPs.
+                // RequestBspStopStoring is triggered by the RPC to initiate the process.
+                // BspRequestedToStopStoringNotification is emitted when the on-chain event is detected,
+                // triggering the confirmation after the minimum wait period.
+                RequestBspStopStoring => BspStopStoringTask,
+                BspRequestedToStopStoringNotification<Runtime> => BspStopStoringTask,
             ]
         );
 

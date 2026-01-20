@@ -21,6 +21,7 @@ use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvidersRuntimeApi;
 use sc_rpc_api::check_if_safe;
 use shc_actors_framework::actor::ActorHandle;
+use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, BlockchainService};
 use shc_common::{
     blockchain_utils::get_provider_id_from_keystore,
     consts::CURRENT_FOREST_KEY,
@@ -58,6 +59,7 @@ pub struct RpcConfig {
 
 pub struct StorageHubClientRpcConfig<FL, FSH, Runtime>
 where
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     pub file_storage: Arc<RwLock<FL>>,
@@ -65,11 +67,13 @@ where
     pub keystore: KeystorePtr,
     pub config: RpcConfig,
     pub file_transfer: ActorHandle<FileTransferService<Runtime>>,
+    pub blockchain: Option<ActorHandle<BlockchainService<FSH, Runtime>>>,
     _runtime: PhantomData<Runtime>,
 }
 
-impl<FL, FSH: Clone, Runtime> Clone for StorageHubClientRpcConfig<FL, FSH, Runtime>
+impl<FL, FSH, Runtime> Clone for StorageHubClientRpcConfig<FL, FSH, Runtime>
 where
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> Self {
@@ -79,6 +83,7 @@ where
             keystore: self.keystore.clone(),
             config: self.config.clone(),
             file_transfer: self.file_transfer.clone(),
+            blockchain: self.blockchain.clone(),
             _runtime: PhantomData,
         }
     }
@@ -87,7 +92,7 @@ where
 impl<FL, FSH, Runtime> StorageHubClientRpcConfig<FL, FSH, Runtime>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Runtime> + Send + Sync,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(
@@ -103,12 +108,21 @@ where
             keystore,
             config,
             file_transfer,
+            blockchain: None,
             _runtime: PhantomData,
         }
     }
 
     pub fn with_remote_file_config(mut self, config: RemoteFileConfig) -> Self {
         self.config.remote_file = config;
+        self
+    }
+
+    pub fn with_blockchain(
+        mut self,
+        blockchain: ActorHandle<BlockchainService<FSH, Runtime>>,
+    ) -> Self {
+        self.blockchain = Some(blockchain);
         self
     }
 }
@@ -175,6 +189,17 @@ pub enum RpcProviderId {
 pub enum GetValuePropositionsResult {
     Success(Vec<Vec<u8>>),
     NotAnMsp,
+}
+
+/// Result of requesting a BSP to stop storing a file.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum StopStoringFileResult {
+    /// The request was successfully initiated.
+    Success,
+    /// This node is not a BSP.
+    NotABsp,
+    /// The blockchain service is not available.
+    BlockchainServiceNotAvailable,
 }
 
 /// Provides an interface with the desired RPC method.
@@ -363,11 +388,26 @@ pub trait StorageHubClientApi {
     /// Get the value propositions of the node if it's an MSP, or None if it's a BSP
     #[method(name = "getValuePropositions", with_extensions)]
     async fn get_value_propositions(&self) -> RpcResult<GetValuePropositionsResult>;
+
+    /// Stop storing a file.
+    ///
+    /// This initiates the two-phase stop storing process:
+    /// 1. Calls `bsp_request_stop_storing` with the file's metadata and inclusion proof
+    /// 2. Waits for the minimum required time (`MinWaitForStopStoring`)
+    /// 3. Automatically calls `bsp_confirm_stop_storing` to complete the process
+    ///
+    /// This method is only available for BSP nodes.
+    #[method(name = "stopStoringFile", with_extensions)]
+    async fn stop_storing_file(
+        &self,
+        file_key: shp_types::Hash,
+    ) -> RpcResult<StopStoringFileResult>;
 }
 
 /// Stores the required objects to be used in our RPC method.
 pub struct StorageHubClientRpc<FL, FSH, Runtime, Block>
 where
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
@@ -376,6 +416,7 @@ where
     keystore: KeystorePtr,
     config: RpcConfig,
     file_transfer: ActorHandle<FileTransferService<Runtime>>,
+    blockchain: Option<ActorHandle<BlockchainService<FSH, Runtime>>>,
     _block_marker: std::marker::PhantomData<Block>,
 }
 
@@ -383,7 +424,7 @@ impl<FL, FSH, Runtime, Block> StorageHubClientRpc<FL, FSH, Runtime, Block>
 where
     Runtime: StorageEnableRuntime,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Runtime> + Send + Sync,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
 {
     pub fn new(
         client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
@@ -396,6 +437,7 @@ where
             keystore: storage_hub_client_rpc_config.keystore,
             config: storage_hub_client_rpc_config.config,
             file_transfer: storage_hub_client_rpc_config.file_transfer,
+            blockchain: storage_hub_client_rpc_config.blockchain,
             _block_marker: Default::default(),
         }
     }
@@ -411,7 +453,7 @@ impl<FL, FSH, Runtime> StorageHubClientApiServer
 where
     Runtime: StorageEnableRuntime,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Runtime> + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
 {
     async fn load_file_in_storage(
         &self,
@@ -1434,6 +1476,40 @@ where
             );
             Ok(GetValuePropositionsResult::NotAnMsp)
         }
+    }
+
+    async fn stop_storing_file(
+        &self,
+        ext: &Extensions,
+        file_key: shp_types::Hash,
+    ) -> RpcResult<StopStoringFileResult> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Check if the blockchain service is available.
+        let blockchain = match &self.blockchain {
+            Some(blockchain) => blockchain,
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "stop_storing_file called but blockchain service is not available"
+                );
+                return Ok(StopStoringFileResult::BlockchainServiceNotAvailable);
+            }
+        };
+
+        info!(
+            target: LOG_TARGET,
+            "stop_storing_file called for file_key=[{:x}]. Emitting RequestBspStopStoring event.",
+            file_key
+        );
+
+        // Emit the event to trigger the BspStopStoringTask.
+        blockchain
+            .emit_request_bsp_stop_storing(file_key.into())
+            .await;
+
+        Ok(StopStoringFileResult::Success)
     }
 }
 

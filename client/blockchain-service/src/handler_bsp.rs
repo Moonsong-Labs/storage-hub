@@ -27,10 +27,10 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     events::{
-        FinalisedBspConfirmStoppedStoring, FinalisedTrieRemoveMutationsAppliedForBsp,
-        ForestWriteLockTaskData, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MultipleNewChallengeSeeds, NewStorageRequest,
-        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
+        BspRequestedToStopStoringNotification, FinalisedBspConfirmStoppedStoring,
+        FinalisedTrieRemoveMutationsAppliedForBsp, ForestWriteLockTaskData, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MultipleNewChallengeSeeds,
+        NewStorageRequest, ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
@@ -193,6 +193,22 @@ where
                     bucket_id,
                     new_msp_id,
                 });
+            }
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::BspRequestedToStopStoring {
+                    bsp_id,
+                    file_key,
+                    owner: _,
+                    location: _,
+                },
+            ) => {
+                // Emit the notification if this is for our BSP, so the task can schedule the confirmation.
+                if managed_bsp_id == &bsp_id {
+                    self.emit(BspRequestedToStopStoringNotification {
+                        bsp_id,
+                        file_key: file_key.into(),
+                    });
+                }
             }
             // Ignore all other events.
             _ => {}

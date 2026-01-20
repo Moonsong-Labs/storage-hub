@@ -106,7 +106,8 @@ import type {
   LoadFileInStorageResult,
   RemoveFilesFromForestStorageResult,
   RpcProviderId,
-  SaveFileToDisk
+  SaveFileToDisk,
+  StopStoringFileResult
 } from "@storagehub/api-augment/solochain-evm/interfaces/storagehubclient";
 
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
@@ -1227,6 +1228,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           file_key: H256 | string | Uint8Array,
           file_path: Text | string
         ) => Observable<SaveFileToDisk>
+      >;
+      /**
+       * Stop storing a file as a BSP. This initiates the two-phase stop storing process.
+       **/
+      stopStoringFile: AugmentedRpc<
+        (file_key: H256 | string | Uint8Array) => Observable<StopStoringFileResult>
       >;
     };
     syncstate: {

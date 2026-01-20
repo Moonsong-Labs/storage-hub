@@ -1423,6 +1423,7 @@ import type {
   RpcProviderId,
   SaveFileToDisk,
   ShouldRemoveFile,
+  StopStoringFileResult,
   StorageDataUnit,
   StorageProviderId,
   StorageRequestMetadata,
@@ -2560,6 +2561,7 @@ declare module "@polkadot/types/types/registry" {
     StatementStoreInvalidStatement: StatementStoreInvalidStatement;
     StatementStoreStatementSource: StatementStoreStatementSource;
     StatementStoreValidStatement: StatementStoreValidStatement;
+    StopStoringFileResult: StopStoringFileResult;
     StorageChangeSet: StorageChangeSet;
     StorageData: StorageData;
     StorageDataUnit: StorageDataUnit;
