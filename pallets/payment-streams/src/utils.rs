@@ -166,11 +166,6 @@ where
             Error::<T>::NotAProvider
         );
 
-        // We do not allow updating a payment stream if the provider is insolvent
-        if <T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(*provider_id) {
-            return Err(Error::<T>::ProviderInsolvent.into());
-        }
-
         // Ensure that the new rate is not 0 (should use remove_fixed_rate_payment_stream instead)
         ensure!(new_rate != Zero::zero(), Error::<T>::RateCantBeZero);
 
@@ -424,11 +419,6 @@ where
             <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
-
-        // We do not allow updating a payment stream if the provider is insolvent
-        if <T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(*provider_id) {
-            return Err(Error::<T>::ProviderInsolvent.into());
-        }
 
         // Ensure that the new amount provided is not 0 (should use remove_dynamic_rate_payment_stream instead)
         ensure!(
