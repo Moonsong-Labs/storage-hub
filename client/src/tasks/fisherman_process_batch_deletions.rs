@@ -29,6 +29,7 @@
 
 use anyhow::anyhow;
 use codec::Decode;
+use frame_support::BoundedVec;
 use futures::future::join_all;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
@@ -38,9 +39,9 @@ use shc_blockchain_service::{
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        BackupStorageProviderId, BucketId, DisplayHexListExt, FileDeletionRequest,
-        ForestProof as CommonForestProof, OffchainSignature, StorageProofsMerkleTrieLayout,
-        StorageProviderId,
+        BackupStorageProviderId, BucketId, DisplayHexListExt, FileDeletionRequest, FileMetadata,
+        Fingerprint, ForestProof as CommonForestProof, MaxFileDeletionsPerExtrinsic,
+        OffchainSignature, StorageProofsMerkleTrieLayout, StorageProviderId,
     },
 };
 use shc_fisherman_service::{
@@ -306,12 +307,29 @@ where
         files: Vec<BatchFileDeletionData<Runtime>>,
         deletion_type: shc_indexer_db::models::FileDeletionType,
     ) -> anyhow::Result<()> {
-        let file_keys: Vec<_> = files.iter().map(|f| f.file_key).collect();
+        // Convert to BoundedVec, truncating if necessary.
+        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
+        // performs only a single comparison and returns early. If equal, it does minimal pointer
+        // arithmetic but no elements are dropped (no-op).
+        let original_len = files.len();
+        let files_bounded: BoundedVec<_, MaxFileDeletionsPerExtrinsic<Runtime>> =
+            BoundedVec::truncate_from(files);
+        if files_bounded.len() < original_len {
+            info!(
+                target: LOG_TARGET,
+                "🎣 Target {:?} has {} files, truncating to {} for this cycle. Remaining files will be processed in subsequent cycles.",
+                target,
+                original_len,
+                files_bounded.len()
+            );
+        }
+
+        let file_keys: Vec<_> = files_bounded.iter().map(|f| f.file_key).collect();
 
         info!(
             target: LOG_TARGET,
             "🎣 Processing {} files for target {:?}: [{}]",
-            files.len(),
+            files_bounded.len(),
             target,
             file_keys.display_hex_list()
         );
@@ -325,7 +343,7 @@ where
 
         // Filter files to only include those with valid file keys
         // This ensures we only submit extrinsics for files that can be proven
-        let remaining_files: Vec<_> = files
+        let remaining_files: Vec<_> = files_bounded
             .into_iter()
             .filter(|f| remaining_file_keys.contains(&f.file_key))
             .collect();
@@ -518,57 +536,48 @@ where
             last_indexed_finalized_block
         );
 
-        // Fetch all file keys for the deletion target from finalized data
-        let all_file_keys = match &deletion_target {
+        // Fetch all files for the deletion target from finalized data (single query)
+        let all_files = match &deletion_target {
             FileDeletionTarget::BspId(bsp_id) => {
                 // Convert H256 to OnchainBspId for database query
                 let onchain_bsp_id = shc_indexer_db::OnchainBspId::from(*bsp_id);
-                shc_indexer_db::models::BspFile::get_all_file_keys_for_bsp(
-                    &mut conn,
-                    onchain_bsp_id,
-                )
-                .await
-                .map_err(|e| anyhow!("Failed to get all file keys for BSP: {:?}", e))?
+                shc_indexer_db::models::BspFile::get_all_files_for_bsp(&mut conn, onchain_bsp_id)
+                    .await
+                    .map_err(|e| anyhow!("Failed to get all files for BSP: {:?}", e))?
             }
             FileDeletionTarget::BucketId(bucket_id) => {
                 // Only get files that are in the bucket's forest
-                shc_indexer_db::models::file::File::get_all_file_keys_for_bucket(
+                shc_indexer_db::models::file::File::get_all_files_for_bucket(
                     &mut conn,
                     bucket_id.as_ref(),
                     Some(true),
                 )
                 .await
-                .map_err(|e| anyhow!("Failed to get all file keys for bucket: {:?}", e))?
+                .map_err(|e| anyhow!("Failed to get all files for bucket: {:?}", e))?
             }
         };
 
-        // Fetch all files and convert to FileMetadata
-        let mut all_file_metadatas = Vec::new();
-        for key in &all_file_keys {
-            let file_records = shc_indexer_db::models::File::get_by_file_key(&mut conn, key)
-                .await
-                .map_err(|e| anyhow!("Failed to get file records: {:?}", e))?;
-
-            // There can be multiple file records for a given file key if there were multiple
-            // storage requests for the same file key. Any of them is good to use to get the file metadata,
-            // so we just pick the first one.
-            let file = file_records
-                .first()
-                .ok_or_else(|| anyhow!("No file records found for file key: {:?}", key))?;
-
-            let metadata = file
-                .to_file_metadata(file.onchain_bucket_id.clone())
-                .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
-
-            all_file_metadatas.push(metadata);
-        }
+        // Convert to file metadata for forest operations
+        let all_file_metadatas: Vec<_> = all_files
+            .iter()
+            .map(|f| {
+                FileMetadata::new(
+                    f.account.clone(),
+                    f.onchain_bucket_id.clone(),
+                    f.location.clone(),
+                    f.size as u64,
+                    Fingerprint::from(f.fingerprint.as_slice()),
+                )
+            })
+            .collect::<Result<_, _>>()
+            .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
 
         drop(conn);
 
         trace!(
             target: LOG_TARGET,
             "Building ephemeral trie with {} file keys from finalized data",
-            all_file_keys.len(),
+            all_file_metadatas.len(),
         );
 
         // Create ephemeral in-memory forest storage
@@ -736,7 +745,6 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
-        // Build Vec<FileDeletionRequest> for all files in the batch
         let mut file_deletion_requests = Vec::new();
         for file in files.iter() {
             // Extract signature and signed_intention from BatchFileDeletionData
@@ -773,14 +781,26 @@ where
             file_deletion_requests.push(file_deletion);
         }
 
-        // Convert to BoundedVec
-        let file_deletions = file_deletion_requests
-            .try_into()
-            .map_err(|_| anyhow!("Batch size exceeds MaxFileDeletionsPerExtrinsic limit"))?;
+        // Convert to runtime's expected BoundedVec,
+        // truncating if necessary (should not be needed since we truncate earlier).
+        let original_len = file_deletion_requests.len();
+        let file_deletion_requests_bounded: BoundedVec<
+            FileDeletionRequest<Runtime>,
+            MaxFileDeletionsPerExtrinsic<Runtime>,
+        > = BoundedVec::truncate_from(file_deletion_requests);
+        let file_deletion_requests_bounded_len = file_deletion_requests_bounded.len();
+        if file_deletion_requests_bounded_len < original_len {
+            warn!(
+                target: LOG_TARGET,
+                "🎣 File deletion requests were truncated from {} to {} - this should not happen as truncation should occur earlier in the processing pipeline",
+                original_len,
+                file_deletion_requests_bounded_len
+            );
+        }
 
         // Build the delete_files extrinsic call
         let call = pallet_file_system::Call::<Runtime>::delete_files {
-            file_deletions,
+            file_deletions: file_deletion_requests_bounded,
             bsp_id: maybe_bsp_id,
             forest_proof: forest_proof.proof,
         };
@@ -801,7 +821,7 @@ where
                 error!(
                     target: LOG_TARGET,
                     "Failed to submit delete_files extrinsic for {} files: {:?}",
-                    files.len(),
+                    file_deletion_requests_bounded_len,
                     e
                 );
                 anyhow!("Failed to submit delete_files extrinsic: {:?}", e)
@@ -810,7 +830,7 @@ where
         info!(
             target: LOG_TARGET,
             "🎣 Successfully submitted delete_files extrinsic for {} files",
-            files.len()
+            file_deletion_requests_bounded_len
         );
 
         Ok(())
@@ -837,11 +857,20 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
-        // Convert file keys to the required format and wrap in BoundedVec
-        let file_keys_vec: Vec<_> = file_keys.iter().map(|k| (*k).into()).collect();
-        let file_keys_bounded = file_keys_vec
-            .try_into()
-            .map_err(|_| anyhow!("Batch size exceeds MaxFileDeletionsPerExtrinsic limit"))?;
+        // Convert to runtime's expected BoundedVec,
+        // truncating if necessary (should not be needed since we truncate earlier).
+        let original_len = file_keys.len();
+        let file_keys_bounded: BoundedVec<Runtime::Hash, MaxFileDeletionsPerExtrinsic<Runtime>> =
+            BoundedVec::truncate_from(file_keys.to_vec());
+        let file_keys_bounded_len = file_keys_bounded.len();
+        if file_keys_bounded_len < original_len {
+            warn!(
+                target: LOG_TARGET,
+                "🎣 File keys were truncated from {} to {} - this should not happen as truncation should occur earlier in the processing pipeline",
+                original_len,
+                file_keys_bounded_len
+            );
+        }
 
         // Build the delete_files_for_incomplete_storage_request extrinsic call
         let call =
@@ -867,7 +896,7 @@ where
                 error!(
                     target: LOG_TARGET,
                     "Failed to submit delete_files_for_incomplete_storage_request extrinsic for {} files: {:?}",
-                    file_keys.len(),
+                    file_keys_bounded_len,
                     e
                 );
                 anyhow!(
@@ -879,7 +908,7 @@ where
         info!(
             target: LOG_TARGET,
             "🎣 Successfully submitted delete_files_for_incomplete_storage_request extrinsic for {} files",
-            file_keys.len()
+            file_keys_bounded_len
         );
 
         Ok(())

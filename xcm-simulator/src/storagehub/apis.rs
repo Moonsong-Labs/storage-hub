@@ -382,6 +382,9 @@ impl_runtime_apis! {
         fn get_users_of_payment_streams_of_provider(provider_id: &ProviderIdFor<Runtime>) -> Vec<AccountId> {
             PaymentStreams::get_users_of_payment_streams_of_provider(provider_id)
         }
+        fn get_number_of_active_users_of_provider(provider_id: &ProviderIdFor<Runtime>) -> u32 {
+            PaymentStreams::get_number_of_active_users_of_provider(provider_id)
+        }
         fn get_providers_with_payment_streams_with_user(user_account: &AccountId) -> Vec<ProviderIdFor<Runtime>> {
             PaymentStreams::get_providers_with_payment_streams_with_user(user_account)
         }

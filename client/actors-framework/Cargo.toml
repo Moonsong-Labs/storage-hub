@@ -25,3 +25,5 @@ sc-utils = { workspace = true }
 
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
+
+shc-telemetry = { workspace = true }
