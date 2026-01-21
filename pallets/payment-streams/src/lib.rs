@@ -273,12 +273,21 @@ pub mod pallet {
 
     // Events & Errors:
 
-    /// The events that can be emitted by this pallet
+    /// The events that can be emitted by this pallet.
+    ///
+    /// # Event Encoding Stability
+    ///
+    /// All event variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Event emitted when a fixed-rate payment stream is created. Provides information about the Provider and User of the stream
         /// and its initial rate.
+        #[codec(index = 0)]
         FixedRatePaymentStreamCreated {
             user_account: T::AccountId,
             provider_id: ProviderIdFor<T>,
@@ -286,18 +295,21 @@ pub mod pallet {
         },
         /// Event emitted when a fixed-rate payment stream is updated. Provides information about the User and Provider of the stream
         /// and the new rate of the stream.
+        #[codec(index = 1)]
         FixedRatePaymentStreamUpdated {
             user_account: T::AccountId,
             provider_id: ProviderIdFor<T>,
             new_rate: BalanceOf<T>,
         },
         /// Event emitted when a fixed-rate payment stream is removed. Provides information about the User and Provider of the stream.
+        #[codec(index = 2)]
         FixedRatePaymentStreamDeleted {
             user_account: T::AccountId,
             provider_id: ProviderIdFor<T>,
         },
         /// Event emitted when a dynamic-rate payment stream is created. Provides information about the User and Provider of the stream
         /// and the initial amount provided.
+        #[codec(index = 3)]
         DynamicRatePaymentStreamCreated {
             user_account: T::AccountId,
             provider_id: ProviderIdFor<T>,
@@ -305,18 +317,21 @@ pub mod pallet {
         },
         /// Event emitted when a dynamic-rate payment stream is updated. Provides information about the User and Provider of the stream
         /// and the new amount provided.
+        #[codec(index = 4)]
         DynamicRatePaymentStreamUpdated {
             user_account: T::AccountId,
             provider_id: ProviderIdFor<T>,
             new_amount_provided: UnitsProvidedFor<T>,
         },
         /// Event emitted when a dynamic-rate payment stream is removed. Provides information about the User and Provider of the stream.
+        #[codec(index = 5)]
         DynamicRatePaymentStreamDeleted {
             user_account: T::AccountId,
             provider_id: ProviderIdFor<T>,
         },
         /// Event emitted when a payment is charged. Provides information about the user that was charged,
         /// the Provider that received the funds, the tick up to which it was charged and the amount that was charged.
+        #[codec(index = 6)]
         PaymentStreamCharged {
             user_account: T::AccountId,
             provider_id: ProviderIdFor<T>,
@@ -326,6 +341,7 @@ pub mod pallet {
         },
         /// Event emitted when multiple payment streams have been charged from a Provider. Provides information about
         /// the charged users, the Provider that received the funds and the tick when the charge happened.
+        #[codec(index = 7)]
         UsersCharged {
             user_accounts: BoundedVec<T::AccountId, T::MaxUsersToCharge>,
             provider_id: ProviderIdFor<T>,
@@ -333,6 +349,7 @@ pub mod pallet {
         },
         /// Event emitted when a Provider's last chargeable tick and price index are updated. Provides information about the Provider of the stream,
         /// the tick number of the last chargeable tick and the price index at that tick.
+        #[codec(index = 8)]
         LastChargeableInfoUpdated {
             provider_id: ProviderIdFor<T>,
             last_chargeable_tick: BlockNumberFor<T>,
@@ -341,59 +358,90 @@ pub mod pallet {
         /// Event emitted when a Provider is correctly trying to charge a User and that User does not have enough funds to pay for their services.
         /// This event is emitted to flag the user and let the network know that the user is not paying for the requested services, so other Providers can
         /// stop providing services to that user.
+        #[codec(index = 9)]
         UserWithoutFunds { who: T::AccountId },
         /// Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid all its outstanding debt.
+        #[codec(index = 10)]
         UserPaidAllDebts { who: T::AccountId },
         /// Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid some (but not all) of its outstanding debt.
+        #[codec(index = 11)]
         UserPaidSomeDebts { who: T::AccountId },
         /// Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has waited the cooldown period,
         /// correctly paid all their outstanding debt and can now contract new services again.
+        #[codec(index = 12)]
         UserSolvent { who: T::AccountId },
         /// Event emitted when the `on_poll` hook detects that the tick of the proof submitters that needs to process is not the one immediately after the last processed tick.
+        #[codec(index = 13)]
         InconsistentTickProcessing {
             last_processed_tick: BlockNumberFor<T>,
             tick_to_process: BlockNumberFor<T>,
         },
     }
 
-    /// The errors that can be thrown by this pallet to inform users about what went wrong
+    /// The errors that can be thrown by this pallet to inform users about what went wrong.
+    ///
+    /// # Error Encoding Stability
+    ///
+    /// All error variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::error]
     pub enum Error<T> {
         /// Error thrown when a user of this pallet tries to add a payment stream that already exists.
+        #[codec(index = 0)]
         PaymentStreamAlreadyExists,
         /// Error thrown when a user of this pallet tries to update, remove or charge a payment stream that does not exist.
+        #[codec(index = 1)]
         PaymentStreamNotFound,
         /// Error thrown when a user tries to charge a payment stream and it's not a registered Provider
+        #[codec(index = 2)]
         NotAProvider,
         /// Error thrown when failing to get the payment account of a registered Provider
+        #[codec(index = 3)]
         ProviderInconsistencyError,
         /// Error thrown when the system can't hold funds from the User as a deposit for creating a new payment stream
+        #[codec(index = 4)]
         CannotHoldDeposit,
         /// Error thrown when trying to update the rate of a fixed-rate payment stream to the same rate as before
+        #[codec(index = 5)]
         UpdateRateToSameRate,
         /// Error thrown when trying to update the amount provided of a dynamic-rate payment stream to the same amount as before
+        #[codec(index = 6)]
         UpdateAmountToSameAmount,
         /// Error thrown when trying to create a new fixed-rate payment stream with rate 0 or update the rate of an existing one to 0 (should use remove_fixed_rate_payment_stream instead)
+        #[codec(index = 7)]
         RateCantBeZero,
         /// Error thrown when trying to create a new dynamic-rate payment stream with amount provided 0 or update the amount provided of an existing one to 0 (should use remove_dynamic_rate_payment_stream instead)
+        #[codec(index = 8)]
         AmountProvidedCantBeZero,
         /// Error thrown when the tick number of when the payment stream was last charged is greater than the tick number of the last chargeable tick
+        #[codec(index = 9)]
         LastChargedGreaterThanLastChargeable,
         /// Error thrown when the new last chargeable tick number that is trying to be set is greater than the current tick number or smaller than the previous last chargeable tick number
+        #[codec(index = 10)]
         InvalidLastChargeableBlockNumber,
         /// Error thrown when the new last chargeable price index that is trying to be set is greater than the current price index or smaller than the previous last chargeable price index
+        #[codec(index = 11)]
         InvalidLastChargeablePriceIndex,
         /// Error thrown when charging a payment stream would result in an overflow of the balance type
+        #[codec(index = 12)]
         ChargeOverflow,
         /// Error thrown when trying to operate when the User has been flagged for not having enough funds.
+        #[codec(index = 13)]
         UserWithoutFunds,
         /// Error thrown when a user that has not been flagged as without funds tries to use the extrinsic to pay its outstanding debt
+        #[codec(index = 14)]
         UserNotFlaggedAsWithoutFunds,
         /// Error thrown when a user tries to clear the flag of being without funds before the cooldown period has passed
+        #[codec(index = 15)]
         CooldownPeriodNotPassed,
         /// Error thrown when a user tries to clear the flag of being without funds before paying all its remaining debt
+        #[codec(index = 16)]
         UserHasRemainingDebt,
         /// Error thrown when a charge is attempted when the provider is marked as insolvent
+        #[codec(index = 17)]
         ProviderInsolvent,
     }
 

@@ -121,31 +121,45 @@ pub mod pallet {
         type WeightInfo: WeightInfo;
     }
 
+    /// The events that can be emitted by this pallet.
+    ///
+    /// # Event Encoding Stability
+    ///
+    /// All event variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::event]
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Event emitted when a Provider's CR cycle has been initialised. It has the information about its first deadline for a seed commitment.
+        #[codec(index = 0)]
         ProviderCycleInitialised {
             provider_id: ProviderIdFor<T>,
             first_seed_commitment_deadline_tick: BlockNumberFor<T>,
         },
 
         /// Event emitted when a Provider's CR cycle has been stopped. It has the information about the Provider ID.
+        #[codec(index = 1)]
         ProviderCycleStopped { provider_id: ProviderIdFor<T> },
 
         /// Event emitted when a Provider submits their first seed commitment.
+        #[codec(index = 2)]
         ProviderInitialisedRandomness {
             first_seed_commitment: T::SeedCommitment,
             next_deadline_tick: BlockNumberFor<T>,
         },
 
         /// Event emitted when a Provider gets marked as slashable for not submitting their seed reveal and new commitment in time.
+        #[codec(index = 3)]
         ProviderMarkedAsSlashable {
             provider_id: ProviderIdFor<T>,
             next_deadline: BlockNumberFor<T>,
         },
 
         /// Event emitted when a Provider correctly reveals their previous randomness seed and commits a new one.
+        #[codec(index = 4)]
         RandomnessCommitted {
             previous_randomness_revealed: T::Seed,
             valid_from_tick: BlockNumberFor<T>,
@@ -154,27 +168,46 @@ pub mod pallet {
         },
     }
 
+    /// The errors that can be thrown by this pallet to inform users about what went wrong.
+    ///
+    /// # Error Encoding Stability
+    ///
+    /// All error variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::error]
     pub enum Error<T> {
         /// Provider ID provided by the caller is not valid
+        #[codec(index = 0)]
         ProviderIdNotValid,
         /// Caller not owner of the Provider ID
+        #[codec(index = 1)]
         CallerNotOwner,
         /// Seed provided by the storage provider is not valid
+        #[codec(index = 2)]
         NotAValidSeed,
         /// We cannot find corresponding end tick for provided seed commitment
+        #[codec(index = 3)]
         NoEndTickForSeedCommitment,
         /// Provider is early in submitting the seed commitment
+        #[codec(index = 4)]
         EarlySubmissionOfSeed,
         /// Storage provider is late in submitting the seed commitment
+        #[codec(index = 5)]
         LateSubmissionOfSeed,
         /// Seed reveal is missing
+        #[codec(index = 6)]
         MissingSeedReveal,
         /// Seed commitment is already in the list of pending commitments
+        #[codec(index = 7)]
         NewCommitmentAlreadyPending,
         /// We are not able to convert tick number to u32 for arithmetic
+        #[codec(index = 8)]
         UnableToConvertTickNumberForArithmetic,
         /// We encountered an error while modifying seed queue
+        #[codec(index = 9)]
         QueueError(queue::QueueError),
     }
 

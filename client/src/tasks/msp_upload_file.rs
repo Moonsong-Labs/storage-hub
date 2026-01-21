@@ -1500,7 +1500,7 @@ where
                             "Failed to decode module error: {:?}",
                             e
                         );
-                        return Err(anyhow!("Failed to decode module error: {:?}", e));
+                        return Err(anyhow!("Failed to decode module error. This likely indicates a breaking change in a possible runtime upgrade since a new error variant was encountered and cannot be decoded. Underlying error: {:?}", e));
                     }
                 }
             }

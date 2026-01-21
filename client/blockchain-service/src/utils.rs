@@ -1637,21 +1637,25 @@ where
     /// all blocks in [`TreeRoute::route`] are "enacted" blocks.
     /// For reorgs, `tree_route` should be one such that [`TreeRoute::pivot`] is not 0, therefore
     /// some blocks in [`TreeRoute::route`] are "retracted" blocks and some are "enacted" blocks.
-    pub(crate) async fn forest_root_changes_catchup<Block>(&mut self, tree_route: &TreeRoute<Block>)
+    pub(crate) async fn forest_root_changes_catchup<Block>(
+        &mut self,
+        tree_route: &TreeRoute<Block>,
+    ) -> Result<()>
     where
         Block: BlockT<Hash = Runtime::Hash>,
     {
         // Retracted blocks, i.e. the blocks from the `TreeRoute` that are reverted in the reorg.
         for block in tree_route.retracted() {
-            self.apply_forest_root_changes(block, true).await;
+            self.apply_forest_root_changes(block, true).await?;
         }
 
         // Enacted blocks, i.e. the blocks from the `TreeRoute` that are applied in the reorg.
         for block in tree_route.enacted() {
-            self.apply_forest_root_changes(block, false).await;
+            self.apply_forest_root_changes(block, false).await?;
         }
 
         trace!(target: LOG_TARGET, "Applied Forest root changes for tree route {:?}", tree_route);
+        Ok(())
     }
 
     /// Gets the next tick for which a Provider (BSP) should submit a proof.
@@ -1700,7 +1704,11 @@ where
     /// Two kinds of events are handled:
     /// 1. [`pallet_proofs_dealer::Event::MutationsAppliedForProvider`]: for mutations applied to a BSP.
     /// 2. [`pallet_proofs_dealer::Event::MutationsApplied`]: for mutations applied to the Buckets of an MSP.
-    async fn apply_forest_root_changes<Block>(&mut self, block: &HashAndNumber<Block>, revert: bool)
+    async fn apply_forest_root_changes<Block>(
+        &mut self,
+        block: &HashAndNumber<Block>,
+        revert: bool,
+    ) -> Result<()>
     where
         Block: BlockT<Hash = Runtime::Hash>,
     {
@@ -1711,34 +1719,31 @@ where
         }
 
         // Process the events in the block, specifically those that are related to the Forest root changes.
-        match get_events_at_block::<Runtime>(&self.client, &block.hash) {
-            Ok(events) => {
-                for ev in events {
-                    if let Some(managed_provider) = &self.maybe_managed_provider {
-                        match managed_provider {
-                            ManagedProvider::Bsp(_) => {
-                                self.bsp_process_forest_root_changing_events(
-                                    ev.event.clone().into(),
-                                    revert,
-                                )
-                                .await;
-                            }
-                            ManagedProvider::Msp(_) => {
-                                self.msp_process_forest_root_changing_events(
-                                    &block.hash,
-                                    ev.event.clone().into(),
-                                    revert,
-                                )
-                                .await;
-                            }
-                        }
+        let events = get_events_at_block::<Runtime>(&self.client, &block.hash)?;
+
+        for ev in events {
+            if let Some(managed_provider) = &self.maybe_managed_provider {
+                match managed_provider {
+                    ManagedProvider::Bsp(_) => {
+                        self.bsp_process_forest_root_changing_events(
+                            ev.event.clone().into(),
+                            revert,
+                        )
+                        .await;
+                    }
+                    ManagedProvider::Msp(_) => {
+                        self.msp_process_forest_root_changing_events(
+                            &block.hash,
+                            ev.event.clone().into(),
+                            revert,
+                        )
+                        .await;
                     }
                 }
             }
-            Err(e) => {
-                error!(target: LOG_TARGET, "Failed to get events at block {:?}: {:?}", block.hash, e);
-            }
         }
+
+        Ok(())
     }
 
     /// Applies a set of [`TrieMutation`]s to a Merkle Patricia Forest, and verifies the new local
@@ -2113,18 +2118,18 @@ where
     ///
     /// Note: For blocks imported before they're finalised, finality processing is handled
     /// by `handle_finality_notification` when the finality justification eventually arrives.
-    pub(crate) fn process_finality_events_if_finalised(
+    pub(crate) async fn process_finality_events_if_finalised(
         &mut self,
         block_hash: &Runtime::Hash,
         block_number: BlockNumber<Runtime>,
-    ) {
+    ) -> Result<()> {
         // Get the current finalised block number from the client
         let finalised_number: BlockNumber<Runtime> =
             self.client.info().finalized_number.saturated_into();
 
         // Only process if this block is finalised
         if block_number > finalised_number {
-            return;
+            return Ok(());
         }
 
         info!(
@@ -2133,7 +2138,7 @@ where
             block_number
         );
 
-        self.process_finality_events(block_hash);
+        self.process_finality_events(block_hash).await?;
 
         // Update last_finalised_block_processed if this block is more recent
         if block_number > self.last_finalised_block_processed.number {
@@ -2142,6 +2147,8 @@ where
                 hash: *block_hash,
             };
         }
+
+        Ok(())
     }
 
     /// Process a single block during sync.
@@ -2160,7 +2167,7 @@ where
         &mut self,
         block_hash: &Runtime::Hash,
         block_number: BlockNumber<Runtime>,
-    ) {
+    ) -> Result<()> {
         info!(target: LOG_TARGET, "🛫 Processing initial sync block #{}: {:x}", block_number, block_hash);
 
         // Ensure the provider ID is synced before processing mutations
@@ -2170,18 +2177,19 @@ where
         match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => {
                 let bsp_id = bsp_handler.bsp_id;
-                self.process_bsp_sync_mutations(block_hash, bsp_id).await;
+                self.process_bsp_sync_mutations(block_hash, bsp_id).await?;
             }
             Some(ManagedProvider::Msp(msp_handler)) => {
                 let msp_id = msp_handler.msp_id;
-                self.process_msp_sync_mutations(block_hash, msp_id).await;
+                self.process_msp_sync_mutations(block_hash, msp_id).await?;
             }
             None => {}
         }
 
         // Check if this block is already finalised and process finality events if so
         // This ensures file storage cleanup happens for finalised blocks during sync
-        self.process_finality_events_if_finalised(block_hash, block_number);
+        self.process_finality_events_if_finalised(block_hash, block_number)
+            .await?;
 
         // Update the last processed block in persistent storage for tracking
         self.update_last_processed_block_info(MinimalBlockInfo {
@@ -2190,6 +2198,7 @@ where
         });
 
         info!(target: LOG_TARGET, "🛬 Initial sync block #{}: {:x} processed successfully", block_number, block_hash);
+        Ok(())
     }
 
     /// Process a reorg during sync.
@@ -2204,7 +2213,7 @@ where
         &mut self,
         tree_route: &TreeRoute<OpaqueBlock>,
         new_best_block: MinimalBlockInfo<Runtime>,
-    ) {
+    ) -> Result<()> {
         info!(
             target: LOG_TARGET,
             "🔀 Processing reorg during sync: {} retracted, {} enacted",
@@ -2216,18 +2225,20 @@ where
         self.sync_provider_id(&new_best_block.hash);
 
         // Apply forest root changes for the reorg (revert retracted, apply enacted mutations)
-        self.forest_root_changes_catchup(tree_route).await;
+        self.forest_root_changes_catchup(tree_route).await?;
 
         // Process finality events for enacted blocks
         for block in tree_route.enacted() {
             let block_num: BlockNumber<Runtime> = block.number.saturated_into();
-            self.process_finality_events_if_finalised(&block.hash, block_num);
+            self.process_finality_events_if_finalised(&block.hash, block_num)
+                .await?;
         }
 
         // Update the last processed block to the new best
         self.update_last_processed_block_info(new_best_block);
 
         info!(target: LOG_TARGET, "🔀 Reorg during sync: {} retracted, {} enacted processed successfully", tree_route.retracted().len(), tree_route.enacted().len());
+        Ok(())
     }
 
     /// Process finality events for a given block.
@@ -2238,37 +2249,38 @@ where
     ///
     /// This is called both from `handle_finality_notification` for real-time finality
     /// and from `process_finality_events_if_finalised` during catch-up/sync.
-    pub(crate) fn process_finality_events(&mut self, block_hash: &Runtime::Hash) {
-        match get_events_at_block::<Runtime>(&self.client, block_hash) {
-            Ok(block_events) => {
-                for ev in block_events {
-                    // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
-                    self.process_common_finality_events(ev.event.clone().into());
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if SCALE decoding of `System.Events` fails. This is intentional:
+    /// a decode failure indicates an incompatible runtime upgrade, and the service must halt so
+    /// operators can upgrade the client.
+    pub(crate) async fn process_finality_events(
+        &mut self,
+        block_hash: &Runtime::Hash,
+    ) -> Result<()> {
+        // IMPORTANT:
+        // - Decode failures are fatal (handled inside `get_events_at_block`)
+        // - Transient retrieval failures are returned so they can be handled upstream.
+        let block_events = get_events_at_block::<Runtime>(&self.client, block_hash)?;
 
-                    // Process Provider-specific events.
-                    match &self.maybe_managed_provider {
-                        Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_finality_events(block_hash, ev.event.clone().into());
-                        }
-                        Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_finality_events(block_hash, ev.event.clone().into());
-                        }
-                        _ => {}
-                    }
+        for ev in block_events {
+            // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
+            self.process_common_finality_events(ev.event.clone().into());
+
+            // Process Provider-specific events.
+            match &self.maybe_managed_provider {
+                Some(ManagedProvider::Bsp(_)) => {
+                    self.bsp_process_finality_events(block_hash, ev.event.clone().into());
                 }
-            }
-            Err(e) => {
-                // TODO: This can happen for older blocks where state has been pruned, or if
-                // we're parsing a block authored with an older version of the runtime
-                // using a node that has a newer version of the runtime. Consider using runtime APIs
-                // for getting old data of previous blocks, and this just for current blocks.
-                error!(
-                        target: LOG_TARGET,
-                        "Failed to get events for block {:?}: {:?}",
-                        block_hash, e
-                );
+                Some(ManagedProvider::Msp(_)) => {
+                    self.msp_process_finality_events(block_hash, ev.event.clone().into());
+                }
+                _ => {}
             }
         }
+
+        Ok(())
     }
 
     /// Catch up on any blocks that were imported to the database but not processed.
@@ -2360,13 +2372,31 @@ where
         self.sync_provider_id(&best_hash);
 
         // Apply Forest root changes for the entire tree route.
-        self.forest_root_changes_catchup(&tree_route).await;
+        if let Err(e) = self.forest_root_changes_catchup(&tree_route).await {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to apply forest root changes during startup catchup: {:?}",
+                e
+            );
+            return;
+        }
 
         // Process finality events for enacted blocks that are finalised.
         // We don't process finality for retracted blocks since they're no longer canonical.
         for block in tree_route.enacted() {
             let block_num: BlockNumber<Runtime> = block.number.saturated_into();
-            self.process_finality_events_if_finalised(&block.hash, block_num);
+            if let Err(e) = self
+                .process_finality_events_if_finalised(&block.hash, block_num)
+                .await
+            {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to process finality events during startup catchup for block {:?}: {:?}",
+                    block.hash,
+                    e
+                );
+                return;
+            }
         }
 
         // Update the local best block and last processed block to reflect the catch up

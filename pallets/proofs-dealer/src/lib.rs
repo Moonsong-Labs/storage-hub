@@ -437,18 +437,27 @@ pub mod pallet {
         }
     }
 
-    // Pallets use events to inform users when important changes are made.
-    // https://docs.substrate.io/v3/runtime/events-and-errors
+    /// The events that can be emitted by this pallet.
+    ///
+    /// # Event Encoding Stability
+    ///
+    /// All event variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A manual challenge was submitted.
+        #[codec(index = 0)]
         NewChallenge {
             who: Option<AccountIdFor<T>>,
             key_challenged: KeyFor<T>,
         },
 
         /// A priority challenge was submitted.
+        #[codec(index = 1)]
         NewPriorityChallenge {
             who: Option<AccountIdFor<T>>,
             key_challenged: KeyFor<T>,
@@ -456,6 +465,7 @@ pub mod pallet {
         },
 
         /// A proof was accepted.
+        #[codec(index = 2)]
         ProofAccepted {
             provider_id: ProviderIdFor<T>,
             proof: Proof<T>,
@@ -463,27 +473,32 @@ pub mod pallet {
         },
 
         /// A new challenge seed was generated.
+        #[codec(index = 3)]
         NewChallengeSeed {
             challenges_ticker: BlockNumberFor<T>,
             seed: RandomnessOutputFor<T>,
         },
 
         /// A new checkpoint challenge was generated.
+        #[codec(index = 4)]
         NewCheckpointChallenge {
             challenges_ticker: BlockNumberFor<T>,
             challenges: BoundedVec<CustomChallenge<T>, MaxCustomChallengesPerBlockFor<T>>,
         },
 
         /// A provider was marked as slashable and their challenge deadline was forcefully pushed.
+        #[codec(index = 5)]
         SlashableProvider {
             provider: ProviderIdFor<T>,
             next_challenge_deadline: BlockNumberFor<T>,
         },
 
         /// No record of the last tick the Provider submitted a proof for.
+        #[codec(index = 6)]
         NoRecordOfLastSubmittedProof { provider: ProviderIdFor<T> },
 
         /// A provider's challenge cycle was initialised.
+        #[codec(index = 7)]
         NewChallengeCycleInitialised {
             current_tick: BlockNumberFor<T>,
             next_challenge_deadline: BlockNumberFor<T>,
@@ -492,6 +507,7 @@ pub mod pallet {
         },
 
         /// A set of mutations has been applied to the Forest of a given Provider.
+        #[codec(index = 8)]
         MutationsAppliedForProvider {
             provider_id: ProviderIdFor<T>,
             mutations: Vec<(KeyFor<T>, TrieMutation)>,
@@ -506,6 +522,7 @@ pub mod pallet {
         ///
         /// Additional information for context on where the mutations were applied can be provided
         /// by using the `event_info` field.
+        #[codec(index = 9)]
         MutationsApplied {
             mutations: Vec<(KeyFor<T>, TrieMutation)>,
             old_root: KeyFor<T>,
@@ -514,41 +531,65 @@ pub mod pallet {
         },
 
         /// The [`ChallengesTicker`] has been paused or unpaused.
+        #[codec(index = 10)]
         ChallengesTickerSet { paused: bool },
     }
 
-    // Errors inform users that something went wrong.
+    /// The errors that can be thrown by this pallet to inform users about what went wrong.
+    ///
+    /// # Error Encoding Stability
+    ///
+    /// All error variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility./// The errors that can be thrown by this pallet to inform users about what went wrong.
+    ///
+    /// # Error Encoding Stability
+    ///
+    /// All error variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::error]
     pub enum Error<T> {
         /// General errors
 
         /// The proof submitter is not a registered Provider.
+        #[codec(index = 0)]
         NotProvider,
 
         /// `challenge` extrinsic errors
 
         /// The ChallengesQueue is full. No more manual challenges can be made
         /// until some of the challenges in the queue are dispatched.
+        #[codec(index = 1)]
         ChallengesQueueOverflow,
 
         /// The PriorityChallengesQueue is full. No more priority challenges can be made
         /// until some of the challenges in the queue are dispatched.
+        #[codec(index = 2)]
         PriorityChallengesQueueOverflow,
 
         /// The fee for submitting a challenge could not be charged.
+        #[codec(index = 3)]
         FeeChargeFailed,
 
         /// `submit_proof` extrinsic errors
 
         /// There are no key proofs submitted.
+        #[codec(index = 4)]
         EmptyKeyProofs,
 
         /// The root for the Provider could not be found.
+        #[codec(index = 5)]
         ProviderRootNotFound,
 
         /// Provider is submitting a proof when they have a zero root.
         /// Providers with zero roots are not providing any service, so they should not be
         /// submitting proofs.
+        #[codec(index = 6)]
         ZeroRoot,
 
         /// Provider is submitting a proof but there is no record of the last tick they
@@ -556,67 +597,84 @@ pub mod pallet {
         /// Providers who are required to submit proofs should always have a record of the
         /// last tick they submitted a proof for, otherwise it means they haven't started
         /// providing service for any user yet.
+        #[codec(index = 7)]
         NoRecordOfLastSubmittedProof,
 
         /// The provider stake could not be found.
+        #[codec(index = 8)]
         ProviderStakeNotFound,
 
         /// Provider is submitting a proof but their stake is zero.
+        #[codec(index = 9)]
         ZeroStake,
 
         /// The staked balance of the Provider could not be converted to `u128`.
         /// This should not be possible, as the `Balance` type should be an unsigned integer type.
+        #[codec(index = 10)]
         StakeCouldNotBeConverted,
 
         /// Provider is submitting a proof for a tick in the future.
+        #[codec(index = 11)]
         ChallengesTickNotReached,
 
         /// Provider is submitting a proof for a tick before the last tick this pallet registers
         /// challenges for.
+        #[codec(index = 12)]
         ChallengesTickTooOld,
 
         /// Provider is submitting a proof for a tick too late, i.e. that the challenges tick
         /// is greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
+        #[codec(index = 13)]
         ChallengesTickTooLate,
 
         /// The seed for the tick could not be found.
         /// This should not be possible for a tick within the `ChallengeHistoryLength` range, as
         /// seeds are generated for all ticks, and stored within this range.
+        #[codec(index = 14)]
         SeedNotFound,
 
         /// Checkpoint challenges not found in block.
         /// This should only be possible if `TickToCheckpointChallenges` is dereferenced for a tick
         /// that is not a checkpoint tick.
+        #[codec(index = 15)]
         CheckpointChallengesNotFound,
 
         /// The forest proof submitted by the Provider is invalid.
         /// This could be because the proof is not valid for the root, or because the proof is
         /// not sufficient for the challenges made.
+        #[codec(index = 16)]
         ForestProofVerificationFailed,
 
         /// The number of key proofs submitted does not match the number of keys proven in the forest proof.
+        #[codec(index = 17)]
         IncorrectNumberOfKeyProofs,
 
         /// There is at least one key proven in the forest proof, that does not have a corresponding
         /// key proof.
+        #[codec(index = 18)]
         KeyProofNotFound,
 
         /// A key proof submitted by the Provider is invalid.
         /// This could be because the proof is not valid for the root of that key, or because the proof
         /// is not sufficient for the challenges made.
+        #[codec(index = 19)]
         KeyProofVerificationFailed,
 
         /// Failed to apply delta to the forest proof partial trie.
+        #[codec(index = 20)]
         FailedToApplyDelta,
 
         /// After successfully applying delta for a set of mutations, the number of mutated keys is
         /// not the same as the number of mutations expected to have been applied.
+        #[codec(index = 21)]
         UnexpectedNumberOfRemoveMutations,
 
         /// Failed to update the provider after a key removal mutation.
+        #[codec(index = 22)]
         FailedToUpdateProviderAfterKeyRemoval,
 
         /// The limit of Providers that can submit a proof in a single tick has been reached.
+        #[codec(index = 23)]
         TooManyValidProofSubmitters,
     }
 

@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
 use std::{sync::Arc, u32};
@@ -53,15 +54,15 @@ where
         &mut self,
         block_hash: &Runtime::Hash,
         bsp_id: BackupStorageProviderId<Runtime>,
-    ) {
-        // Get all events for the block
-        let events = match get_events_at_block::<Runtime>(&self.client, block_hash) {
-            Ok(events) => events,
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
-                return;
-            }
-        };
+    ) -> Result<()> {
+        // Get all events for the block.
+        let events = get_events_at_block::<Runtime>(&self.client, block_hash).map_err(|e| {
+            anyhow!(
+                "Failed to retrieve events during BSP sync for block {:?}: {:?}",
+                block_hash,
+                e
+            )
+        })?;
 
         // Apply any mutations in the block that are relevant to this BSP
         for ev in events {
@@ -96,6 +97,8 @@ where
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Handles the initial sync of a BSP, after coming out of syncing mode.
@@ -126,14 +129,17 @@ where
         block_hash: &Runtime::Hash,
         block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
-    ) where
+    ) -> Result<()>
+    where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        self.forest_root_changes_catchup(&tree_route).await;
+        self.forest_root_changes_catchup(&tree_route).await?;
         let block_number: U256 = (*block_number).into();
         if block_number % self.config.check_for_pending_proofs_period == Zero::zero() {
             self.proof_submission_catch_up(block_hash);
         }
+
+        Ok(())
     }
 
     /// Processes new block imported events that are only relevant for a BSP.

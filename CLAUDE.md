@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 StorageHub is a Substrate-based parachain for the Polkadot ecosystem, focused on decentralized storage. It implements two types of storage providers:
 
-- **MSP (Main Storage Providers)**: Primary data retrieval services
-- **BSP (Backup Storage Providers)**: Redundancy and backup services
+* **MSP (Main Storage Providers)**: Primary data retrieval services
+* **BSP (Backup Storage Providers)**: Redundancy and backup services
 
 ## Build Commands
 
@@ -69,28 +69,28 @@ pnpm typegen  # Generate TypeScript types from runtime
 
 ### Core Components
 
-- `/runtime`: StorageHub runtime implementation
-- `/pallets`: Custom Substrate pallets (bucket-nfts, file-system, payment-streams, proofs-dealer, providers, randomness)
-- `/node`: Parachain node implementation
-- `/client`: Storage hub client modules using actors-framework
-- `/primitives`: Shared types and traits
-- `/test`: Comprehensive test suite
+* `/runtime`: StorageHub runtime implementation
+* `/pallets`: Custom Substrate pallets (bucket-nfts, file-system, payment-streams, proofs-dealer, providers, randomness)
+* `/node`: Parachain node implementation
+* `/client`: Storage hub client modules using actors-framework
+* `/primitives`: Shared types and traits
+* `/test`: Comprehensive test suite
 
 ### Client Architecture
 
 The client uses an actor-based architecture (`/client/actors-framework`) with specialized services:
 
-- `blockchain-service`: Blockchain interaction
-- `file-manager`: File operations and chunking
-- `forest-manager`: Merkle tree management
-- `indexer-service`: Blockchain event indexing
+* `blockchain-service`: Blockchain interaction
+* `file-manager`: File operations and chunking
+* `forest-manager`: Merkle tree management
+* `indexer-service`: Blockchain event indexing
 
 ### Testing Infrastructure
 
-- **Docker-based**: Most tests run in Docker containers for isolation
-- **Zombienet**: Network topology testing
-- **BSPNet**: Small dev network for file merklisation testing
-- **Integration tests**: TypeScript-based using Node.js test runner
+* **Docker-based**: Most tests run in Docker containers for isolation
+* **Zombienet**: Network topology testing
+* **BSPNet**: Small dev network for file merklisation testing
+* **Integration tests**: TypeScript-based using Node.js test runner
 
 ## Development Workflow
 
@@ -115,15 +115,58 @@ The client uses an actor-based architecture (`/client/actors-framework`) with sp
    ```
 
 3. **Before Committing**:
-   - Run `cargo fmt --all`
-   - Run `cargo clippy --all-targets`
-   - Run relevant tests for your changes
-   - Update TypeScript types if runtime APIs changed: `pnpm typegen`
+   * Run `cargo fmt --all`
+   * Run `cargo clippy --all-targets`
+   * Run relevant tests for your changes
+   * Update TypeScript types if runtime APIs changed: `pnpm typegen`
+
+## Event/Error Encoding Stability
+
+StorageHub pallets enforce strict encoding stability rules to ensure clients can decode events and errors across runtime upgrades. **These rules are critical.**
+
+### Rules for StorageHub Pallets
+
+The following pallets have encoding stability requirements: `Providers`, `FileSystem`, `ProofsDealer`, `Randomness`, `PaymentStreams`, `BucketNfts`.
+
+1. **Pallet indices are immutable**: The `#[runtime::pallet_index(N)]` value must never change once deployed.
+
+2. **Event/error variant indices are pinned**: All event and error variants use explicit `#[codec(index = N)]` attributes. These indices must never change or be reused.
+
+3. **Field signatures are stable**: The fields (types, count, order) of existing event/error variants must never change.
+
+4. **Breaking changes require new variants**: If you need to change an event or error, add a new variant with a `Vx` suffix (e.g., `NewStorageRequestV2`) using the next available index. Keep the old variant for backward compatibility.
+
+### Example
+
+```rust
+// WRONG: Changing an existing event's fields
+#[codec(index = 8)]
+NewStorageRequest {
+    who: T::AccountId,
+    file_key: MerkleHash<T>,
+    new_field: u32,  // BREAKING CHANGE!
+}
+
+// CORRECT: Add a new versioned event
+#[codec(index = 8)]
+NewStorageRequest {
+    who: T::AccountId,
+    file_key: MerkleHash<T>,
+    // ... original fields unchanged
+}
+
+#[codec(index = 30)]  // Use next available index
+NewStorageRequestV2 {
+    who: T::AccountId,
+    file_key: MerkleHash<T>,
+    new_field: u32,
+}
+```
 
 ## Key Development Notes
 
-- The project uses a monorepo structure with both Rust (Cargo workspace) and TypeScript (pnpm workspace)
-- Docker is heavily used for testing to ensure consistency and isolation
-- When updating RuntimeAPIs or RPC calls, update `/types-bundle/src/rpc.ts` and `/types-bundle/src/runtime.ts`
-- BSP selection can be "gamed" in tests by choosing BSP IDs that match file fingerprints
-- The client implements a sophisticated actor system for handling storage operations
+* The project uses a monorepo structure with both Rust (Cargo workspace) and TypeScript (pnpm workspace)
+* Docker is heavily used for testing to ensure consistency and isolation
+* When updating RuntimeAPIs or RPC calls, update `/types-bundle/src/rpc.ts` and `/types-bundle/src/runtime.ts`
+* BSP selection can be "gamed" in tests by choosing BSP IDs that match file fingerprints
+* The client implements a sophisticated actor system for handling storage operations

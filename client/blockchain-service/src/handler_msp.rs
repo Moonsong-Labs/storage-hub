@@ -56,15 +56,9 @@ where
         &mut self,
         block_hash: &Runtime::Hash,
         msp_id: ProviderId<Runtime>,
-    ) {
-        // Get all events for the block
-        let events = match get_events_at_block::<Runtime>(&self.client, block_hash) {
-            Ok(events) => events,
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
-                return;
-            }
-        };
+    ) -> Result<()> {
+        // Get all events for the block.
+        let events = get_events_at_block::<Runtime>(&self.client, block_hash)?;
 
         // Apply any mutations in the block that are relevant to this MSP
         for ev in events {
@@ -83,14 +77,14 @@ where
                     Ok(bucket_id) => bucket_id,
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to get bucket ID from MutationsApplied event info: {:?}", e);
-                        return;
+                        return Err(e);
                     }
                 };
 
                 // Check if this bucket is managed by this MSP
                 if !self.validate_bucket_mutations_for_msp(block_hash, &msp_id, &bucket_id) {
                     trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. Skipping mutations applied event.", bucket_id, msp_id);
-                    return;
+                    continue;
                 }
 
                 debug!(target: LOG_TARGET, "Applying {} mutations during sync for bucket [0x{:x}]", mutations.len(), bucket_id);
@@ -114,6 +108,8 @@ where
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Handles the initial sync of a MSP, after coming out of syncing mode.
@@ -143,10 +139,12 @@ where
         _block_hash: &Runtime::Hash,
         _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
-    ) where
+    ) -> Result<()>
+    where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        self.forest_root_changes_catchup(&tree_route).await;
+        self.forest_root_changes_catchup(&tree_route).await?;
+        Ok(())
     }
 
     /// Processes new block imported events that are only relevant for an MSP.

@@ -1678,8 +1678,20 @@ where
         }
 
         let block_number = block_number.saturated_into();
-        self.process_block_import(&block_hash, &block_number, tree_route)
-            .await;
+        if let Err(e) = self
+            .process_block_import(&block_hash, &block_number, tree_route)
+            .await
+        {
+            error!(
+                target: LOG_TARGET,
+                "Failed to process block import notification (#{}): {} error: {:?}",
+                block_number,
+                block_hash,
+                e
+            );
+            observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["block_import", STATUS_FAILURE], start.elapsed().as_secs_f64());
+            return;
+        }
 
         info!(target: LOG_TARGET, "📭 Block import notification (#{}): {} processed successfully", block_number, block_hash);
 
@@ -1750,8 +1762,19 @@ where
         match new_block_notification_kind {
             NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => {
                 // Process the new best block as a linear chain extension
-                self.process_sync_block(&new_best_block.hash, new_best_block.number)
-                    .await;
+                if let Err(e) = self
+                    .process_sync_block(&new_best_block.hash, new_best_block.number)
+                    .await
+                {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Failed to process sync block #{} ({:?}): {:?}",
+                        new_best_block.number,
+                        new_best_block.hash,
+                        e
+                    );
+                    return;
+                }
             }
             NewBlockNotificationKind::NewNonBestBlock(_) => {
                 // Skip non-best blocks (uncle/stale blocks not on the canonical chain)
@@ -1763,7 +1786,10 @@ where
                 ..
             } => {
                 // Process the reorg
-                self.process_sync_reorg(&tree_route, new_best_block).await;
+                if let Err(e) = self.process_sync_reorg(&tree_route, new_best_block).await {
+                    warn!(target: LOG_TARGET, "Failed to process sync reorg: {:?}", e);
+                    return;
+                }
             }
         }
     }
@@ -1816,7 +1842,7 @@ where
         block_hash: &Runtime::Hash,
         block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<OpaqueBlock>,
-    ) {
+    ) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
         // Cleanup manager and DB, and handle old nonce gaps in one helper
@@ -1828,11 +1854,11 @@ where
         match self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
                 self.bsp_init_block_processing(block_hash, block_number, tree_route.clone())
-                    .await;
+                    .await?;
             }
             Some(ManagedProvider::Msp(_)) => {
                 self.msp_init_block_processing(block_hash, block_number, tree_route.clone())
-                    .await;
+                    .await?;
             }
             None => {
                 trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
@@ -1866,40 +1892,25 @@ where
 
         // Get events from storage.
         // TODO: Handle the `pallet-cr-randomness` events here, if/when we start using them.
-        match get_events_at_block::<Runtime>(&self.client, block_hash) {
-            Ok(block_events) => {
-                for ev in block_events {
-                    // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
+        let block_events = get_events_at_block::<Runtime>(&self.client, block_hash)?;
 
-                    self.process_msp_and_bsp_block_import_events(ev.event.clone().into());
+        for ev in block_events {
+            // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
 
-                    // Process Provider-specific events.
-                    match &self.maybe_managed_provider {
-                        Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_block_import_events(
-                                block_hash,
-                                ev.event.clone().into(),
-                            );
-                        }
-                        Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_block_import_events(
-                                block_hash,
-                                ev.event.clone().into(),
-                            );
-                        }
-                        None => {
-                            // * USER SPECIFIC EVENTS. USED ONLY FOR TESTING.
-                            self.process_test_user_events(ev.event.clone().into());
-                        }
-                    }
+            self.process_msp_and_bsp_block_import_events(ev.event.clone().into());
+
+            // Process Provider-specific events.
+            match &self.maybe_managed_provider {
+                Some(ManagedProvider::Bsp(_)) => {
+                    self.bsp_process_block_import_events(block_hash, ev.event.clone().into());
                 }
-            }
-            Err(e) => {
-                // TODO: Handle case where the storage cannot be decoded.
-                // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
-                // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
-                // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
-                error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
+                Some(ManagedProvider::Msp(_)) => {
+                    self.msp_process_block_import_events(block_hash, ev.event.clone().into());
+                }
+                None => {
+                    // * USER SPECIFIC EVENTS. USED ONLY FOR TESTING.
+                    self.process_test_user_events(ev.event.clone().into());
+                }
             }
         }
 
@@ -1922,6 +1933,8 @@ where
             number: *block_number,
             hash: *block_hash,
         });
+
+        Ok(())
     }
 
     /// Handle a finality notification.
@@ -2008,12 +2021,28 @@ where
                     continue;
                 }
 
-                self.process_finality_events(intermediate_hash);
+                if let Err(e) = self.process_finality_events(intermediate_hash).await {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Failed to process finality events for implicitly finalised block {:?}: {:?}",
+                        intermediate_hash,
+                        e
+                    );
+                    return;
+                }
             }
         }
 
         // Process finality events for the newly finalised block itself
-        self.process_finality_events(&block_hash);
+        if let Err(e) = self.process_finality_events(&block_hash).await {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to process finality events for finalised block {:?}: {:?}",
+                block_hash,
+                e
+            );
+            return;
+        }
 
         // Cleanup the pending transaction store for the last finalised block processed.
         // Transactions with a nonce below the on-chain nonce of this block are finalised.
