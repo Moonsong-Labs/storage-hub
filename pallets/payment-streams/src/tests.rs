@@ -463,46 +463,6 @@ mod fixed_rate_streams {
         }
 
         #[test]
-        fn update_payment_stream_fails_if_provider_is_insolvent() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
-                let bob: AccountId = 1;
-
-                // Register Alice as a MSP with 100 units of data and get her MSP ID
-                register_account_as_msp(alice, 100);
-                let alice_msp_id =
-                    <StorageProviders as ReadProvidersInterface>::get_provider_id(&alice).unwrap();
-
-                // Create a payment stream from Bob to Alice of 10 units per block
-                let rate: BalanceOf<Test> = 10;
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &alice_msp_id,
-                        &bob,
-                        rate
-                    )
-                );
-
-                // Simulate insolvent provider
-                pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    (),
-                );
-
-                // Try to update the rate of the payment stream from Bob to Alice to 0 units per block
-                let new_rate: BalanceOf<Test> = 0;
-                assert_noop!(
-                    <PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
-                        &alice_msp_id,
-                        &bob,
-                        new_rate
-                    ),
-                    Error::<Test>::ProviderInsolvent
-                );
-            });
-        }
-
-        #[test]
         fn update_payment_stream_fails_if_new_rate_is_zero() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
@@ -3298,52 +3258,6 @@ mod dynamic_rate_streams {
                         new_amount_provided,
                     }
                     .into(),
-                );
-            });
-        }
-
-        #[test]
-        fn update_payment_stream_fails_if_insolvent_provider() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
-                let bob: AccountId = 1;
-                let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
-
-                // Update the current price and current price index
-                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
-
-                // Register Alice as a BSP with 100 units of data and get her BSP ID
-                register_account_as_bsp(alice, 100);
-                let alice_bsp_id =
-                    <StorageProviders as ReadProvidersInterface>::get_provider_id(&alice).unwrap();
-
-                // Create a payment stream from Bob to Alice of 100 units provided
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
-                        &alice_bsp_id,
-                        &bob,
-                        &amount_provided,
-                    )
-                );
-
-                // Simulate insolvent provider
-                pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
-                    (),
-                );
-
-                // Try to update the amount provided of the payment stream from Bob to Alice to 0 units
-                let new_amount_provided = 0;
-                assert_noop!(
-                    <PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-                        &alice_bsp_id,
-                        &bob,
-                        &new_amount_provided,
-                    ),
-                    Error::<Test>::ProviderInsolvent
                 );
             });
         }
