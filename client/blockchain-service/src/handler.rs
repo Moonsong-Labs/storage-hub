@@ -1475,6 +1475,9 @@ where
                         });
 
                     // Re-queue pending volunteer requests for later processing.
+                    // We re-queue them here to avoid filtering them out in the runtime API call below,
+                    // and not attempt the confirmation ever again. This way we ensure that once this node
+                    // sees the volunteer transaction succeed on-chain, it will be able to send the storage confirmation.
                     for request in &requests_to_requeue {
                         info!(
                             target: LOG_TARGET,

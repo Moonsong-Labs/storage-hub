@@ -497,9 +497,9 @@ where
             .await;
 
         // Handle extrinsic submission result.
-        // - If the extrinsic failed to submit, we re-queue the file keys for later retry.
-        // - If the extrinsic succeeded, we check for proof errors and re-queue if needed.
-        // - If the extrinsic succeeded but no events were emitted, we re-queue for safety.
+        // - If the extrinsic submission failed, we re-queue the file keys for later retry.
+        // - If the extrinsic submission succeeded, we check for proof errors and re-queue if needed.
+        // - If the extrinsic submission succeeded but no events were emitted, we re-queue for safety.
         match extrinsic_result {
             Err(e) => {
                 error!(
@@ -911,11 +911,7 @@ where
                 "BSP not registered as a volunteer for file {:x}",
                 file_key
             );
-            // Remove from pending - volunteer failed.
-            self.storage_hub_handler
-                .blockchain
-                .remove_pending_volunteer_file_key(file_key.into())
-                .await;
+            // Removing from pending is handled in the error case by `self.unvolunteer_file`
             return Err(anyhow!(
                 "BSP not registered as a volunteer for file {:x}",
                 file_key
