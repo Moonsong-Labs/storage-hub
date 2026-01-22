@@ -1914,7 +1914,7 @@ where
                 ManagedProvider::Msp(_) => self.msp_assign_forest_root_write_lock(),
             }
         } else {
-            error!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider. This should never happen.");
+            error!(target: LOG_TARGET, "Tried to handle a forest root write permit release notification while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
         }
     }
 
