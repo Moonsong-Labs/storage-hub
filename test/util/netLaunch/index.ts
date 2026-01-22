@@ -160,6 +160,10 @@ export class NetworkLauncher {
       }
     }
 
+    // Always allow the primary BSP to accept download requests from the main MSP in tests.
+    // We only set this for the main BSP ("sh-bsp"), not for bspTwo/bspThree created later via addBsp.
+    composeYaml.services["sh-bsp"].command.push(`--trusted-msps=${DUMMY_MSP_ID}`);
+
     // Configure fisherman service
     if (!this.config.fisherman || this.type !== "fullnet") {
       if (composeYaml.services["sh-fisherman"]) {
