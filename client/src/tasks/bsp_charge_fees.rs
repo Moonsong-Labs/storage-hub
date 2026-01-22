@@ -104,7 +104,7 @@ where
         &mut self,
         event: LastChargeableInfoUpdated<Runtime>,
     ) -> anyhow::Result<String> {
-        info!(target: LOG_TARGET, "A proof was accepted for provider {:x} and users' fees are going to be charged.", event.provider_id);
+        info!(target: LOG_TARGET, "A proof was accepted for provider [0x{:x}] and users' fees are going to be charged.", event.provider_id);
 
         // Retrieves users with debt over the min_debt threshold from config
         // using a Runtime API.

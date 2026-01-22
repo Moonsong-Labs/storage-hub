@@ -164,8 +164,7 @@ where
             Some("bspRequestStopStoring".to_string()),
         );
 
-        let result = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .send_extrinsic(call, options)
             .await
@@ -205,7 +204,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Processing BspRequestedToStopStoringNotification for file key [{:x}], BSP [{:x}]",
+            "Processing BspRequestedToStopStoringNotification for file key [{:x}], BSP [0x{:x}]",
             event.file_key,
             event.bsp_id
         );
@@ -238,7 +237,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "Waiting until tick {} to confirm stop storing for file key [{:x}]. Current tick: {}, MinWait: {}",
+            "Waiting until tick {} to confirm stop storing for file key [0x{:x}]. Current tick: {}, MinWait: {}",
             confirm_tick,
             file_key,
             current_block_info.number,
@@ -322,7 +321,7 @@ where
         }
 
         Ok(format!(
-            "Handled BspRequestedToStopStoringNotification for file key [{:x}]",
+            "Handled BspRequestedToStopStoringNotification for file key [0x{:x}]",
             file_key
         ))
     }
