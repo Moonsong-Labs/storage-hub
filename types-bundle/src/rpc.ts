@@ -137,6 +137,16 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       ],
       type: "Option<FileMetadata>"
     },
+    getAllStoredFileKeys: {
+      description: "Get all the file keys stored in the node's forest of the given forest key.",
+      params: [
+        {
+          name: "forest_key",
+          type: "Option<H256>"
+        }
+      ],
+      type: "Vec<H256>"
+    },
     generateForestProof: {
       description:
         "Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest.",
