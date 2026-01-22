@@ -448,6 +448,36 @@ where
             }
         };
 
+        // Fast-path: if there is no pending work, do NOT acquire the semaphore permit.
+        //
+        // This avoids an event-loop spin caused by acquiring + dropping a notifying guard
+        // even when no work is scheduled.
+        let has_pending_work = {
+            // In-memory queue (cheap).
+            let has_pending_respond = match &self.maybe_managed_provider {
+                Some(ManagedProvider::Msp(msp_handler)) => {
+                    !msp_handler.pending_respond_storage_requests.is_empty()
+                }
+                _ => unreachable!("We just checked this is a MSP"),
+            };
+
+            if has_pending_respond {
+                true
+            } else {
+                // Persistent deque (O(1) size check).
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                    .size()
+                    > 0
+            }
+        };
+
+        if !has_pending_work {
+            trace!(target: LOG_TARGET, "No pending MSP forest-write work; skipping semaphore acquisition");
+            return;
+        }
+
         // Try to acquire a permit from the semaphore.
         // If the permit is unavailable, another task is still processing, so we return early.
         let permit = {
@@ -460,13 +490,7 @@ where
             match semaphore.try_acquire_owned() {
                 Ok(permit) => {
                     trace!(target: LOG_TARGET, "Forest root write semaphore permit acquired");
-                    // Wrap permit in ForestWritePermitGuard to notify when dropped
-                    // The guard will be held by the event handler for its lifetime,
-                    // automatically notifying the event loop when released
-                    Arc::new(ForestWritePermitGuard::new(
-                        permit,
-                        self.permit_release_sender.clone(),
-                    ))
+                    permit
                 }
                 Err(_) => {
                     trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
@@ -552,7 +576,13 @@ where
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
             trace!(target: LOG_TARGET, "Emitting forest write event");
-            self.msp_emit_forest_write_event(event_data, permit);
+            // Only wrap the semaphore permit in the notifying guard when we actually emit an event.
+            // This ensures the drop notification corresponds to a task completion, not an idle scan.
+            let forest_root_write_permit = Arc::new(ForestWritePermitGuard::new(
+                permit,
+                self.permit_release_sender.clone(),
+            ));
+            self.msp_emit_forest_write_event(event_data, forest_root_write_permit);
         } else {
             trace!(target: LOG_TARGET, "No event data to emit");
         }

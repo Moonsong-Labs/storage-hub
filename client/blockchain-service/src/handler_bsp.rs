@@ -359,6 +359,42 @@ where
             }
         };
 
+        // Fast-path: if there is no pending work, do NOT acquire the semaphore permit.
+        //
+        // This avoids a subtle event-loop spin: acquiring + immediately dropping the permit
+        // would notify `permit_release_receiver`, which would call back into this method
+        // even though there is no work to do.
+        let has_pending_work = {
+            // In-memory queue (cheap).
+            let has_pending_submit_proof = match &self.maybe_managed_provider {
+                Some(ManagedProvider::Bsp(bsp_handler)) => {
+                    !bsp_handler.pending_submit_proof_requests.is_empty()
+                }
+                _ => unreachable!("We just checked this is a BSP"),
+            };
+
+            if has_pending_submit_proof {
+                true
+            } else {
+                // Persistent deques (O(1) size checks).
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                let has_confirm = state_store_context
+                    .pending_confirm_storing_request_deque::<Runtime>()
+                    .size()
+                    > 0;
+                let has_stop_storing = state_store_context
+                    .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                    .size()
+                    > 0;
+                has_confirm || has_stop_storing
+            }
+        };
+
+        if !has_pending_work {
+            trace!(target: LOG_TARGET, "No pending BSP forest-write work; skipping semaphore acquisition");
+            return;
+        }
+
         // Try to acquire a permit from the semaphore.
         // If the permit is unavailable, another task is still processing, so we return early.
         let permit = {
@@ -371,13 +407,7 @@ where
             match semaphore.try_acquire_owned() {
                 Ok(permit) => {
                     trace!(target: LOG_TARGET, "Forest root write semaphore permit acquired");
-                    // Wrap permit in ForestWritePermitGuard and Arc for Clone requirement.
-                    // The guard will notify the blockchain service when dropped (task completes),
-                    // triggering processing of any pending forest write requests.
-                    Arc::new(ForestWritePermitGuard::new(
-                        permit,
-                        self.permit_release_sender.clone(),
-                    ))
+                    permit
                 }
                 Err(_) => {
                     trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
@@ -486,7 +516,13 @@ where
 
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
-            self.bsp_emit_forest_write_event(event_data, permit);
+            // Only wrap the semaphore permit in the notifying guard when we actually emit an event.
+            // This ensures the drop notification corresponds to a task completion, not an idle scan.
+            let forest_root_write_permit = Arc::new(ForestWritePermitGuard::new(
+                permit,
+                self.permit_release_sender.clone(),
+            ));
+            self.bsp_emit_forest_write_event(event_data, forest_root_write_permit);
         }
     }
 
