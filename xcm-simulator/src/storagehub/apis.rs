@@ -370,6 +370,10 @@ impl_runtime_apis! {
             FileSystem::list_incomplete_storage_request_keys(start_after, limit)
         }
 
+        fn query_pending_bsp_confirm_storage_requests(bsp_id: BackupStorageProviderId<Runtime>, file_keys: Vec<H256>) -> Vec<H256> {
+            FileSystem::query_pending_bsp_confirm_storage_requests(bsp_id, file_keys)
+        }
+
         fn query_min_wait_for_stop_storing() -> BlockNumber {
             FileSystem::query_min_wait_for_stop_storing()
         }

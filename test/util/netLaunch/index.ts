@@ -921,7 +921,7 @@ export class NetworkLauncher {
     // One BSP will be down, two more will be up.
     const runtimeTypeArgs =
       this.config.runtimeType === "solochain" ? ["--chain=solochain-evm-dev"] : [];
-    const { containerName: bspDownContainerName } = await addBsp(
+    const { containerName: bspDownContainerName, rpcPort: bspDownRpcPort } = await addBsp(
       api,
       api.accounts.bspDownKey,
       api.accounts.sudo,
@@ -965,8 +965,18 @@ export class NetworkLauncher {
     const location = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
-    // Wait for a few seconds for all BSPs to be synced
-    await sleep(5000);
+    // Wait for all BSPs to be synced
+    const bspDownApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspDownRpcPort}`);
+    const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspTwoRpcPort}`);
+    const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspThreeRpcPort}`);
+
+    await api.wait.nodeCatchUpToChainTip(bspDownApi);
+    await api.wait.nodeCatchUpToChainTip(bspTwoApi);
+    await api.wait.nodeCatchUpToChainTip(bspThreeApi);
+
+    await bspTwoApi.disconnect();
+    await bspThreeApi.disconnect();
+    await bspDownApi.disconnect();
 
     const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
       source,
