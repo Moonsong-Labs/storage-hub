@@ -3,6 +3,7 @@ import type { ApiPromise } from "@polkadot/api";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import { GenericAccountId } from "@polkadot/types";
 import type { AccountId32, H256 } from "@polkadot/types/interfaces";
+import type { EventRecord } from "@polkadot/types/interfaces/system";
 import { u8aToHex } from "@polkadot/util";
 import type { HexString } from "@polkadot/util/types";
 import { decodeAddress } from "@polkadot/util-crypto";
@@ -12,6 +13,43 @@ import { waitFor } from "./waits";
 import { sealBlock } from "./block";
 import * as ShConsts from "./consts";
 import type { FileMetadata } from "./types";
+
+// Proof-related errors that may be expected in some test scenarios
+const PROOF_RELATED_ERRORS = [
+  "proofsDealer.ForestProofVerificationFailed",
+  "proofsDealer.KeyProofNotFound",
+  "proofsDealer.KeyProofVerificationFailed",
+  "proofsDealer.FailedToApplyDelta"
+];
+
+/**
+ * Logs unexpected extrinsic errors from events, filtering out proof-related errors.
+ * This helps identify unexpected failures from BSP confirm and MSP accept extrinsics.
+ */
+const logUnexpectedExtrinsicErrors = (
+  api: ApiPromise,
+  events: EventRecord[],
+  prefix: "MSP" | "BSP"
+): void => {
+  const failedEvents = (events || []).filter((e) => api.events.system.ExtrinsicFailed.is(e.event));
+
+  for (const failedEvent of failedEvents) {
+    if (api.events.system.ExtrinsicFailed.is(failedEvent.event)) {
+      const { dispatchError } = failedEvent.event.data;
+      if (dispatchError.isModule) {
+        const decoded = api.registry.findMetaError(dispatchError.asModule);
+        const errorName = `${decoded.section}.${decoded.name}`;
+        if (!PROOF_RELATED_ERRORS.includes(errorName)) {
+          console.error(
+            `[${prefix}] Unexpected extrinsic error: ${errorName} - ${decoded.docs.join(" ")}`
+          );
+        }
+      } else {
+        console.error(`[${prefix}] Unexpected extrinsic error: ${dispatchError.toString()}`);
+      }
+    }
+  }
+};
 
 export const sendNewStorageRequest = async (
   api: ApiPromise,
@@ -528,6 +566,9 @@ export const batchStorageRequests = async (
 
         // Count total MspAcceptedStorageRequest events
         totalAcceptance += acceptEvents.length;
+
+        // Log unexpected MSP extrinsic errors (non-proof related)
+        logUnexpectedExtrinsicErrors(api, events || [], "MSP");
       }
 
       if (bspFound && expectBspConfirmations) {
@@ -542,6 +583,9 @@ export const batchStorageRequests = async (
             totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
           }
         }
+
+        // Log unexpected BSP extrinsic errors (non-proof related)
+        logUnexpectedExtrinsicErrors(api, events || [], "BSP");
       }
     }
 

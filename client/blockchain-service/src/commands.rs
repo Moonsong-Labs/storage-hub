@@ -3,10 +3,12 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use shc_common::{
+    blockchain_utils::decode_module_error,
     traits::{KeyTypeOperations, StorageEnableRuntime},
     types::StorageEnableEvents,
 };
 use sp_api::ApiError;
+use sp_runtime::DispatchError;
 
 use pallet_file_system_runtime_api::{
     IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -195,6 +197,32 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueryPendingStorageRequests {
         maybe_file_keys: Option<Vec<FileKey>>,
     },
+    /// Query pending BSP confirm storage requests.
+    ///
+    /// Takes a list of confirm storing requests and returns only file keys where the BSP
+    /// has volunteered but not yet confirmed storing.
+    ///
+    /// Pre-filters requests with pending volunteer transactions (not yet on-chain) and
+    /// re-queues them for later processing.
+    ///
+    /// Internally calls the runtime API `query_pending_bsp_confirm_storage_requests` to filter out:
+    /// - File keys where the BSP has already confirmed storing
+    /// - File keys where the BSP is not a volunteer
+    /// - File keys where the storage request doesn't exist
+    #[command(success_type = Vec<FileKey>)]
+    QueryPendingBspConfirmStorageRequests {
+        confirm_storing_requests: Vec<ConfirmStoringRequest<Runtime>>,
+    },
+    /// Add a file key to pending volunteer tracking.
+    ///
+    /// Called before submitting a volunteer tx to track that the volunteer is pending.
+    #[command(mode = "FireAndForget")]
+    AddPendingVolunteerFileKey { file_key: FileKey },
+    /// Remove a file key from pending volunteer tracking.
+    ///
+    /// Called after volunteer is verified on-chain or fails.
+    #[command(mode = "FireAndForget")]
+    RemovePendingVolunteerFileKey { file_key: FileKey },
     /// Set the terminal status of a file key in the MSP upload pipeline.
     ///
     /// Used by tasks to update the status of a file key after processing.
@@ -303,27 +331,71 @@ where
 
             match result {
                 Ok(block_hash) => {
-                    debug!(target: LOG_TARGET, "Transaction with hash {:?} succeeded", submitted_ext_info.hash);
+                    // Always fetch the extrinsic to check if it succeeded or failed on-chain
+                    let extrinsic = self
+                        .get_extrinsic_from_block(block_hash, submitted_ext_info.hash)
+                        .await?;
+
+                    // Check the extrinsic result and log appropriately
+                    match Self::extrinsic_result(extrinsic.clone()) {
+                        Ok(ExtrinsicResult::Success { .. }) => {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Transaction {:?} succeeded in block {:?}",
+                                call,
+                                block_hash
+                            );
+                        }
+                        Ok(ExtrinsicResult::Failure { dispatch_error, .. }) => {
+                            // Try to decode module errors to get human-readable error names
+                            let error_description = match &dispatch_error {
+                                DispatchError::Module(module_error) => {
+                                    match decode_module_error::<Runtime>(module_error.clone()) {
+                                        Ok(decoded) => format!("{:?}", decoded),
+                                        Err(_) => format!("{:?}", dispatch_error),
+                                    }
+                                }
+                                _ => format!("{:?}", dispatch_error),
+                            };
+                            warn!(
+                                target: LOG_TARGET,
+                                "Transaction {:?} failed on-chain with dispatch error: {}",
+                                call,
+                                error_description
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Transaction {:?} included in block but could not determine result: {:?}",
+                                call,
+                                e
+                            );
+                        }
+                    }
 
                     if with_events {
-                        let extrinsic = self
-                            .get_extrinsic_from_block(block_hash, submitted_ext_info.hash)
-                            .await?;
                         return Ok(Some(extrinsic.events));
                     } else {
                         return Ok(None);
                     }
                 }
                 Err(err) => {
-                    warn!(target: LOG_TARGET, "Transaction failed: {:?}", err);
+                    warn!(
+                        target: LOG_TARGET,
+                        "Transaction {:?} (hash: {:?}) failed on attempt {}/{}: {:?}",
+                        call,
+                        submitted_ext_info.hash,
+                        retry_count + 1,
+                        retry_strategy.max_retries + 1,
+                        err
+                    );
 
                     if let Some(ref should_retry) = retry_strategy.should_retry {
                         if !should_retry(err.clone()).await {
                             return Err(anyhow::anyhow!("Exhausted retry strategy"));
                         }
                     }
-
-                    warn!(target: LOG_TARGET, "Failed to submit transaction with hash {:?}, attempt #{}", submitted_ext_info.hash, retry_count + 1);
 
                     if let WatchTransactionError::Timeout = err {
                         // Increase the tip to incentivise the collators to include the transaction in a block with priority
