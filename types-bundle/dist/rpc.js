@@ -280,7 +280,7 @@ export const rpcDefinitions = {
             type: "u128"
         },
         stopStoringFile: {
-            description: "Stop storing a file as a BSP. This initiates the two-phase stop storing process.",
+            description: "Stop storing a file as a provider.",
             params: [
                 {
                     name: "file_key",

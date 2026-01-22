@@ -191,12 +191,13 @@ pub enum GetValuePropositionsResult {
     NotAnMsp,
 }
 
-/// Result of requesting a BSP to stop storing a file.
+/// Result of requesting a node to stop storing a file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StopStoringFileResult {
     /// The request was successfully initiated.
     Success,
     /// This node is not a BSP.
+    /// This is temporary until we add support for MSPs to stop storing files.
     NotABsp,
     /// The blockchain service is not available.
     BlockchainServiceNotAvailable,
@@ -391,12 +392,13 @@ pub trait StorageHubClientApi {
 
     /// Stop storing a file.
     ///
-    /// This initiates the two-phase stop storing process:
+    /// This initiates the two-phase BSP stop storing process:
     /// 1. Calls `bsp_request_stop_storing` with the file's metadata and inclusion proof
     /// 2. Waits for the minimum required time (`MinWaitForStopStoring`)
     /// 3. Automatically calls `bsp_confirm_stop_storing` to complete the process
     ///
-    /// This method is only available for BSP nodes.
+    /// Note: This method is only available for BSP nodes for now.
+    /// TODO: Add support for MSPs to stop storing files.
     #[method(name = "stopStoringFile", with_extensions)]
     async fn stop_storing_file(
         &self,
@@ -1499,6 +1501,13 @@ where
                 return Ok(StopStoringFileResult::BlockchainServiceNotAvailable);
             }
         };
+
+        // Check if the node is a BSP.
+        // TODO: Remove this once we add support for MSPs to stop storing files.
+        let provider_id = self.get_provider_id(ext).await?;
+        if let RpcProviderId::Bsp(_) = provider_id {
+            return Ok(StopStoringFileResult::NotABsp);
+        }
 
         info!(
             target: LOG_TARGET,

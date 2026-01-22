@@ -291,34 +291,14 @@ where
             Some("bspConfirmStopStoring".to_string()),
         );
 
-        let result = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .send_extrinsic(call, options)
-            .await;
-
-        match result {
-            Ok(submitted_ext_info) => {
-                info!(
-                    target: LOG_TARGET,
-                    "Successfully submitted bsp_confirm_stop_storing for file key [{:x}]. Extrinsic hash: {:?}",
-                    file_key,
-                    submitted_ext_info.hash
-                );
-            }
-            Err(e) => {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to submit bsp_confirm_stop_storing for file key [{:x}]: {:?}",
-                    file_key,
-                    e
-                );
-                return Err(anyhow!(
-                    "Failed to submit bsp_confirm_stop_storing: {:?}",
-                    e
-                ));
-            }
-        }
+            .await
+            .map_err(|e| anyhow!("Failed to submit BSP confirm stop storing: {:?}", e))?
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await
+            .map_err(|e| anyhow!("Failed to watch for success: {:?}", e))?;
 
         Ok(format!(
             "Handled BspRequestedToStopStoringNotification for file key [0x{:x}]",

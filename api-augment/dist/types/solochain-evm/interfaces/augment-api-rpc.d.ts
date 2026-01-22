@@ -689,7 +689,7 @@ declare module '@polkadot/rpc-core/types/jsonrpc' {
              **/
             saveFileToDisk: AugmentedRpc<(file_key: H256 | string | Uint8Array, file_path: Text | string) => Observable<SaveFileToDisk>>;
             /**
-             * Stop storing a file as a BSP. This initiates the two-phase stop storing process.
+             * Stop storing a file as a provider.
              **/
             stopStoringFile: AugmentedRpc<(file_key: H256 | string | Uint8Array) => Observable<StopStoringFileResult>>;
         };
