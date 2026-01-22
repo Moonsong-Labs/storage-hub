@@ -448,10 +448,11 @@ where
             }
         };
 
-        // Fast-path: if there is no pending work, do NOT acquire the semaphore permit.
+        // If there is no pending work, do NOT acquire the semaphore permit and return early.
         //
-        // This avoids an event-loop spin caused by acquiring + dropping a notifying guard
-        // even when no work is scheduled.
+        // This avoids a subtle event-loop spin: acquiring + immediately dropping the permit
+        // would notify `permit_release_receiver`, which would call back into this method
+        // even though there is no work to do.
         let has_pending_work = {
             // In-memory queue (cheap).
             let has_pending_respond = match &self.maybe_managed_provider {
@@ -479,7 +480,7 @@ where
         }
 
         // Try to acquire a permit from the semaphore.
-        // If the permit is unavailable, another task is still processing, so we return early.
+        // If the permit is unavailable, another task is still processing and we return early.
         let permit = {
             let semaphore = match &self.maybe_managed_provider {
                 Some(ManagedProvider::Msp(msp_handler)) => {

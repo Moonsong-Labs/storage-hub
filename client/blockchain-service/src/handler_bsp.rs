@@ -359,7 +359,7 @@ where
             }
         };
 
-        // Fast-path: if there is no pending work, do NOT acquire the semaphore permit.
+        // If there is no pending work, do NOT acquire the semaphore permit and return early.
         //
         // This avoids a subtle event-loop spin: acquiring + immediately dropping the permit
         // would notify `permit_release_receiver`, which would call back into this method
@@ -396,7 +396,7 @@ where
         }
 
         // Try to acquire a permit from the semaphore.
-        // If the permit is unavailable, another task is still processing, so we return early.
+        // If the permit is unavailable, another task is still processing and we return early.
         let permit = {
             let semaphore = match &self.maybe_managed_provider {
                 Some(ManagedProvider::Bsp(bsp_handler)) => {
