@@ -2006,7 +2006,7 @@ where
         if block_number > self.last_block_processed.number {
             warn!(
                 target: LOG_TARGET,
-                "⏳ Finality notification for block #{} is ahead of last import-processed block #{}, deferring to queue",
+                "🛑 Finality notification for block #{} is ahead of last import-processed block #{}, deferring to queue",
                 block_number, self.last_block_processed.number
             );
             self.pending_finality_notifications.push_back(notification);
@@ -2028,7 +2028,8 @@ where
             return;
         }
 
-        // Process the finality notification
+        // At this point, we know that the finality notification is for a block that has been import-processed,
+        // and it is not a reorg of the last processed block. Therefore, we can safely process it.
         self.process_finality_notification(notification).await;
     }
 
@@ -2089,7 +2090,7 @@ where
         let block_hash = notification.hash;
         let block_number: BlockNumber<Runtime> = (*notification.header.number()).saturated_into();
 
-        info!(target: LOG_TARGET, "📨 Processing finality notification for block #{}: 0x{:x}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📇 Processing finality notification for block #{}: 0x{:x}", block_number, block_hash);
 
         // Process finality events for all implicitly finalised blocks in tree_route.
         // tree_route contains all blocks from (old_finalised, new_finalised_parent), i.e., the blocks
@@ -2102,9 +2103,9 @@ where
         // was behind our `last_finalised_block_processed`.
         if !notification.tree_route.is_empty() {
             info!(
-                    target: LOG_TARGET,
-                    "📦 Processing finality events for {} implicitly finalised blocks",
-                    notification.tree_route.len()
+                target: LOG_TARGET,
+                "📦 Processing finality events for {} implicitly finalised blocks",
+                notification.tree_route.len()
             );
 
             let last_processed = self.last_finalised_block_processed.number;
@@ -2162,9 +2163,9 @@ where
         };
         self.update_last_finalised_block_info(self.last_finalised_block_processed);
 
+        info!(target: LOG_TARGET, "📨 Finality notification for block #{}: 0x{:x} processed successfully", block_number, block_hash);
+
         // Record finality notification processing duration
         observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_SUCCESS], start.elapsed().as_secs_f64());
-
-        info!(target: LOG_TARGET, "✅ Finality notification for block #{}: 0x{:x} processed successfully", block_number, block_hash);
     }
 }
