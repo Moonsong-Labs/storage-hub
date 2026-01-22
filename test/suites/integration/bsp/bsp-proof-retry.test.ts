@@ -63,21 +63,22 @@ const hasBspConfirmProofError = (
  *
  * Test Flow:
  * 1. File 1 storage request fulfilled (BSP confirms storing)
- * 2. Generate forest proof for File 1 deletion (while BSP is running)
+ * 2. Generate forest proof for File 1 deletion
  * 3. Issue storage request for File 2
  * 4. Seal MSP response and BSP volunteer
- * 5. Pause BSP container (before it confirms storing)
- * 6. User requests deletion of File 1
- * 7. Build and submit deleteFiles extrinsic to pool (using pre-generated proof)
- * 8. Resume BSP → BSP builds confirm proof for File 2 against OLD root
- * 9. Wait for BSP confirm extrinsic in pool
- * 10. Seal block → delete changes root, BSP confirm fails with ForestProofVerificationFailed
- * 11. Wait for BSP retry
- * 12. Seal → confirm succeeds
+ * 5. Wait for BSP confirm extrinsic in pool (proves file transfer completed)
+ * 6. Submit requestDeleteFile to pool (without sealing), pause BSP, drop BSP confirm, seal block
+ * 7. Resume BSP, wait for BSP to re-submit confirm
+ * 8. Submit deleteFiles extrinsic with HIGH TIP
+ * 9. Drop BSP's confirm tx so it gets re-added with lower priority
+ * 10. Wait for BSP to re-add confirm extrinsic
+ * 11. Seal block → delete executes first (higher tip), BSP confirm fails
+ * 12. Wait for BSP forest root to sync, then wait for BSP retry
+ * 13. Seal → confirm succeeds
  */
 await describeMspNet(
   "BSP retries storage confirmation after proof error",
-  { networkConfig: "standard" },
+  { networkConfig: "standard", extrinsicRetryTimeout: 5 },
   ({ before, createMsp1Api, it, createUserApi, createBspApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -118,7 +119,7 @@ await describeMspNet(
       const file1Key = file1Result.fileKeys[0];
       const bucketId = file1Result.bucketIds[0];
 
-      // Phase 2: Generate forest proof for File 1 deletion BEFORE pausing BSP
+      // Phase 2: Generate forest proof for File 1 deletion
       const bspInclusionProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         file1Key
       ]);
@@ -164,10 +165,20 @@ await describeMspNet(
       // Seal block with MSP acceptance and BSP volunteer
       await userApi.block.seal();
 
-      // Phase 4: Pause BSP container before it confirms storing
-      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
+      // Phase 4: Wait for BSP to queue confirm storing (proves file transfer completed)
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        timeoutMs: 15000,
+        sealBlock: false
+      });
 
-      // Phase 5: Submit user delete request for File 1
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspConfirmStoring",
+        checkTxPool: true
+      });
+
+      // Phase 5: Submit user delete request for File 1 (without sealing)
       const fileOperationIntention = {
         fileKey: file1Key,
         operation: { Delete: null }
@@ -183,25 +194,54 @@ await describeMspNet(
         Sr25519: rawSignature
       });
 
-      await userApi.block.seal({
-        calls: [
-          userApi.tx.fileSystem.requestDeleteFile(
-            fileOperationIntention,
-            userSignature,
-            bucketId,
-            file1Result.locations[0],
-            file1Result.fileSizes[0],
-            file1Result.fingerprints[0]
-          )
-        ],
-        signer: shUser
+      // Submit requestDeleteFile to pool WITHOUT sealing
+      const requestDeleteTx = userApi.tx.fileSystem.requestDeleteFile(
+        fileOperationIntention,
+        userSignature,
+        bucketId,
+        file1Result.locations[0],
+        file1Result.fileSizes[0],
+        file1Result.fingerprints[0]
+      );
+      await requestDeleteTx.signAndSend(shUser);
+
+      // Verify requestDeleteFile is in pool
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "requestDeleteFile",
+        checkTxPool: true,
+        timeout: 5000
       });
+
+      // Phase 6: Pause BSP container and drop its confirm tx
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
+
+      // Drop BSP's confirm tx from pool via userApi (BSP's RPC is unavailable while paused)
+      await userApi.node.dropTxn({
+        module: "fileSystem",
+        method: "bspConfirmStoring"
+      });
+
+      // Seal block with only requestDeleteFile (BSP confirm is gone)
+      await userApi.block.seal();
 
       // Verify FileDeletionRequested event
       await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested");
 
-      // Phase 6: Build and submit deleteFiles extrinsic (without sealing)
-      // Using the forest proof generated earlier (before BSP was paused)
+      // Phase 7: Seal a block and resume BSP container
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
+      });
+
+      // Phase 8: Wait for BSP to re-submit confirm storing for file 2
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        timeoutMs: 15000,
+        sealBlock: false
+      });
+
+      // Phase 9: Build and submit deleteFiles extrinsic with HIGH TIP
+      // Using the forest proof generated earlier
       // Delete from BSP's forest by passing BSP ID as second parameter
 
       // Build deletion request structure
@@ -226,7 +266,6 @@ await describeMspNet(
 
       // Sign and send with high tip to ensure priority over BSP's transaction
       await deleteFilesTx.signAndSend(shUser, {
-        nonce: -1,
         tip: 1_000_000_000_000n
       });
 
@@ -238,14 +277,12 @@ await describeMspNet(
         timeout: 5000
       });
 
-      // Phase 7: Resume BSP container
-      // BSP will catch up and process File 2 storage request
-      // Importantly, it builds its proof against the CURRENT forest root (before delete executes)
-      await userApi.docker.resumeContainer({
-        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
+      await userApi.node.dropTxn({
+        module: "fileSystem",
+        method: "bspConfirmStoring"
       });
 
-      // Phase 8: Wait for BSP confirm extrinsic in pool
+      // Phase 11: Wait for BSP to re-add confirm extrinsic
       await userApi.wait.bspStored({
         expectedExts: 1,
         timeoutMs: 15000,
@@ -258,7 +295,7 @@ await describeMspNet(
         checkTxPool: true
       });
 
-      // Phase 9: Seal block and verify proof error
+      // Phase 12: Seal block and verify proof error
 
       // Seal block with file deletion and BSP confirmation transactions
       const blockResult = await userApi.block.seal();
@@ -299,7 +336,7 @@ await describeMspNet(
         iterations: 50
       });
 
-      // Phase 10: Wait for BSP retry
+      // Phase 13: Wait for BSP to retry
       // The BSP client will retry by requeueing the confirm storing request
       await userApi.wait.bspStored({
         expectedExts: 1,
@@ -307,7 +344,7 @@ await describeMspNet(
         sealBlock: false
       });
 
-      // Phase 11: Seal and verify success
+      // Phase 14: Seal retry and verify success
       const retryResult = await userApi.block.seal();
 
       // Verify BspConfirmedStoring event
