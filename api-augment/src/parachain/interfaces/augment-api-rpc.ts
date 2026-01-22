@@ -1118,6 +1118,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<Bytes>
       >;
       /**
+       * Get all the file keys stored in the node's forest of the given forest key.
+       **/
+      getAllStoredFileKeys: AugmentedRpc<
+        (forest_key: Option<H256> | null | Uint8Array | H256 | string) => Observable<Vec<H256>>
+      >;
+      /**
        * Get the current price per giga unit per tick from the payment streams pallet
        **/
       getCurrentPricePerGigaUnitPerTick: AugmentedRpc<() => Observable<u128>>;

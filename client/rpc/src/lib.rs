@@ -305,6 +305,12 @@ pub trait StorageHubClientApi {
         file_key: shp_types::Hash,
     ) -> RpcResult<Option<FileMetadata>>;
 
+    #[method(name = "getAllStoredFileKeys", with_extensions)]
+    async fn get_all_stored_file_keys(
+        &self,
+        forest_key: Option<shp_types::Hash>,
+    ) -> RpcResult<Vec<shp_types::Hash>>;
+
     /// Check if this node is currently expecting to receive the given file key (i.e., it has been registered)
     #[method(name = "isFileKeyExpected")]
     async fn is_file_key_expected(&self, file_key: shp_types::Hash) -> RpcResult<bool>;
@@ -996,6 +1002,47 @@ where
         Ok(result)
     }
 
+    async fn get_all_stored_file_keys(
+        &self,
+        ext: &Extensions,
+        forest_key: Option<shp_types::Hash>,
+    ) -> RpcResult<Vec<shp_types::Hash>> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Get a read lock on the forest storage.
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
+        let forest_storage = self
+            .forest_storage_handler
+            .get(&forest_key)
+            .await
+            .ok_or_else(|| {
+                into_rpc_error(
+                    format!(
+                        "Forest storage not found for forest key [0x{:?}].",
+                        hex::encode(&forest_key)
+                    )
+                    .to_string(),
+                )
+            })?;
+        let read_fs = forest_storage.read().await;
+
+        // Get all the stored file keys.
+        let file_keys = read_fs.list_all_file_keys().map_err(into_rpc_error)?;
+
+        info!(
+            target: LOG_TARGET,
+            "get_all_stored_file_keys finished for forest_key=[{}]. Result: {:?} files found.",
+            hex::encode(forest_key),
+            file_keys.len()
+        );
+
+        Ok(file_keys)
+    }
+
     async fn is_file_key_expected(&self, file_key: shp_types::Hash) -> RpcResult<bool> {
         let expected = self
             .file_transfer
@@ -1481,7 +1528,8 @@ where
     }
 
     // TODO: Make this RPC method more generic so MSPs can also use it.
-    // TODO: For that, we will need to add an extrinsic for MSPs
+    // TODO: For that, we will need to add an extrinsic for MSPs.
+    // TODO: For now, MSPs should use the stop storing bucket extrinsic.
     async fn stop_storing_file(
         &self,
         ext: &Extensions,
