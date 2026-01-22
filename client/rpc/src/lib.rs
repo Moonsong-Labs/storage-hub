@@ -909,7 +909,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "is_file_in_forest finished for forest_key=[{}], file_key=[{:x}]. Result: {}",
+            "is_file_in_forest finished for forest_key=[{}], file_key=[0x{:x}]. Result: {}",
             hex::encode(forest_key),
             file_key,
             result
@@ -952,7 +952,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "is_file_in_file_storage finished for file_key=[{:x}]. Result: {:?}",
+            "is_file_in_file_storage finished for file_key=[0x{:x}]. Result: {:?}",
             file_key,
             result
         );
@@ -1502,7 +1502,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "stop_storing_file called for file_key=[{:x}]. Emitting RequestBspStopStoring event.",
+            "stop_storing_file called for file_key=[0x{:x}]. Emitting RequestBspStopStoring event.",
             file_key
         );
 
