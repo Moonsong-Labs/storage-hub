@@ -1710,9 +1710,6 @@ where
 
         info!(target: LOG_TARGET, "📭 Block import notification (#{}): {} processed successfully", block_number, block_hash);
 
-        // Drain any pending finality notifications that can now be processed
-        self.drain_pending_finality_notifications().await;
-
         // Record block processing duration
         observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["block_import", STATUS_SUCCESS], start.elapsed().as_secs_f64());
     }
@@ -1797,9 +1794,6 @@ where
                 self.process_sync_reorg(&tree_route, new_best_block).await;
             }
         }
-
-        // Drain any pending finality notifications that can now be processed
-        self.drain_pending_finality_notifications().await;
     }
 
     /// Initialises the Blockchain Service with variables that should be checked and
@@ -1984,6 +1978,11 @@ where
 
         info!(target: LOG_TARGET, "📩 Received finality notification for block #{}: 0x{:x}", block_number, block_hash);
 
+        // Drain any pending finality notifications that can now be processed.
+        // This handles notifications that were queued because they arrived before their
+        // corresponding block import was processed.
+        self.drain_pending_finality_notifications().await;
+
         // Skip if this finalised block was already processed.
         // This can happen during sync when both `handle_sync_block_notification` (via
         // `process_finality_events_if_finalised`) and this handler process the same block.
@@ -2035,8 +2034,9 @@ where
 
     /// Drain and process any pending finality notifications that can now be processed.
     ///
-    /// This is called after block import processing to handle any finality notifications
-    /// that were queued because they arrived before their corresponding block import.
+    /// This is called at the start of finality notification handling to process any
+    /// notifications that were queued because they arrived before their corresponding
+    /// block import was processed.
     async fn drain_pending_finality_notifications(&mut self) {
         // Process notifications in order while they're <= last_block_processed
         while let Some(notification) = self.pending_finality_notifications.front() {
@@ -2060,7 +2060,7 @@ where
 
             // Skip if the finality has been already processed
             if block_number <= self.last_finalised_block_processed.number {
-                trace!(
+                warn!(
                     target: LOG_TARGET,
                     "🔁 Deferred finality notification #{} already processed, skipping",
                     block_number
