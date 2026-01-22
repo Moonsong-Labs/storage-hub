@@ -134,7 +134,7 @@ await describeBspNet(
       // Treasury balance should have increased by the penalty
       const treasuryBalanceIncrease = treasuryBalanceAfterRequest.sub(treasuryBalanceBefore);
       assert(
-        treasuryBalanceIncrease === penalty,
+        treasuryBalanceIncrease.eq(penalty),
         `Treasury balance should increase by the penalty. Increase: ${treasuryBalanceIncrease.toString()}, Penalty: ${penalty.toString()}`
       );
 
