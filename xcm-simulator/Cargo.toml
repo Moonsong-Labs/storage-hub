@@ -1,7 +1,7 @@
 [package]
 name = "sh-xcm-simulator"
 description = "Test kit to simulate cross-chain message passing and XCM execution for StorageHub"
-version = "0.3.2"
+version = "0.3.3"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }

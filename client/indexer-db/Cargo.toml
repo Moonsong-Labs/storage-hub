@@ -1,6 +1,6 @@
 [package]
 name = "shc-indexer-db"
-version = "0.3.2"
+version = "0.3.3"
 description = "Storage Hub Indexer Database definitions, migrations and helpers."
 homepage = { workspace = true }
 license = { workspace = true }

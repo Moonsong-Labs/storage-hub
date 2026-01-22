@@ -1,6 +1,6 @@
 [package]
 name = "sh-parachain-runtime"
-version = "0.3.2"
+version = "0.3.3"
 description = "StorageHub Runtime - a decentralised storage solution designed for the Polkadot ecosystem."
 homepage = { workspace = true }
 license = { workspace = true }
