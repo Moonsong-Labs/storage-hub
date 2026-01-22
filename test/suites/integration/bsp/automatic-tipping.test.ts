@@ -1,10 +1,4 @@
-import {
-  assertDockerLog,
-  assertExtrinsicPresent,
-  describeBspNet,
-  type EnrichedBspApi,
-  waitFor
-} from "../../../util";
+import { assertDockerLog, describeBspNet, type EnrichedBspApi, waitFor } from "../../../util";
 
 await describeBspNet(
   "BSP Automatic Tipping",
@@ -48,7 +42,7 @@ await describeBspNet(
           // Find all bspConfirmStoring extrinsics in the pool
           let matches: { module: string; method: string; extIndex: number }[];
           try {
-            matches = await assertExtrinsicPresent(userApi, {
+            matches = await userApi.assert.extrinsicPresent({
               module: "fileSystem",
               method: "bspConfirmStoring",
               checkTxPool: true
