@@ -269,7 +269,7 @@ where
     ///
     /// Sent by `ForestWritePermitGuard::drop()` when a task with the forest write lock succeeds, fails or panics.
     /// Triggers [`BlockchainService::handle_permit_released`] to process any pending forest write requests.
-    PermitReleased,
+    ForestRootWritePermitReleased,
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
@@ -389,7 +389,7 @@ where
                 .map(MergedEventLoopMessage::<Runtime>::TxStatusUpdate)
                 .boxed(),
             permit_release_stream
-                .map(|_| MergedEventLoopMessage::<Runtime>::PermitReleased)
+                .map(|_| MergedEventLoopMessage::<Runtime>::ForestRootWritePermitReleased)
                 .boxed(),
         ]);
 
@@ -417,7 +417,7 @@ where
                         .handle_transaction_status_update(nonce, tx_hash, status)
                         .await;
                 }
-                MergedEventLoopMessage::PermitReleased => {
+                MergedEventLoopMessage::ForestRootWritePermitReleased => {
                     self.actor.handle_permit_released();
                 }
             };
