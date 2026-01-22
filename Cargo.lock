@@ -16656,6 +16656,7 @@ dependencies = [
  "sc-utils",
  "serde",
  "serde_json",
+ "shc-forest-lock",
  "shc-telemetry",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -16956,6 +16957,15 @@ dependencies = [
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
+name = "shc-forest-lock"
+version = "0.3.0"
+dependencies = [
+ "log",
  "thiserror 1.0.69",
  "tokio",
 ]

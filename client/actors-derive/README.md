@@ -34,6 +34,7 @@ pub struct NewChallengeSeed {
 ```
 
 This will:
+
 - Automatically derive `Debug` and `Clone` for the struct
 - Implement `EventBusMessage` for the struct
 - Register the event with the specified actor ID (`blockchain_service` in this example)

@@ -22,6 +22,7 @@ members = [
 	"node",
 	"client",
 	"client/actors-framework",
+	"client/forest-lock",
 	"client/telemetry",
 	"client/blockchain-service",
 	"client/common",
@@ -294,6 +295,7 @@ pallet-evm-precompile-file-system = { path = "precompiles/pallet-file-system", d
 
 # Local - StorageHub Client (used by the node, can be std or no_std)
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
+shc-forest-lock = { path = "client/forest-lock", default-features = false }
 shc-telemetry = { path = "client/telemetry", default-features = false }
 shc-actors-derive = { path = "client/actors-derive", default-features = false }
 shc-blockchain-service = { path = "client/blockchain-service", default-features = false }

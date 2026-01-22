@@ -1,0 +1,17 @@
+[package]
+name = "shc-forest-lock"
+description = "Forest root write lock coordination primitives"
+version = "0.3.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+log = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
