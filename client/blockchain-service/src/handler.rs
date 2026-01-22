@@ -1871,9 +1871,10 @@ where
         }
     }
 
-    /// Handle a forest root write permit release notification.
+    /// Handle a forest root write permit release notification by assigning the forest
+    /// root write lock to the next pending forest write request.
     ///
-    /// This method is called when a `ForestWritePermitGuard` is dropped (task completes),
+    /// This method is called when a `ForestWritePermitGuard` is dropped by a task,
     /// allowing the next pending forest write request to be processed.
     ///
     /// Depending on the provider type (BSP or MSP), it delegates to the appropriate
