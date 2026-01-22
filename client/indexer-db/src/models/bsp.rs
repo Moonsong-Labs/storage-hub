@@ -7,7 +7,7 @@ use diesel_async::RunQueryDsl;
 
 use crate::{
     models::{
-        file::{FileDeletionType, DEFAULT_BATCH_QUERY_LIMIT},
+        file::{FileDeletionType, FileMetadataQuery, DEFAULT_BATCH_QUERY_LIMIT},
         multiaddress::MultiAddress,
         File,
     },
@@ -263,20 +263,23 @@ impl BspFile {
     }
 
     // TODO: Add paging for performance
-    // TODO: Make this and other db model functions return actual types instead of raw bytes for example
-    pub async fn get_all_file_keys_for_bsp<'a>(
+    /// Get all file metadata for a BSP.
+    ///
+    /// Returns lightweight [`FileMetadataQuery`] records containing only the fields required for
+    /// conversion to [`FileMetadata`](shc_common::types::FileMetadata).
+    pub async fn get_all_files_for_bsp<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bsp_id: OnchainBspId,
-    ) -> Result<Vec<Vec<u8>>, diesel::result::Error> {
-        let file_keys: Vec<Vec<u8>> = bsp_file::table
+    ) -> Result<Vec<FileMetadataQuery>, diesel::result::Error> {
+        let files: Vec<FileMetadataQuery> = bsp_file::table
             .inner_join(bsp::table.on(bsp_file::bsp_id.eq(bsp::id)))
             .inner_join(file::table.on(bsp_file::file_id.eq(file::id)))
             .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id))
-            .select(file::file_key)
-            .load::<Vec<u8>>(conn)
+            .select(FileMetadataQuery::as_select())
+            .load::<FileMetadataQuery>(conn)
             .await?;
 
-        Ok(file_keys)
+        Ok(files)
     }
 
     /// Get files pending deletion grouped by BSP.

@@ -130,9 +130,13 @@ pub type IncompleteStorageRequestMetadata<Runtime> =
     pallet_file_system::types::IncompleteStorageRequestMetadata<Runtime>;
 pub type MaxBatchConfirmStorageRequests<Runtime> =
     <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
+pub type MaxFileDeletionsPerExtrinsic<Runtime> =
+    <Runtime as pallet_file_system::Config>::MaxFileDeletionsPerExtrinsic;
 pub type ValuePropositionWithId<Runtime> =
     pallet_storage_providers::types::ValuePropositionWithId<Runtime>;
 pub type MerkleTrieHash<Runtime> = <Runtime as pallet_proofs_dealer::Config>::MerkleTrieHash;
+pub type DefaultMerkleRoot<Runtime> =
+    <Runtime as pallet_storage_providers::Config>::DefaultMerkleRoot;
 
 /// Type alias for the events vector.
 ///

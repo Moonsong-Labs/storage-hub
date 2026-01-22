@@ -58,11 +58,8 @@ impl Services {
             rpc.clone(),
         ));
 
-        let msp = Arc::new(
-            MspService::new(postgres.clone(), rpc.clone(), config.msp.clone())
-                .await
-                .expect("MSP must be available when starting the backend's services"),
-        );
+        let msp =
+            Arc::new(MspService::new(postgres.clone(), rpc.clone(), config.msp.clone()).await);
 
         let download_sessions = Arc::new(DownloadSessionManager::new(
             config.file_transfer.max_download_sessions,

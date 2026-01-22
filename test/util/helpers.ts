@@ -51,7 +51,9 @@ export const verifyContainerFreshness = async () => {
     (container) =>
       container.Image === DOCKER_IMAGE ||
       container.Names.some((name) => name.includes("toxiproxy")) ||
-      container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
+      container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName)) ||
+      container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.prometheus.containerName)) ||
+      container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.grafana.containerName))
   );
 
   if (existingContainers.length > 0) {
@@ -150,6 +152,14 @@ export const cleanupEnvironment = async (verbose = false) => {
     container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
   );
 
+  const prometheusContainer = allContainers.find((container) =>
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.prometheus.containerName))
+  );
+
+  const grafanaContainer = allContainers.find((container) =>
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.grafana.containerName))
+  );
+
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
 
   const logPromises = existingNodes.map((node) =>
@@ -210,6 +220,20 @@ export const cleanupEnvironment = async (verbose = false) => {
     promises.push(docker.getContainer(backendContainer.Id).remove({ force: true }));
   } else {
     verbose && console.log("No backend container found, skipping");
+  }
+
+  if (prometheusContainer) {
+    console.log("Stopping prometheus container");
+    promises.push(docker.getContainer(prometheusContainer.Id).remove({ force: true }));
+  } else {
+    verbose && console.log("No prometheus container found, skipping");
+  }
+
+  if (grafanaContainer) {
+    console.log("Stopping grafana container");
+    promises.push(docker.getContainer(grafanaContainer.Id).remove({ force: true }));
+  } else {
+    verbose && console.log("No grafana container found, skipping");
   }
 
   await Promise.all(promises);

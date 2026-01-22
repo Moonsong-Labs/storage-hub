@@ -166,11 +166,6 @@ where
             Error::<T>::NotAProvider
         );
 
-        // We do not allow updating a payment stream if the provider is insolvent
-        if <T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(*provider_id) {
-            return Err(Error::<T>::ProviderInsolvent.into());
-        }
-
         // Ensure that the new rate is not 0 (should use remove_fixed_rate_payment_stream instead)
         ensure!(new_rate != Zero::zero(), Error::<T>::RateCantBeZero);
 
@@ -424,11 +419,6 @@ where
             <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
-
-        // We do not allow updating a payment stream if the provider is insolvent
-        if <T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(*provider_id) {
-            return Err(Error::<T>::ProviderInsolvent.into());
-        }
 
         // Ensure that the new amount provided is not 0 (should use remove_dynamic_rate_payment_stream instead)
         ensure!(
@@ -1787,6 +1777,15 @@ where
         }
 
         payment_streams
+    }
+
+    /// This function is called by the runtime API that allows anyone to get the count of users that have
+    /// at least one payment stream with a provider.
+    /// It returns the count as a u32, avoiding vector allocation and serialization overhead.
+    pub fn get_number_of_active_users_of_provider(provider_id: &ProviderIdFor<T>) -> u32 {
+        let fixed_count = FixedRatePaymentStreams::<T>::iter_prefix(provider_id).count();
+        let dynamic_count = DynamicRatePaymentStreams::<T>::iter_prefix(provider_id).count();
+        (fixed_count + dynamic_count) as u32
     }
 
     /// This function is called by the runtime API that allows anyone to get the list of Providers that have a

@@ -9,11 +9,10 @@
 
 use codec::Codec;
 
-use crate::runtime::{AccountId, Balance, ProviderId};
+use crate::runtime::{Balance, ProviderId};
 
 // Type Aliases for Runtime API Types
 pub type CurrentPrice = Balance;
-pub type ActiveUsersList = Vec<AccountId>;
 
 /// Enumeration of all runtime API calls that the backend can make.
 ///
@@ -28,11 +27,11 @@ pub enum RuntimeApiCalls {
     /// - **Returns**: `u128`
     GetCurrentPricePerGigaUnitPerTick,
 
-    /// Get the list of users with an active payment stream for a given provider.
+    /// Get the count of users with an active payment stream for a given provider.
     ///
     /// - **Parameters**: `H256` (provider ID as H256)
-    /// - **Returns**: `Vec<H160>`
-    GetUsersOfPaymentStreamsOfProvider,
+    /// - **Returns**: `u32`
+    GetNumberOfActiveUsersOfProvider,
 }
 
 impl RuntimeApiCalls {
@@ -44,8 +43,8 @@ impl RuntimeApiCalls {
             Self::GetCurrentPricePerGigaUnitPerTick => {
                 "PaymentStreamsApi_get_current_price_per_giga_unit_per_tick"
             }
-            Self::GetUsersOfPaymentStreamsOfProvider => {
-                "PaymentStreamsApi_get_users_of_payment_streams_of_provider"
+            Self::GetNumberOfActiveUsersOfProvider => {
+                "PaymentStreamsApi_get_number_of_active_users_of_provider"
             }
         }
     }
@@ -76,12 +75,12 @@ impl RuntimeApiCallTypes for GetCurrentPricePerGigaUnitPerTick {
     }
 }
 
-pub struct GetUsersOfPaymentStreamsOfProvider;
-impl RuntimeApiCallTypes for GetUsersOfPaymentStreamsOfProvider {
+pub struct GetNumberOfActiveUsersOfProvider;
+impl RuntimeApiCallTypes for GetNumberOfActiveUsersOfProvider {
     type Params = ProviderId;
-    type ReturnType = ActiveUsersList;
+    type ReturnType = u32;
 
     fn runtime_api_call() -> RuntimeApiCalls {
-        RuntimeApiCalls::GetUsersOfPaymentStreamsOfProvider
+        RuntimeApiCalls::GetNumberOfActiveUsersOfProvider
     }
 }

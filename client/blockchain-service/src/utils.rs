@@ -1838,15 +1838,24 @@ where
         // MSP Follower nodes do not create the Forests in the tasks when there is a new
         // storage request, because they do not handle these events. So this is useful for them.
         let forest_key = forest_key.into();
-        let fs = if let Some(existing) = self.forest_storage_handler.get(&forest_key).await {
-            existing
-        } else {
-            info!(
-                target: LOG_TARGET,
-                "Forest storage for key [{:?}] not found while applying mutation; creating new instance",
-                forest_key
-            );
-            self.forest_storage_handler.create(&forest_key).await
+        let fs = match self.forest_storage_handler.get(&forest_key).await {
+            Some(existing) => existing,
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "Forest storage for key [{:?}] not found while applying mutation; creating new instance",
+                    forest_key
+                );
+                self.forest_storage_handler
+                    .create(&forest_key)
+                    .await
+                    .map_err(|e| {
+                        anyhow!(
+                            "CRITICAL ❗️❗️❗️: Failed to create forest storage for key [{:?}] while applying mutation: {:?}",
+                            forest_key, e
+                        )
+                    })?
+            }
         };
 
         // Write lock is released when exiting the scope of this `match` statement.
