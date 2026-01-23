@@ -93,13 +93,12 @@ where
         {
             Ok(capacity) => capacity,
             Err(e) => {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to query capacity for provider [{:x}]: {:?}. Skipping slash.",
-                    event.provider,
-                    e,
+                let err_msg = format!(
+                    "Failed to query capacity for provider [{:x}]: {:?}",
+                    event.provider, e
                 );
-                return Ok(());
+                error!(target: LOG_TARGET, err_msg);
+                return Err(anyhow::anyhow!(err_msg));
             }
         };
 
