@@ -66,9 +66,7 @@ pub mod pallet {
         type BabeDataGetterBlockNumber: sp_runtime::traits::BlockNumber;
     }
 
-    /// The events that can be emitted by this pallet.
-    ///
-    /// # Event Encoding Stability
+    /// # Event Encoding/Decoding Stability
     ///
     /// All event variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
     /// across runtime upgrades.

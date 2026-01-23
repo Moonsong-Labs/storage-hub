@@ -54,11 +54,10 @@ pub enum ModuleErrorDecodeError {
 /// # Event Decoding Strategy
 ///
 /// This function decodes `System.Events` locally using the compiled runtime's event types.
-/// If a runtime upgrade introduces breaking event changes (new variants with different encoding),
-/// the SCALE decode will fail and return an error.
+/// If a runtime upgrade introduces breaking event changes, the SCALE decode will fail and return an error.
 ///
-/// To ensure backward compatibility for historical blocks, StorageHub pallets _**must**_ have fixed pallet indices via `#[runtime::pallet_index(N)]`
-/// in runtime implementations but this cannot be enforced at the StorageHub pallet level.
+/// To ensure backward compatibility for historical blocks, Runtimes which implement StorageHub pallets _**must**_ have fixed pallet indices via `#[runtime::pallet_index(N)]`
+/// but this cannot be enforced at the StorageHub pallet level.
 ///
 /// StorageHub pallets do enforce the following constraints on event and error variants:
 /// - Fixed variant indices via `#[codec(index = N)]`
@@ -74,26 +73,19 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
     block_hash: &H256,
 ) -> Result<StorageHubEventsVec<Runtime>, EventsRetrievalError> {
     // Get the events storage.
-    let raw_storage_opt = client.storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?;
+    let raw_storage = client
+        .storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?
+        .ok_or(EventsRetrievalError::StorageNotFound)?;
 
-    match raw_storage_opt {
-        None => Err(EventsRetrievalError::StorageNotFound),
-        Some(raw_storage) => {
-            match StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()) {
-                Ok(events) => Ok(events),
-                Err(e) => {
-                    error!(
-                        target: "blockchain-utils",
-                        "Failed to decode System.Events at block {:?}. This likely indicates a \
-                        breaking change in a possible runtime upgrade since a new event variant \
-                        was encountered and cannot be decoded. Underlying error: {}",
-                        block_hash, e
-                    );
-                    Err(EventsRetrievalError::DecodeError(e))
-                }
-            }
-        }
-    }
+    StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()).map_err(|e| {
+        error!(
+            target: "blockchain-utils",
+            "Failed to decode System.Events at block {:?}. This likely indicates a breaking change in a possible runtime upgrade since an event was likely 
+            added or even worse an existing event was removed or updated and cannot be decoded. Underlying error: {:?}",
+            block_hash, e
+        );
+        EventsRetrievalError::DecodeError(e)
+    })
 }
 
 /// Decode a [`sp_runtime::ModuleError`] into [`StorageEnableErrors`].
@@ -103,12 +95,10 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
 ///
 /// # Error Decoding Strategy
 ///
-/// This function relies on fixed pallet indices and error variant indices:
-/// - StorageHub pallets use `#[runtime::pallet_index(N)]` for stable pallet indices
-/// - Error variants use `#[codec(index = N)]` for stable error discriminants
+/// This function relies on fixed pallet indices and error variant indices to
+/// decode the error into the appropriate error variant.
 ///
-/// If a runtime upgrade changes error encoding in a breaking way, decode will fail and
-/// the service will halt—signaling the client needs to be upgraded.
+/// If a runtime upgrade changes the ordering of error variants or removes an error variant, decoding will fail.
 pub fn decode_module_error<Runtime: StorageEnableRuntime>(
     module_error: sp_runtime::ModuleError,
 ) -> Result<StorageEnableErrors<Runtime>, ModuleErrorDecodeError> {

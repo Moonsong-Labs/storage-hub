@@ -1718,9 +1718,16 @@ where
             trace!(target: LOG_TARGET, "Applying Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
         }
 
-        // Process the events in the block, specifically those that are related to the Forest root changes.
-        let events = get_events_at_block::<Runtime>(&self.client, &block.hash)?;
+        let events = get_events_at_block::<Runtime>(&self.client, &block.hash).map_err(|e| {
+            let err_msg = format!(
+                "Failed to get events to process Forest root changes for block {:?}: {:?}",
+                block.hash, e
+            );
+            error!(target: LOG_TARGET, "{}", err_msg);
+            anyhow!(err_msg)
+        })?;
 
+        // Process the events in the block, specifically those that are related to the Forest root changes.
         for ev in events {
             if let Some(managed_provider) = &self.maybe_managed_provider {
                 match managed_provider {
@@ -2118,7 +2125,7 @@ where
     ///
     /// Note: For blocks imported before they're finalised, finality processing is handled
     /// by `handle_finality_notification` when the finality justification eventually arrives.
-    pub(crate) async fn process_finality_events_if_finalised(
+    pub(crate) fn process_finality_events_if_finalised(
         &mut self,
         block_hash: &Runtime::Hash,
         block_number: BlockNumber<Runtime>,
@@ -2138,7 +2145,7 @@ where
             block_number
         );
 
-        self.process_finality_events(block_hash).await?;
+        self.process_finality_events(block_hash)?;
 
         // Update last_finalised_block_processed if this block is more recent
         if block_number > self.last_finalised_block_processed.number {
@@ -2188,8 +2195,7 @@ where
 
         // Check if this block is already finalised and process finality events if so
         // This ensures file storage cleanup happens for finalised blocks during sync
-        self.process_finality_events_if_finalised(block_hash, block_number)
-            .await?;
+        self.process_finality_events_if_finalised(block_hash, block_number)?;
 
         // Update the last processed block in persistent storage for tracking
         self.update_last_processed_block_info(MinimalBlockInfo {
@@ -2230,8 +2236,7 @@ where
         // Process finality events for enacted blocks
         for block in tree_route.enacted() {
             let block_num: BlockNumber<Runtime> = block.number.saturated_into();
-            self.process_finality_events_if_finalised(&block.hash, block_num)
-                .await?;
+            self.process_finality_events_if_finalised(&block.hash, block_num)?;
         }
 
         // Update the last processed block to the new best
@@ -2255,10 +2260,7 @@ where
     /// This function will panic if SCALE decoding of `System.Events` fails. This is intentional:
     /// a decode failure indicates an incompatible runtime upgrade, and the service must halt so
     /// operators can upgrade the client.
-    pub(crate) async fn process_finality_events(
-        &mut self,
-        block_hash: &Runtime::Hash,
-    ) -> Result<()> {
+    pub(crate) fn process_finality_events(&mut self, block_hash: &Runtime::Hash) -> Result<()> {
         // IMPORTANT:
         // - Decode failures are fatal (handled inside `get_events_at_block`)
         // - Transient retrieval failures are returned so they can be handled upstream.
@@ -2385,10 +2387,7 @@ where
         // We don't process finality for retracted blocks since they're no longer canonical.
         for block in tree_route.enacted() {
             let block_num: BlockNumber<Runtime> = block.number.saturated_into();
-            if let Err(e) = self
-                .process_finality_events_if_finalised(&block.hash, block_num)
-                .await
-            {
+            if let Err(e) = self.process_finality_events_if_finalised(&block.hash, block_num) {
                 warn!(
                     target: LOG_TARGET,
                     "Failed to process finality events during startup catchup for block {:?}: {:?}",

@@ -56,13 +56,12 @@ where
         bsp_id: BackupStorageProviderId<Runtime>,
     ) -> Result<()> {
         // Get all events for the block.
-        let events = get_events_at_block::<Runtime>(&self.client, block_hash).map_err(|e| {
-            anyhow!(
-                "Failed to retrieve events during BSP sync for block {:?}: {:?}",
-                block_hash,
-                e
-            )
-        })?;
+        let Ok(events) = get_events_at_block::<Runtime>(&self.client, block_hash) else {
+            return Err(anyhow::anyhow!(
+                "Failed to retrieve events during BSP sync for block {:?}",
+                block_hash
+            ));
+        };
 
         // Apply any mutations in the block that are relevant to this BSP
         for ev in events {
@@ -91,7 +90,12 @@ where
                             .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
                             .await
                         {
-                            error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync: {:?}", e);
+                            let err_msg = format!(
+                                "CRITICAL ❗❗ Failed to apply mutation during sync: {:?}",
+                                e
+                            );
+                            error!(target: LOG_TARGET, "{}", err_msg);
+                            return Err(anyhow::anyhow!(err_msg));
                         }
                     }
                 }

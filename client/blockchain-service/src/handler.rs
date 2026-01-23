@@ -2021,7 +2021,7 @@ where
                     continue;
                 }
 
-                if let Err(e) = self.process_finality_events(intermediate_hash).await {
+                if let Err(e) = self.process_finality_events(intermediate_hash) {
                     warn!(
                         target: LOG_TARGET,
                         "Failed to process finality events for implicitly finalised block {:?}: {:?}",
@@ -2034,7 +2034,7 @@ where
         }
 
         // Process finality events for the newly finalised block itself
-        if let Err(e) = self.process_finality_events(&block_hash).await {
+        if let Err(e) = self.process_finality_events(&block_hash) {
             warn!(
                 target: LOG_TARGET,
                 "Failed to process finality events for finalised block {:?}: {:?}",

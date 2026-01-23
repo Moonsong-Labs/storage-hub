@@ -63,9 +63,7 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    /// The events that can be emitted by this pallet.
-    ///
-    /// # Event Encoding Stability
+    /// # Event Encoding/Decoding Stability
     ///
     /// All event variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
     /// across runtime upgrades.
@@ -97,9 +95,7 @@ pub mod pallet {
         },
     }
 
-    /// The errors that can be thrown by this pallet to inform users about what went wrong.
-    ///
-    /// # Error Encoding Stability
+    /// # Error Encoding/Decoding Stability
     ///
     /// All error variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
     /// across runtime upgrades.
