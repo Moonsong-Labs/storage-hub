@@ -129,7 +129,7 @@ await describeMspNet(
         mspId,
         valuePropId,
         owner: shUser,
-        bspApi,
+        bspApis: [bspApi],
         mspApi: msp1Api
       });
 
@@ -257,7 +257,7 @@ await describeMspNet(
         mspId,
         valuePropId,
         owner: shUser,
-        bspApi,
+        bspApis: undefined, // Intentionally skip BSP checks; replicationTarget keeps request incomplete
         mspApi: msp1Api
       });
 
