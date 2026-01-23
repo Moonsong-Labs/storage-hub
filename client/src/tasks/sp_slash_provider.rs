@@ -105,7 +105,7 @@ where
         if capacity.is_zero() {
             info!(
                 target: LOG_TARGET,
-                "Skipping slashing provider [{:x}]: capacity is already 0",
+                "Skipping slashing provider [0x{:x}]: capacity is already 0",
                 event.provider,
             );
             return Ok(());
