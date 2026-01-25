@@ -207,6 +207,10 @@ where
     pub enable_msp_distribute_files: bool,
     /// Optional Postgres URL for the pending transactions DB. If None, DB is disabled.
     pub pending_db_url: Option<String>,
+    /// Advertised RPC URL for leader registration (optional).
+    pub advertised_rpc_url: Option<String>,
+    /// Advertised trusted file transfer server URL for leader registration (optional).
+    pub advertised_trusted_file_transfer_server_url: Option<String>,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -220,6 +224,8 @@ where
             peer_id: None,
             enable_msp_distribute_files: false,
             pending_db_url: None,
+            advertised_rpc_url: None,
+            advertised_trusted_file_transfer_server_url: None,
         }
     }
 }
@@ -1667,6 +1673,26 @@ where
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::GetLeaderInfo { callback } => {
+                    use shc_blockchain_service_db::leadership::get_leader_info;
+
+                    let result = match &self.leadership_conn {
+                        Some(client) => get_leader_info(client).await,
+                        None => {
+                            // No leadership connection available, return None
+                            Ok(None)
+                        }
+                    };
+
+                    match callback.send(result) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Leader info sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send leader info: {:?}", e);
                         }
                     }
                 }

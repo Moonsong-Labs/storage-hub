@@ -29,9 +29,9 @@ use crate::{
         DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
         FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
-        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        StartMovedBucketDownload,
+        NewStorageRequest, ProcessFollowerDownloads, ProcessMspRespondStoringRequest,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
     types::{FileDistributionInfo, FileKeyStatus, ManagedProvider, MultiInstancesNodeRole},
@@ -251,6 +251,7 @@ where
     /// 1. Monitor for new pending storage requests and emit events for processing.
     /// 2. Check for BSPs who volunteered for files this MSP has to distribute, and spawn task
     ///    to distribute them.
+    /// 3. For follower nodes, emit ProcessFollowerDownloads event to trigger download attempts.
     pub(crate) async fn msp_end_block_processing<Block>(
         &mut self,
         block_hash: &Runtime::Hash,
@@ -272,6 +273,11 @@ where
 
         // Distribute files to BSPs
         self.spawn_distribute_file_to_bsps_tasks(block_hash, managed_msp_id);
+
+        // For follower nodes, emit ProcessFollowerDownloads every block
+        if matches!(self.role, MultiInstancesNodeRole::Follower) {
+            self.emit(ProcessFollowerDownloads {});
+        }
     }
 
     /// Processes finality events that are only relevant for an MSP.
