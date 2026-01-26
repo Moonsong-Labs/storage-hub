@@ -422,7 +422,11 @@ await describeMspNet(
       });
 
       // Verify BspFileDeletionsCompleted event
-      userApi.assert.eventPresent("fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
+      await userApi.assert.eventPresent(
+        "fileSystem",
+        "BspFileDeletionsCompleted",
+        deletionResult.events
+      );
 
       // Verify BucketFileDeletionsCompleted events (one per bucket)
       const bucketDeletionEvents = (deletionResult.events || []).filter((record) =>
@@ -799,7 +803,11 @@ await describeMspNet(
       });
 
       // Verify BspFileDeletionsCompleted event
-      userApi.assert.eventPresent("fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
+      await userApi.assert.eventPresent(
+        "fileSystem",
+        "BspFileDeletionsCompleted",
+        deletionResult.events
+      );
 
       // Verify BucketFileDeletionsCompleted events (one per bucket)
       const bucketDeletionEvents = (deletionResult.events || []).filter((record) =>

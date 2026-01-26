@@ -261,7 +261,7 @@ await describeBspNet(
       ignoredBlockHash = blockReceipt.blockHash.toString();
 
       // Check that the BSP confirm storing extrinsic is successfully included in the block.
-      userApi.assert.eventPresent("fileSystem", "BspConfirmedStoring", events);
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmedStoring", events);
 
       // Check that the BSP root has not changed.
       // We check for 3 seconds expecting to have no change, i.e. expecting the check in the
@@ -395,7 +395,7 @@ await describeBspNet(
       await userApi.block.seal({ finaliseBlock: false });
 
       // Check that the BSP confirm storing extrinsic is successfully included in the block.
-      userApi.assert.eventPresent("fileSystem", "BspConfirmedStoring");
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmedStoring");
 
       // Wait for confirmation line in docker logs.
       await bspApi.docker.waitForLog({
