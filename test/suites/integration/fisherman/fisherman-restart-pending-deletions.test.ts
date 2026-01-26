@@ -49,9 +49,7 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing",
     standaloneIndexer: true,
-    logLevel: "debug",
-    only: true,
-    networkConfig: "standard"
+    logLevel: "debug"
   },
   ({
     before,
