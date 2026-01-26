@@ -49,7 +49,9 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing",
     standaloneIndexer: true,
-    logLevel: "debug"
+    logLevel: "debug",
+    only: true,
+    networkConfig: "standard"
   },
   ({
     before,
@@ -305,8 +307,6 @@ await describeMspNet(
 
       const { fileKeys } = batchResult;
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
-
       // Ensure the BSP confirms to store all files before continuing
       // Due to race conditions, the BSP confirmations might come in multiple blocks, so we need to wait
       // for all confirmations to complete.
@@ -357,6 +357,8 @@ await describeMspNet(
           );
         }
       }
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Wait for all files to be indexed
       for (const fileKey of fileKeys) {
