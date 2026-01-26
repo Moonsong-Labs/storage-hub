@@ -629,6 +629,57 @@ await describeMspNet(
 
       const { fileKeys, bucketIds } = batchResult;
 
+      // Ensure the BSP confirms to store all files before continuing
+      // Due to race conditions, the BSP confirmations might come in multiple blocks, so we need to wait
+      // for all confirmations to complete.
+      const bspAddress = userApi.createType("Address", bspApi.accounts.bspKey.address);
+      let stillConfirming = true;
+      while (stillConfirming) {
+        try {
+          await userApi.wait.bspStored({
+            expectedExts: 1,
+            bspAccount: bspAddress,
+            timeoutMs: 6000
+          });
+        } catch (_) {
+          stillConfirming = false;
+        }
+      }
+
+      // Sanity check: this test assumes the (single) BSP is actually storing these files,
+      // otherwise fisherman won't be able to batch a BSP-side deletion for "Incomplete" requests.
+      for (const [index, fileKey] of fileKeys.entries()) {
+        try {
+          await waitFor({
+            lambda: async () => {
+              const bspFileStorageResult =
+                await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+              return bspFileStorageResult.isFileFound;
+            }
+          });
+        } catch (error) {
+          throw new Error(
+            `BSP has not stored file in file storage: ${fileKey} at index ${index}: ${error}`
+          );
+        }
+
+        try {
+          await waitFor({
+            lambda: async () => {
+              const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(
+                null,
+                fileKey
+              );
+              return bspForestResult.isTrue;
+            }
+          });
+        } catch (error) {
+          throw new Error(
+            `BSP is not storing file in forest: ${fileKey} at index ${index}: ${error}`
+          );
+        }
+      }
+
       // Store finalized incomplete storage data for verification in test 6
       finalizedIncompleteFileKeys = fileKeys;
       finalizedIncompleteBucketIds = bucketIds;
@@ -732,6 +783,57 @@ await describeMspNet(
 
       const { fileKeys: unfinalizedFileKeys, bucketIds: unfinalizedBucketIds } =
         unfinalizedBatchResult;
+
+      // Ensure the BSP confirms to store all files before continuing
+      // Due to race conditions, the BSP confirmations might come in multiple blocks, so we need to wait
+      // for all confirmations to complete.
+      const bspAddress = userApi.createType("Address", bspApi.accounts.bspKey.address);
+      let stillConfirming = true;
+      while (stillConfirming) {
+        try {
+          await userApi.wait.bspStored({
+            expectedExts: 1,
+            bspAccount: bspAddress,
+            timeoutMs: 6000
+          });
+        } catch (_) {
+          stillConfirming = false;
+        }
+      }
+
+      // Sanity check: this test assumes the (single) BSP is actually storing these files,
+      // otherwise the manual BSP deletion (and later fisherman behaviour) is not meaningful.
+      for (const [index, fileKey] of unfinalizedFileKeys.entries()) {
+        try {
+          await waitFor({
+            lambda: async () => {
+              const bspFileStorageResult =
+                await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+              return bspFileStorageResult.isFileFound;
+            }
+          });
+        } catch (error) {
+          throw new Error(
+            `BSP has not stored file in file storage: ${fileKey} at index ${index}: ${error}`
+          );
+        }
+
+        try {
+          await waitFor({
+            lambda: async () => {
+              const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(
+                null,
+                fileKey
+              );
+              return bspForestResult.isTrue;
+            }
+          });
+        } catch (error) {
+          throw new Error(
+            `BSP is not storing file in forest: ${fileKey} at index ${index}: ${error}`
+          );
+        }
+      }
 
       // Store unfinalized incomplete storage data for verification in test 6
       unfinalizedIncompleteFileKeys = unfinalizedFileKeys;
