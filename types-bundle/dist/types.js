@@ -283,7 +283,7 @@ export const SHARED_TYPES = {
             NotAnMsp: null
         }
     },
-    StopStoringFileResult: {
+    BspStopStoringFileResult: {
         _enum: {
             Success: null,
             NotABsp: null,

@@ -285,7 +285,7 @@ export const SHARED_TYPES: RegistryTypes = {
       NotAnMsp: null
     }
   },
-  StopStoringFileResult: {
+  BspStopStoringFileResult: {
     _enum: {
       Success: null,
       NotABsp: null,

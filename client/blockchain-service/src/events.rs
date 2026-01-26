@@ -388,7 +388,7 @@ pub struct DistributeFileToBsp<Runtime: StorageEnableRuntime> {
 
 /// Event triggered by RPC to initiate the two-phase BSP stop storing flow.
 ///
-/// This event is emitted when the RPC method `stopStoringFile` is called on a BSP node,
+/// This event is emitted when the RPC method `bspStopStoringFile` is called on a BSP node,
 /// triggering the task to generate proofs and call `bsp_request_stop_storing`.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]

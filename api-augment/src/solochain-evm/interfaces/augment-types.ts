@@ -1380,6 +1380,7 @@ import type {
   AddFilesToForestStorageResult,
   BackupStorageProvider,
   BackupStorageProviderId,
+  BspStopStoringFileResult,
   BucketId,
   CheckpointChallenge,
   ChunkId,
@@ -1423,7 +1424,6 @@ import type {
   RpcProviderId,
   SaveFileToDisk,
   ShouldRemoveFile,
-  StopStoringFileResult,
   StorageDataUnit,
   StorageProviderId,
   StorageRequestMetadata,
@@ -1582,6 +1582,7 @@ declare module "@polkadot/types/types/registry" {
     BridgedBlockNumber: BridgedBlockNumber;
     BridgedHeader: BridgedHeader;
     BridgeMessageId: BridgeMessageId;
+    BspStopStoringFileResult: BspStopStoringFileResult;
     BucketId: BucketId;
     BufferedSessionChange: BufferedSessionChange;
     Bytes: Bytes;
@@ -2561,7 +2562,6 @@ declare module "@polkadot/types/types/registry" {
     StatementStoreInvalidStatement: StatementStoreInvalidStatement;
     StatementStoreStatementSource: StatementStoreStatementSource;
     StatementStoreValidStatement: StatementStoreValidStatement;
-    StopStoringFileResult: StopStoringFileResult;
     StorageChangeSet: StorageChangeSet;
     StorageData: StorageData;
     StorageDataUnit: StorageDataUnit;

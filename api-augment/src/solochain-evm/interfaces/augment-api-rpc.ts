@@ -99,6 +99,7 @@ import type {
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
   AddFilesToForestStorageResult,
+  BspStopStoringFileResult,
   CheckpointChallenge,
   FileMetadata,
   GetFileFromFileStorageResult,
@@ -106,8 +107,7 @@ import type {
   LoadFileInStorageResult,
   RemoveFilesFromForestStorageResult,
   RpcProviderId,
-  SaveFileToDisk,
-  StopStoringFileResult
+  SaveFileToDisk
 } from "@storagehub/api-augment/solochain-evm/interfaces/storagehubclient";
 
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
@@ -1071,6 +1071,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         (key: H256 | string | Uint8Array, exclude_type: Text | string) => Observable<ITuple<[]>>
       >;
       /**
+       * Request a BSP node to stop storing a file.
+       **/
+      bspStopStoringFile: AugmentedRpc<
+        (file_key: H256 | string | Uint8Array) => Observable<BspStopStoringFileResult>
+      >;
+      /**
        * Generate a SCALE-encoded proof for a file key to allow a BSP to confirm storing it.
        **/
       generateFileKeyProofBspConfirm: AugmentedRpc<
@@ -1234,12 +1240,6 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           file_key: H256 | string | Uint8Array,
           file_path: Text | string
         ) => Observable<SaveFileToDisk>
-      >;
-      /**
-       * Stop storing a file as a provider.
-       **/
-      stopStoringFile: AugmentedRpc<
-        (file_key: H256 | string | Uint8Array) => Observable<StopStoringFileResult>
       >;
     };
     syncstate: {

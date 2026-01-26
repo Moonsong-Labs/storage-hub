@@ -21,6 +21,13 @@ export interface BackupStorageProvider extends Struct {
 /** @name BackupStorageProviderId */
 export interface BackupStorageProviderId extends H256 {
 }
+/** @name BspStopStoringFileResult */
+export interface BspStopStoringFileResult extends Enum {
+    readonly isSuccess: boolean;
+    readonly isNotABsp: boolean;
+    readonly isBlockchainServiceNotAvailable: boolean;
+    readonly type: 'Success' | 'NotABsp' | 'BlockchainServiceNotAvailable';
+}
 /** @name BucketId */
 export interface BucketId extends H256 {
 }
@@ -291,13 +298,6 @@ export interface SaveFileToDisk extends Enum {
 }
 /** @name ShouldRemoveFile */
 export interface ShouldRemoveFile extends bool {
-}
-/** @name StopStoringFileResult */
-export interface StopStoringFileResult extends Enum {
-    readonly isSuccess: boolean;
-    readonly isNotABsp: boolean;
-    readonly isBlockchainServiceNotAvailable: boolean;
-    readonly type: 'Success' | 'NotABsp' | 'BlockchainServiceNotAvailable';
 }
 /** @name StorageData */
 export interface StorageData extends u64 {
