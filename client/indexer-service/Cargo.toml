@@ -1,6 +1,6 @@
 [package]
 name = "shc-indexer-service"
-version = "0.3.3"
+version = "0.3.4"
 description = "Storage Hub Indexer Service."
 homepage = { workspace = true }
 license = { workspace = true }

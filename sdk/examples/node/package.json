@@ -1,7 +1,7 @@
 {
   "name": "@storagehub-sdk/example-node",
   "private": true,
-  "version": "0.3.3",
+  "version": "0.3.4",
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",

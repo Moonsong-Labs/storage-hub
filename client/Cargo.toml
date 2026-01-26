@@ -1,6 +1,6 @@
 [package]
 name = "shc-client"
-version = "0.3.3"
+version = "0.3.4"
 description = "StorageHub Client."
 homepage = { workspace = true }
 license = { workspace = true }
