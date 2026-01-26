@@ -70,6 +70,8 @@ pub async fn internal_upload_by_key(
     };
 
     // Stream chunks to channel
+    // Note: Session cleanup is handled automatically by the DownloadSessionGuard
+    // in the download_by_key spawned task, so we don't need to manually remove it here
     let mut stream = body.into_data_stream();
     while let Some(chunk_result) = stream.next().await {
         match chunk_result {
@@ -77,7 +79,6 @@ pub async fn internal_upload_by_key(
                 if tx.send(Ok(chunk)).await.is_err() {
                     // Client disconnected
                     tracing::info!("Client disconnected for session {}", session_id);
-                    services.download_sessions.remove_session(&session_id);
                     return (StatusCode::OK, "Client disconnected".to_string());
                 }
             }
@@ -89,7 +90,6 @@ pub async fn internal_upload_by_key(
                         e.to_string(),
                     )))
                     .await;
-                services.download_sessions.remove_session(&session_id);
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Stream error".to_string(),
@@ -98,7 +98,6 @@ pub async fn internal_upload_by_key(
         }
     }
 
-    services.download_sessions.remove_session(&session_id);
     (StatusCode::OK, "Upload successful".to_string())
 }
 
@@ -139,14 +138,16 @@ pub async fn download_by_key(
     // have more than 1 Mb of allocated memory per download session (defined by MAX_BUFFER_BYTES)
     let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(QUEUE_BUFFER_SIZE);
 
-    // Add the transmitter to the active download sessions
-    let _ = services
+    // Create a download session and get its guard.
+    // This ensures automatic cleanup when the download completes, fails, or if the client disconnects
+    let guard = services
         .download_sessions
-        .add_session(&session_id, tx)
+        .start_session(session_id.clone(), tx)
         .map_err(|e| Error::BadRequest(e.to_string()))?;
 
+    // Move guard into spawned task so when the task ends, the guard is dropped and the session is automatically removed
     tokio::spawn(async move {
-        // We trigger the download process via RPC call
+        let _guard = guard;
         _ = services.msp.get_file(&session_id, file_info).await;
     });
 
