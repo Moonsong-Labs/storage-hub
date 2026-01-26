@@ -1,4 +1,4 @@
-import { strictEqual } from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
 await describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
@@ -56,13 +56,37 @@ await describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createB
     );
     strictEqual(slashableProvidersAfterSlash.isNone, true);
 
-    // Simulate 2 failed challenge periods
-    await userApi.block.skipToChallengePeriod(
-      nextChallengeDeadline2,
-      userApi.shConsts.DUMMY_BSP_ID
+    // Loop slashing until capacity is 0
+    let nextChallengeDeadline = nextChallengeDeadline2;
+    let capacity = await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
+      bspApi.shConsts.DUMMY_BSP_ID
     );
 
-    // Wait for provider to be slashed.
-    await userApi.assert.providerSlashed(userApi.shConsts.DUMMY_BSP_ID);
+    while (capacity.toNumber() > 0) {
+      // Skip to next challenge period to trigger SlashableProvider event
+      nextChallengeDeadline = await userApi.block.skipToChallengePeriod(
+        nextChallengeDeadline,
+        bspApi.shConsts.DUMMY_BSP_ID
+      );
+
+      // Wait for provider to be slashed
+      await userApi.assert.providerSlashed(bspApi.shConsts.DUMMY_BSP_ID);
+
+      // Query updated capacity
+      capacity = await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
+        bspApi.shConsts.DUMMY_BSP_ID
+      );
+    }
+
+    // Skip to next challenge period - this will emit SlashableProvider event from runtime
+    // but the client should NOT submit a slash extrinsic since capacity is already 0
+    await userApi.block.skipToChallengePeriod(nextChallengeDeadline, bspApi.shConsts.DUMMY_BSP_ID);
+
+    try {
+      await userApi.assert.providerSlashed(bspApi.shConsts.DUMMY_BSP_ID);
+      assert.fail("Provider should not be slashed when capacity is 0");
+    } catch (e) {
+      // Expected error
+    }
   });
 });
