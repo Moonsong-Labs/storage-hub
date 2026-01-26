@@ -1,34 +1,34 @@
 {
-  "name": "@storagehub/types-bundle",
-  "version": "0.4.0",
-  "description": "Bundle definitions for Polkadot{.js} app & api",
-  "private": false,
-  "type": "module",
-  "scripts": {
-    "fmt": "biome format .",
-    "fmt:fix": "biome format . --write",
-    "tsc": "tsc --noEmit --pretty",
-    "build": "tsc -b --verbose"
-  },
-  "keywords": [],
-  "author": "",
-  "module": "./dist/definitions.js",
-  "types": "./dist/types/definitions.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/types/definitions.d.ts",
-      "module": "./dist/definitions.js",
-      "default": "./dist/definitions.js"
-    }
-  },
-  "license": "ISC",
-  "dependencies": {
-    "@polkadot/api": "^16.4.7",
-    "@polkadot/api-base": "^16.4.7",
-    "@polkadot/rpc-core": "^16.4.6",
-    "@polkadot/typegen": "^16.4.6",
-    "@polkadot/types": "^16.4.7",
-    "@polkadot/types-codec": "^16.4.7",
-    "typescript": "^5.9.2"
-  }
+	"name": "@storagehub/types-bundle",
+	"version": "0.3.3",
+	"description": "Bundle definitions for Polkadot{.js} app & api",
+	"private": false,
+	"type": "module",
+	"scripts": {
+		"fmt": "biome format .",
+		"fmt:fix": "biome format . --write",
+		"tsc": "tsc --noEmit --pretty",
+		"build": "tsc -b --verbose"
+	},
+	"keywords": [],
+	"author": "",
+	"module": "./dist/definitions.js",
+	"types": "./dist/types/definitions.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/types/definitions.d.ts",
+			"module": "./dist/definitions.js",
+			"default": "./dist/definitions.js"
+		}
+	},
+	"license": "ISC",
+	"dependencies": {
+		"@polkadot/api": "^16.4.7",
+		"@polkadot/api-base": "^16.4.7",
+		"@polkadot/rpc-core": "^16.4.6",
+		"@polkadot/typegen": "^16.4.6",
+		"@polkadot/types": "^16.4.7",
+		"@polkadot/types-codec": "^16.4.7",
+		"typescript": "^5.9.2"
+	}
 }
