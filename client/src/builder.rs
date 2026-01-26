@@ -332,7 +332,7 @@ where
         <(R, S) as ShNodeType<Runtime>>::FSH,
         Runtime,
     > {
-        let mut rpc_config = StorageHubClientRpcConfig::new(
+        StorageHubClientRpcConfig::new(
             self.file_storage
                 .clone()
                 .expect("File Storage not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
@@ -341,19 +341,13 @@ where
                 .expect("Forest Storage Handler not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
             keystore,
             config,
-						// TODO: Remove this if we stop using the FileTransferService as an event emitter for RPC calls
+            // TODO: Remove this if we stop using the FileTransferService as an event emitter for RPC calls
             self.file_transfer
                 .as_ref()
                 .expect("File Transfer not set.")
                 .clone(),
-        );
-
-        // Include the blockchain service handle if available
-        if let Some(blockchain) = &self.blockchain {
-            rpc_config = rpc_config.with_blockchain(blockchain.clone());
-        }
-
-        rpc_config
+            self.blockchain.clone(),
+        )
     }
 
     /// Set configuration options for the MSP charge fees task.

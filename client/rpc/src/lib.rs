@@ -101,6 +101,7 @@ where
         keystore: KeystorePtr,
         config: RpcConfig,
         file_transfer: ActorHandle<FileTransferService<Runtime>>,
+        blockchain: Option<ActorHandle<BlockchainService<FSH, Runtime>>>,
     ) -> Self {
         Self {
             file_storage,
@@ -108,21 +109,13 @@ where
             keystore,
             config,
             file_transfer,
-            blockchain: None,
+            blockchain,
             _runtime: PhantomData,
         }
     }
 
     pub fn with_remote_file_config(mut self, config: RemoteFileConfig) -> Self {
         self.config.remote_file = config;
-        self
-    }
-
-    pub fn with_blockchain(
-        mut self,
-        blockchain: ActorHandle<BlockchainService<FSH, Runtime>>,
-    ) -> Self {
-        self.blockchain = Some(blockchain);
         self
     }
 }
