@@ -24,12 +24,16 @@ The following scripts are available for development and maintenance:
 To use the bundled types in your project, import the `types-bundle` package and configure the Polkadot{.js} API to use the custom types.
 
 ```typescript
+import "@storagehub/api-augment"; // must be first import
+
 import { ApiPromise, WsProvider } from '@polkadot/api';
-import { typesBundle } from '@storagehub/types-bundle';
+import { types as storagehubTypesBundle } from "@storagehub/types-bundle";
+
 const provider = new WsProvider('ws://localhost:9944');
+
 const api = await ApiPromise.create({
-provider,
-typesBundle
+  provider,
+  typesBundle: storagehubTypesBundle
 });
 ```
 
