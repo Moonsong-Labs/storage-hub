@@ -9,7 +9,7 @@ import {
 
 await describeBspNet(
   "BSPNet: Stop Storing File RPC",
-  { initialised: false, only: true, keepAlive: true, networkConfig: "standard" },
+  { initialised: false, only: true, networkConfig: "standard" },
   ({ before, createBspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -102,8 +102,7 @@ await describeBspNet(
       assert(penalty.toString() === "100", "BspStopStoringFilePenalty should be 100");
 
       // ================ Step 3: Call the stopStoringFile RPC ================
-      const rpcResult = await bspApi.rpc.storagehubclient.stopStoringFile(fileMetadata.fileKey);
-      console.log(`stopStoringFile RPC result: ${JSON.stringify(rpcResult.toHuman())}`);
+      const rpcResult = await bspApi.rpc.storagehubclient.bspStopStoringFile(fileMetadata.fileKey);
       strictEqual(rpcResult.isSuccess, true, "RPC should return Success");
 
       // ================ Step 4: Wait for bspRequestStopStoring in tx pool and seal ================
@@ -150,10 +149,6 @@ await describeBspNet(
         .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
       const confirmBlock = currentBlockNumber + minWaitForStopStoring + 1;
 
-      console.log(
-        `Current block: ${currentBlockNumber}, MinWaitForStopStoring: ${minWaitForStopStoring}, skipping to block: ${confirmBlock}`
-      );
-
       // Skip to the block where BSP can confirm stop storing
       await userApi.block.skipTo(confirmBlock);
 
@@ -181,8 +176,6 @@ await describeBspNet(
         }
       });
 
-      console.log("File is no longer in BSP forest storage");
-
       // ================ Step 9: Finalize block and verify file is no longer in file storage ================
       // Seal and finalize a block to trigger file storage cleanup
       const { blockReceipt } = await userApi.block.seal({ finaliseBlock: true });
@@ -198,9 +191,6 @@ await describeBspNet(
           (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileMetadata.fileKey))
             .isFileNotFound
       });
-
-      console.log("File is no longer in BSP file storage after finalization");
-      console.log("Test completed successfully!");
     });
   }
 );

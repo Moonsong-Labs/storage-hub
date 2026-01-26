@@ -289,15 +289,15 @@ export const rpcDefinitions = {
             params: [],
             type: "u128"
         },
-        stopStoringFile: {
-            description: "Stop storing a file as a provider.",
+        bspStopStoringFile: {
+            description: "Request a BSP node to stop storing a file.",
             params: [
                 {
                     name: "file_key",
                     type: "H256"
                 }
             ],
-            type: "StopStoringFileResult"
+            type: "BspStopStoringFileResult"
         }
     }
 };

@@ -191,13 +191,12 @@ pub enum GetValuePropositionsResult {
     NotAnMsp,
 }
 
-/// Result of requesting a node to stop storing a file.
+/// Result of requesting a BSP node to stop storing a file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum StopStoringFileResult {
+pub enum BspStopStoringFileResult {
     /// The request was successfully initiated.
     Success,
-    /// This node is not a BSP.
-    /// This is temporary until we add support for MSPs to stop storing files.
+    /// The node is not a BSP.
     NotABsp,
     /// The blockchain service is not available.
     BlockchainServiceNotAvailable,
@@ -396,20 +395,20 @@ pub trait StorageHubClientApi {
     #[method(name = "getValuePropositions", with_extensions)]
     async fn get_value_propositions(&self) -> RpcResult<GetValuePropositionsResult>;
 
-    /// Stop storing a file.
+    /// Request a BSP node to stop storing a file.
     ///
     /// This initiates the two-phase BSP stop storing process:
     /// 1. Calls `bsp_request_stop_storing` with the file's metadata and inclusion proof
     /// 2. Waits for the minimum required time (`MinWaitForStopStoring`)
     /// 3. Automatically calls `bsp_confirm_stop_storing` to complete the process
     ///
-    /// Note: This method is only available for BSP nodes for now.
-    /// TODO: Add support for MSPs to stop storing files.
-    #[method(name = "stopStoringFile", with_extensions)]
-    async fn stop_storing_file(
+    /// Note: This method is only available for BSP nodes. MSPs should stop storing
+    /// the entire bucket instead for now
+    #[method(name = "bspStopStoringFile", with_extensions)]
+    async fn bsp_stop_storing_file(
         &self,
         file_key: shp_types::Hash,
-    ) -> RpcResult<StopStoringFileResult>;
+    ) -> RpcResult<BspStopStoringFileResult>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -1527,14 +1526,11 @@ where
         }
     }
 
-    // TODO: Make this RPC method more generic so MSPs can also use it.
-    // TODO: For that, we will need to add an extrinsic for MSPs.
-    // TODO: For now, MSPs should use the stop storing bucket extrinsic.
-    async fn stop_storing_file(
+    async fn bsp_stop_storing_file(
         &self,
         ext: &Extensions,
         file_key: shp_types::Hash,
-    ) -> RpcResult<StopStoringFileResult> {
+    ) -> RpcResult<BspStopStoringFileResult> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
 
@@ -1544,22 +1540,21 @@ where
             None => {
                 info!(
                     target: LOG_TARGET,
-                    "stop_storing_file called but blockchain service is not available"
+                    "bsp_stop_storing_file called but blockchain service is not available"
                 );
-                return Ok(StopStoringFileResult::BlockchainServiceNotAvailable);
+                return Ok(BspStopStoringFileResult::BlockchainServiceNotAvailable);
             }
         };
 
         // Check if the node is a BSP.
-        // TODO: Remove this once we add support for MSPs to stop storing files.
         let provider_id = self.get_provider_id(ext).await?;
-        if let RpcProviderId::Bsp(_) = provider_id {
-            return Ok(StopStoringFileResult::NotABsp);
+        if !matches!(provider_id, RpcProviderId::Bsp(_)) {
+            return Ok(BspStopStoringFileResult::NotABsp);
         }
 
         info!(
             target: LOG_TARGET,
-            "stop_storing_file called for file_key=[0x{:x}]. Emitting RequestBspStopStoring event.",
+            "bsp_stop_storing_file called for file_key=[0x{:x}]. Emitting RequestBspStopStoring event.",
             file_key
         );
 
@@ -1568,7 +1563,7 @@ where
             .emit_request_bsp_stop_storing(file_key.into())
             .await;
 
-        Ok(StopStoringFileResult::Success)
+        Ok(BspStopStoringFileResult::Success)
     }
 }
 

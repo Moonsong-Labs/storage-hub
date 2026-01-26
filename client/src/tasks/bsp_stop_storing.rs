@@ -26,7 +26,7 @@ const LOG_TARGET: &str = "bsp-stop-storing-task";
 ///
 /// This task reacts to the events:
 /// - **[`RequestBspStopStoring`] Event:**
-///   - Triggered by the RPC method `requestBspStopStoring`.
+///   - Triggered by the RPC method `bspStopStoringFile`.
 ///   - Retrieves file metadata from the forest storage.
 ///   - Generates a forest inclusion proof.
 ///   - Submits the `bsp_request_stop_storing` extrinsic to initiate the stop storing process.
@@ -74,7 +74,7 @@ where
 
 /// Handles the [`RequestBspStopStoring`] event.
 ///
-/// This event is triggered by the RPC method `stopStoringFile` to initiate
+/// This event is triggered by the RPC method `bspStopStoringFile` to initiate
 /// the stop storing process for a file.
 ///
 /// This handler performs the following actions:
@@ -148,7 +148,7 @@ where
             owner,
             fingerprint,
             size,
-            can_serve: true, // We can still serve the file during the waiting period
+            can_serve: false,
             inclusion_forest_proof: forest_proof.proof.into(),
         }
         .into();
@@ -235,7 +235,7 @@ where
             .saturating_add(min_wait)
             .saturating_add(1u32.into());
 
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Waiting until tick {} to confirm stop storing for file key [0x{:x}]. Current tick: {}, MinWait: {}",
             confirm_tick,
@@ -251,7 +251,7 @@ where
             .await
             .map_err(|e| anyhow!("Failed to wait for tick {}: {:?}", confirm_tick, e))?;
 
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Tick {} reached, proceeding to confirm stop storing for file key [{:x}]",
             confirm_tick,
