@@ -1880,8 +1880,17 @@ where
         match new_block_notification_kind {
             NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => {
                 // Process the new best block as a linear chain extension
-                self.process_sync_block(&new_best_block.hash, new_best_block.number)
-                    .await;
+                // If processing fails, the block won't be marked as processed and will be retried on restart
+                if let Err(e) = self
+                    .process_sync_block(&new_best_block.hash, new_best_block.number)
+                    .await
+                {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process sync block #{}: {:?}. Block will be retried on restart.",
+                        new_best_block.number, e
+                    );
+                }
             }
             NewBlockNotificationKind::NewNonBestBlock(_) => {
                 // Skip non-best blocks (uncle/stale blocks not on the canonical chain)
@@ -2182,6 +2191,10 @@ where
     }
 
     /// Internal method to process a finality notification.
+    ///
+    /// If finality event processing fails, the block is NOT marked as processed
+    /// (i.e., `last_finalised_block_processed` is not updated), ensuring the block
+    /// will be retried on the next restart.
     async fn process_finality_notification(
         &mut self,
         notification: FinalityNotification<OpaqueBlock>,
@@ -2242,12 +2255,36 @@ where
                     continue;
                 }
 
-                self.process_finality_events(intermediate_hash);
+                if let Err(e) = self.process_finality_events(intermediate_hash) {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process finality events for intermediate block #{} (0x{:x}): {:?}. Block will be retried on restart.",
+                        intermediate_number, intermediate_hash, e
+                    );
+                    observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_FAILURE], start.elapsed().as_secs_f64());
+                    return;
+                }
+
+                // Update last_finalised_block_processed after each successful intermediate block
+                // so we don't reprocess it on restart or on later finality notifications if a later block fails
+                self.last_finalised_block_processed = MinimalBlockInfo {
+                    number: intermediate_number,
+                    hash: *intermediate_hash,
+                };
+                self.update_last_finalised_block_info(self.last_finalised_block_processed);
             }
         }
 
         // Process finality events for the newly finalised block itself
-        self.process_finality_events(&block_hash);
+        if let Err(e) = self.process_finality_events(&block_hash) {
+            error!(
+                target: LOG_TARGET,
+                "Failed to process finality events for block #{} (0x{:x}): {:?}. Block will be retried on restart.",
+                block_number, block_hash, e
+            );
+            observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_FAILURE], start.elapsed().as_secs_f64());
+            return;
+        }
 
         // Cleanup the pending transaction store for the last finalised block processed.
         // Transactions with a nonce below the on-chain nonce of this block are finalised.

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
 use std::{sync::Arc, u32};
@@ -49,19 +50,19 @@ where
     /// This is called for each sync block to apply `MutationsAppliedForProvider` events
     /// before state pruning can occur. This ensures the local forest stays in sync with
     /// the on-chain state even when the node has been offline for a long period.
+    ///
+    /// Returns an error if there's a failure during event processing that should prevent
+    /// the block from being marked as processed (e.g., API errors when fetching events).
     pub(crate) async fn process_bsp_sync_mutations(
         &mut self,
         block_hash: &Runtime::Hash,
         bsp_id: BackupStorageProviderId<Runtime>,
-    ) {
+    ) -> Result<()> {
         // Get all events for the block
-        let events = match get_events_at_block::<Runtime>(&self.client, block_hash) {
-            Ok(events) => events,
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
-                return;
-            }
-        };
+        let events = get_events_at_block::<Runtime>(&self.client, block_hash).map_err(|e| {
+            warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
+            e
+        })?;
 
         // Apply any mutations in the block that are relevant to this BSP
         for ev in events {
@@ -96,6 +97,8 @@ where
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Handles the initial sync of a BSP, after coming out of syncing mode.
