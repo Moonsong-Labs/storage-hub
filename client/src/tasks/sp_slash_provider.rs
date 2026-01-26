@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use sc_tracing::tracing::*;
+use sp_runtime::traits::Zero;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -83,6 +84,33 @@ where
         &mut self,
         event: SlashableProvider<Runtime>,
     ) -> anyhow::Result<()> {
+        // Skip slashing the provider if they have no more capacity.
+        let capacity = match self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_capacity(event.provider)
+            .await
+        {
+            Ok(capacity) => capacity,
+            Err(e) => {
+                let err_msg = format!(
+                    "Failed to query capacity for provider [{:x}]: {:?}",
+                    event.provider, e
+                );
+                error!(target: LOG_TARGET, err_msg);
+                return Err(anyhow::anyhow!(err_msg));
+            }
+        };
+
+        if capacity.is_zero() {
+            info!(
+                target: LOG_TARGET,
+                "Skipping slashing provider [0x{:x}]: capacity is already 0",
+                event.provider,
+            );
+            return Ok(());
+        }
+
         // Build extrinsic.
         let call: Runtime::Call = pallet_storage_providers::Call::<Runtime>::slash {
             provider_id: event.provider,
