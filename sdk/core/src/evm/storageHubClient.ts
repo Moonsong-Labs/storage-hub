@@ -10,7 +10,7 @@
 
 import { filesystemAbi } from "../abi/filesystem";
 import type { FileInfo } from "../types";
-import type { EvmWriteOptions, StorageHubClientOptions } from "./types";
+import type { Eip1559FeeOptions, EvmWriteOptions, StorageHubClientOptions } from "./types";
 import { FileOperation, type ReplicationLevel } from "./types";
 import {
   type Address,
@@ -55,7 +55,6 @@ export class StorageHubClient {
 
   // TODO: Gas estimation defaults
   private static readonly DEFAULT_GAS_MULTIPLIER = 5;
-  private static readonly DEFAULT_GAS_PRICE = parseGwei("1");
 
   /**
    * Get write contract instance bound to the wallet client.
@@ -119,27 +118,71 @@ export class StorageHubClient {
 
   /**
    * Build transaction options with gas and fee settings.
-   * Handles both legacy and EIP-1559 fee structures.
+   *
    *
    * Note: `chain: null` is set to ensure compatibility with wallet clients that don't
    * properly expose chain information (e.g., Reown's Social Login). This tells viem
    * to use the wallet's currently selected chain rather than trying to fetch chainId.
    */
-  private buildTxOptions(gasLimit: bigint, options?: EvmWriteOptions): Record<string, unknown> {
-    const useEip1559 =
-      options?.maxFeePerGas !== undefined || options?.maxPriorityFeePerGas !== undefined;
-    const txOpts: Record<string, unknown> = { gas: gasLimit, chain: null };
+  private buildTxOptions(gasLimit: bigint, feeOptions: Eip1559FeeOptions): Record<string, unknown> {
+    return {
+      gas: gasLimit,
+      chain: null,
+      maxFeePerGas: feeOptions.maxFeePerGas,
+      maxPriorityFeePerGas: feeOptions.maxPriorityFeePerGas
+    };
+  }
 
-    if (useEip1559) {
-      // User wants EIP-1559 fees
-      if (options?.maxFeePerGas) txOpts.maxFeePerGas = options.maxFeePerGas;
-      if (options?.maxPriorityFeePerGas) txOpts.maxPriorityFeePerGas = options.maxPriorityFeePerGas;
-    } else {
-      // Default to legacy gas pricing
-      txOpts.gasPrice = options?.gasPrice ?? StorageHubClient.DEFAULT_GAS_PRICE;
+  /**
+   * Builds EIP-1559 gas fee.
+   *
+   * Strategy:
+   * - Reads the `baseFeePerGas` from the latest block (EIP-1559 required).
+   * - Sets a congestion-aware tip (`maxPriorityFeePerGas`).
+   * - Computes `maxFeePerGas` as:
+   *
+   *      maxFeePerGas = baseFeePerGas * 3 + maxPriorityFeePerGas
+   *
+   * The 3x multiplier provides protection against short-term base fee spikes
+   * while avoiding excessive overpayment during normal conditions.
+   *
+   */
+  private async buildEip1559FeeOptions(options?: EvmWriteOptions): Promise<Eip1559FeeOptions> {
+    // Fetch the latest block to read the current base fee
+    const { baseFeePerGas } = await this.publicClient.getBlock({
+      blockTag: "latest"
+    });
+
+    // If baseFeePerGas is missing, the RPC / chain does not support EIP-1559
+    if (baseFeePerGas == null) {
+      throw new Error("RPC does not support EIP-1559 (baseFeePerGas missing)");
     }
 
-    return txOpts;
+    // Convert base fee to gwei for easier threshold comparisons
+    const baseFeeGwei = baseFeePerGas / 1_000_000_000n;
+
+    // Default priority fee for normal network conditions
+    let computedPriorityFeePerGas = parseGwei("2");
+
+    // Increase tip under higher congestion
+    if (baseFeeGwei > 100n) {
+      // Severe congestion
+      computedPriorityFeePerGas = parseGwei("8");
+    } else if (baseFeeGwei > 50n) {
+      // High congestion
+      computedPriorityFeePerGas = parseGwei("5");
+    }
+
+    const maxPriorityFeePerGas = options?.maxPriorityFeePerGas ?? computedPriorityFeePerGas;
+
+    // Hard upper bound to absorb temporary base fee spikes (unless user provided maxFeePerGas).
+    const computedMaxFeePerGas = baseFeePerGas * 3n + maxPriorityFeePerGas;
+    const maxFeePerGas = options?.maxFeePerGas ?? computedMaxFeePerGas;
+
+    return {
+      maxFeePerGas,
+      maxPriorityFeePerGas
+    };
   }
 
   /**
@@ -268,7 +311,8 @@ export class StorageHubClient {
     );
     const args = [mspId, nameHex, isPrivate, valuePropId] as const;
     const gasLimit = await this.estimateGas("createBucket", args, options);
-    const txOpts = this.buildTxOptions(gasLimit, options);
+    const feeOptions = await this.buildEip1559FeeOptions(options);
+    const txOpts = this.buildTxOptions(gasLimit, feeOptions);
 
     const contract = this.getWriteContract();
     return await contract.write.createBucket?.(args, txOpts);
@@ -289,7 +333,8 @@ export class StorageHubClient {
   ) {
     const args = [bucketId, newMspId, newValuePropId] as const;
     const gasLimit = await this.estimateGas("requestMoveBucket", args, options);
-    const txOpts = this.buildTxOptions(gasLimit, options);
+    const feeOptions = await this.buildEip1559FeeOptions(options);
+    const txOpts = this.buildTxOptions(gasLimit, feeOptions);
 
     const contract = this.getWriteContract();
     return await contract.write.requestMoveBucket?.(args, txOpts);
@@ -308,7 +353,8 @@ export class StorageHubClient {
   ) {
     const args = [bucketId, isPrivate] as const;
     const gasLimit = await this.estimateGas("updateBucketPrivacy", args, options);
-    const txOpts = this.buildTxOptions(gasLimit, options);
+    const feeOptions = await this.buildEip1559FeeOptions(options);
+    const txOpts = this.buildTxOptions(gasLimit, feeOptions);
 
     const contract = this.getWriteContract();
     return await contract.write.updateBucketPrivacy?.(args, txOpts);
@@ -326,7 +372,8 @@ export class StorageHubClient {
       args,
       options
     );
-    const txOpts = this.buildTxOptions(gasLimit, options);
+    const feeOptions = await this.buildEip1559FeeOptions(options);
+    const txOpts = this.buildTxOptions(gasLimit, feeOptions);
 
     const contract = this.getWriteContract();
     return await contract.write.createAndAssociateCollectionWithBucket?.(args, txOpts);
@@ -340,7 +387,8 @@ export class StorageHubClient {
   async deleteBucket(bucketId: `0x${string}`, options?: EvmWriteOptions) {
     const args = [bucketId] as const;
     const gasLimit = await this.estimateGas("deleteBucket", args, options);
-    const txOpts = this.buildTxOptions(gasLimit, options);
+    const feeOptions = await this.buildEip1559FeeOptions(options);
+    const txOpts = this.buildTxOptions(gasLimit, feeOptions);
 
     const contract = this.getWriteContract();
     return await contract.write.deleteBucket?.(args, txOpts);
@@ -388,7 +436,8 @@ export class StorageHubClient {
       replicas
     ] as const;
     const gasLimit = await this.estimateGas("issueStorageRequest", args, options);
-    const txOpts = this.buildTxOptions(gasLimit, options);
+    const feeOptions = await this.buildEip1559FeeOptions(options);
+    const txOpts = this.buildTxOptions(gasLimit, feeOptions);
 
     const contract = this.getWriteContract();
     return await contract.write.issueStorageRequest?.(args, txOpts);
@@ -402,7 +451,8 @@ export class StorageHubClient {
   async revokeStorageRequest(fileKey: `0x${string}`, options?: EvmWriteOptions) {
     const args = [fileKey] as const;
     const gasLimit = await this.estimateGas("revokeStorageRequest", args, options);
-    const txOpts = this.buildTxOptions(gasLimit, options);
+    const feeOptions = await this.buildEip1559FeeOptions(options);
+    const txOpts = this.buildTxOptions(gasLimit, feeOptions);
 
     const contract = this.getWriteContract();
     return await contract.write.revokeStorageRequest?.(args, txOpts);
@@ -433,7 +483,8 @@ export class StorageHubClient {
       fileInfo.fingerprint
     ] as const;
     const gasLimit = await this.estimateGas("requestDeleteFile", args, options);
-    const txOpts = this.buildTxOptions(gasLimit, options);
+    const feeOptions = await this.buildEip1559FeeOptions(options);
+    const txOpts = this.buildTxOptions(gasLimit, feeOptions);
 
     const contract = this.getWriteContract();
     const fn = contract.write.requestDeleteFile;

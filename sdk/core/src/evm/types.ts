@@ -27,16 +27,34 @@ export type StorageHubClientOptions = {
 };
 
 /**
- * Optional EVM write overrides for SDK calls.
  *
- * Use these when you need to customize the transaction envelope or
- * sidestep under-estimation issues on Frontier/weight based pallets.
+ * Use this type to explicitly control transaction fees when submitting
+ * EIP-1559 transactions, especially under network congestion or when
+ * automatic fee estimation is unreliable.
  *
- * - If `gas` is not provided, the SDK will estimate gas for the function
- *   and apply `gasMultiplier` (default 5) for headroom.
- * - You can provide legacy `gasPrice`, or EIP-1559 fees via
- *   `maxFeePerGas` and `maxPriorityFeePerGas`.
+ * Notes:
+ * - These fields are mutually exclusive with legacy `gasPrice`.
+ * - The effective gas price paid is:
+ *   `min(maxFeePerGas, baseFeePerGas + maxPriorityFeePerGas)`.
  */
+export type Eip1559FeeOptions = {
+  /**
+   * Maximum total fee per gas unit (wei).
+   *
+   * Acts as an upper bound that protects against sudden base fee spikes
+   * between blocks.
+   */
+  maxFeePerGas: bigint;
+
+  /**
+   * Priority fee (tip) per gas unit (wei) paid to the block producer.
+   *
+   * Higher values increase the likelihood of faster inclusion under
+   * congestion.
+   */
+  maxPriorityFeePerGas: bigint;
+};
+
 export type EvmWriteOptions = {
   /**
    * Explicit gas limit. If omitted, the SDK will estimate and multiply.
@@ -48,7 +66,10 @@ export type EvmWriteOptions = {
    */
   gasMultiplier?: number;
   /**
-   * Legacy gas price (wei). If set, EIP-1559 fields are ignored by most clients.
+   * Legacy gas price (wei).
+   *
+   * @deprecated StorageHub SDK is moving to EIP-1559 only. This field is ignored by the SDK.
+   * Use `maxFeePerGas` and `maxPriorityFeePerGas` instead.
    */
   gasPrice?: bigint;
   /**
