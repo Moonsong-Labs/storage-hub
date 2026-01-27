@@ -459,6 +459,7 @@ jobs:
           node --import tsx                         \
                --test                               \
                --test-reporter=@reporters/github    \
+               --test-reporter-destination=stdout   \
                --test-reporter=spec                 \
                --test-reporter-destination=stdout   \
                --test-concurrency=1                 \
@@ -514,6 +515,7 @@ jobs:
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
               --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
@@ -601,6 +603,7 @@ jobs:
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
               --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
@@ -714,6 +717,7 @@ jobs:
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
               --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
@@ -809,6 +813,7 @@ jobs:
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
               --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
@@ -899,6 +904,7 @@ jobs:
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
               --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
