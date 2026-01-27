@@ -189,6 +189,12 @@ where
     /// Used for recording command lifecycle metrics (pending count, processing duration)
     /// and block processing metrics (block import/finality durations).
     pub(crate) metrics: MetricsLink,
+    /// Whether there are pending transactions that need to be resubscribed when RPC handlers become available.
+    ///
+    /// This flag is set during startup for Leader nodes that have pending transactions in the DB.
+    /// The resubscription is deferred until `SetRpcHandlers` is called, since submitting extrinsics
+    /// requires RPC handlers to be available.
+    pub(crate) pending_startup_resubscription: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -321,12 +327,12 @@ where
             MultiInstancesNodeRole::Leader => {
                 info!(
                     target: LOG_TARGET,
-                    "🧑‍✈️ Node role is LEADER; re-subscribing pending transactions from DB"
+                    "🧑‍✈️ Node role is LEADER; pending transactions will be re-subscribed when RPC handlers are set"
                 );
-                // Re-subscribe watchers for eligible pending transactions persisted in DB.
-                self.actor
-                    .resubscribe_pending_transactions_on_startup()
-                    .await;
+                // Mark that we need to resubscribe pending transactions once RPC handlers are available.
+                // We cannot do it here because submitting extrinsics requires RPC handlers, which are
+                // set later via the SetRpcHandlers command after the RPC server is initialized.
+                self.actor.pending_startup_resubscription = true;
             }
             MultiInstancesNodeRole::Follower => {
                 info!(
@@ -1642,8 +1648,22 @@ where
                         target: LOG_TARGET,
                         "Setting RPC handlers for BlockchainService"
                     );
-                    let mut rpc_handlers_guard = self.rpc_handlers.write().await;
-                    *rpc_handlers_guard = Some(rpc_handlers);
+                    {
+                        let mut rpc_handlers_guard = self.rpc_handlers.write().await;
+                        *rpc_handlers_guard = Some(rpc_handlers);
+                    }
+
+                    // Now that RPC handlers are available, perform any deferred startup tasks
+                    // that require them. This handles the race condition where the blockchain
+                    // service starts before the RPC server is ready.
+                    if self.pending_startup_resubscription {
+                        info!(
+                            target: LOG_TARGET,
+                            "🔁 RPC handlers now available; re-subscribing pending transactions from DB"
+                        );
+                        self.resubscribe_pending_transactions_on_startup().await;
+                        self.pending_startup_resubscription = false;
+                    }
                 }
                 BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
@@ -1861,6 +1881,7 @@ where
             leadership_conn: None,
             pending_finality_notifications: VecDeque::new(),
             metrics,
+            pending_startup_resubscription: false,
         }
     }
 
