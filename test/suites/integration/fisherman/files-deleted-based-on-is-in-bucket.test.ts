@@ -1,13 +1,13 @@
 import assert from "node:assert";
 import {
+  bspTwoKey,
   describeMspNet,
   type EnrichedBspApi,
-  type SqlClient,
-  shUser,
-  mspKey,
   hexToBuffer,
-  bspTwoKey,
-  ShConsts
+  mspKey,
+  ShConsts,
+  type SqlClient,
+  shUser
 } from "../../../util";
 
 /**
@@ -141,7 +141,7 @@ await describeMspNet(
         mspId,
         valuePropId,
         owner: shUser,
-        bspApi,
+        bspApis: [bspApi],
         mspApi: msp1Api
       });
 
@@ -337,7 +337,7 @@ await describeMspNet(
           mspId,
           valuePropId,
           owner: shUser,
-          bspApi,
+          bspApis: [bspApi],
           // mspApi is intentionally not provided - MSP checks will be skipped
           maxAttempts: 5
         });

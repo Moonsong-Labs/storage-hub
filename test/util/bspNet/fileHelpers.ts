@@ -7,12 +7,12 @@ import type { EventRecord } from "@polkadot/types/interfaces/system";
 import { u8aToHex } from "@polkadot/util";
 import type { HexString } from "@polkadot/util/types";
 import { decodeAddress } from "@polkadot/util-crypto";
-import type { EnrichedBspApi } from "./test-api";
 import { assertEventPresent } from "../asserts";
-import { waitFor } from "./waits";
 import { sealBlock } from "./block";
 import * as ShConsts from "./consts";
+import type { EnrichedBspApi } from "./test-api";
 import type { FileMetadata } from "./types";
+import { waitFor } from "./waits";
 
 // Proof-related errors that may be expected in some test scenarios
 const PROOF_RELATED_ERRORS = [
@@ -277,8 +277,13 @@ export interface BatchStorageRequestsOptions {
   owner: KeyringPair;
   /** Whether to finalize blocks */
   finaliseBlock?: boolean;
-  /** BSP API instance for waiting for file storage (optional - if not provided, BSP checks are skipped) */
-  bspApi?: EnrichedBspApi;
+  /**
+   * BSP API instances used for verifying replication.
+   *
+   * If provided, its length MUST match the replication target (replicas) used by ALL the storage requests.
+   * BSP checks are skipped when this is undefined.
+   */
+  bspApis?: EnrichedBspApi[];
   /** MSP API instance for waiting for file storage and catchup (optional - if not provided, MSP checks are skipped) */
   mspApi?: EnrichedBspApi;
   /** Maximum attempts for waiting for confirmations */
@@ -308,7 +313,7 @@ export interface BatchStorageRequestsResult {
  * 1. Creates buckets if bucket names are provided (deduplicates unique bucket names)
  * 2. Prepares all storage request transactions for the provided files
  * 3. Seals all storage requests in a single block (finalized or unfinalized based on `finaliseBlock`)
- * 4. If `bspApi` is provided:
+ * 4. If `bspApis` is provided:
  *    - Waits for all BSP volunteers to appear in tx pool
  *    - Processes BSP confirmations in batches (handles batched extrinsics)
  *    - Verifies all files are confirmed by BSP
@@ -322,12 +327,12 @@ export interface BatchStorageRequestsResult {
  *
  * **Purpose:**
  * This helper simplifies batch creating storage requests. It can handle:
- * - Both BSP and MSP responding (pass both `bspApi` and `mspApi`)
- * - BSP-only scenarios (pass only `bspApi`)
+ * - Both BSP and MSP responding (pass both `bspApis` and `mspApi`)
+ * - BSP-only scenarios (pass only `bspApis`)
  * - MSP-only scenarios (pass only `mspApi`)
  *
  * **Parameter Requirements:**
- * - At least one of `bspApi` or `mspApi` must be provided
+ * - At least one of `bspApis` or `mspApi` must be provided
  * - `owner` is always required
  *
  * @param api - The API instance
@@ -344,7 +349,7 @@ export const batchStorageRequests = async (
     valuePropId: providedValuePropId,
     owner,
     finaliseBlock = true,
-    bspApi,
+    bspApis,
     mspApi,
     maxAttempts = 10
   } = options;
@@ -353,12 +358,28 @@ export const batchStorageRequests = async (
     throw new Error("Owner is required for batchStorageRequests");
   }
 
-  if (!bspApi && !mspApi) {
-    throw new Error("At least one of bspApi or mspApi must be provided for batchStorageRequests");
+  if (!bspApis && !mspApi) {
+    throw new Error("At least one of bspApis or mspApi must be provided for batchStorageRequests");
   }
 
   const localOwner = owner;
   const ownerHex = u8aToHex(decodeAddress(localOwner.address)).slice(2);
+
+  if (bspApis) {
+    assert(
+      bspApis.length > 0,
+      "Invalid batchStorageRequests options: bspApis was provided but is empty"
+    );
+
+    const replicas = bspApis.length;
+    for (let i = 0; i < files.length; i++) {
+      const replicationTarget = files[i].replicationTarget;
+      assert(
+        replicationTarget === replicas,
+        `Invalid batchStorageRequests options: files[${i}].replicationTarget (${replicationTarget ?? "undefined"}) must equal bspApis.length (${replicas})`
+      );
+    }
+  }
 
   // Get value proposition if not provided
   let valuePropId = providedValuePropId;
@@ -501,13 +522,16 @@ export const batchStorageRequests = async (
   if (mspApi) {
     await api.wait.nodeCatchUpToChainTip(mspApi);
   }
-  if (bspApi) {
-    await api.wait.nodeCatchUpToChainTip(bspApi);
+  if (bspApis) {
+    for (const bspApi of bspApis) {
+      await api.wait.nodeCatchUpToChainTip(bspApi);
+    }
   }
 
   // Wait for all BSP volunteers to appear in tx pool (if bspApi is provided)
-  if (bspApi) {
-    await api.wait.bspVolunteerInTxPool(fileKeys.length);
+  if (bspApis) {
+    const replicas = bspApis.length;
+    await api.wait.bspVolunteerInTxPool(replicas * fileKeys.length);
   }
 
   // Wait for MSP acceptance and/or BSP stored confirmations (if APIs are provided)
@@ -515,7 +539,8 @@ export const batchStorageRequests = async (
   let totalAcceptance = 0;
   let totalConfirmations = 0;
   const expectMspAcceptance = mspApi !== undefined;
-  const expectBspConfirmations = bspApi !== undefined;
+  const expectBspConfirmations = bspApis !== undefined;
+  const expectedBspConfirmations = bspApis ? bspApis.length * fileKeys.length : 0;
 
   let attempt = 0;
   if (expectMspAcceptance || expectBspConfirmations) {
@@ -523,7 +548,7 @@ export const batchStorageRequests = async (
       attempt = 0;
       attempt < maxAttempts &&
       ((expectMspAcceptance && totalAcceptance < fileKeys.length) ||
-        (expectBspConfirmations && totalConfirmations < fileKeys.length));
+        (expectBspConfirmations && totalConfirmations < expectedBspConfirmations));
       attempt++
     ) {
       // Wait for MSP response and/or BSP stored event, depending on what's expected
@@ -541,7 +566,7 @@ export const batchStorageRequests = async (
         }
       }
 
-      if (expectBspConfirmations && totalConfirmations < fileKeys.length) {
+      if (expectBspConfirmations && totalConfirmations < expectedBspConfirmations) {
         try {
           await api.wait.bspStored({
             sealBlock: false,
@@ -598,56 +623,87 @@ export const batchStorageRequests = async (
     }
 
     if (expectBspConfirmations) {
+      const replicas = bspApis?.length ?? 0;
       assert.strictEqual(
         totalConfirmations,
-        fileKeys.length,
-        `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}. Check logs above for ExtrinsicFailed events which may indicate why BSP transactions failed.`
+        expectedBspConfirmations,
+        `Expected ${expectedBspConfirmations} BSP confirmations (${replicas} replicas × ${fileKeys.length} files), but got ${totalConfirmations}. Check logs above for ExtrinsicFailed events which may indicate why BSP transactions failed.`
       );
     }
   }
 
   // Verify files are in BSP and/or MSP forests or file storages (depending on which APIs are provided)
+  for (let index = 0; index < fileKeys.length; index++) {
+    const fileKey = fileKeys[index];
+    const bucketId = bucketIds[index];
 
-  await waitFor({
-    lambda: async () => {
-      for (let index = 0; index < fileKeys.length; index++) {
-        const fileKey = fileKeys[index];
-        const bucketId = bucketIds[index];
-
-        // Check file IS in BSP forest and file storage (if bspApi is provided)
-        if (bspApi) {
-          const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
-          if (!bspForestResult.isTrue) {
-            return false;
-          }
-
-          const bspFileStorageResult =
-            await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
-          if (!bspFileStorageResult.isFileFound) {
-            return false;
-          }
+    if (bspApis) {
+      for (let bspIndex = 0; bspIndex < bspApis.length; bspIndex++) {
+        const bspApi = bspApis[bspIndex];
+        try {
+          await waitFor({
+            lambda: async () => {
+              const bspFileStorageResult =
+                await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+              return bspFileStorageResult.isFileFound;
+            }
+          });
+        } catch (error) {
+          throw new Error(
+            `File ${fileKey} with index ${index} not found in BSP[${bspIndex}] file storage: ${error}`
+          );
         }
 
-        // Check file IS in MSP forest and file storage (if mspApi is provided)
-        if (mspApi) {
-          const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(
-            bucketId,
-            fileKey
+        try {
+          await waitFor({
+            lambda: async () => {
+              const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(
+                null,
+                fileKey
+              );
+              return bspForestResult.isTrue;
+            }
+          });
+        } catch (error) {
+          throw new Error(
+            `File ${fileKey} with index ${index} not found in BSP[${bspIndex}] forest storage: ${error}`
           );
-          if (!mspForestResult.isTrue) {
-            return false;
-          }
-
-          const mspFileStorageResult =
-            await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
-          if (!mspFileStorageResult.isFileFound) {
-            return false;
-          }
         }
       }
-      return true;
     }
-  });
+
+    if (mspApi) {
+      try {
+        await waitFor({
+          lambda: async () => {
+            const mspFileStorageResult =
+              await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+            return mspFileStorageResult.isFileFound;
+          }
+        });
+      } catch (error) {
+        throw new Error(
+          `File ${fileKey} with index ${index} not found in MSP file storage: ${error}`
+        );
+      }
+
+      try {
+        await waitFor({
+          lambda: async () => {
+            const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(
+              bucketId,
+              fileKey
+            );
+            return mspForestResult.isTrue;
+          }
+        });
+      } catch (error) {
+        throw new Error(
+          `File ${fileKey} with index ${index} not found in MSP forest storage: ${error}`
+        );
+      }
+    }
+  }
 
   return {
     fileKeys,
