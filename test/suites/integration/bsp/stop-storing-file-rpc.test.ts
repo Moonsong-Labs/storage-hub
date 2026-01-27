@@ -9,7 +9,7 @@ import {
 
 await describeBspNet(
   "BSPNet: Stop Storing File RPC",
-  { initialised: false, only: true, networkConfig: "standard" },
+  { initialised: false },
   ({ before, createBspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -190,6 +190,178 @@ await describeBspNet(
         lambda: async () =>
           (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileMetadata.fileKey))
             .isFileNotFound
+      });
+    });
+
+    it("BSP can stop storing multiple files via RPC in the same block", async () => {
+      // This test verifies that the BSP handles multiple stop storing
+      // requests on the same block correctly, avoiding invalid proofs.
+
+      const source1 = "res/whatsup.jpg";
+      const source2 = "res/cloud.jpg";
+      const destination1 = "test/stop-storing-multi-1.jpg";
+      const destination2 = "test/stop-storing-multi-2.jpg";
+      const bucketName1 = "stop-storing-multi-test-1";
+      const bucketName2 = "stop-storing-multi-test-2";
+
+      // ================ Step 1: Upload two files and wait for BSP to store both ================
+      // Upload first file
+      const fileMetadata1 = await userApi.file.createBucketAndSendNewStorageRequest(
+        source1,
+        destination1,
+        bucketName1,
+        null,
+        null,
+        null,
+        1
+      );
+
+      await userApi.wait.bspVolunteerInTxPool(1);
+      await userApi.block.seal();
+
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        timeoutMs: 30000,
+        sealBlock: true
+      });
+
+      // Upload second file
+      const fileMetadata2 = await userApi.file.createBucketAndSendNewStorageRequest(
+        source2,
+        destination2,
+        bucketName2,
+        null,
+        null,
+        null,
+        1
+      );
+
+      await userApi.wait.bspVolunteerInTxPool(1);
+      await userApi.block.seal();
+
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        timeoutMs: 30000,
+        sealBlock: true
+      });
+
+      // Wait for BSP to update its local Forest with both files
+      await waitFor({
+        lambda: async () => {
+          const isFile1InForest = await bspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            fileMetadata1.fileKey
+          );
+          const isFile2InForest = await bspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            fileMetadata2.fileKey
+          );
+          return isFile1InForest.isTrue && isFile2InForest.isTrue;
+        }
+      });
+
+      // ================ Step 2: Call stopStoringFile RPC for both files in quick succession ================
+      const rpcResult1 = await bspApi.rpc.storagehubclient.bspStopStoringFile(
+        fileMetadata1.fileKey
+      );
+      const rpcResult2 = await bspApi.rpc.storagehubclient.bspStopStoringFile(
+        fileMetadata2.fileKey
+      );
+
+      strictEqual(rpcResult1.isSuccess, true, "First RPC should return Success");
+      strictEqual(rpcResult2.isSuccess, true, "Second RPC should return Success");
+
+      // ================ Step 3: Wait for both bspRequestStopStoring transactions ================
+      // Due to the forest lock, the requests are processed sequentially.
+      // Wait for first request
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspRequestStopStoring",
+        timeout: 30000
+      });
+      await userApi.block.seal();
+      await userApi.assert.eventPresent("fileSystem", "BspRequestedToStopStoring");
+      const firstRequestBlock = await userApi.rpc.chain.getBlock();
+      const firstRequestBlockNumber = firstRequestBlock.block.header.number.toNumber();
+
+      // Wait for second request
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspRequestStopStoring",
+        timeout: 30000
+      });
+      await userApi.block.seal();
+      await userApi.assert.eventPresent("fileSystem", "BspRequestedToStopStoring");
+      const secondRequestBlock = await userApi.rpc.chain.getBlock();
+      const secondRequestBlockNumber = secondRequestBlock.block.header.number.toNumber();
+      assert(
+        secondRequestBlockNumber === firstRequestBlockNumber + 1,
+        "Second request should be in the next block after the first request"
+      );
+
+      // ================ Step 4: Skip to confirm block of the first request ================
+      const minWaitForStopStoring = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: { MinWaitForStopStoring: null }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
+
+      // Skip to the block where BSP can confirm the first stop storing request
+      const confirmBlock = firstRequestBlockNumber + minWaitForStopStoring + 1;
+      await userApi.block.skipTo(confirmBlock);
+
+      // ================ Step 5: Wait for the first bspConfirmStopStoring transaction ================
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspConfirmStopStoring",
+        timeout: 30000
+      });
+      await userApi.block.seal();
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+
+      // ================ Step 6: Wait for the second bspConfirmStopStoring transaction ================
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspConfirmStopStoring",
+        timeout: 30000
+      });
+      await userApi.block.seal();
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+
+      // ================ Step 7: Verify both files are no longer in forest storage ================
+      await waitFor({
+        lambda: async () => {
+          const isFile1InForest = await bspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            fileMetadata1.fileKey
+          );
+          const isFile2InForest = await bspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            fileMetadata2.fileKey
+          );
+          return isFile1InForest.isFalse && isFile2InForest.isFalse;
+        }
+      });
+
+      // ================ Step 7: Finalize and verify both files removed from file storage ================
+      const { blockReceipt } = await userApi.block.seal({ finaliseBlock: true });
+      const finalisedBlockHash = blockReceipt.blockHash.toString();
+
+      await bspApi.wait.blockImported(finalisedBlockHash);
+      await bspApi.block.finaliseBlock(finalisedBlockHash);
+
+      await waitFor({
+        lambda: async () => {
+          const file1Status = await bspApi.rpc.storagehubclient.isFileInFileStorage(
+            fileMetadata1.fileKey
+          );
+          const file2Status = await bspApi.rpc.storagehubclient.isFileInFileStorage(
+            fileMetadata2.fileKey
+          );
+          return file1Status.isFileNotFound && file2Status.isFileNotFound;
+        }
       });
     });
   }
