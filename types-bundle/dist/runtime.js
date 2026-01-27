@@ -114,6 +114,20 @@ const FILE_SYSTEM_V1 = {
             }
         ],
         type: "Vec<H256>"
+    },
+    query_pending_bsp_confirm_storage_requests: {
+        description: "Query the file keys that a BSP still needs to confirm storing after volunteering.",
+        params: [
+            {
+                name: "bspId",
+                type: "BackupStorageProviderId"
+            },
+            {
+                name: "fileKeys",
+                type: "Vec<H256>"
+            }
+        ],
+        type: "Vec<H256>"
     }
 };
 const PROOFS_DEALER_V1 = {
