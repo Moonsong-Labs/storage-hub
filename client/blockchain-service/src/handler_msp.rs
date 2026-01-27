@@ -56,13 +56,14 @@ where
         &mut self,
         block_hash: &Runtime::Hash,
         msp_id: ProviderId<Runtime>,
-    ) -> Result<()> {
-        // Get all events for the block.
-        let Ok(events) = get_events_at_block::<Runtime>(&self.client, block_hash) else {
-            return Err(anyhow::anyhow!(
-                "Failed to get events during MSP sync for block {:?}",
-                block_hash
-            ));
+    ) {
+        // Get all events for the block
+        let events = match get_events_at_block::<Runtime>(&self.client, block_hash) {
+            Ok(events) => events,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
+                return;
+            }
         };
 
         // Apply any mutations in the block that are relevant to this MSP
@@ -81,20 +82,15 @@ where
                 {
                     Ok(bucket_id) => bucket_id,
                     Err(e) => {
-                        let msg = format!(
-                            "Failed to get bucket ID from MutationsApplied event info: {:?}",
-                            e
-                        );
-                        error!(target: LOG_TARGET, "{}", msg);
-                        return Err(anyhow::anyhow!(msg));
+                        error!(target: LOG_TARGET, "Failed to get bucket ID from MutationsApplied event info: {:?}", e);
+                        return;
                     }
                 };
 
                 // Check if this bucket is managed by this MSP
                 if !self.validate_bucket_mutations_for_msp(block_hash, &msp_id, &bucket_id) {
-                    let err_msg = format!("Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. Skipping mutations applied event.", bucket_id, msp_id);
-                    trace!(target: LOG_TARGET, "{}", err_msg);
-                    return Err(anyhow::anyhow!(err_msg));
+                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. Skipping mutations applied event.", bucket_id, msp_id);
+                    return;
                 }
 
                 debug!(target: LOG_TARGET, "Applying {} mutations during sync for bucket [0x{:x}]", mutations.len(), bucket_id);
@@ -113,15 +109,11 @@ where
                         .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
                         .await
                     {
-                        let err_msg = format!("CRITICAL ❗❗ Failed to apply mutation during sync for bucket [0x{:x}]: {:?}", bucket_id, e);
-                        error!(target: LOG_TARGET, "{}", err_msg);
-                        return Err(anyhow::anyhow!(err_msg));
+                        error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync for bucket [0x{:x}]: {:?}", bucket_id, e);
                     }
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Handles the initial sync of a MSP, after coming out of syncing mode.
@@ -151,11 +143,10 @@ where
         _block_hash: &Runtime::Hash,
         _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
-    ) -> Result<()>
-    where
+    ) where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        self.forest_root_changes_catchup(&tree_route).await
+        self.forest_root_changes_catchup(&tree_route).await;
     }
 
     /// Processes new block imported events that are only relevant for an MSP.
@@ -434,15 +425,16 @@ where
     ///
     /// This function is called every time a new block is imported and after each request is queued.
     ///
-    /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
+    /// _IMPORTANT: This check will be skipped if the block currently being processed does not match the client's best block._
     pub(crate) fn msp_assign_forest_root_write_lock(&mut self) {
         let client_best_hash: Runtime::Hash = self.client.info().best_hash;
         let client_best_number: BlockNumber<Runtime> = self.client.info().best_number.into();
 
-        // Skip if the latest processed block doesn't match the current best block
-        if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number
+        // Skip if the block currently being processed doesn't match the client's best block
+        if self.current_block.hash != client_best_hash
+            || self.current_block.number != client_best_number
         {
-            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])", self.best_block.hash, self.best_block.number, client_best_hash, client_best_number);
+            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because block currently being processed does not match client's best block (current block hash and number [{}, {}], client best block hash and number [{}, {}])", self.current_block.hash, self.current_block.number, client_best_hash, client_best_number);
             return;
         }
 

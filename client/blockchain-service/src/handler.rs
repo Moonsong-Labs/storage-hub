@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use futures::prelude::*;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashSet, VecDeque},
     path::PathBuf,
     sync::Arc,
 };
@@ -16,6 +16,7 @@ use sc_transaction_pool_api::TransactionStatus;
 use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
+use sp_core::H256;
 use sp_keystore::KeystorePtr;
 use sp_runtime::{traits::Header, SaturatedConversion, Saturating};
 
@@ -39,7 +40,7 @@ use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxSt
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::CFDequeAPI,
-    types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
+    types::{AccountId, BlockNumber, FileKey, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
@@ -84,11 +85,21 @@ where
     /// This is used to manage Forest Storage instances and update their roots when there are
     /// Forest-root-changing events on-chain, for the Storage Provider managed by this service.
     pub(crate) forest_storage_handler: FSH,
-    /// The hash and number of the last best block processed by the BlockchainService.
+    /// The hash and number of the block currently being processed by the BlockchainService.
     ///
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
-    pub(crate) best_block: MinimalBlockInfo<Runtime>,
+    ///
+    /// Note: This is updated at the START of block processing, so it doesn't indicate that
+    /// processing has completed. Use `last_block_processed` for that.
+    pub(crate) current_block: MinimalBlockInfo<Runtime>,
+    /// The hash and number of the last block for which we've completed import processing.
+    ///
+    /// Unlike `current_block` which is updated at the start of block processing, this field is
+    /// updated at the END of block import processing. This is important for coordinating with
+    /// finality notifications, as we should only process finality for blocks that have been
+    /// fully import-processed.
+    pub(crate) last_block_processed: MinimalBlockInfo<Runtime>,
     /// The hash and number of the last finalised block processed by the BlockchainService.
     pub(crate) last_finalised_block_processed: MinimalBlockInfo<Runtime>,
     /// Nonce counter for the extrinsics.
@@ -156,6 +167,17 @@ where
     pub(crate) role: MultiInstancesNodeRole,
     /// Dedicated leadership connection used to hold advisory locks when DB is enabled.
     pub(crate) leadership_conn: Option<LeadershipClient>,
+    /// Queue for finality notifications that arrive before their corresponding block import.
+    ///
+    /// This handles the race condition where finality notifications can outpace block import
+    /// notifications if the block import processing is lagging behind.
+    /// When a finality notification arrives for a block that hasn't been
+    /// import-processed yet (`finality_block_number > last_block_processed.number`),
+    /// it's queued here and processed after block import catches up.
+    ///
+    /// The queue is drained at the end of each block import notification, processing any
+    /// queued finality notifications whose block numbers are now <= last_block_processed.number.
+    pub(crate) pending_finality_notifications: VecDeque<FinalityNotification<OpaqueBlock>>,
     /// Metrics link for recording telemetry.
     ///
     /// Used for recording command lifecycle metrics (pending count, processing duration)
@@ -458,7 +480,7 @@ where
                     }
                 }
                 BlockchainServiceCommand::GetBestBlockInfo { callback } => {
-                    let best_block_info = self.best_block;
+                    let best_block_info = self.last_block_processed;
                     match callback.send(Ok(best_block_info)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Best block info sent successfully");
@@ -998,12 +1020,7 @@ where
                 }
                 BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
                     if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
-                        let state_store_context =
-                            self.persistent_state.open_rw_context_with_overlay();
-                        state_store_context
-                            .pending_confirm_storing_request_deque::<Runtime>()
-                            .push_back(request);
-                        state_store_context.commit();
+                        self.queue_confirm_storing_requests(std::iter::once(request));
                         // We check right away if we can process the request so we don't waste time.
                         self.bsp_assign_forest_root_write_lock();
                         match callback.send(Ok(())) {
@@ -1448,6 +1465,112 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryPendingBspConfirmStorageRequests {
+                    confirm_storing_requests,
+                    callback,
+                } => {
+                    let (managed_bsp_id, pending_volunteer_file_keys) = match &self
+                        .maybe_managed_provider
+                    {
+                        Some(ManagedProvider::Bsp(bsp_handler)) => (
+                            bsp_handler.bsp_id.clone(),
+                            &bsp_handler.pending_volunteer_file_keys,
+                        ),
+                        _ => {
+                            error!(target: LOG_TARGET, "`QueryPendingBspConfirmStorageRequests` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                            match callback.send(Err(anyhow!("Node is not managing a BSP"))) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    // Pre-filter: separate requests with pending volunteer transactions from those ready to query.
+                    let (requests_to_requeue, requests_to_query): (Vec<_>, Vec<_>) =
+                        confirm_storing_requests.into_iter().partition(|request| {
+                            let file_key: FileKey = request.file_key.as_ref().into();
+                            pending_volunteer_file_keys.contains(&file_key)
+                        });
+
+                    // Re-queue pending volunteer requests for later processing.
+                    // We re-queue them here to avoid filtering them out in the runtime API call below,
+                    // and not attempt the confirmation ever again. This way we ensure that once this node
+                    // sees the volunteer transaction succeed on-chain, it will be able to send the storage confirmation.
+                    for request in &requests_to_requeue {
+                        info!(
+                            target: LOG_TARGET,
+                            "Volunteer pending for file key [{:?}], re-queuing confirm request",
+                            request.file_key
+                        );
+                    }
+                    self.queue_confirm_storing_requests(requests_to_requeue);
+
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let file_keys: Vec<H256> = requests_to_query
+                        .iter()
+                        .map(|r| H256::from_slice(r.file_key.as_ref()))
+                        .collect();
+
+                    // Query the runtime API to filter file keys to only those pending confirmation
+                    let pending_file_keys = match self
+                        .client
+                        .runtime_api()
+                        .query_pending_bsp_confirm_storage_requests(
+                            current_block_hash,
+                            managed_bsp_id,
+                            file_keys,
+                        ) {
+                        Ok(keys) => keys,
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to query pending BSP confirm storage requests: {:?}", e);
+                            match callback.send(Err(anyhow!(
+                                "Failed to query pending BSP confirm storage requests"
+                            ))) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    let result: Vec<FileKey> = pending_file_keys
+                        .into_iter()
+                        .map(|k| k.as_ref().into())
+                        .collect();
+
+                    match callback.send(Ok(result)) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send pending BSP confirm storage requests: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::AddPendingVolunteerFileKey { file_key } => {
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        debug!(target: LOG_TARGET, "Adding file key [{:?}] to pending volunteer tracking", file_key);
+                        bsp_handler.pending_volunteer_file_keys.insert(file_key);
+                    } else {
+                        error!(target: LOG_TARGET, "AddPendingVolunteerFileKey received while not managing a BSP. This should never happen.");
+                    }
+                }
+                BlockchainServiceCommand::RemovePendingVolunteerFileKey { file_key } => {
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        debug!(target: LOG_TARGET, "Removing file key [{:?}] from pending volunteer tracking", file_key);
+                        bsp_handler.pending_volunteer_file_keys.remove(&file_key);
+                    } else {
+                        error!(target: LOG_TARGET, "RemovePendingVolunteerFileKey received while not managing a BSP. This should never happen.");
+                    }
+                }
                 BlockchainServiceCommand::SetFileKeyStatus { file_key, status } => {
                     if let Some(ManagedProvider::Msp(msp_handler)) =
                         &mut self.maybe_managed_provider
@@ -1590,7 +1713,11 @@ where
             keystore,
             rpc_handlers,
             forest_storage_handler,
-            best_block: MinimalBlockInfo {
+            current_block: MinimalBlockInfo {
+                number: 0u32.into(),
+                hash: genesis_hash,
+            },
+            last_block_processed: MinimalBlockInfo {
                 number: 0u32.into(),
                 hash: genesis_hash,
             },
@@ -1616,6 +1743,7 @@ where
             pending_tx_store: None,
             role: MultiInstancesNodeRole::Standalone,
             leadership_conn: None,
+            pending_finality_notifications: VecDeque::new(),
             metrics,
         }
     }
@@ -1634,13 +1762,14 @@ where
         // This prevents:
         // 1. Double-processing of reorgs during sync (which would trigger unwanted events)
         // 2. Premature triggering of `handle_initial_sync` during any reorgs during sync
-        // 3. Duplicate `register_best_block_and_check_reorg` calls
+        // 3. Duplicate `register_current_block_and_check_reorg` calls
         if notification.origin == sp_consensus::BlockOrigin::NetworkInitialSync {
             return;
         }
 
         // Check if this new imported block is the new best, and if it causes a reorg.
-        let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
+        let new_block_notification_kind =
+            self.register_current_block_and_check_reorg(&notification);
 
         // Get the new best block info, and the `TreeRoute`, i.e. the blocks from the old best block to the new best block.
         // A new non-best block is ignored and not processed.
@@ -1678,20 +1807,8 @@ where
         }
 
         let block_number = block_number.saturated_into();
-        if let Err(e) = self
-            .process_block_import(&block_hash, &block_number, tree_route)
-            .await
-        {
-            error!(
-                target: LOG_TARGET,
-                "Failed to process block import notification (#{}): {} error: {:?}",
-                block_number,
-                block_hash,
-                e
-            );
-            observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["block_import", STATUS_FAILURE], start.elapsed().as_secs_f64());
-            return;
-        }
+        self.process_block_import(&block_hash, &block_number, tree_route)
+            .await;
 
         info!(target: LOG_TARGET, "📭 Block import notification (#{}): {} processed successfully", block_number, block_hash);
 
@@ -1757,24 +1874,14 @@ where
         }
 
         // Check if this new imported block is the new best, and if it causes a reorg.
-        let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
+        let new_block_notification_kind =
+            self.register_current_block_and_check_reorg(&notification);
 
         match new_block_notification_kind {
             NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => {
                 // Process the new best block as a linear chain extension
-                if let Err(e) = self
-                    .process_sync_block(&new_best_block.hash, new_best_block.number)
-                    .await
-                {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Failed to process sync block #{} ({:?}): {:?}",
-                        new_best_block.number,
-                        new_best_block.hash,
-                        e
-                    );
-                    return;
-                }
+                self.process_sync_block(&new_best_block.hash, new_best_block.number)
+                    .await;
             }
             NewBlockNotificationKind::NewNonBestBlock(_) => {
                 // Skip non-best blocks (uncle/stale blocks not on the canonical chain)
@@ -1786,10 +1893,7 @@ where
                 ..
             } => {
                 // Process the reorg
-                if let Err(e) = self.process_sync_reorg(&tree_route, new_best_block).await {
-                    warn!(target: LOG_TARGET, "Failed to process sync reorg: {:?}", e);
-                    return;
-                }
+                self.process_sync_reorg(&tree_route, new_best_block).await;
             }
         }
     }
@@ -1842,7 +1946,7 @@ where
         block_hash: &Runtime::Hash,
         block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<OpaqueBlock>,
-    ) -> anyhow::Result<()> {
+    ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
         // Cleanup manager and DB, and handle old nonce gaps in one helper
@@ -1854,11 +1958,11 @@ where
         match self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
                 self.bsp_init_block_processing(block_hash, block_number, tree_route.clone())
-                    .await?;
+                    .await;
             }
             Some(ManagedProvider::Msp(_)) => {
                 self.msp_init_block_processing(block_hash, block_number, tree_route.clone())
-                    .await?;
+                    .await;
             }
             None => {
                 trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
@@ -1892,25 +1996,40 @@ where
 
         // Get events from storage.
         // TODO: Handle the `pallet-cr-randomness` events here, if/when we start using them.
-        let block_events = get_events_at_block::<Runtime>(&self.client, block_hash)?;
+        match get_events_at_block::<Runtime>(&self.client, block_hash) {
+            Ok(block_events) => {
+                for ev in block_events {
+                    // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
 
-        for ev in block_events {
-            // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
+                    self.process_msp_and_bsp_block_import_events(ev.event.clone().into());
 
-            self.process_msp_and_bsp_block_import_events(ev.event.clone().into());
-
-            // Process Provider-specific events.
-            match &self.maybe_managed_provider {
-                Some(ManagedProvider::Bsp(_)) => {
-                    self.bsp_process_block_import_events(block_hash, ev.event.clone().into());
+                    // Process Provider-specific events.
+                    match &self.maybe_managed_provider {
+                        Some(ManagedProvider::Bsp(_)) => {
+                            self.bsp_process_block_import_events(
+                                block_hash,
+                                ev.event.clone().into(),
+                            );
+                        }
+                        Some(ManagedProvider::Msp(_)) => {
+                            self.msp_process_block_import_events(
+                                block_hash,
+                                ev.event.clone().into(),
+                            );
+                        }
+                        None => {
+                            // * USER SPECIFIC EVENTS. USED ONLY FOR TESTING.
+                            self.process_test_user_events(ev.event.clone().into());
+                        }
+                    }
                 }
-                Some(ManagedProvider::Msp(_)) => {
-                    self.msp_process_block_import_events(block_hash, ev.event.clone().into());
-                }
-                None => {
-                    // * USER SPECIFIC EVENTS. USED ONLY FOR TESTING.
-                    self.process_test_user_events(ev.event.clone().into());
-                }
+            }
+            Err(e) => {
+                // TODO: Handle case where the storage cannot be decoded.
+                // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
+                // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
+                // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
+                error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
 
@@ -1929,12 +2048,12 @@ where
             }
         }
 
-        self.update_last_processed_block_info(MinimalBlockInfo {
+        // Update both the in-memory tracker and persistent storage
+        self.last_block_processed = MinimalBlockInfo {
             number: *block_number,
             hash: *block_hash,
-        });
-
-        Ok(())
+        };
+        self.update_last_processed_block_info(self.last_block_processed);
     }
 
     /// Handle a finality notification.
@@ -1942,6 +2061,10 @@ where
     /// This processes finality events for the finalised block and all implicitly finalised blocks
     /// in the `tree_route`. This is important for scenarios where finality jumps multiple blocks
     /// at once (e.g., after a node restart, network partition recovery or solved finality staleness).
+    ///
+    /// If the finality notification is for a block that hasn't been import-processed yet
+    /// (`block_number > last_block_processed.number`), it is queued for later processing. This handles
+    /// the race condition where finality notifications can arrive before block import notifications.
     async fn handle_finality_notification(
         &mut self,
         notification: FinalityNotification<OpaqueBlock>,
@@ -1954,6 +2077,13 @@ where
             trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping finality notification #{}: {}", block_number, block_hash);
             return;
         }
+
+        info!(target: LOG_TARGET, "📩 Received finality notification for block #{}: 0x{:x}", block_number, block_hash);
+
+        // Drain any pending finality notifications that can now be processed.
+        // This handles notifications that were queued because they arrived before their
+        // corresponding block import was processed.
+        self.drain_pending_finality_notifications().await;
 
         // Skip if this finalised block was already processed.
         // This can happen during sync when both `handle_sync_block_notification` (via
@@ -1970,10 +2100,99 @@ where
             return;
         }
 
-        // Start timing block processing after early returns
+        // If this finality notification is for a block that hasn't been fully import-processed yet,
+        // queue it for later. This prevents processing finality events before the forest has
+        // been updated by block import, which would cause issues like failing to delete files
+        // because they're still in the forest.
+        if block_number > self.last_block_processed.number {
+            warn!(
+                target: LOG_TARGET,
+                "🛑 Finality notification for block #{} is ahead of last import-processed block #{}, deferring to queue",
+                block_number, self.last_block_processed.number
+            );
+            self.pending_finality_notifications.push_back(notification);
+            return;
+        }
+
+        // If the block number is the same as the last import-processed block number, but the hash is different,
+        // it means the block has been reorged and we need to wait for the new block that replaces it before processing
+        // the finality notification.
+        if block_number == self.last_block_processed.number
+            && block_hash != self.last_block_processed.hash
+        {
+            warn!(
+                target: LOG_TARGET,
+                "🔄 Finality notification for block #{}: finalised block 0x{:x} is a reorg of the last processed block 0x{:x}, deferring to queue",
+                block_number, block_hash, self.last_block_processed.hash
+            );
+            self.pending_finality_notifications.push_back(notification);
+            return;
+        }
+
+        // At this point, we know that the finality notification is for a block that has been import-processed,
+        // and it is not a reorg of the last processed block. Therefore, we can safely process it.
+        self.process_finality_notification(notification).await;
+    }
+
+    /// Drain and process any pending finality notifications that can now be processed.
+    ///
+    /// This is called at the start of finality notification handling to process any
+    /// notifications that were queued because they arrived before their corresponding
+    /// block import was processed.
+    async fn drain_pending_finality_notifications(&mut self) {
+        // Process notifications in order while they're <= last_block_processed
+        while let Some(notification) = self.pending_finality_notifications.front() {
+            let block_number: BlockNumber<Runtime> =
+                (*notification.header.number()).saturated_into();
+
+            if block_number > self.last_block_processed.number {
+                // Still ahead, stop draining
+                break;
+            }
+
+            if block_number == self.last_block_processed.number
+                && notification.hash != self.last_block_processed.hash
+            {
+                // The last processed block has been reorged, stop draining
+                break;
+            }
+
+            // Safe to process now
+            let notification = self.pending_finality_notifications.pop_front().unwrap();
+
+            // Skip if the finality has been already processed
+            if block_number <= self.last_finalised_block_processed.number {
+                warn!(
+                    target: LOG_TARGET,
+                    "🔁 Deferred finality notification #{} already processed, skipping",
+                    block_number
+                );
+                continue;
+            }
+
+            info!(
+                target: LOG_TARGET,
+                "⏰ Processing deferred finality notification #{} (queue size: {})",
+                block_number,
+                self.pending_finality_notifications.len()
+            );
+
+            self.process_finality_notification(notification).await;
+        }
+    }
+
+    /// Internal method to process a finality notification.
+    async fn process_finality_notification(
+        &mut self,
+        notification: FinalityNotification<OpaqueBlock>,
+    ) {
+        // Start timing finality notification processing
         let start = std::time::Instant::now();
 
-        info!(target: LOG_TARGET, "📩 Finality notification #{}: {:x}", block_number, block_hash);
+        let block_hash = notification.hash;
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).saturated_into();
+
+        info!(target: LOG_TARGET, "📇 Processing finality notification for block #{}: 0x{:x}", block_number, block_hash);
 
         // Process finality events for all implicitly finalised blocks in tree_route.
         // tree_route contains all blocks from (old_finalised, new_finalised_parent), i.e., the blocks
@@ -1995,54 +2214,40 @@ where
 
             for intermediate_hash in notification.tree_route.iter() {
                 // Get the block number for this hash to check if we already processed it
-                let intermediate_number: BlockNumber<Runtime> =
-                    match self.client.number(*intermediate_hash) {
-                        Ok(Some(num)) => num.saturated_into(),
-                        Ok(None) => {
-                            warn!(
+                let intermediate_number: BlockNumber<Runtime> = match self
+                    .client
+                    .number(*intermediate_hash)
+                {
+                    Ok(Some(num)) => num.saturated_into(),
+                    Ok(None) => {
+                        warn!(
                                 target: LOG_TARGET,
                                 "Could not find block number for hash {:?} in tree_route, skipping",
                                 intermediate_hash
-                            );
-                            continue;
-                        }
-                        Err(e) => {
-                            warn!(
+                        );
+                        continue;
+                    }
+                    Err(e) => {
+                        warn!(
                                 target: LOG_TARGET,
                                 "Error getting block number for hash {:?}: {:?}, skipping",
                                 intermediate_hash, e
-                            );
-                            continue;
-                        }
-                    };
+                        );
+                        continue;
+                    }
+                };
 
                 // Skip if already processed
                 if intermediate_number <= last_processed {
                     continue;
                 }
 
-                if let Err(e) = self.process_finality_events(intermediate_hash) {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Failed to process finality events for implicitly finalised block {:?}: {:?}",
-                        intermediate_hash,
-                        e
-                    );
-                    return;
-                }
+                self.process_finality_events(intermediate_hash);
             }
         }
 
         // Process finality events for the newly finalised block itself
-        if let Err(e) = self.process_finality_events(&block_hash) {
-            warn!(
-                target: LOG_TARGET,
-                "Failed to process finality events for finalised block {:?}: {:?}",
-                block_hash,
-                e
-            );
-            return;
-        }
+        self.process_finality_events(&block_hash);
 
         // Cleanup the pending transaction store for the last finalised block processed.
         // Transactions with a nonce below the on-chain nonce of this block are finalised.
@@ -2053,15 +2258,29 @@ where
                 .await;
         }
 
-        // Update the last finalised block processed.
+        // Update the last finalised block processed (in memory and persistent storage).
         self.last_finalised_block_processed = MinimalBlockInfo {
             number: block_number.saturated_into(),
             hash: block_hash,
         };
+        self.update_last_finalised_block_info(self.last_finalised_block_processed);
 
-        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:x} processed successfully", block_number, block_hash);
+        info!(target: LOG_TARGET, "📨 Finality notification for block #{}: 0x{:x} processed successfully", block_number, block_hash);
 
-        // Record block processing duration
+        // Record finality notification processing duration
         observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_SUCCESS], start.elapsed().as_secs_f64());
+    }
+
+    /// Queue one or more confirm storing requests to the pending deque.
+    pub(crate) fn queue_confirm_storing_requests(
+        &self,
+        requests: impl IntoIterator<Item = crate::types::ConfirmStoringRequest<Runtime>>,
+    ) {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let mut deque = state_store_context.pending_confirm_storing_request_deque::<Runtime>();
+        for request in requests {
+            deque.push_back(request);
+        }
+        state_store_context.commit();
     }
 }

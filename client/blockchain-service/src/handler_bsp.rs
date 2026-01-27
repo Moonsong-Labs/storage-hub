@@ -1,4 +1,3 @@
-use anyhow::{anyhow, Result};
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
 use std::{sync::Arc, u32};
@@ -54,13 +53,14 @@ where
         &mut self,
         block_hash: &Runtime::Hash,
         bsp_id: BackupStorageProviderId<Runtime>,
-    ) -> Result<()> {
-        // Get all events for the block.
-        let Ok(events) = get_events_at_block::<Runtime>(&self.client, block_hash) else {
-            return Err(anyhow::anyhow!(
-                "Failed to retrieve events during BSP sync for block {:?}",
-                block_hash
-            ));
+    ) {
+        // Get all events for the block
+        let events = match get_events_at_block::<Runtime>(&self.client, block_hash) {
+            Ok(events) => events,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
+                return;
+            }
         };
 
         // Apply any mutations in the block that are relevant to this BSP
@@ -90,19 +90,12 @@ where
                             .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
                             .await
                         {
-                            let err_msg = format!(
-                                "CRITICAL ❗❗ Failed to apply mutation during sync: {:?}",
-                                e
-                            );
-                            error!(target: LOG_TARGET, "{}", err_msg);
-                            return Err(anyhow::anyhow!(err_msg));
+                            error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync: {:?}", e);
                         }
                     }
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Handles the initial sync of a BSP, after coming out of syncing mode.
@@ -133,17 +126,14 @@ where
         block_hash: &Runtime::Hash,
         block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
-    ) -> Result<()>
-    where
+    ) where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        self.forest_root_changes_catchup(&tree_route).await?;
+        self.forest_root_changes_catchup(&tree_route).await;
         let block_number: U256 = (*block_number).into();
         if block_number % self.config.check_for_pending_proofs_period == Zero::zero() {
             self.proof_submission_catch_up(block_hash);
         }
-
-        Ok(())
     }
 
     /// Processes new block imported events that are only relevant for a BSP.
@@ -348,16 +338,16 @@ where
     ///
     /// This function is called every time a new block is imported and after each request is queued.
     ///
-    /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
+    /// _IMPORTANT: This check will be skipped if the block currently being processed does not match the client's best block._
     pub(crate) fn bsp_assign_forest_root_write_lock(&mut self) {
         let client_best_hash = self.client.info().best_hash;
         let client_best_number = self.client.info().best_number;
 
-        // Skip if the latest processed block doesn't match the current best block
-        if self.best_block.hash != client_best_hash
-            || self.best_block.number != client_best_number.into()
+        // Skip if the block currently being processed doesn't match the client's best block
+        if self.current_block.hash != client_best_hash
+            || self.current_block.number != client_best_number.into()
         {
-            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])", self.best_block.hash, self.best_block.number, client_best_hash, client_best_number);
+            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because block currently being processed does not match client's best block (current block hash and number [{}, {}], client best block hash and number [{}, {}])", self.current_block.hash, self.current_block.number, client_best_hash, client_best_number);
             return;
         }
 
