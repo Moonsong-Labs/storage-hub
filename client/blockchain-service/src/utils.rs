@@ -2269,8 +2269,8 @@ where
         &mut self,
         block_hash: &Runtime::Hash,
     ) -> Result<(), anyhow::Error> {
-        let block_events = get_events_at_block::<Runtime>(&self.client, block_hash).map_err(
-            |e| {
+        let block_events =
+            get_events_at_block::<Runtime>(&self.client, block_hash).map_err(|e| {
                 // TODO: This can happen for older blocks where state has been pruned, or if
                 // we're parsing a block authored with an older version of the runtime
                 // using a node that has a newer version of the runtime. Consider using runtime APIs
@@ -2281,8 +2281,7 @@ where
                     block_hash, e
                 );
                 e
-            },
-        )?;
+            })?;
 
         for ev in block_events {
             // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
