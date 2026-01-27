@@ -261,7 +261,7 @@ await describeBspNet(
       ignoredBlockHash = blockReceipt.blockHash.toString();
 
       // Check that the BSP confirm storing extrinsic is successfully included in the block.
-      userApi.assert.eventPresent("fileSystem", "BspConfirmedStoring", events);
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmedStoring", events);
 
       // Check that the BSP root has not changed.
       // We check for 3 seconds expecting to have no change, i.e. expecting the check in the
@@ -383,11 +383,26 @@ await describeBspNet(
 
       // Wait for both the BSP and MSP to respond and have their respective transactions in the tx pool.
       await userApi.wait.mspResponseInTxPool();
-      await userApi.wait.bspVolunteer();
+      await userApi.wait.bspVolunteerInTxPool();
       const {
         blockReceipt: { blockHash }
       } = await userApi.block.seal();
       volunteerBlockHash = blockHash.toString();
+
+      // Check that the BSP was able to correctly volunteer for the storage request.
+      const { event: acceptedBspVolunteerEvent } = await userApi.assert.eventPresent(
+        "fileSystem",
+        "AcceptedBspVolunteer"
+      );
+      const acceptedBspVolunteerDataBlob =
+        userApi.events.fileSystem.AcceptedBspVolunteer.is(acceptedBspVolunteerEvent) &&
+        acceptedBspVolunteerEvent.data;
+      assert(acceptedBspVolunteerDataBlob, "AcceptedBspVolunteer event data does not match type");
+      strictEqual(acceptedBspVolunteerDataBlob.bspId.toString(), userApi.shConsts.DUMMY_BSP_ID);
+      strictEqual(
+        acceptedBspVolunteerDataBlob.fingerprint.toString(),
+        secondFileMetadata.fingerprint.toString()
+      );
 
       // Wait for the BSP to send the confirm storage extrinsic, and then seal a block,
       // without finalising it, to be able to reorg it out.
@@ -395,7 +410,7 @@ await describeBspNet(
       await userApi.block.seal({ finaliseBlock: false });
 
       // Check that the BSP confirm storing extrinsic is successfully included in the block.
-      userApi.assert.eventPresent("fileSystem", "BspConfirmedStoring");
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmedStoring");
 
       // Wait for confirmation line in docker logs.
       await bspApi.docker.waitForLog({

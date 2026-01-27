@@ -108,7 +108,7 @@ await describeMspNet(
         mspId,
         valuePropId,
         owner: shUser,
-        bspApi,
+        bspApis: [bspApi],
         mspApi
       });
 
