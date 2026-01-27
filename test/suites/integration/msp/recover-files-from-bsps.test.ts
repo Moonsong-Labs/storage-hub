@@ -86,7 +86,7 @@ await describeMspNet(
           }
         ],
         mspId: userApi.shConsts.DUMMY_MSP_ID,
-        bspApi,
+        bspApis: [bspApi, bspTwoApi, bspThreeApi],
         mspApi
       });
 
