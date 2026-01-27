@@ -2215,11 +2215,14 @@ where
     /// 2. Applies mutations for enacted blocks (via `forest_root_changes_catchup`)
     /// 3. Processes finality events for all enacted blocks
     /// 4. Updates the last processed block info (number and hash)
+    ///
+    /// Returns an error if finality event processing fails for any finalized block,
+    /// in which case the block trackers are not updated so the block can be retried.
     pub(crate) async fn process_sync_reorg(
         &mut self,
         tree_route: &TreeRoute<OpaqueBlock>,
         new_best_block: MinimalBlockInfo<Runtime>,
-    ) {
+    ) -> Result<(), anyhow::Error> {
         info!(
             target: LOG_TARGET,
             "🔀 Processing reorg during sync: {} retracted, {} enacted",
@@ -2233,18 +2236,20 @@ where
         // Apply forest root changes for the reorg (revert retracted, apply enacted mutations)
         self.forest_root_changes_catchup(tree_route).await;
 
-        // Process finality events for enacted blocks
-        // Note: If finality event processing fails for a block, we log the error but continue
-        // processing other blocks. Failed blocks will be retried on next restart.
+        // Process finality events for enacted blocks.
+        // If finality event processing fails, we return early without updating last_block_processed
+        // so the block can be retried on restart.
         for block in tree_route.enacted() {
             let block_num: BlockNumber<Runtime> = block.number.saturated_into();
-            if let Err(e) = self.process_finality_events_if_finalised(&block.hash, block_num) {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to process finality events for block #{}: {:?}. Block will be retried on restart.",
-                    block_num, e
-                );
-            }
+            self.process_finality_events_if_finalised(&block.hash, block_num)
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process finality events for block #{}: {:?}. Block will be retried on restart.",
+                        block_num, e
+                    );
+                    e
+                })?;
         }
 
         // Update both the in-memory tracker and persistent storage
@@ -2252,6 +2257,8 @@ where
         self.update_last_processed_block_info(new_best_block);
 
         info!(target: LOG_TARGET, "🔀 Reorg during sync: {} retracted, {} enacted processed successfully", tree_route.retracted().len(), tree_route.enacted().len());
+
+        Ok(())
     }
 
     /// Process finality events for a given block.
@@ -2314,7 +2321,10 @@ where
     ///
     /// This function also initializes `self.current_block` to the client's actual best block,
     /// ensuring we start from the correct position regardless of whether there are missed blocks.
-    pub(crate) async fn catch_up_missed_blocks(&mut self) {
+    ///
+    /// Returns an error if finality event processing fails for any finalized block,
+    /// in which case the block trackers are not updated so the block can be retried.
+    pub(crate) async fn catch_up_missed_blocks(&mut self) -> Result<(), anyhow::Error> {
         // Get the best block saved in the node's Substrate client database
         let chain_info = self.client.info();
         let best_number: BlockNumber<Runtime> = chain_info.best_number.saturated_into();
@@ -2331,7 +2341,7 @@ where
             // If there's no `last_processed_block` in persistent storage, it means this is the first startup of the node, which
             // means there's nothing to catch up on.
             info!(target: LOG_TARGET, "No last processed block found in persistent storage. Skipping startup catch up.");
-            return;
+            return Ok(());
         };
 
         // Initialize last_block_processed from persistent storage.
@@ -2355,7 +2365,7 @@ where
                 "☑️ No missed blocks to catch up (last_processed=#{}: {:?}, best=#{}: {:?})",
                 last_processed.number, last_processed.hash, best_number, best_hash
             );
-            return;
+            return Ok(());
         }
 
         info!(
@@ -2379,7 +2389,7 @@ where
                     "Failed to build tree route for startup catchup: {:?}. Block may have been pruned.",
                     e
                 );
-                return;
+                return Ok(());
             }
         };
 
@@ -2405,17 +2415,19 @@ where
 
         // Process finality events for enacted blocks that are finalised.
         // We don't process finality for retracted blocks since they're no longer canonical.
-        // Note: If finality event processing fails for a block, we log the error but continue
-        // processing other blocks. Failed blocks will be retried on next restart.
+        // If finality event processing fails, we return early without updating block trackers
+        // so the block can be retried on restart.
         for block in tree_route.enacted() {
             let block_num: BlockNumber<Runtime> = block.number.saturated_into();
-            if let Err(e) = self.process_finality_events_if_finalised(&block.hash, block_num) {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to process finality events for block #{}: {:?}. Block will be retried on restart.",
-                    block_num, e
-                );
-            }
+            self.process_finality_events_if_finalised(&block.hash, block_num)
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process finality events for block #{}: {:?}. Block will be retried on restart.",
+                        block_num, e
+                    );
+                    e
+                })?;
         }
 
         // Update the last processed block to reflect the catch up
@@ -2446,6 +2458,8 @@ where
             "✅ Startup catchup complete. Reverted {} block(s), processed {} block(s).",
             retracted_count, enacted_count
         );
+
+        Ok(())
     }
 
     /// Update the last processed block in persistent storage.

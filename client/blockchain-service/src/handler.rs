@@ -313,7 +313,13 @@ where
         }
 
         // Catch up on any blocks that were imported but not processed
-        self.actor.catch_up_missed_blocks().await;
+        if let Err(e) = self.actor.catch_up_missed_blocks().await {
+            error!(
+                target: LOG_TARGET,
+                "Failed to catch up missed blocks during startup: {:?}. Finalized blocks will be retried on next finality notification.",
+                e
+            );
+        }
 
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
@@ -1902,7 +1908,14 @@ where
                 ..
             } => {
                 // Process the reorg
-                self.process_sync_reorg(&tree_route, new_best_block).await;
+                // If processing fails, the block won't be marked as processed and will be retried on restart
+                if let Err(e) = self.process_sync_reorg(&tree_route, new_best_block).await {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process sync reorg: {:?}. Block will be retried on restart.",
+                        e
+                    );
+                }
             }
         }
     }
