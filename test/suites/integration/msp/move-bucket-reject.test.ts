@@ -118,7 +118,7 @@ await describeMspNet(
         mspId: userApi.shConsts.DUMMY_MSP_ID,
         valuePropId,
         owner: shUser,
-        bspApi: undefined, // No BSP needed for this test
+        bspApis: undefined, // No BSP needed for this test
         mspApi: msp1Api
       });
 
