@@ -253,7 +253,8 @@ where
                 .expect("Task spawner is not set."),
             client,
             fisherman_options.batch_interval_seconds,
-            fisherman_options.batch_deletion_limit,
+            fisherman_options.batch_deletion_limit_per_bsp,
+            fisherman_options.batch_deletion_limit_per_msp,
             self.metrics.clone(),
         )
         .await;
@@ -936,15 +937,23 @@ pub struct FishermanOptions {
     pub database_url: String,
     /// Duration between batch deletion processing cycles (in seconds).
     pub batch_interval_seconds: u64,
-    /// Maximum number of files to process per batch deletion cycle.
-    #[serde(default = "default_batch_deletion_limit")]
-    pub batch_deletion_limit: u64,
+    /// Maximum number of files to process per BSP target in batch deletion cycle.
+    #[serde(default = "default_batch_deletion_limit_per_bsp")]
+    pub batch_deletion_limit_per_bsp: u64,
+    /// Maximum number of files to process per MSP target in batch deletion cycle.
+    #[serde(default = "default_batch_deletion_limit_per_msp")]
+    pub batch_deletion_limit_per_msp: u64,
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
 }
 
-/// Default value for batch deletion limit.
-fn default_batch_deletion_limit() -> u64 {
-    1000
+/// Default value for batch deletion limit per BSP.
+fn default_batch_deletion_limit_per_bsp() -> u64 {
+    30
+}
+
+/// Default value for batch deletion limit per MSP.
+fn default_batch_deletion_limit_per_msp() -> u64 {
+    30
 }

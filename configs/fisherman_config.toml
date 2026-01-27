@@ -8,6 +8,10 @@ fisherman_database_url = "postgresql://postgres:postgres@localhost:5432/fisherma
 # This corresponds to the `--fisherman-batch-interval-seconds` CLI flag.
 batch_interval_seconds = 60
 
-# Maximum number of files to process per batch deletion cycle.
-# This corresponds to the `--fisherman-batch-deletion-limit` CLI flag.
-batch_deletion_limit = 1000
+# Maximum number of files to process per BSP target in batch deletion cycle.
+# This corresponds to the `--fisherman-batch-deletion-limit-per-bsp` CLI flag.
+batch_deletion_limit_per_bsp = 30
+
+# Maximum number of files to process per MSP target in batch deletion cycle.
+# This corresponds to the `--fisherman-batch-deletion-limit-per-msp` CLI flag.
+batch_deletion_limit_per_msp = 30

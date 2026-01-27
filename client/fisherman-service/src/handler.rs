@@ -52,8 +52,10 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     batch_interval_duration: Duration,
     /// Timestamp of last batch emission.
     last_batch_time: Option<Instant>,
-    /// Maximum number of files to process per batch deletion cycle
-    batch_deletion_limit: u64,
+    /// Maximum number of files to process per BSP target in batch deletion cycle
+    batch_deletion_limit_per_bsp: u64,
+    /// Maximum number of files to process per MSP target in batch deletion cycle
+    batch_deletion_limit_per_msp: u64,
     /// Metrics link for recording command processing
     pub(crate) metrics: MetricsLink,
 }
@@ -81,7 +83,8 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     pub fn new(
         client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         batch_interval_seconds: u64,
-        batch_deletion_limit: u64,
+        batch_deletion_limit_per_bsp: u64,
+        batch_deletion_limit_per_msp: u64,
         metrics: MetricsLink,
     ) -> Self {
         Self {
@@ -91,7 +94,8 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             last_deletion_type: None,
             batch_interval_duration: Duration::from_secs(batch_interval_seconds),
             last_batch_time: None,
-            batch_deletion_limit,
+            batch_deletion_limit_per_bsp,
+            batch_deletion_limit_per_msp,
             metrics,
         }
     }
@@ -211,7 +215,8 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     // Emit event to trigger batch processing
                     self.emit(crate::events::BatchFileDeletions {
                         deletion_type,
-                        batch_deletion_limit: self.batch_deletion_limit,
+                        batch_deletion_limit_per_bsp: self.batch_deletion_limit_per_bsp,
+                        batch_deletion_limit_per_msp: self.batch_deletion_limit_per_msp,
                         permit: permit_wrapper,
                     });
                 }

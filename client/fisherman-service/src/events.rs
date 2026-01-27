@@ -24,8 +24,10 @@ pub enum FileDeletionTarget<Runtime: StorageEnableRuntime> {
 pub struct BatchFileDeletions {
     /// Type of deletion to process in this batch cycle (User or Incomplete)
     pub deletion_type: shc_indexer_db::models::FileDeletionType,
-    /// Maximum number of files to process in this batch cycle
-    pub batch_deletion_limit: u64,
+    /// Maximum number of files to process per BSP target in this batch cycle
+    pub batch_deletion_limit_per_bsp: u64,
+    /// Maximum number of files to process per MSP target in this batch cycle
+    pub batch_deletion_limit_per_msp: u64,
     /// Semaphore permit wrapped in Arc to satisfy Clone requirement for events.
     /// The permit is held by the event handler for its lifetime,
     /// automatically releasing when the handler completes or fails.

@@ -143,19 +143,21 @@ where
 
         info!(
             target: LOG_TARGET,
-            "🎣 Processing batch file deletions for {:?} deletion type (limit: {})",
+            "🎣 Processing batch file deletions for {:?} deletion type (bsp_limit: {}, msp_limit: {})",
             event.deletion_type,
-            event.batch_deletion_limit
+            event.batch_deletion_limit_per_bsp,
+            event.batch_deletion_limit_per_msp
         );
 
-        // Query pending deletions with configured batch limit
+        // Query pending deletions with configured batch limits (separate for BSP and MSP)
         // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
         let grouped_deletions = self
             .get_pending_deletions(
                 event.deletion_type,
                 None,
                 None,
-                Some(event.batch_deletion_limit as i64),
+                Some(event.batch_deletion_limit_per_bsp as i64),
+                Some(event.batch_deletion_limit_per_msp as i64),
                 None,
             )
             .await?;
@@ -926,20 +928,22 @@ where
     /// * `deletion_type` - Type of deletion to query ([`FileDeletionType::User`] or [`FileDeletionType::Incomplete`])
     /// * `bucket_id` - Optional filter to only return files from a specific bucket
     /// * `bsp_id` - Optional filter to only return files from a specific BSP
-    /// * `limit` - Maximum number of files to return (default: 1000)
+    /// * `bsp_limit` - Maximum number of files to return per BSP target
+    /// * `msp_limit` - Maximum number of files to return per MSP target (bucket deletions)
     /// * `offset` - Number of files to skip for pagination (default: 0)
     async fn get_pending_deletions(
         &self,
         deletion_type: shc_indexer_db::models::FileDeletionType,
         bucket_id: Option<BucketId<Runtime>>,
         bsp_id: Option<BackupStorageProviderId<Runtime>>,
-        limit: Option<i64>,
+        bsp_limit: Option<i64>,
+        msp_limit: Option<i64>,
         offset: Option<i64>,
     ) -> anyhow::Result<PendingDeletionsGrouped<Runtime>> {
         trace!(
             target: LOG_TARGET,
-            "🎣 Fetching pending {:?} deletions (bucket_id: {:?}, bsp_id: {:?}, limit: {:?}, offset: {:?})",
-            deletion_type, bucket_id, bsp_id, limit, offset
+            "🎣 Fetching pending {:?} deletions (bucket_id: {:?}, bsp_id: {:?}, bsp_limit: {:?}, msp_limit: {:?}, offset: {:?})",
+            deletion_type, bucket_id, bsp_id, bsp_limit, msp_limit, offset
         );
 
         // Get indexer DB pool
@@ -967,12 +971,13 @@ where
             // Query bucket files from DB with deduplication
             // Only get files that are in the bucket's forest
             // Use deduplicated version to avoid duplicate file keys in batch deletion
+            // Uses msp_limit since bucket deletions are for MSP targets
             let bucket_files = shc_indexer_db::models::File::get_files_pending_deletion_grouped_by_bucket_deduplicated(
                 &mut bucket_conn,
                 deletion_type,
                 bucket_id_bytes,
                 Some(true),
-                limit,
+                msp_limit,
                 offset,
             )
             .await?;
@@ -995,11 +1000,12 @@ where
 
             // Query BSP files from DB with deduplication
             // Use deduplicated version to avoid duplicate file keys in batch deletion
+            // Uses bsp_limit since these are BSP target deletions
             let bsp_files = shc_indexer_db::models::BspFile::get_files_pending_deletion_grouped_by_bsp_deduplicated(
                 &mut bsp_conn,
                 deletion_type,
                 bsp_id_db,
-                limit,
+                bsp_limit,
                 offset,
             )
             .await?;
