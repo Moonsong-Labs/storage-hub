@@ -34,6 +34,7 @@ import {
   mspTwoKey,
   shUser
 } from "../pjsKeyring";
+import * as Prometheus from "../prometheus";
 import * as BspNetBlock from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
@@ -45,7 +46,6 @@ import * as NodeBspNet from "./node";
 import * as PendingDb from "./pending";
 import type { BspNetApi, BspStoredOptions, SealBlockOptions, SqlClient } from "./types";
 import * as Waits from "./waits";
-import * as Prometheus from "../prometheus";
 
 /**
  * Options for the waitForTxInPool method.
@@ -532,7 +532,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * custom logic instead of using this helper.
        *
        * **Parameter Requirements:**
-       * - `bspApi` is required for verifying BSP file storage
+       * - `bspApis` is required for verifying BSP file storage (one API per replica)
        * - `mspApi` is required for MSP catchup and verifying MSP file storage
        * - `owner` is always required (defaults to `shUser` or `ethShUser` based on runtime type)
        *
