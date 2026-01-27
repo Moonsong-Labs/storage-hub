@@ -1977,14 +1977,31 @@ where
             .await;
 
         // Provider-specific code to run at the start of every block import.
+        // If forest root changes fail, we log the error but continue processing the block.
         match self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
-                self.bsp_init_block_processing(block_hash, block_number, tree_route.clone())
-                    .await;
+                if let Err(e) = self
+                    .bsp_init_block_processing(block_hash, block_number, tree_route.clone())
+                    .await
+                {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process BSP forest root changes for block #{}: {:?}",
+                        block_number, e
+                    );
+                }
             }
             Some(ManagedProvider::Msp(_)) => {
-                self.msp_init_block_processing(block_hash, block_number, tree_route.clone())
-                    .await;
+                if let Err(e) = self
+                    .msp_init_block_processing(block_hash, block_number, tree_route.clone())
+                    .await
+                {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process MSP forest root changes for block #{}: {:?}",
+                        block_number, e
+                    );
+                }
             }
             None => {
                 trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");

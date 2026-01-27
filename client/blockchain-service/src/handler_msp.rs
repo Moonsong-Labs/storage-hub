@@ -149,15 +149,19 @@ where
     ///
     /// Steps:
     /// 1. Catch up to Forest root changes in the Forests of the Buckets this MSP manages.
+    ///
+    /// Returns an error if there's a failure during forest root change processing.
     pub(crate) async fn msp_init_block_processing<Block>(
         &mut self,
         _block_hash: &Runtime::Hash,
         _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
-    ) where
+    ) -> Result<()>
+    where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        self.forest_root_changes_catchup(&tree_route).await;
+        self.forest_root_changes_catchup(&tree_route).await?;
+        Ok(())
     }
 
     /// Processes new block imported events that are only relevant for an MSP.
@@ -584,17 +588,21 @@ where
         }
     }
 
+    /// Processes forest root changing events for MSP buckets.
+    ///
+    /// Returns an error if there's a failure during event processing that should prevent
+    /// the block from being marked as processed (e.g., runtime API errors when validating bucket ownership).
     pub(crate) async fn msp_process_forest_root_changing_events(
         &mut self,
         block_hash: &BlockHash,
         event: StorageEnableEvents<Runtime>,
         revert: bool,
-    ) {
+    ) -> Result<()> {
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
             _ => {
                 error!(target: LOG_TARGET, "`msp_process_forest_root_changing_events` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
+                return Ok(());
             }
         };
 
@@ -605,15 +613,12 @@ where
             event_info,
         }) = event
         {
-            let bucket_id = match self
+            let bucket_id = self
                 .get_bucket_id_from_mutations_applied_event_info(block_hash, event_info)
-            {
-                Ok(bucket_id) => bucket_id,
-                Err(e) => {
+                .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to get bucket ID from MutationsApplied event info: {:?}", e);
-                    return;
-                }
-            };
+                    e
+                })?;
 
             match self.validate_bucket_mutations_for_msp(block_hash, managed_msp_id, &bucket_id) {
                 Ok(true) => {
@@ -621,11 +626,11 @@ where
                 }
                 Ok(false) => {
                     trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. Skipping.", bucket_id, managed_msp_id);
-                    return;
+                    return Ok(());
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Failed to validate bucket [0x{:x}]: {:?}", bucket_id, e);
-                    return;
+                    return Err(e);
                 }
             }
 
@@ -653,22 +658,23 @@ where
             // For file deletions, we will remove the file from the File Storage only after finality is reached.
             // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
             let bucket_forest_key = bucket_id.as_ref().to_vec();
-            if let Err(e) = self
-                .apply_forest_mutations_and_verify_root(
-                    bucket_forest_key,
-                    &mutations,
-                    revert,
-                    old_root,
-                    new_root,
-                )
-                .await
-            {
+            self.apply_forest_mutations_and_verify_root(
+                bucket_forest_key,
+                &mutations,
+                revert,
+                old_root,
+                new_root,
+            )
+            .await
+            .map_err(|e| {
                 error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
-                return;
-            };
+                anyhow::anyhow!("Failed to apply mutations and verify root for Bucket {:?}: {:?}", bucket_id, e)
+            })?;
 
             info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
         }
+
+        Ok(())
     }
 
     fn msp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
