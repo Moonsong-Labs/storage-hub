@@ -27,18 +27,21 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     events::{
-        BspRequestedToStopStoringNotification, FinalisedBspConfirmStoppedStoring,
-        FinalisedTrieRemoveMutationsAppliedForBsp, ForestWriteLockTaskData, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MultipleNewChallengeSeeds,
-        NewStorageRequest, ProcessConfirmStoringRequest, ProcessStopStoringForInsolventUserRequest,
+        FinalisedBspConfirmStoppedStoring, FinalisedTrieRemoveMutationsAppliedForBsp,
+        ForestWriteLockTaskData, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MultipleNewChallengeSeeds, NewStorageRequest,
+        ProcessBspConfirmStopStoring, ProcessBspConfirmStopStoringData,
+        ProcessBspRequestStopStoring, ProcessBspRequestStopStoringData,
+        ProcessConfirmStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
         ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
     state::BlockchainServiceStateStoreRwContext,
     types::{
-        BspForestWriteQueue, BspForestWriteQueuePop, BspForestWriteWork, ConfirmStoringRequest,
-        ForestWritePermitGuard, ManagedProvider, MultiInstancesNodeRole,
+        BspForestWriteQueue, BspForestWriteQueuePop, BspForestWriteWork,
+        ConfirmBspStopStoringRequest, ConfirmStoringRequest, ForestWritePermitGuard,
+        ManagedProvider, MultiInstancesNodeRole,
     },
     BlockchainService,
 };
@@ -206,12 +209,47 @@ where
                     location: _,
                 },
             ) => {
-                // Emit the notification if this is for our BSP, so the task can schedule the confirmation.
+                // Queue the confirm stop storing request if this is for our BSP.
                 if managed_bsp_id == &bsp_id {
-                    self.emit(BspRequestedToStopStoringNotification {
-                        bsp_id,
-                        file_key: file_key.into(),
-                    });
+                    // Query MinWaitForStopStoring from runtime
+                    let min_wait = match self
+                        .client
+                        .runtime_api()
+                        .query_min_wait_for_stop_storing(self.current_block.hash)
+                    {
+                        Ok(min_wait) => min_wait,
+                        Err(e) => {
+                            error!(
+                                target: LOG_TARGET,
+                                "CRITICAL ❗❗ Failed to query MinWaitForStopStoring: {:?}.",
+                                e
+                            );
+                            return;
+                        }
+                    };
+
+                    // Calculate confirm_after_tick: current tick + min_wait + 1 (to be safe)
+                    let current_tick = self.current_block.number;
+                    let confirm_after_tick = current_tick + min_wait + 1u32.into();
+
+                    info!(
+                        target: LOG_TARGET,
+                        "BspRequestedToStopStoring detected for file [{:?}]. \
+                         Queueing confirm stop storing for tick {:?} (current: {:?}, min_wait: {:?})",
+                        file_key,
+                        confirm_after_tick,
+                        current_tick,
+                        min_wait
+                    );
+
+                    // Queue the confirm stop storing request
+                    let request: ConfirmBspStopStoringRequest<Runtime> =
+                        ConfirmBspStopStoringRequest::new(file_key.into(), confirm_after_tick);
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .pending_confirm_bsp_stop_storing_deque()
+                        .push_back(request);
+                    state_store_context.commit();
                 }
             }
             // Ignore all other events.
@@ -505,6 +543,63 @@ where
                 next_event_data = Some(
                     ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
                 );
+            }
+        }
+
+        // If we have no pending storage requests to respond to, check for pending StopStoringForInsolventUser requests.
+        if next_event_data.is_none() {
+            // Pop the next StopStoringForInsolventUser request from the queue.
+            if let Some(BspForestWriteQueuePop::StopStoringForInsolventUser(request)) =
+                Self::bsp_forest_write_work(
+                    &mut self.maybe_managed_provider,
+                    &state_store_context,
+                    Some(BspForestWriteQueue::StopStoringForInsolventUser),
+                )
+                .popped
+            {
+                next_event_data = Some(
+                    ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
+                );
+            }
+        }
+
+        // If there's no stop storing for insolvent user requestes pending, we check for pending request stop storing requests.
+        if next_event_data.is_none() {
+            if let Some(request) = state_store_context
+                .pending_request_bsp_stop_storing_deque::<Runtime>()
+                .pop_front()
+            {
+                trace!(target: LOG_TARGET, "Processing BSP request stop storing for file [{:?}]", request.file_key);
+                next_event_data = Some(ProcessBspRequestStopStoringData { request }.into());
+            }
+        }
+
+        // If there's no request stop storing requests pending, we check for pending confirm stop storing requests.
+        // Items in this queue are ordered chronologically by confirm_after_tick, so if the first
+        // item's tick hasn't been reached, none of the others have either.
+        if next_event_data.is_none() {
+            let current_tick = self.current_block.number;
+            // Peek first to check if the tick has been reached without modifying the queue
+            if let Some(peeked) = state_store_context
+                .pending_confirm_bsp_stop_storing_deque::<Runtime>()
+                .peek_front()
+            {
+                if peeked.confirm_after_tick <= current_tick {
+                    // Tick reached, pop and process this request
+                    let request = state_store_context
+                        .pending_confirm_bsp_stop_storing_deque::<Runtime>()
+                        .pop_front()
+                        .expect("Just peeked, should exist");
+                    trace!(
+                        target: LOG_TARGET,
+                        "Processing BSP confirm stop storing for file [{:?}], confirm_after_tick: {:?}, current_tick: {:?}",
+                        request.file_key,
+                        request.confirm_after_tick,
+                        current_tick
+                    );
+                    next_event_data = Some(ProcessBspConfirmStopStoringData { request }.into());
+                }
+                // If tick not reached, do nothing since no other items can be ready either
             }
         }
 
@@ -847,6 +942,18 @@ where
                 self.emit(ProcessStopStoringForInsolventUserRequest {
                     data,
                     forest_root_write_permit,
+                });
+            }
+            ForestWriteLockTaskData::BspRequestStopStoring(data) => {
+                self.emit(ProcessBspRequestStopStoring {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::BspConfirmStopStoring(data) => {
+                self.emit(ProcessBspConfirmStopStoring {
+                    data,
+                    forest_root_write_tx,
                 });
             }
             ForestWriteLockTaskData::MspRespondStorageRequest(_) => {

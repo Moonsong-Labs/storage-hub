@@ -13,16 +13,17 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, BspRequestedToStopStoringNotification, DistributeFileToBsp,
-        FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
-        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected,
-        FinalisedTrieRemoveMutationsAppliedForBsp, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBspConfirmStoppedStoring,
+        FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
+        FinalisedStorageRequestRejected, FinalisedTrieRemoveMutationsAppliedForBsp,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessBspConfirmStopStoring,
+        ProcessBspRequestStopStoring, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
-        ProcessSubmitProofRequest, RequestBspStopStoring, SlashableProvider,
-        SpStopStoringInsolventUser, StartMovedBucketDownload, UserWithoutFunds,
+        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
+        StartMovedBucketDownload, UserWithoutFunds,
     },
     handler::BlockchainServiceConfig,
     BlockchainService,
@@ -428,11 +429,12 @@ where
                 FinalisedBspConfirmStoppedStoring<Runtime> => BspDeleteFileTask,
                 FinalisedTrieRemoveMutationsAppliedForBsp<Runtime> => BspDeleteFileTask,
                 // BspStopStoringTask handles the two-phase stop storing process for BSPs.
-                // RequestBspStopStoring is triggered by the RPC to initiate the process.
-                // BspRequestedToStopStoringNotification is emitted when the on-chain event is detected,
-                // triggering the confirmation after the minimum wait period.
-                RequestBspStopStoring => BspStopStoringTask,
-                BspRequestedToStopStoringNotification<Runtime> => BspStopStoringTask,
+                // ProcessBspRequestStopStoring is emitted when the blockchain service has acquired
+                // the forest root write lock and is ready to process phase 1 (request stop storing).
+                // ProcessBspConfirmStopStoring is emitted when the confirm tick has been reached and
+                // the forest root write lock is available for phase 2 (confirm stop storing).
+                ProcessBspRequestStopStoring<Runtime> => BspStopStoringTask,
+                ProcessBspConfirmStopStoring<Runtime> => BspStopStoringTask,
             ]
         );
 

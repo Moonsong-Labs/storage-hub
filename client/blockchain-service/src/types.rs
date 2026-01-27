@@ -182,6 +182,56 @@ impl<Runtime: StorageEnableRuntime> StopStoringForInsolventUserRequest<Runtime> 
     }
 }
 
+/// A struct that holds the information to request stop storing a file for a BSP.
+///
+/// This struct is used as an item in the `pending_request_bsp_stop_storing_requests` queue.
+/// It represents a BSP's request to stop storing a file, triggered by the RPC.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct RequestBspStopStoringRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
+    pub try_count: u32,
+}
+
+impl<Runtime: StorageEnableRuntime> RequestBspStopStoringRequest<Runtime> {
+    pub fn new(file_key: MerkleTrieHash<Runtime>) -> Self {
+        Self {
+            file_key,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
+/// A struct that holds the information to confirm stop storing a file for a BSP.
+///
+/// This struct is used as an item in the `pending_confirm_bsp_stop_storing_requests` queue.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ConfirmBspStopStoringRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
+    pub confirm_after_tick: BlockNumber<Runtime>,
+    pub try_count: u32,
+}
+
+impl<Runtime: StorageEnableRuntime> ConfirmBspStopStoringRequest<Runtime> {
+    pub fn new(
+        file_key: MerkleTrieHash<Runtime>,
+        confirm_after_tick: BlockNumber<Runtime>,
+    ) -> Self {
+        Self {
+            file_key,
+            confirm_after_tick,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
 /// A struct that holds the information to delete a file from storage.
 ///
 /// This struct is used as an item in the `pending_file_deletion_requests` queue.

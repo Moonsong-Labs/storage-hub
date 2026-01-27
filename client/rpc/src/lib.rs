@@ -21,7 +21,10 @@ use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvidersRuntimeApi;
 use sc_rpc_api::check_if_safe;
 use shc_actors_framework::actor::ActorHandle;
-use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, BlockchainService};
+use shc_blockchain_service::{
+    commands::BlockchainServiceCommandInterface, types::RequestBspStopStoringRequest,
+    BlockchainService,
+};
 use shc_common::{
     blockchain_utils::get_provider_id_from_keystore,
     consts::CURRENT_FOREST_KEY,
@@ -1547,16 +1550,27 @@ where
 
         info!(
             target: LOG_TARGET,
-            "bsp_stop_storing_file called for file_key=[0x{:x}]. Emitting RequestBspStopStoring event.",
+            "bsp_stop_storing_file called for file_key=[0x{:x}]. Queueing request stop storing.",
             file_key
         );
 
-        // Emit the event to trigger the BspStopStoringTask.
-        blockchain
-            .emit_request_bsp_stop_storing(file_key.into())
-            .await;
-
-        Ok(BspStopStoringFileResult::Success)
+        // Queue the request to stop storing the file.
+        let request = RequestBspStopStoringRequest::new(file_key.into());
+        match blockchain.queue_bsp_request_stop_storing(request).await {
+            Ok(_) => Ok(BspStopStoringFileResult::Success),
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to queue BSP request stop storing for file_key=[0x{:x}]: {:?}",
+                    file_key,
+                    e
+                );
+                Err(into_rpc_error(format!(
+                    "Failed to queue BSP request stop storing: {:?}",
+                    e
+                )))
+            }
+        }
     }
 }
 

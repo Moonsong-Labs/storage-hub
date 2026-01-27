@@ -48,7 +48,7 @@ use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCE
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
-    events::{BlockchainServiceEventBusProvider, NewStorageRequest, RequestBspStopStoring},
+    events::{BlockchainServiceEventBusProvider, NewStorageRequest},
     state::BlockchainServiceStateStore,
     transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{
@@ -1617,24 +1617,6 @@ where
                         );
                     }
                 }
-                BlockchainServiceCommand::EmitRequestBspStopStoring { file_key } => {
-                    if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
-                        info!(
-                            target: LOG_TARGET,
-                            "Emitting RequestBspStopStoring event for file key [{:x}]",
-                            file_key
-                        );
-                        self.emit(RequestBspStopStoring { file_key });
-                    } else {
-                        command_succeeded = false;
-                        // Fire-and-forget command, just log the error
-                        error!(
-                            target: LOG_TARGET,
-                            "EmitRequestBspStopStoring received while not managing a BSP. \
-                             This command is only valid for BSP nodes."
-                        );
-                    }
-                }
                 BlockchainServiceCommand::SetRpcHandlers { rpc_handlers } => {
                     info!(
                         target: LOG_TARGET,
@@ -1694,6 +1676,87 @@ where
                                 Err(e) => {
                                     error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
                                 }
+                            }
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueueBspRequestStopStoring { request, callback } => {
+                    if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
+                        let state_store_context =
+                            self.persistent_state.open_rw_context_with_overlay();
+                        state_store_context
+                            .pending_request_bsp_stop_storing_deque()
+                            .push_back(request.clone());
+                        state_store_context.commit();
+
+                        info!(
+                            target: LOG_TARGET,
+                            "Queued BSP request stop storing for file key [{:?}]",
+                            request.file_key
+                        );
+
+                        // We check right away if we can process the request so we don't waste time.
+                        self.bsp_assign_forest_root_write_lock();
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    } else {
+                        command_succeeded = false;
+                        error!(
+                            target: LOG_TARGET,
+                            "QueueBspRequestBspStopStoring received while not managing a BSP. \
+                             This command is only valid for BSP nodes."
+                        );
+                        match callback.send(Err(anyhow!(
+                            "QueueBspRequestBspStopStoring received while not managing a BSP"
+                        ))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueueBspConfirmStopStoring { request, callback } => {
+                    if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
+                        let state_store_context =
+                            self.persistent_state.open_rw_context_with_overlay();
+                        state_store_context
+                            .pending_confirm_bsp_stop_storing_deque()
+                            .push_back(request.clone());
+                        state_store_context.commit();
+
+                        info!(
+                            target: LOG_TARGET,
+                            "Queued BSP confirm stop storing for file key [{:?}], confirm after tick: {:?}",
+                            request.file_key,
+                            request.confirm_after_tick
+                        );
+
+                        // We check right away if we can process the request so we don't waste time.
+                        self.bsp_assign_forest_root_write_lock();
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    } else {
+                        command_succeeded = false;
+                        error!(
+                            target: LOG_TARGET,
+                            "QueueBspConfirmBspStopStoring received while not managing a BSP. \
+                             This command is only valid for BSP nodes."
+                        );
+                        match callback.send(Err(anyhow!(
+                            "QueueBspConfirmBspStopStoring received while not managing a BSP"
+                        ))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
                             }
                         }
                     }

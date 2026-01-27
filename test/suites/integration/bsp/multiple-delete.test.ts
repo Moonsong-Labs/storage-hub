@@ -139,6 +139,9 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
     strictEqual(stopStoringEvents.length, fileKeys.length);
 
     // Wait enough blocks for the deletion to be allowed.
+    // All 3 requests were submitted in the same block, so they all have the same confirm_after_tick.
+    // The BSP processes one confirm per block, so we need to skip to the cooldown block,
+    // then wait and seal for each confirm.
     const currentBlock = await userApi.rpc.chain.getBlock();
     const currentBlockNumber = currentBlock.block.header.number.toNumber();
     const minWaitForStopStoring = (
@@ -150,19 +153,31 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
     )
       .unwrap()
       .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
-    const cooldown = currentBlockNumber + minWaitForStopStoring;
+    const cooldown = currentBlockNumber + minWaitForStopStoring + 1;
     await userApi.block.skipTo(cooldown);
 
+    // The BSP will automatically submit bspConfirmStopStoring after the cooldown.
+    // Wait for each confirm to appear in the tx pool and seal it.
+    // Note: The BSP may also need to submit proofs which have priority, so we check for those first.
     for (let i = 0; i < fileKeys.length; i++) {
-      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
-        fileKeys[i]
-      ]);
-      await userApi.block.seal({
-        calls: [
-          userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof.toString())
-        ],
-        signer: bspKey
+      // Check if there's a pending submitProof extrinsic and seal it first if so.
+      // Proof submissions have priority over confirm stop storing.
+      let pendingTxs = await userApi.rpc.author.pendingExtrinsics();
+      let proofTxs = pendingTxs.filter((tx) => tx.method.method === "submitProof");
+      while (proofTxs.length > 0) {
+        await userApi.block.seal();
+        pendingTxs = await userApi.rpc.author.pendingExtrinsics();
+        proofTxs = pendingTxs.filter((tx) => tx.method.method === "submitProof");
+      }
+
+      // Wait for BSP to automatically submit confirm stop storing
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspConfirmStopStoring"
       });
+
+      // Seal the block with the confirm
+      await userApi.block.seal();
 
       // Check for the confirm stopped storing event.
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
@@ -307,15 +322,28 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
       const cooldown = currentBlockNumber + minWaitForStopStoring;
       await userApi.block.skipTo(cooldown);
 
-      // Batching the delete confirmation should fail because of the wrong inclusionForestProof for extrinsic 2 and 3
-      const confirmStopStoringTxs = [];
+      // The BSP will automatically submit bspConfirmStopStoring after the cooldown.
+      // Wait for each confirm to appear in the tx pool and seal it.
+      // Note: The BSP may also need to submit proofs which have priority, so we check for those first.
       for (let i = 0; i < fileKeys.length; i++) {
-        const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
-          fileKeys[i]
-        ]);
-        confirmStopStoringTxs.push(
-          userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof.toString())
-        );
+        // Check if there's a pending submitProof extrinsic and seal it first if so.
+        // Proof submissions have priority over confirm stop storing.
+        let pendingTxs = await userApi.rpc.author.pendingExtrinsics();
+        let proofTxs = pendingTxs.filter((tx) => tx.method.method === "submitProof");
+        while (proofTxs.length > 0) {
+          await userApi.block.seal();
+          pendingTxs = await userApi.rpc.author.pendingExtrinsics();
+          proofTxs = pendingTxs.filter((tx) => tx.method.method === "submitProof");
+        }
+
+        // Wait for BSP to automatically submit confirm stop storing
+        await userApi.wait.waitForTxInPool({
+          module: "fileSystem",
+          method: "bspConfirmStopStoring"
+        });
+
+        // Seal the block with the confirm
+        await userApi.block.seal();
 
         // Check for the confirm stopped storing event.
         await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
@@ -331,19 +359,6 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
           }
         });
       }
-
-      await userApi.block.seal({ calls: confirmStopStoringTxs, signer: bspKey });
-
-      // Check for the confirm stopped storing event.
-      const confirmStopStoringEvents = await userApi.assert.eventMany(
-        "fileSystem",
-        "BspConfirmStoppedStoring"
-      );
-
-      assert(
-        confirmStopStoringEvents.length === 1,
-        "two of the extrinsics should fail because of wrong inclusion proof"
-      );
     }
   );
 });

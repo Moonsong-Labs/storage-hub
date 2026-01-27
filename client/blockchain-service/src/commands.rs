@@ -42,10 +42,11 @@ use crate::{
     handler::BlockchainService,
     transaction_manager::wait_for_transaction_status,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest,
-        FileKeyStatusUpdate, MinimalBlockInfo, RespondStorageRequest, RetryStrategy,
-        SendExtrinsicOptions, StatusToWait, StopStoringForInsolventUserRequest, SubmitProofRequest,
-        SubmittedExtrinsicInfo, WatchTransactionError,
+        ConfirmBspStopStoringRequest, ConfirmStoringRequest, Extrinsic, ExtrinsicResult,
+        FileDeletionRequest, FileKeyStatusUpdate, MinimalBlockInfo, RequestBspStopStoringRequest,
+        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
+        StopStoringForInsolventUserRequest, SubmitProofRequest, SubmittedExtrinsicInfo,
+        WatchTransactionError,
     },
 };
 
@@ -231,13 +232,24 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// - After extrinsic submission failures (may be transient)
     #[command(mode = "FireAndForget")]
     RemoveFileKeyStatus { file_key: FileKey },
-    /// Emit the RequestBspStopStoring event to trigger the BSP stop storing flow.
+    /// Queue a request to stop storing a file for a BSP.
     ///
-    /// This command is called by the RPC to initiate the two-phase stop storing process.
-    /// The event will be handled by the BspStopStoringTask which will generate proofs
-    /// and call the `bsp_request_stop_storing` extrinsic.
-    #[command(mode = "FireAndForget")]
-    EmitRequestBspStopStoring { file_key: FileKey },
+    /// This command is called by the RPC to initiate the BSP stop storing process.
+    /// The request will be queued and processed when the forest root write lock
+    /// is available, ensuring atomic proof generation and submission.
+    #[command(success_type = ())]
+    QueueBspRequestStopStoring {
+        request: RequestBspStopStoringRequest<Runtime>,
+    },
+    /// Queue a confirm stop storing request for a BSP.
+    ///
+    /// This command is called when the on-chain `BspRequestedToStopStoring` event is detected.
+    /// The request will be queued and processed when the confirm_after_tick is reached
+    /// and the forest root write lock is available.
+    #[command(success_type = ())]
+    QueueBspConfirmStopStoring {
+        request: ConfirmBspStopStoringRequest<Runtime>,
+    },
     /// Set the RPC handlers for the BlockchainService.
     ///
     /// This command must be called after the RPC server has been initialized to provide
