@@ -3011,6 +3011,32 @@ where
             .collect()
     }
 
+    /// Filter the given file keys to return only those that the BSP still needs to confirm storing after
+    /// volunteering for them.
+    ///
+    /// This function queries `StorageRequestBsps` for each provided file key and BSP ID,
+    /// filtering out file keys where:
+    /// - The BSP has already confirmed storing (confirmed = true)
+    /// - The BSP is not a volunteer for the storage request (no entry exists)
+    /// - The storage request doesn't exist
+    ///
+    /// Returns a Vec of file keys that the BSP has volunteered for but not yet confirmed.
+    pub fn query_pending_bsp_confirm_storage_requests(
+        bsp_id: ProviderIdFor<T>,
+        file_keys: Vec<MerkleHash<T>>,
+    ) -> Vec<MerkleHash<T>> {
+        file_keys
+            .into_iter()
+            .filter(|file_key| {
+                // Check if BSP has volunteered but not yet confirmed for this file key
+                match StorageRequestBsps::<T>::get(file_key, &bsp_id) {
+                    Some(metadata) => !metadata.confirmed,
+                    None => false,
+                }
+            })
+            .collect()
+    }
+
     /// Removes multiple file keys from the bucket's forest in a single operation, updating the bucket's root.
     ///
     /// Does not enforce the presence of an MSP storing the bucket. If no MSP is found to be

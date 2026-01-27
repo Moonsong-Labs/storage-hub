@@ -278,7 +278,7 @@ jobs:
           pnpm dlx create-next-app@latest /tmp/hello_world_nextjs --yes --ts --eslint --app --tailwind false --use-pnpm
       - name: Install SDK packages
         working-directory: /tmp/hello_world_nextjs
-        run: pnpm add -w @storagehub-sdk/core @storagehub-sdk/msp-client
+        run: pnpm add @storagehub-sdk/core @storagehub-sdk/msp-client
       - name: Smoke build
         working-directory: /tmp/hello_world_nextjs
         env:
