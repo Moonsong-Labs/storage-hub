@@ -763,6 +763,10 @@ impl_runtime_apis! {
         fn query_min_wait_for_stop_storing() -> BlockNumber {
             FileSystem::query_min_wait_for_stop_storing()
         }
+
+        fn has_pending_stop_storing_request(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> bool {
+            FileSystem::has_pending_stop_storing_request(bsp_id, file_key)
+        }
     }
 
     impl pallet_payment_streams_runtime_api::PaymentStreamsApi<Block, ProviderIdFor<Runtime>, Balance, AccountId> for Runtime {

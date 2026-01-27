@@ -171,6 +171,11 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueryMspIdOfBucketId { bucket_id: BucketId<Runtime> },
     #[command(success_type = BlockNumber<Runtime>, error_type = ApiError)]
     QueryMinWaitForStopStoring,
+    #[command(success_type = bool, error_type = ApiError)]
+    HasPendingStopStoringRequest {
+        bsp_id: BackupStorageProviderId<Runtime>,
+        file_key: FileKey,
+    },
     QueueFileDeletionRequest {
         request: FileDeletionRequest<Runtime>,
     },

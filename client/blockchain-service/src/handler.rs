@@ -1354,6 +1354,26 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::HasPendingStopStoringRequest {
+                    bsp_id,
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let has_request = self.client.runtime_api().has_pending_stop_storing_request(
+                        current_block_hash,
+                        bsp_id.into(),
+                        file_key.into(),
+                    );
+
+                    match callback.send(has_request) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back HasPendingStopStoringRequest: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueryBucketsOfUserStoredByMsp {
                     msp_id,
                     user,
