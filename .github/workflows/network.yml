@@ -461,7 +461,6 @@ jobs:
                --test-reporter=@reporters/github    \
                --test-reporter-destination=stdout   \
                --test-reporter=spec                 \
-               --test-reporter-destination=stdout   \
                --test-concurrency=1                 \
                --test-shard=${{ matrix.shard }}/2   \
                ./suites/solo-node/**/**.test.ts
@@ -517,7 +516,6 @@ jobs:
               --test-reporter=@reporters/github    \
               --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
-              --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
               --test-shard=${{ matrix.shard }}/4   \
               ./suites/integration/msp/**.test.ts
@@ -605,7 +603,6 @@ jobs:
               --test-reporter=@reporters/github    \
               --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
-              --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
               --test-shard=${{ matrix.shard }}/5   \
               ./suites/integration/bsp/**.test.ts
@@ -719,7 +716,6 @@ jobs:
               --test-reporter=@reporters/github    \
               --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
-              --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
               --test-shard=${{ matrix.shard }}/1   \
               ./suites/integration/backend/**.test.ts
@@ -815,7 +811,6 @@ jobs:
               --test-reporter=@reporters/github    \
               --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
-              --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
               --test-shard=${{ matrix.shard }}/2   \
               ./suites/integration/user/**.test.ts
@@ -906,8 +901,8 @@ jobs:
               --test-reporter=@reporters/github    \
               --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
-              --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
+              --test-shard=${{ matrix.shard }}/2   \
               ./suites/integration/fisherman/**.test.ts
 
       - name: Collect Docker logs on failure
