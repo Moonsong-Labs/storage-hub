@@ -2194,7 +2194,7 @@ where
     ///
     /// If finality event processing fails, the block is NOT marked as processed
     /// (i.e., `last_finalised_block_processed` is not updated), ensuring the block
-    /// will be retried on the next restart.
+    /// will be retried on the next finality notification or restart.
     async fn process_finality_notification(
         &mut self,
         notification: FinalityNotification<OpaqueBlock>,
@@ -2258,7 +2258,7 @@ where
                 if let Err(e) = self.process_finality_events(intermediate_hash) {
                     error!(
                         target: LOG_TARGET,
-                        "Failed to process finality events for intermediate block #{} (0x{:x}): {:?}. Block will be retried on restart.",
+                        "Failed to process finality events for intermediate block #{} (0x{:x}): {:?}. Block will be retried on the next finality notification or restart.",
                         intermediate_number, intermediate_hash, e
                     );
                     observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_FAILURE], start.elapsed().as_secs_f64());
@@ -2279,7 +2279,7 @@ where
         if let Err(e) = self.process_finality_events(&block_hash) {
             error!(
                 target: LOG_TARGET,
-                "Failed to process finality events for block #{} (0x{:x}): {:?}. Block will be retried on restart.",
+                "Failed to process finality events for block #{} (0x{:x}): {:?}. Block will be retried on the next finality notification or restart.",
                 block_number, block_hash, e
             );
             observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_FAILURE], start.elapsed().as_secs_f64());
