@@ -31,6 +31,7 @@ use std::{
 };
 use tokio::time::{interval, Duration};
 
+use sc_client_api::HeaderBackend;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse, RequestFailure},
     service::traits::NetworkService,
@@ -38,13 +39,16 @@ use sc_network::{
 };
 use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
+use sp_api::ProvideRuntimeApi;
 
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
+    blockchain_utils::convert_raw_multiaddresses_to_multiaddr,
     traits::StorageEnableRuntime,
     types::{
-        BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId,
-        BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
+        BucketId, DownloadRequestId, FileKey, FileKeyProof, ProviderId, StorageHubClient,
+        UploadRequestId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
     },
 };
 use shp_file_metadata::ChunkId;
@@ -106,6 +110,12 @@ pub struct FileTransferService<Runtime: StorageEnableRuntime> {
     request_receiver: async_channel::Receiver<IncomingRequest>,
     /// Substrate network service that gives access to p2p operations.
     network: Arc<dyn NetworkService>,
+    /// StorageHub client used to query runtime APIs for authorisation checks.
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
+    /// Trusted MSP IDs (on-chain IDs) configured for this BSP.
+    trusted_msps: Vec<ProviderId<Runtime>>,
+    /// Mapping from trusted MSP peer IDs to their on-chain MSP IDs.
+    trusted_msp_peers: HashMap<PeerId, ProviderId<Runtime>>,
     /// Registry of (peer, file key) pairs for which we accept requests.
     peer_file_allow_list: HashSet<(PeerId, FileKey)>,
     /// Registry of peers by file key, used for cleanup.
@@ -559,6 +569,8 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FileTransferService<Runtime>>
     async fn run(mut self) {
         info!(target: LOG_TARGET, "💾 StorageHub's File Transfer Service starting up!");
 
+        self.actor.initialise_trusted_msps().await;
+
         let ticker = interval(Duration::from_secs(1));
         let ticker_stream = stream::unfold(ticker, |mut interval| {
             Box::pin(async move {
@@ -616,11 +628,16 @@ impl<Runtime: StorageEnableRuntime> FileTransferService<Runtime> {
         protocol_name: ProtocolName,
         request_receiver: async_channel::Receiver<IncomingRequest>,
         network: Arc<dyn NetworkService>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
+        trusted_msps: Vec<ProviderId<Runtime>>,
     ) -> Self {
         Self {
             protocol_name,
             request_receiver,
             network,
+            client,
+            trusted_msps,
+            trusted_msp_peers: HashMap::new(),
             peer_file_allow_list: HashSet::new(),
             peers_by_file: HashMap::new(),
             peer_bucket_allow_list: HashSet::new(),
@@ -633,6 +650,72 @@ impl<Runtime: StorageEnableRuntime> FileTransferService<Runtime> {
             upload_pending_response_nonce: UploadRequestId::new(0),
             last_bucket_move_retry: None,
         }
+    }
+
+    async fn initialise_trusted_msps(&mut self) {
+        if self.trusted_msps.is_empty() {
+            return;
+        }
+
+        let current_block_hash = self.client.info().best_hash;
+        let mut total_peers = 0usize;
+
+        for msp_id in self.trusted_msps.clone() {
+            let multiaddresses = match self
+                .client
+                .runtime_api()
+                .query_provider_multiaddresses(current_block_hash, &msp_id)
+            {
+                Ok(Ok(multiaddresses)) => multiaddresses,
+                Ok(Err(e)) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Failed to query provider multiaddresses for trusted MSP [0x{:x}]: {:?}",
+                        msp_id,
+                        e
+                    );
+                    continue;
+                }
+                Err(e) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Runtime API error querying provider multiaddresses for trusted MSP [0x{:x}]: {:?}",
+                        msp_id,
+                        e
+                    );
+                    continue;
+                }
+            };
+
+            let parsed_multiaddresses =
+                convert_raw_multiaddresses_to_multiaddr::<Runtime>(multiaddresses);
+
+            let mut msp_peers = 0usize;
+            for multiaddr in parsed_multiaddresses {
+                if let Some(peer_id) = PeerId::try_from_multiaddr(&multiaddr) {
+                    self.network.add_known_address(peer_id.into(), multiaddr);
+                    self.trusted_msp_peers.insert(peer_id, msp_id);
+                    msp_peers += 1;
+                }
+            }
+
+            if msp_peers == 0 {
+                warn!(
+                    target: LOG_TARGET,
+                    "Trusted MSP [0x{:x}] resolved to 0 peer IDs from on-chain multiaddresses",
+                    msp_id
+                );
+            }
+
+            total_peers += msp_peers;
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Configured {} trusted MSP(s) with {} resolved peer ID(s)",
+            self.trusted_msps.len(),
+            total_peers
+        );
     }
 
     async fn handle_request(
@@ -820,10 +903,43 @@ impl<Runtime: StorageEnableRuntime> FileTransferService<Runtime> {
         }
 
         if let Some(bucket_id) = bucket_id {
-            self.peer_bucket_allow_list.contains(&(peer, bucket_id))
-        } else {
-            false
+            if self.peer_bucket_allow_list.contains(&(peer, bucket_id)) {
+                return true;
+            }
+
+            // If this peer belongs to a trusted MSP, validate it is the current MSP for the bucket.
+            if let Some(trusted_msp_id) = self.trusted_msp_peers.get(&peer) {
+                let current_block_hash = self.client.info().best_hash;
+                return match self
+                    .client
+                    .runtime_api()
+                    .query_msp_id_of_bucket_id(current_block_hash, &bucket_id)
+                {
+                    Ok(Ok(Some(current_msp))) => current_msp == *trusted_msp_id,
+                    Ok(Ok(None)) => false,
+                    Ok(Err(e)) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Error querying MSP for bucket [0x{:x}] during download authorisation: {:?}",
+                            bucket_id,
+                            e
+                        );
+                        false
+                    }
+                    Err(e) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Runtime API error querying MSP for bucket [0x{:x}] during download authorisation: {:?}",
+                            bucket_id,
+                            e
+                        );
+                        false
+                    }
+                };
+            }
         }
+
+        false
     }
 
     fn handle_bad_request(

@@ -22,6 +22,10 @@ pub trait ForestStorage<T: TrieLayout, Runtime: StorageEnableRuntime>: 'static {
         &self,
         file_key: &HasherOutT<T>,
     ) -> Result<Option<FileMetadata>, ErrorT<T>>;
+    /// Get all files stored in this forest.
+    ///
+    /// Returns a vector of `(file_key, file_metadata)` pairs.
+    fn get_all_files(&self) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>>;
     /// Generate proof for file key(s).
     fn generate_proof(
         &self,
