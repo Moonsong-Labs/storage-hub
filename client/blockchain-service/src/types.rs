@@ -4,8 +4,10 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     future::Future,
     pin::Pin,
+    sync::Arc,
     time::Duration,
 };
+use tokio::sync::{mpsc::UnboundedSender, OwnedSemaphorePermit};
 
 use codec::{Decode, Encode};
 use frame_system::DispatchEventInfo;
@@ -30,6 +32,40 @@ use crate::{
     commands::BlockchainServiceCommandInterfaceExt, handler::LOG_TARGET,
     transaction_manager::wait_for_transaction_status,
 };
+
+/// RAII wrapper for forest root write permits that notifies the blockchain service
+/// when the permit is dropped via the `release_notifier` channel to the blockchain service event loop, allowing immediate processing of pending requests.
+///
+/// When tasks acquire a forest write lock, they receive an `Arc<ForestWritePermitGuard>`.
+/// When the guard is dropped, the `Drop` implementation sends a notification
+/// through the channel, which triggers the blockchain service to check for and
+/// process any pending forest write requests.
+#[derive(Debug)]
+pub struct ForestWritePermitGuard {
+    _permit: OwnedSemaphorePermit,
+    release_notifier: UnboundedSender<()>,
+}
+
+impl ForestWritePermitGuard {
+    /// Creates a new `ForestWritePermitGuard` wrapping the given permit.
+    ///
+    /// When this guard is dropped, a notification will be sent
+    /// through `release_notifier` to the blockchain service event loop to trigger processing of pending requests.
+    pub fn new(permit: OwnedSemaphorePermit, release_notifier: UnboundedSender<()>) -> Self {
+        Self {
+            _permit: permit,
+            release_notifier,
+        }
+    }
+}
+
+impl Drop for ForestWritePermitGuard {
+    fn drop(&mut self) {
+        // Send notification to the blockchain service event loop to process pending requests.
+        // Ignore errors as the receiver may be dropped during shutdown.
+        let _ = self.release_notifier.send(());
+    }
+}
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -782,12 +818,11 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
     /// various edge cases when restarting the node.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest<Runtime>>,
-    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    /// Semaphore to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
     ///
-    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
-    /// would be to send a [`MutexGuard`].
-    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// A permit is acquired before emitting forest-write events and automatically released when
+    /// the task handler completes (permit dropped).
+    pub(crate) forest_root_write_semaphore: Arc<tokio::sync::Semaphore>,
     /// A set of Forest Storage snapshots, ordered by block number and block hash.
     ///
     /// A BSP can have multiple Forest Storage snapshots.
@@ -808,7 +843,7 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
         Self {
             bsp_id,
             pending_submit_proof_requests: BTreeSet::new(),
-            forest_root_write_lock: None,
+            forest_root_write_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             forest_root_snapshots: BTreeSet::new(),
             pending_volunteer_file_keys: HashSet::new(),
         }
@@ -888,14 +923,13 @@ impl From<FileKeyStatusUpdate> for FileKeyStatus {
 pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// The MSP ID.
     pub(crate) msp_id: MainStorageProviderId<Runtime>,
-    /// TODO: CHANGE THIS INTO MULTIPLE LOCKS, ONE FOR EACH BUCKET.
+    /// TODO: CHANGE THIS INTO MULTIPLE SEMAPHORES, ONE FOR EACH BUCKET.
     ///
-    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    /// Semaphore to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
     ///
-    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
-    /// would be to send a [`MutexGuard`].
-    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// A permit is acquired before emitting forest-write events and automatically released when
+    /// the task handler completes (permit dropped).
+    pub(crate) forest_root_write_semaphore: Arc<tokio::sync::Semaphore>,
     /// A map of [`BucketId`] to the Forest Storage snapshots.
     ///
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
@@ -926,7 +960,7 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
     pub fn new(msp_id: MainStorageProviderId<Runtime>) -> Self {
         Self {
             msp_id,
-            forest_root_write_lock: None,
+            forest_root_write_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             forest_root_snapshots: BTreeMap::new(),
             files_to_distribute: HashMap::new(),
             file_key_statuses: HashMap::new(),
