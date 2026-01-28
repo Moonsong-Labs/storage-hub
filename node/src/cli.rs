@@ -370,6 +370,25 @@ pub struct ProviderConfigurations {
     )]
     pub msp_database_url: Option<String>,
 
+    // ============== Blockchain Service Batch Size Options ==============
+    /// Maximum number of BSP confirm storing requests to batch together (default: 20)
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "Blockchain Service Options",
+        default_value = "20"
+    )]
+    pub bsp_confirm_file_batch_size: Option<u32>,
+
+    /// Maximum number of MSP respond storage requests to batch together (default: 20)
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "Blockchain Service Options",
+        default_value = "20"
+    )]
+    pub msp_respond_storage_batch_size: Option<u32>,
+
     /// Enable the trusted file transfer HTTP server
     #[arg(
         long,
@@ -505,6 +524,16 @@ impl ProviderConfigurations {
 
         if let Some(check_for_pending_proofs_period) = self.check_for_pending_proofs_period {
             bs_options.check_for_pending_proofs_period = Some(check_for_pending_proofs_period);
+            bs_changed = true;
+        }
+
+        if let Some(bsp_confirm_file_batch_size) = self.bsp_confirm_file_batch_size {
+            bs_options.bsp_confirm_file_batch_size = Some(bsp_confirm_file_batch_size);
+            bs_changed = true;
+        }
+
+        if let Some(msp_respond_storage_batch_size) = self.msp_respond_storage_batch_size {
+            bs_options.msp_respond_storage_batch_size = Some(msp_respond_storage_batch_size);
             bs_changed = true;
         }
 
