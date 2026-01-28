@@ -63,21 +63,31 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
+    /// # Event Encoding/Decoding Stability
+    ///
+    /// All event variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Notifies that access to a bucket has been shared with another account.
+        #[codec(index = 0)]
         AccessShared {
             issuer: T::AccountId,
             recipient: AccountIdLookupTargetOf<T>,
         },
         /// Notifies that the read access for an item has been updated.
+        #[codec(index = 1)]
         ItemReadAccessUpdated {
             admin: T::AccountId,
             bucket: BucketIdFor<T>,
             item_id: T::ItemId,
         },
         /// Notifies that an item has been burned.
+        #[codec(index = 2)]
         ItemBurned {
             account: T::AccountId,
             bucket: BucketIdFor<T>,
@@ -85,16 +95,26 @@ pub mod pallet {
         },
     }
 
-    // Errors inform users that something went wrong.
+    /// # Error Encoding/Decoding Stability
+    ///
+    /// All error variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::error]
     pub enum Error<T> {
         /// Bucket is not private. Call `update_bucket_privacy` from the file system pallet to make it private.
+        #[codec(index = 0)]
         BucketIsNotPrivate,
         /// Account is not the owner of the bucket.
+        #[codec(index = 1)]
         NotBucketOwner,
         /// No collection corresponding to the bucket. Call `update_bucket_privacy` from the file system pallet to make it private.
+        #[codec(index = 2)]
         NoCorrespondingCollection,
         /// Failed to convert bytes to `BoundedVec`
+        #[codec(index = 3)]
         ConvertBytesToBoundedVec,
     }
 

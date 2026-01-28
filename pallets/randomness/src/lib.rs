@@ -66,10 +66,18 @@ pub mod pallet {
         type BabeDataGetterBlockNumber: sp_runtime::traits::BlockNumber;
     }
 
+    /// # Event Encoding/Decoding Stability
+    ///
+    /// All event variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::event]
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Event emitted when a new random seed is available from the relay chain
+        #[codec(index = 0)]
         NewOneEpochAgoRandomnessAvailable {
             randomness_seed: T::Hash,
             from_epoch: u64,
