@@ -227,6 +227,16 @@ pub struct ProviderConfigurations {
     #[arg(long, value_name = "COUNT", default_value = "1024")]
     pub internal_buffer_size: Option<u64>,
 
+    // ============== MSP Upload File task options ==============
+    /// Maximum number of MSP respond storage requests to batch together (default: 20)
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "Blockchain Service Options",
+        default_value = "20"
+    )]
+    pub msp_respond_storage_batch_size: Option<u32>,
+
     // ============== MSP Charge Fees task options ==============
     /// Enable and configure MSP Charge Fees task.
     #[arg(long)]
@@ -310,6 +320,15 @@ pub struct ProviderConfigurations {
     )]
     pub bsp_upload_file_max_tip: Option<u128>,
 
+    /// Maximum number of BSP confirm storing requests to batch together (default: 20)
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "Blockchain Service Options",
+        default_value = "20"
+    )]
+    pub bsp_confirm_file_batch_size: Option<u32>,
+
     // ============== BSP Move Bucket task options ==============
     /// Enable and configure BSP Move Bucket task.
     #[arg(long)]
@@ -369,25 +388,6 @@ pub struct ProviderConfigurations {
         help_heading = "MSP Database Options"
     )]
     pub msp_database_url: Option<String>,
-
-    // ============== Blockchain Service Batch Size Options ==============
-    /// Maximum number of BSP confirm storing requests to batch together (default: 20)
-    #[arg(
-        long,
-        value_name = "COUNT",
-        help_heading = "Blockchain Service Options",
-        default_value = "20"
-    )]
-    pub bsp_confirm_file_batch_size: Option<u32>,
-
-    /// Maximum number of MSP respond storage requests to batch together (default: 20)
-    #[arg(
-        long,
-        value_name = "COUNT",
-        help_heading = "Blockchain Service Options",
-        default_value = "20"
-    )]
-    pub msp_respond_storage_batch_size: Option<u32>,
 
     /// Enable the trusted file transfer HTTP server
     #[arg(
