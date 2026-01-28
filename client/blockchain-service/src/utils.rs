@@ -1734,8 +1734,11 @@ where
             if let Some(managed_provider) = &self.maybe_managed_provider {
                 match managed_provider {
                     ManagedProvider::Bsp(_) => {
-                        self.bsp_process_forest_root_changing_events(ev.event.clone().into(), revert)
-                            .await?;
+                        self.bsp_process_forest_root_changing_events(
+                            ev.event.clone().into(),
+                            revert,
+                        )
+                        .await?;
                     }
                     ManagedProvider::Msp(_) => {
                         self.msp_process_forest_root_changing_events(
