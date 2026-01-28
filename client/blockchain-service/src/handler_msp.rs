@@ -38,7 +38,6 @@ use crate::{
     BlockchainService,
 };
 
-
 impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
