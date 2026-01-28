@@ -119,6 +119,7 @@ impl pallet_xcm::Config for Runtime {
     type RemoteLockConsumerIdentifier = ();
     type WeightInfo = pallet_xcm::TestWeightInfo;
     type AdminOrigin = EnsureRoot<AccountId>;
+    type AuthorizedAliasConsideration = ();
 }
 
 impl origin::Config for Runtime {}

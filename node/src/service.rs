@@ -884,7 +884,7 @@ where
         config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
     );
 
-    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+    let (network, system_rpc_tx, tx_handler_controller, sync_service) =
         sc_service::build_network(sc_service::BuildNetworkParams {
             config: &config,
             net_config,
@@ -1204,7 +1204,6 @@ where
 
     log::info!("Development Service Ready");
 
-    network_starter.start_network();
     Ok(task_manager)
 }
 
@@ -1269,7 +1268,7 @@ where
         config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
     );
 
-    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+    let (network, system_rpc_tx, tx_handler_controller, sync_service) =
         sc_service::build_network(sc_service::BuildNetworkParams {
             config: &config,
             net_config,
@@ -1374,7 +1373,6 @@ where
     log::info!("🛠️  Manual sealing is disabled");
     log::info!("🛠️  Only RPC functionality is available");
 
-    network_starter.start_network();
     Ok(task_manager)
 }
 
@@ -1464,7 +1462,7 @@ where
     let transaction_pool = params.transaction_pool.clone();
     let import_queue_service = params.import_queue.service();
 
-    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+    let (network, system_rpc_tx, tx_handler_controller, sync_service) =
         build_network(BuildNetworkParams {
             parachain_config: &parachain_config,
             net_config,
@@ -1634,8 +1632,6 @@ where
         )?;
     }
 
-    network_starter.start_network();
-
     Ok((task_manager, client))
 }
 
@@ -1701,7 +1697,7 @@ where
 
     let transaction_pool = params.transaction_pool.clone();
 
-    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+    let (network, system_rpc_tx, tx_handler_controller, sync_service) =
         build_network(BuildNetworkParams {
             parachain_config: &parachain_config,
             net_config,
@@ -1802,7 +1798,6 @@ where
     log::info!("🛠️  Block import and relay chain sync are disabled");
 
     // We still need to start the network to allow RPC connections
-    network_starter.start_network();
 
     log::info!("🛠️  Node started in maintenance mode - only RPC functionality is available");
 
@@ -1896,6 +1891,7 @@ fn start_parachain_consensus(
         collator_service,
         authoring_duration: Duration::from_millis(2000),
         reinitialize: false,
+        max_pov_percentage: None,
     };
 
     let fut = aura::run::<Block, sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _, _>(
@@ -2142,7 +2138,7 @@ where
         );
     net_config.add_notification_protocol(grandpa_protocol_config);
 
-    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+    let (network, system_rpc_tx, tx_handler_controller, sync_service) =
         sc_service::build_network(sc_service::BuildNetworkParams {
             config: &config,
             net_config,
@@ -2266,7 +2262,7 @@ where
         let fee_history_limit_captured = fee_history_limit;
         let command_sink = command_sink.clone();
         Box::new(move |_| {
-            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
+            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime>(
                 crate::rpc::SolochainEvmDeps {
                     client: client.clone(),
                     pool: transaction_pool.clone(),
@@ -2278,7 +2274,7 @@ where
                     frontier_backend: match &*frontier_backend {
                         fc_db::Backend::KeyValue(b) => b.clone(),
                     },
-                    graph: transaction_pool.pool().clone(),
+                    graph: transaction_pool.clone(),
                     block_data_cache: block_data_cache.clone(),
                     filter_pool: filter_pool.clone(),
                     fee_history_cache: fee_history_cache.clone(),
@@ -2461,7 +2457,6 @@ where
         .await?;
     }
 
-    network_starter.start_network();
     Ok(task_manager)
 }
 
@@ -2814,7 +2809,7 @@ where
         );
     net_config.add_notification_protocol(grandpa_protocol_config);
 
-    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+    let (network, system_rpc_tx, tx_handler_controller, sync_service) =
         sc_service::build_network(sc_service::BuildNetworkParams {
             config: &config,
             net_config,
@@ -2898,7 +2893,7 @@ where
         let fee_history_cache_captured = fee_history_cache.clone();
         let fee_history_limit_captured = fee_history_limit;
         Box::new(move |_| {
-            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
+            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime>(
                 crate::rpc::SolochainEvmDeps {
                     client: client.clone(),
                     pool: transaction_pool.clone(),
@@ -2910,7 +2905,7 @@ where
                     frontier_backend: match &*frontier_backend {
                         fc_db::Backend::KeyValue(b) => b.clone(),
                     },
-                    graph: transaction_pool.pool().clone(),
+                    graph: transaction_pool.clone(),
                     block_data_cache: block_data_cache.clone(),
                     filter_pool: filter_pool_captured.clone(),
                     fee_history_cache: fee_history_cache_captured.clone(),
@@ -3114,7 +3109,6 @@ where
         .await?;
     }
 
-    network_starter.start_network();
     Ok((task_manager, client))
 }
 
@@ -3175,7 +3169,7 @@ where
     }
 
     let metrics = Network::register_notification_metrics(config.prometheus_registry());
-    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+    let (network, system_rpc_tx, tx_handler_controller, sync_service) =
         sc_service::build_network(sc_service::BuildNetworkParams {
             config: &config,
             net_config,
@@ -3217,7 +3211,7 @@ where
         let prometheus_registry = prometheus_registry.clone();
         let spawn_handle = task_manager.spawn_handle();
         Box::new(move |_| {
-            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
+            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime>(
                 crate::rpc::SolochainEvmDeps {
                     client: client.clone(),
                     pool: transaction_pool.clone(),
@@ -3229,7 +3223,7 @@ where
                     frontier_backend: match &*frontier_backend {
                         fc_db::Backend::KeyValue(b) => b.clone(),
                     },
-                    graph: transaction_pool.pool().clone(),
+                    graph: transaction_pool.clone(),
                     block_data_cache: Arc::new(fc_rpc::EthBlockDataCacheTask::new(
                         spawn_handle.clone(),
                         storage_override.clone(),
@@ -3278,6 +3272,5 @@ where
         .await?;
     }
 
-    network_starter.start_network();
     Ok((task_manager, client))
 }

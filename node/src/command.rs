@@ -2,7 +2,6 @@ use cumulus_client_service::storage_proof_size::HostFunctions as ReclaimHostFunc
 use cumulus_primitives_core::ParaId;
 use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 use log::info;
-use polkadot_cli::service::IdentifyNetworkBackend;
 use sc_cli::{
     ChainSpec, CliConfiguration, DefaultConfigurationValues, ImportParams, KeystoreParams,
     NetworkParams, Result, RpcEndpoint, SharedParams, SubstrateCli,
@@ -478,8 +477,7 @@ pub fn run() -> Result<()> {
                     }
                 );
 
-                let default_backend = config.chain_spec.network_backend();
-                let network_backend = config.network.network_backend.unwrap_or(default_backend);
+                let network_backend = config.network.network_backend;
 
                 match network_backend {
                     sc_network::config::NetworkBackendType::Libp2p => {

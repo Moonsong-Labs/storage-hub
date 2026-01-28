@@ -4,6 +4,10 @@ pub mod xcm_config;
 // Substrate and Polkadot dependencies
 use crate::mock_message_queue;
 use crate::storagehub::{configs::xcm_config::XcmConfig, MessageQueue, ParachainInfo, PolkadotXcm};
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    vec,
+};
 use core::marker::PhantomData;
 use cumulus_pallet_parachain_system::{
     DefaultCoreSelector, RelayChainStateProof, RelayNumberMonotonicallyIncreases,
@@ -35,6 +39,7 @@ use polkadot_runtime_common::{prod_or_fast, BlockHashCount, SlowAdjustingFeeUpda
 use runtime_params::RuntimeParameters;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
+use shp_traits::ShpCompactProof;
 use shp_traits::{
     CommitmentVerifier, IdentityAdapter, MaybeDebug, TrieMutation, TrieProofDeltaApplier,
 };
@@ -48,9 +53,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
 };
-use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
-use sp_std::vec;
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_trie::{LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 use xcm_simulator::XcmExecutor;
@@ -128,6 +131,11 @@ impl frame_system::Config for Runtime {
     /// The action to take on a Runtime Upgrade
     type OnSetCode = cumulus_pallet_parachain_system::ParachainSetCode<Self>;
     type MaxConsumers = frame_support::traits::ConstU32<16>;
+}
+
+/// Configure the weight reclaim extension.
+impl cumulus_pallet_weight_reclaim::Config for Runtime {
+    type WeightInfo = ();
 }
 
 impl pallet_timestamp::Config for Runtime {
@@ -297,6 +305,7 @@ impl pallet_session::Config for Runtime {
     type SessionHandler = <SessionKeys as sp_runtime::traits::OpaqueKeys>::KeyTypeIdProviders;
     type Keys = SessionKeys;
     type WeightInfo = ();
+    type DisablingStrategy = ();
 }
 
 impl pallet_aura::Config for Runtime {
@@ -380,6 +389,7 @@ impl pallet_nfts::Config for Runtime {
     type OffchainSignature = Signature;
     type OffchainPublic = <Signature as Verify>::Signer;
     type WeightInfo = pallet_nfts::weights::SubstrateWeight<Runtime>;
+    type BlockNumberProvider = frame_system::Pallet<Self>;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
     type Locker = ();
@@ -807,17 +817,18 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Commitment = H256;
     type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: &CompactProof,
+        proof: &ShpCompactProof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.encoded_nodes.len() > 0 {
+        if proof.inner().encoded_nodes.len() > 0 {
             Ok(proof
+                .inner()
                 .encoded_nodes
                 .iter()
                 .map(|node| H256::from_slice(&node[..]))
@@ -833,7 +844,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(

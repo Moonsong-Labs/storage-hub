@@ -2,6 +2,10 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::vec::Vec;
+use core::marker::PhantomData;
 use fp_account::{AccountId20, EthereumSignature};
 use fp_evm::{Log, PrecompileHandle};
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
@@ -17,7 +21,6 @@ use precompile_utils::prelude::*;
 use shp_traits::ReadBucketsInterface;
 use sp_core::{ConstU32, H160, H256, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
-use sp_std::{marker::PhantomData, vec::Vec};
 
 #[cfg(test)]
 mod mock;
@@ -182,10 +185,10 @@ where
     Runtime: pallet_file_system::Config
         + pallet_evm::Config
         + frame_system::Config<AccountId = AccountId20>,
-    Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
-    Runtime::RuntimeCall: From<FileSystemCall<Runtime>>,
-    <Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
-    <Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
+    <Runtime as frame_system::Config>::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
+    <Runtime as frame_system::Config>::RuntimeCall: From<FileSystemCall<Runtime>>,
+    <Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<<Runtime as frame_system::Config>::AccountId>,
+    <<Runtime as frame_system::Config>::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<<Runtime as frame_system::Config>::AccountId>>,
     // Runtime types:
     ProviderIdFor<Runtime>: From<H256> + Into<H256>,
     ValuePropId<Runtime>: From<H256> + Into<H256>,

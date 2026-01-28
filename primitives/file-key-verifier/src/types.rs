@@ -1,18 +1,33 @@
-use codec::{Decode, Encode};
+extern crate alloc;
+
+use alloc::vec::Vec;
+use codec::{Decode, DecodeWithMemTracking, Encode};
 use core::fmt::Debug;
 use scale_info::TypeInfo;
 use shp_file_metadata::{
     Chunk, ChunkId, ChunkIdError, ChunkWithId, FileMetadata, Fingerprint, Leaf,
 };
-use sp_std::vec::Vec;
+use shp_traits::ShpCompactProof;
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
 
-#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode, DecodeWithMemTracking)]
 pub struct FileKeyProof<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
     pub file_metadata: FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>,
-    pub proof: CompactProof,
+    pub proof: ShpCompactProof,
+}
+
+/// Implement the `From<ShpCompactProof>` trait for the `FileKeyProof` struct.
+impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
+    From<ShpCompactProof> for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
+{
+    fn from(proof: ShpCompactProof) -> Self {
+        Self {
+            file_metadata: Default::default(),
+            proof,
+        }
+    }
 }
 
 /// Implement the `From<CompactProof>` trait for the `FileKeyProof` struct.
@@ -22,8 +37,17 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     fn from(proof: CompactProof) -> Self {
         Self {
             file_metadata: Default::default(),
-            proof,
+            proof: proof.into(),
         }
+    }
+}
+
+/// Implement the `Into<ShpCompactProof>` trait for the `FileKeyProof` struct.
+impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
+    Into<ShpCompactProof> for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
+{
+    fn into(self) -> ShpCompactProof {
+        self.proof
     }
 }
 
@@ -32,7 +56,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
 {
     fn into(self) -> CompactProof {
-        self.proof
+        self.proof.into_inner()
     }
 }
 
@@ -67,14 +91,14 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         location: Vec<u8>,
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
-        proof: CompactProof,
+        proof: impl Into<ShpCompactProof>,
     ) -> Result<Self, ProvenFileKeyError> {
         let file_metadata = FileMetadata::new(owner, bucket_id, location, size, fingerprint)
             .map_err(|_| ProvenFileKeyError::FailedToCreateFileMetadata)?;
 
         Ok(Self {
             file_metadata,
-            proof,
+            proof: proof.into(),
         })
     }
 
@@ -94,6 +118,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = self
             .proof
+            .inner()
             .to_memory_db::<<T as TrieLayout>::Hash>(Some(&expected_root))
             .map_err(|_| ProvenFileKeyError::TrieAndExpectedRootMismatch)?;
 

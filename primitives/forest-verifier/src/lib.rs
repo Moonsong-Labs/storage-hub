@@ -1,9 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::collections::{BTreeMap, BTreeSet};
 use frame_support::sp_runtime::DispatchError;
-use shp_traits::{CommitmentVerifier, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation};
-use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
-use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
+use shp_traits::{
+    CommitmentVerifier, ShpCompactProof, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
+};
+use sp_trie::{MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
 
 #[cfg(test)]
@@ -21,7 +25,7 @@ impl<T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for ForestVerifier
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Commitment = <T::Hash as sp_core::Hasher>::Out;
     type Challenge = <T::Hash as sp_core::Hasher>::Out;
 
@@ -40,7 +44,7 @@ where
         }
 
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
-        let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
+        let (memdb, root) = proof.inner().to_memory_db(Some(root.into())).map_err(|_| {
             "Failed to convert proof to memory DB, root doesn't match with expected."
         })?;
 
@@ -209,7 +213,7 @@ impl<T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(
@@ -237,6 +241,7 @@ where
         // TODO: Understand why `CompactProof` cannot be used directly to construct memdb and modify a partial trie. (it fails with error IncompleteDatabase)
         // Convert compact proof to `sp_trie::StorageProof` in order to access the trie nodes.
         let (storage_proof, mut root) = proof
+            .inner()
             .to_storage_proof::<T::Hash>(Some(root.into()))
             .map_err(|_| {
                 "Failed to convert proof to memory DB, root doesn't match with expected."

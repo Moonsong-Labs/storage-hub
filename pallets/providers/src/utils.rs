@@ -1,4 +1,7 @@
+extern crate alloc;
+
 use crate::{types::*, *};
+use alloc::vec::Vec;
 use codec::{Decode, Encode};
 use frame_support::{
     ensure,
@@ -30,7 +33,6 @@ use shp_traits::{
 };
 use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
 use sp_runtime::traits::{Convert, ConvertBack};
-use sp_std::vec::Vec;
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -3124,7 +3126,7 @@ mod hooks {
                         }
                     };
                 } else {
-                    let expiration_tick = sp_std::cmp::max(
+                    let expiration_tick = core::cmp::max(
                         NextAvailableProviderTopUpExpirationShTick::<T>::get(),
                         top_up_metadata.end_tick_grace_period,
                     );

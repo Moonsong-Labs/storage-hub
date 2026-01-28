@@ -1,5 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
 use frame_support::{pallet, traits::Randomness};
 pub use pallet::*;
 
@@ -36,6 +38,7 @@ pub trait SeedGenerator {
 #[pallet]
 pub mod pallet {
     use super::*;
+    use alloc::{collections::BTreeSet, vec, vec::Vec};
     use codec::FullCodec;
     use frame_support::pallet_prelude::*;
     use frame_support::weights::WeightMeter;
@@ -46,7 +49,6 @@ pub mod pallet {
     use sp_runtime::traits::{
         CheckEqual, CheckedDiv, Convert, Debug, MaybeDisplay, One, Saturating, SimpleBitOps, Zero,
     };
-    use sp_std::{collections::btree_set::BTreeSet, prelude::*};
     use types::{
         CommitmentWithSeed, ProviderIdFor, ProvidersPalletFor, SeedCommitmentFor,
         StakeToBlockNumberFor,

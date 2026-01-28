@@ -474,7 +474,7 @@ mod tests {
     use shc_common::types::StorageProofsMerkleTrieLayout;
     use shc_common::types::{FileMetadata, Fingerprint, Proven, TrieMutation, TrieRemoveMutation};
     use shp_forest_verifier::ForestVerifier;
-    use shp_traits::{CommitmentVerifier, TrieProofDeltaApplier};
+    use shp_traits::{CommitmentVerifier, ShpCompactProof, TrieProofDeltaApplier};
     use sp_core::Hasher;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
@@ -706,11 +706,12 @@ mod tests {
             )
             .unwrap();
         let included_keys = vec![keys[0], keys[1], keys[2]];
+        let shp_proof: ShpCompactProof = proof.proof.clone().into();
         assert!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 included_keys.as_slice(),
-                &proof.proof
+                &shp_proof
             )
             .is_ok()
         );
@@ -723,11 +724,12 @@ mod tests {
             )
             .unwrap();
         let included_keys = vec![keys[9], keys[10], keys[11], keys[39], keys[40], keys[41]];
+        let shp_proof: ShpCompactProof = proof.proof.clone().into();
         assert!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 included_keys.as_slice(),
-                &proof.proof
+                &shp_proof
             )
             .is_ok()
         );
@@ -742,13 +744,13 @@ mod tests {
                 sh_parachain_runtime::Runtime,
             >::generate_proof(&forest_storage, vec![*key])
                 .unwrap();
-            let proof = proof.proof;
+            let shp_proof: ShpCompactProof = proof.proof.clone().into();
             let mutations: Vec<(H256, TrieMutation)> =
                 vec![(*key, TrieRemoveMutation::default().into())];
 
             let apply_delta_result =
                 ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
-                    &root, &mutations, &proof,
+                    &root, &mutations, &shp_proof,
                 );
             assert!(apply_delta_result.is_ok());
             assert!(apply_delta_result

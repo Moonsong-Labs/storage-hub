@@ -802,7 +802,7 @@ where
         let call = pallet_file_system::Call::<Runtime>::delete_files {
             file_deletions: file_deletion_requests_bounded,
             bsp_id: maybe_bsp_id,
-            forest_proof: forest_proof.proof,
+            forest_proof: forest_proof.proof.into(),
         };
 
         // Submit the extrinsic
@@ -877,7 +877,7 @@ where
             pallet_file_system::Call::<Runtime>::delete_files_for_incomplete_storage_request {
                 file_keys: file_keys_bounded,
                 bsp_id: maybe_bsp_id,
-                forest_proof: forest_proof.proof,
+                forest_proof: forest_proof.proof.into(),
             };
 
         // Submit the extrinsic

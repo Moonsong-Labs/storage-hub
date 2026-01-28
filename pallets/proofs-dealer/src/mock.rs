@@ -14,7 +14,7 @@ use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot, EnsureSigned};
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
     CommitRevealRandomnessInterface, CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
-    TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
+    ShpCompactProof, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
@@ -22,8 +22,8 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
-use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_trie::{LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use std::collections::{BTreeMap, BTreeSet};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -388,16 +388,16 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Commitment = H256;
     type Challenge = C;
 
     fn verify_proof(
         _root: &Self::Commitment,
         challenges: &[Self::Challenge],
-        proof: &CompactProof,
+        proof: &ShpCompactProof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.encoded_nodes.len() > 0 {
+        if proof.inner().encoded_nodes.len() > 0 {
             let challenges: BTreeSet<Self::Challenge> = challenges.iter().cloned().collect();
             Ok(challenges)
         } else {
@@ -411,7 +411,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(

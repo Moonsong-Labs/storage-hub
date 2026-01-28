@@ -1,6 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Decode, Encode, FullCodec, HasCompact};
+extern crate alloc;
+
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    vec::Vec,
+};
+use codec::{Decode, DecodeWithMemTracking, Encode, FullCodec, HasCompact};
+use core::ops::Deref;
 use frame_support::{
     dispatch::DispatchResult,
     pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member},
@@ -17,7 +24,6 @@ use sp_runtime::{
     },
     BoundedVec, DispatchError,
 };
-use sp_std::{collections::btree_map::BTreeMap, collections::btree_set::BTreeSet, vec::Vec};
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -27,6 +33,68 @@ impl<T: Debug> MaybeDebug for T {}
 pub trait MaybeDebug {}
 #[cfg(not(feature = "std"))]
 impl<T> MaybeDebug for T {}
+
+/// Wrapper around `sp_trie::CompactProof` that implements `DecodeWithMemTracking`.
+///
+/// This is required because `CompactProof` from `sp_trie` doesn't implement
+/// `DecodeWithMemTracking`, but this trait is needed for types used as pallet
+/// extrinsic parameters in polkadot-sdk stable2503+.
+/// Wrapper around `sp_trie::CompactProof` that implements `DecodeWithMemTracking`.
+///
+/// This is required because `CompactProof` from `sp_trie` doesn't implement
+/// `DecodeWithMemTracking`, but this trait is needed for types used as pallet
+/// extrinsic parameters in polkadot-sdk stable2503+.
+///
+/// Note: We cannot use `#[derive(DecodeWithMemTracking)]` because that requires
+/// the inner type to also implement the trait, which `CompactProof` does not.
+/// The empty impl is valid because `DecodeWithMemTracking` is a marker trait.
+#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode, TypeInfo)]
+pub struct ShpCompactProof(pub sp_trie::CompactProof);
+
+impl DecodeWithMemTracking for ShpCompactProof {}
+
+impl From<sp_trie::CompactProof> for ShpCompactProof {
+    fn from(proof: sp_trie::CompactProof) -> Self {
+        ShpCompactProof(proof)
+    }
+}
+
+impl From<ShpCompactProof> for sp_trie::CompactProof {
+    fn from(proof: ShpCompactProof) -> Self {
+        proof.0
+    }
+}
+
+impl Deref for ShpCompactProof {
+    type Target = sp_trie::CompactProof;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<sp_trie::CompactProof> for ShpCompactProof {
+    fn as_ref(&self) -> &sp_trie::CompactProof {
+        &self.0
+    }
+}
+
+impl ShpCompactProof {
+    /// Create a new `ShpCompactProof` from a `CompactProof`.
+    pub fn new(proof: sp_trie::CompactProof) -> Self {
+        ShpCompactProof(proof)
+    }
+
+    /// Get a reference to the inner `CompactProof`.
+    pub fn inner(&self) -> &sp_trie::CompactProof {
+        &self.0
+    }
+
+    /// Consume self and return the inner `CompactProof`.
+    pub fn into_inner(self) -> sp_trie::CompactProof {
+        self.0
+    }
+}
 
 #[derive(Encode)]
 pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
@@ -926,13 +994,13 @@ pub trait CommitmentVerifier {
 }
 
 /// Enum representing the type of mutation (addition or removal of a key).
-#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, Clone, PartialEq, Debug)]
 pub enum TrieMutation {
     Add(TrieAddMutation),
     Remove(TrieRemoveMutation),
 }
 
-#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug, Default)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, Clone, PartialEq, Debug, Default)]
 pub struct TrieAddMutation {
     pub value: Vec<u8>,
 }
@@ -949,7 +1017,7 @@ impl TrieAddMutation {
     }
 }
 
-#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug, Default)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, Clone, PartialEq, Debug, Default)]
 pub struct TrieRemoveMutation {
     pub maybe_value: Option<Vec<u8>>,
 }

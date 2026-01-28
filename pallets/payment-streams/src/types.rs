@@ -1,7 +1,7 @@
 //! Various types to use in the Storage Providers pallet.
 
 use super::*;
-use codec::{Decode, Encode, MaxEncodedLen};
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -9,7 +9,17 @@ use scale_info::TypeInfo;
 use shp_traits::ReadProvidersInterface;
 
 /// Structure that has the Fixed-Rate Payment Stream information
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    MaxEncodedLen,
+    TypeInfo,
+    RuntimeDebugNoBound,
+    PartialEq,
+    Eq,
+    Clone,
+)]
 #[scale_info(skip_type_params(T))]
 pub struct FixedRatePaymentStream<T: Config> {
     pub rate: BalanceOf<T>,
@@ -19,7 +29,17 @@ pub struct FixedRatePaymentStream<T: Config> {
 }
 
 /// Structure that has the Dynamic-Rate Payment Stream information
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    MaxEncodedLen,
+    TypeInfo,
+    RuntimeDebugNoBound,
+    PartialEq,
+    Eq,
+    Clone,
+)]
 #[scale_info(skip_type_params(T))]
 pub struct DynamicRatePaymentStream<T: Config> {
     pub amount_provided: UnitsProvidedFor<T>,

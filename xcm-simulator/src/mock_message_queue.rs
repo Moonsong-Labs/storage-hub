@@ -8,7 +8,7 @@ use polkadot_parachain_primitives::primitives::{
 };
 use sp_runtime::traits::{Get, Hash};
 
-use sp_std::prelude::*;
+use alloc::vec::Vec;
 use xcm::{latest::prelude::*, VersionedLocation, VersionedXcm};
 
 pub use pallet::*;

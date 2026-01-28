@@ -60,6 +60,7 @@ fn storagehub_genesis(
                 .cloned()
                 .map(|k| (k, endowment))
                 .collect(),
+            ..Default::default()
         },
         parachain_info: ParachainInfoConfig {
             parachain_id: id,

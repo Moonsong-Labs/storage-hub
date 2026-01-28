@@ -7,7 +7,7 @@ use frame_support::{
 use pallet_balances;
 use pallet_file_system;
 use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
-use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
+use shp_traits::{ReadBucketsInterface, ReadProvidersInterface, ShpCompactProof};
 use sp_core::H256;
 use sp_runtime::bounded_vec;
 use sp_weights::WeightMeter;
@@ -1355,9 +1355,10 @@ mod users {
                 FileKeyWithProof<storagehub::Runtime>,
                 MaxBatchConfirmStorageRequests,
             > = BoundedVec::new();
-            let simulated_proof: CompactProof = CompactProof {
+            let simulated_proof: ShpCompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
-            };
+            }
+            .into();
             vec_of_key_proofs.force_push(FileKeyWithProof {
                 file_key: file_key.clone(),
                 proof: simulated_proof.clone(),
@@ -1681,9 +1682,10 @@ mod users {
                 FileKeyWithProof<storagehub::Runtime>,
                 MaxBatchConfirmStorageRequests,
             > = BoundedVec::new();
-            let simulated_proof: CompactProof = CompactProof {
+            let simulated_proof: ShpCompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
-            };
+            }
+            .into();
             vec_of_key_proofs.force_push(FileKeyWithProof {
                 file_key: file_key.clone(),
                 proof: simulated_proof.clone(),

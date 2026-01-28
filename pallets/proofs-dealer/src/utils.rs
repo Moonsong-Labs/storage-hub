@@ -1,3 +1,9 @@
+extern crate alloc;
+
+use alloc::{
+    collections::{BTreeSet, VecDeque},
+    vec::Vec,
+};
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -19,10 +25,6 @@ use shp_traits::{
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, One, Zero},
     ArithmeticError, BoundedVec, DispatchError, SaturatedConversion, Saturating,
-};
-use sp_std::{
-    collections::{btree_set::BTreeSet, vec_deque::VecDeque},
-    vec::Vec,
 };
 
 use crate::{

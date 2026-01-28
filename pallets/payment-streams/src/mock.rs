@@ -13,7 +13,7 @@ use pallet_nfts::PalletFeatures;
 use shp_constants::GIGAUNIT;
 use shp_traits::{
     CommitRevealRandomnessInterface, CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
-    ReadProvidersInterface, TrieMutation, TrieProofDeltaApplier,
+    ReadProvidersInterface, ShpCompactProof, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
@@ -23,7 +23,7 @@ use sp_runtime::{
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_trie::{LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_weights::Weight;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -303,6 +303,7 @@ impl pallet_nfts::Config for Test {
     type OffchainSignature = TestSignature;
     type OffchainPublic = <TestSignature as sp_runtime::traits::Verify>::Signer;
     type WeightInfo = ();
+    type BlockNumberProvider = frame_system::Pallet<Self>;
     pallet_nfts::runtime_benchmarks_enabled! {
         type Helper = ();
     }
@@ -344,17 +345,18 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Commitment = H256;
     type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: &CompactProof,
+        proof: &ShpCompactProof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.encoded_nodes.len() > 0 {
+        if proof.inner().encoded_nodes.len() > 0 {
             Ok(proof
+                .inner()
                 .encoded_nodes
                 .iter()
                 .map(|node| H256::from_slice(&node[..]))
@@ -370,7 +372,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(
@@ -526,6 +528,7 @@ impl ExtBuilder {
                 (123, 5_000_000 * UNITS), // Alice for `on_poll` testing = 123
                 (TreasuryAccount::get(), ExistentialDeposit::get()),
             ],
+            dev_accounts: None,
         }
         .assimilate_storage(&mut t)
         .unwrap();

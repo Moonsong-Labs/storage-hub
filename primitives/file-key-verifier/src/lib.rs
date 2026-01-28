@@ -1,9 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::collections::BTreeSet;
 use frame_support::sp_runtime::DispatchError;
 use shp_file_metadata::ChunkId;
 use shp_traits::CommitmentVerifier;
-use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{Trie, TrieDBBuilder, TrieLayout};
 use types::FileKeyProof;
 
@@ -83,6 +85,7 @@ where
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = proof
             .proof
+            .inner()
             .to_memory_db(Some(&expected_root))
             .map_err(|_| {
                 "Failed to convert proof to memory DB, root doesn't match with expected."

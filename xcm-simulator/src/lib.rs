@@ -1,5 +1,7 @@
 #![recursion_limit = "256"]
 
+extern crate alloc;
+
 use sp_core::Get;
 use sp_runtime::BuildStorage;
 use sp_tracing;
@@ -210,6 +212,7 @@ pub fn para_ext(para_id: u32) -> sp_io::TestExternalities {
             (sibling_account_id(SH_PARA_ID), 10 * INITIAL_BALANCE),
             (sibling_account_id(SYS_PARA_ID), 10 * INITIAL_BALANCE),
         ],
+        dev_accounts: None,
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -239,6 +242,7 @@ pub fn sys_ext(para_id: u32) -> sp_io::TestExternalities {
                 10 * INITIAL_BALANCE,
             ),
         ],
+        dev_accounts: None,
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -267,6 +271,7 @@ pub fn sh_ext() -> sp_io::TestExternalities {
             (sh_sibling_account_id(NON_SYS_PARA_ID), INITIAL_BALANCE),
             (TreasuryAccount::get(), ExistentialDeposit::get()),
         ],
+        dev_accounts: None,
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -294,6 +299,7 @@ pub fn relay_ext() -> sp_io::TestExternalities {
             (child_account_id(SYS_PARA_ID), INITIAL_BALANCE),
             (child_account_id(NON_SYS_PARA_ID), INITIAL_BALANCE),
         ],
+        dev_accounts: None,
     }
     .assimilate_storage(&mut t)
     .unwrap();

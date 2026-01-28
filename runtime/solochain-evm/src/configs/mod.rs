@@ -3,6 +3,7 @@ mod runtime_params;
 #[cfg(feature = "std")]
 pub mod storage_hub;
 
+use alloc::{vec, vec::Vec};
 use core::marker::PhantomData;
 use fp_account::AccountId20;
 use frame_support::{
@@ -54,8 +55,6 @@ use sp_runtime::{
     FixedPointNumber, KeyTypeId, Perbill, SaturatedConversion,
 };
 use sp_staking::{EraIndex, SessionIndex};
-use sp_std::vec;
-use sp_std::vec::Vec;
 use sp_trie::{TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 #[cfg(not(feature = "runtime-benchmarks"))]
@@ -317,6 +316,7 @@ impl pallet_session::Config for Runtime {
     type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
     type Keys = SessionKeys;
     type WeightInfo = ();
+    type DisablingStrategy = ();
 }
 
 parameter_types! {
@@ -346,7 +346,7 @@ impl pallet_grandpa::Config for Runtime {
 
 /// Deal with substrate based fees and tip. This should be used with pallet_transaction_payment.
 pub struct DealWithSubstrateFeesAndTip<R, FeesTreasuryProportion>(
-    sp_std::marker::PhantomData<(R, FeesTreasuryProportion)>,
+    core::marker::PhantomData<(R, FeesTreasuryProportion)>,
 );
 impl<R, FeesTreasuryProportion> DealWithSubstrateFeesAndTip<R, FeesTreasuryProportion>
 where
@@ -388,7 +388,7 @@ where
     }
 }
 
-pub struct BlockAuthorAccountId<R>(sp_std::marker::PhantomData<R>);
+pub struct BlockAuthorAccountId<R>(core::marker::PhantomData<R>);
 impl<R> TypedGet for BlockAuthorAccountId<R>
 where
     R: frame_system::Config + pallet_authorship::Config,
@@ -476,6 +476,7 @@ impl pallet_nfts::Config for Runtime {
     type OffchainSignature = Signature;
     type OffchainPublic = <Signature as Verify>::Signer;
     type WeightInfo = pallet_nfts::weights::SubstrateWeight<Runtime>;
+    type BlockNumberProvider = frame_system::Pallet<Self>;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = benchmark_helpers::NftHelper;
     type Locker = ();
@@ -532,7 +533,7 @@ where
 }
 
 pub struct OnChargeEVMTransaction<BaseFeesOU, PriorityFeesOU>(
-    sp_std::marker::PhantomData<(BaseFeesOU, PriorityFeesOU)>,
+    core::marker::PhantomData<(BaseFeesOU, PriorityFeesOU)>,
 );
 
 impl<T, BaseFeesOU, PriorityFeesOU> OnChargeEVMTransactionT<T>
@@ -571,7 +572,7 @@ where
 
 /// Deal with ethereum based fees. To handle tips/priority fees, use DealWithEthereumPriorityFees.
 pub struct DealWithEthereumBaseFees<R, FeesTreasuryProportion>(
-    sp_std::marker::PhantomData<(R, FeesTreasuryProportion)>,
+    core::marker::PhantomData<(R, FeesTreasuryProportion)>,
 );
 impl<R, FeesTreasuryProportion> OnUnbalanced<Credit<R::AccountId, pallet_balances::Pallet<R>>>
     for DealWithEthereumBaseFees<R, FeesTreasuryProportion>
@@ -592,7 +593,7 @@ where
 }
 
 /// Deal with ethereum based priority fees/tips. See DealWithEthereumBaseFees for base fees.
-pub struct DealWithEthereumPriorityFees<R>(sp_std::marker::PhantomData<R>);
+pub struct DealWithEthereumPriorityFees<R>(core::marker::PhantomData<R>);
 impl<R> OnUnbalanced<Credit<R::AccountId, pallet_balances::Pallet<R>>>
     for DealWithEthereumPriorityFees<R>
 where
@@ -663,6 +664,8 @@ impl pallet_evm::Config for Runtime {
     type GasLimitStorageGrowthRatio = GasLimitStorageGrowthRatio;
     type Timestamp = Timestamp;
     type WeightInfo = ();
+    type CreateOriginFilter = ();
+    type CreateInnerOriginFilter = ();
 }
 
 impl pallet_evm_chain_id::Config for Runtime {}

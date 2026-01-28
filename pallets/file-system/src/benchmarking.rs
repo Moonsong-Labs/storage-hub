@@ -36,6 +36,7 @@ use frame_benchmarking::v2::*;
 )]
 mod benchmarks {
     use super::*;
+    use alloc::{vec, vec::Vec};
     use codec::Encode;
     use frame_support::{
         assert_ok, ensure,
@@ -60,7 +61,6 @@ mod benchmarks {
         traits::{Bounded, Hash, One, Zero},
         Saturating,
     };
-    use sp_std::{vec, vec::Vec};
 
     use crate::benchmark_proofs::*;
 

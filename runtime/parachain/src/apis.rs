@@ -1,4 +1,5 @@
 use crate::*;
+use alloc::{collections::BTreeMap, vec, vec::Vec};
 use codec::Encode;
 use frame_support::{
     genesis_builder_helper::{build_state, get_preset},
@@ -26,7 +27,6 @@ use sp_runtime::{
     transaction_validity::{TransactionSource, TransactionValidity},
     ApplyExtrinsicResult, ExtrinsicInclusionMode,
 };
-use sp_std::{collections::btree_map::BTreeMap, prelude::Vec};
 use sp_version::RuntimeVersion;
 use xcm::Version;
 use xcm::{
@@ -87,7 +87,7 @@ impl_runtime_apis! {
             Runtime::metadata_at_version(version)
         }
 
-        fn metadata_versions() -> sp_std::vec::Vec<u32> {
+        fn metadata_versions() -> alloc::vec::Vec<u32> {
             Runtime::metadata_versions()
         }
     }
@@ -292,7 +292,7 @@ impl_runtime_apis! {
 
             use frame_system_benchmarking::Pallet as SystemBench;
             impl frame_system_benchmarking::Config for Runtime {
-                fn setup_set_code_requirements(code: &sp_std::vec::Vec<u8>) -> Result<(), BenchmarkError> {
+                fn setup_set_code_requirements(code: &alloc::vec::Vec<u8>) -> Result<(), BenchmarkError> {
                     ParachainSystem::initialize_for_set_code_benchmark(code.len() as u32);
                     Ok(())
                 }
@@ -510,10 +510,10 @@ impl_runtime_apis! {
         fn compute_signed_extra_implicit(
             era: sp_runtime::generic::Era,
             enable_metadata: bool,
-        ) -> Result<sp_std::vec::Vec<u8>, sp_runtime::transaction_validity::TransactionValidityError> {
+        ) -> Result<alloc::vec::Vec<u8>, sp_runtime::transaction_validity::TransactionValidityError> {
             // Build the SignedExtra tuple with minimal values; only `era` and `enable_metadata`
             // influence the implicit. Other extensions have `()` implicit.
-            let extra: crate::SignedExtra = (
+            let inner_extra = (
                 frame_system::CheckNonZeroSender::<Runtime>::new(),
                 frame_system::CheckSpecVersion::<Runtime>::new(),
                 frame_system::CheckTxVersion::<Runtime>::new(),
@@ -522,9 +522,9 @@ impl_runtime_apis! {
                 frame_system::CheckNonce::<Runtime>::from(<Nonce as Default>::default()),
                 frame_system::CheckWeight::<Runtime>::new(),
                 pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(<Balance as Default>::default()),
-                cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<Runtime>::new(),
                 frame_metadata_hash_extension::CheckMetadataHash::new(enable_metadata),
             );
+            let extra: crate::SignedExtra = cumulus_pallet_weight_reclaim::StorageWeightReclaim::new(inner_extra);
             let implicit = <crate::SignedExtra as sp_runtime::traits::TransactionExtension<crate::RuntimeCall>>::implicit(&extra)?;
             Ok(implicit.encode())
         }

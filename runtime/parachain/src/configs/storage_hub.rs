@@ -25,7 +25,7 @@ impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::SignedEx
     type Hash = shp_types::Hash;
 
     fn from_minimal_extension(minimal: MinimalExtension) -> Self {
-        (
+        let inner = (
             frame_system::CheckNonZeroSender::<crate::Runtime>::new(),
             frame_system::CheckSpecVersion::<crate::Runtime>::new(),
             frame_system::CheckTxVersion::<crate::Runtime>::new(),
@@ -36,10 +36,9 @@ impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::SignedEx
             pallet_transaction_payment::ChargeTransactionPayment::<crate::Runtime>::from(
                 minimal.tip,
             ),
-            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<crate::Runtime>::new(
-            ),
             frame_metadata_hash_extension::CheckMetadataHash::new(false),
-        )
+        );
+        cumulus_pallet_weight_reclaim::StorageWeightReclaim::new(inner)
     }
 }
 

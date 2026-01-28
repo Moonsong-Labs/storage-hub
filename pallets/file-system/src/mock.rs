@@ -18,7 +18,7 @@ use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
     CommitmentVerifier, IdentityAdapter, MaybeDebug, ProofSubmittersInterface,
-    ReadUserSolvencyInterface, TrieMutation, TrieProofDeltaApplier,
+    ReadUserSolvencyInterface, ShpCompactProof, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -27,9 +27,9 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify, Zero},
     BuildStorage, DispatchError, MultiSignature, Perbill, SaturatedConversion,
 };
-use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_trie::{LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_weights::FixedFee;
+use std::collections::{BTreeMap, BTreeSet};
 use std::{
     sync::{RwLock, RwLockReadGuard},
     thread,
@@ -247,6 +247,7 @@ impl pallet_nfts::Config for Test {
     type OffchainSignature = Signature;
     type OffchainPublic = AccountPublic;
     type WeightInfo = ();
+    type BlockNumberProvider = frame_system::Pallet<Self>;
     pallet_nfts::runtime_benchmarks_enabled! {
         type Helper = ();
     }
@@ -520,17 +521,18 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Commitment = H256;
     type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: &CompactProof,
+        proof: &ShpCompactProof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.encoded_nodes.len() > 0 {
+        if proof.inner().encoded_nodes.len() > 0 {
             Ok(proof
+                .inner()
                 .encoded_nodes
                 .iter()
                 .map(|node| H256::from_slice(&node[..]))
@@ -546,7 +548,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProof;
+    type Proof = ShpCompactProof;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(
@@ -794,6 +796,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
             (Keyring::Eve.to_account_id(), 1_000_000_000_000_000),
             (TreasuryAccount::get(), ExistentialDeposit::get()),
         ],
+        dev_accounts: None,
     }
     .assimilate_storage(&mut t)
     .unwrap();

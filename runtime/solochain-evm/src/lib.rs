@@ -11,7 +11,9 @@ mod genesis_config_presets;
 mod weights;
 
 extern crate alloc;
+extern crate ethereum;
 
+use alloc::{collections::BTreeMap, vec::Vec};
 use codec::Encode;
 use cumulus_primitives_core::BlockT;
 use fp_account::EthereumSignature;
@@ -61,10 +63,6 @@ use sp_runtime::{
     },
     transaction_validity::{TransactionSource, TransactionValidity, TransactionValidityError},
     ApplyExtrinsicResult, ExtrinsicInclusionMode, Perbill,
-};
-use sp_std::{
-    collections::btree_map::BTreeMap,
-    prelude::{Vec, *},
 };
 use sp_version::RuntimeVersion;
 use weights::ExtrinsicBaseWeight;
@@ -454,7 +452,7 @@ impl_runtime_apis! {
             Runtime::metadata_at_version(version)
         }
 
-        fn metadata_versions() -> sp_std::vec::Vec<u32> {
+        fn metadata_versions() -> alloc::vec::Vec<u32> {
             Runtime::metadata_versions()
         }
     }
@@ -890,7 +888,7 @@ impl_runtime_apis! {
         fn compute_signed_extra_implicit(
             era: sp_runtime::generic::Era,
             enable_metadata: bool,
-        ) -> Result<sp_std::vec::Vec<u8>, sp_runtime::transaction_validity::TransactionValidityError> {
+        ) -> Result<alloc::vec::Vec<u8>, sp_runtime::transaction_validity::TransactionValidityError> {
             // Build the TxExtension tuple with minimal values; only `era` and `enable_metadata`
             // influence the implicit. Other extensions have `()` implicit.
             let extra: crate::TxExtension = (
@@ -948,6 +946,7 @@ impl_runtime_apis! {
             nonce: Option<sp_core::U256>,
             estimate: bool,
             access_list: Option<Vec<(H160, Vec<H256>)>>,
+            authorization_list: Option<Vec<ethereum::AuthorizationListItem>>,
         ) -> Result<pallet_evm::CallInfo, sp_runtime::DispatchError> {
             let config = if estimate {
                 let mut config = <Runtime as pallet_evm::Config>::config().clone();
@@ -1004,6 +1003,7 @@ impl_runtime_apis! {
                 max_priority_fee_per_gas,
                 nonce,
                 access_list.unwrap_or_default(),
+                authorization_list.unwrap_or_default(),
                 is_transactional,
                 validate,
                 weight_limit,
@@ -1022,6 +1022,7 @@ impl_runtime_apis! {
             nonce: Option<sp_core::U256>,
             estimate: bool,
             access_list: Option<Vec<(H160, Vec<H256>)>>,
+            authorization_list: Option<Vec<ethereum::AuthorizationListItem>>,
         ) -> Result<pallet_evm::CreateInfo, sp_runtime::DispatchError> {
             let config = if estimate {
                 let mut config = <Runtime as pallet_evm::Config>::config().clone();
@@ -1051,6 +1052,7 @@ impl_runtime_apis! {
                 max_priority_fee_per_gas,
                 nonce,
                 access_list.unwrap_or_default(),
+                authorization_list.unwrap_or_default(),
                 is_transactional,
                 validate,
                 weight_limit,
