@@ -4,7 +4,10 @@ use sc_network::{config::IncomingRequest, service::traits::NetworkService, Proto
 use sc_network_types::PeerId;
 use sc_service::RpcHandlers;
 use serde::Deserialize;
-use shc_indexer_db::DbPool;
+use shc_indexer_db::{
+    models::{FileFiltering, FileOrdering},
+    DbPool,
+};
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::SaturatedConversion;
 use std::{path::PathBuf, sync::Arc};
@@ -76,6 +79,8 @@ where
     peer_manager: Option<Arc<BspPeerManager>>,
     metrics: MetricsLink,
     trusted_file_transfer_server_config: Option<trusted_file_transfer::server::Config>,
+    fisherman_filtering: FileFiltering,
+    fisherman_ordering: FileOrdering,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -110,6 +115,8 @@ where
             peer_manager: None,
             metrics: MetricsLink::new(prometheus_registry),
             trusted_file_transfer_server_config: None,
+            fisherman_filtering: FileFiltering::default(),
+            fisherman_ordering: FileOrdering::default(),
         }
     }
 
@@ -259,6 +266,8 @@ where
         .await;
 
         self.fisherman = Some(fisherman_service_handle);
+        self.fisherman_filtering = fisherman_options.filtering;
+        self.fisherman_ordering = fisherman_options.ordering;
 
         self
     }
@@ -623,6 +632,8 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            FileFiltering::default(), // Not used for BSP
+            FileOrdering::default(),
             self.metrics.clone(),
         )
     }
@@ -670,6 +681,8 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            FileFiltering::default(), // Not used for MSP
+            FileOrdering::default(),
             self.metrics.clone(),
         )
     }
@@ -718,6 +731,8 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            FileFiltering::default(), // Not used for User
+            FileOrdering::default(),
             self.metrics.clone(),
         )
     }
@@ -774,6 +789,8 @@ where
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
+            self.fisherman_filtering,
+            self.fisherman_ordering,
             self.metrics.clone(),
         )
     }
@@ -942,6 +959,12 @@ pub struct FishermanOptions {
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
+    /// Filtering strategy for pending deletions.
+    #[serde(default)]
+    pub filtering: FileFiltering,
+    /// Ordering strategy for pending deletions.
+    #[serde(default)]
+    pub ordering: FileOrdering,
 }
 
 /// Default value for batch deletion limit.
