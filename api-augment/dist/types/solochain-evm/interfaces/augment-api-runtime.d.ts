@@ -215,6 +215,10 @@ declare module '@polkadot/api-base/types/calls' {
              **/
             decodeGenericApplyDeltaEventInfo: AugmentedCall<ApiType, (encodedEventInfo: Bytes | string | Uint8Array) => Observable<Result<BucketId, GenericApplyDeltaEventInfoError>>>;
             /**
+             * Get the maximum batch size for confirm storage requests.
+             **/
+            getMaxBatchConfirmStorageRequests: AugmentedCall<ApiType, () => Observable<u32>>;
+            /**
              * Check if a storage request is open to volunteers.
              **/
             isStorageRequestOpenToVolunteers: AugmentedCall<ApiType, (fileKey: H256 | string | Uint8Array) => Observable<Result<bool, IsStorageRequestOpenToVolunteersError>>>;
