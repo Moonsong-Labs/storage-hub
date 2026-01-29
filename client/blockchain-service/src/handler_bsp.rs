@@ -1,12 +1,12 @@
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
-use std::{sync::Arc, u32};
+use std::sync::Arc;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_core::{Get, U256};
+use sp_core::U256;
 use sp_runtime::traits::{Block as BlockT, Zero};
 
 use pallet_proofs_dealer_runtime_api::{
@@ -19,8 +19,8 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     typed_store::CFDequeAPI,
     types::{
-        BackupStorageProviderId, BlockNumber, FileKey, Fingerprint, MaxBatchConfirmStorageRequests,
-        StorageEnableEvents, TrieMutation,
+        BackupStorageProviderId, BlockNumber, FileKey, Fingerprint, StorageEnableEvents,
+        TrieMutation,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -446,9 +446,9 @@ where
 
         // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
         if next_event_data.is_none() {
-            let max_batch_confirm = <MaxBatchConfirmStorageRequests<Runtime> as Get<u32>>::get();
+            let max_batch_confirm = self.config.bsp_confirm_file_batch_size;
 
-            // Batch multiple confirm file storing taking the runtime maximum.
+            // Batch multiple confirm file storing taking the configured maximum.
             let mut confirm_storing_requests = Vec::new();
             for _ in 0..max_batch_confirm {
                 if let Some(request) = state_store_context
