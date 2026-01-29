@@ -37,7 +37,7 @@ use crate::tasks::{
 
 use super::{
     bsp_peer_manager::BspPeerManager,
-    handler::{ProviderConfig, StorageHubHandler},
+    handler::{FishermanConfig, ProviderConfig, StorageHubHandler},
     trusted_file_transfer,
     types::{
         BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
@@ -79,8 +79,7 @@ where
     peer_manager: Option<Arc<BspPeerManager>>,
     metrics: MetricsLink,
     trusted_file_transfer_server_config: Option<trusted_file_transfer::server::Config>,
-    fisherman_filtering: FileFiltering,
-    fisherman_ordering: FileOrdering,
+    fisherman_config: Option<FishermanConfig>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -115,8 +114,7 @@ where
             peer_manager: None,
             metrics: MetricsLink::new(prometheus_registry),
             trusted_file_transfer_server_config: None,
-            fisherman_filtering: FileFiltering::default(),
-            fisherman_ordering: FileOrdering::default(),
+            fisherman_config: None,
         }
     }
 
@@ -266,8 +264,10 @@ where
         .await;
 
         self.fisherman = Some(fisherman_service_handle);
-        self.fisherman_filtering = fisherman_options.filtering;
-        self.fisherman_ordering = fisherman_options.ordering;
+        self.fisherman_config = Some(FishermanConfig {
+            filtering: fisherman_options.filtering,
+            ordering: fisherman_options.ordering,
+        });
 
         self
     }
@@ -632,8 +632,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
-            FileFiltering::default(), // Not used for BSP
-            FileOrdering::default(),
+            None, // FishermanConfig not used for BSP
             self.metrics.clone(),
         )
     }
@@ -681,8 +680,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
-            FileFiltering::default(), // Not used for MSP
-            FileOrdering::default(),
+            None, // FishermanConfig not used for MSP
             self.metrics.clone(),
         )
     }
@@ -731,8 +729,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
-            FileFiltering::default(), // Not used for User
-            FileOrdering::default(),
+            None, // FishermanConfig not used for User
             self.metrics.clone(),
         )
     }
@@ -789,8 +786,7 @@ where
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
-            self.fisherman_filtering,
-            self.fisherman_ordering,
+            self.fisherman_config,
             self.metrics.clone(),
         )
     }

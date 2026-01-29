@@ -784,12 +784,11 @@ pub struct Cli {
         "storage_layer", "storage_path", "extrinsic_retry_timeout",
         "check_for_pending_proofs_period",
         "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
-        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip",
+        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", "msp_database_url",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
-        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts",
-        "provider_database_url",
+        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts"
     ])]
     pub provider_config_file: Option<String>,
 
