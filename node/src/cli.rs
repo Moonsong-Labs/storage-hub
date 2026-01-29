@@ -10,6 +10,7 @@ use shc_client::builder::{
     BspUploadFileOptions, FishermanOptions, IndexerOptions, MspChargeFeesOptions,
     MspMoveBucketOptions,
 };
+use shc_indexer_db::models::{FileFiltering, FileOrdering};
 use shc_indexer_service::IndexerMode;
 use shc_rpc::RpcConfig;
 
@@ -623,6 +624,26 @@ impl IndexerConfigurations {
     }
 }
 
+/// Filtering strategy for fisherman pending deletion queries.
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum FishermanFiltering {
+    /// No filtering - process all pending deletions (default).
+    #[default]
+    None,
+    /// TTL-based filtering - skip deletions pending longer than threshold.
+    Ttl,
+}
+
+/// Ordering strategy for fisherman pending deletion queries.
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum FishermanOrdering {
+    /// Chronological ordering - process oldest deletions first (FIFO, default).
+    #[default]
+    Chronological,
+    /// Randomized ordering - shuffle processing order.
+    Randomized,
+}
+
 #[derive(Debug, Parser, Clone)]
 pub struct FishermanConfigurations {
     /// Enable the fisherman service.
@@ -647,11 +668,55 @@ pub struct FishermanConfigurations {
     /// Maximum number of files to process per batch deletion cycle.
     #[arg(long, default_value = "1000", value_parser = clap::value_parser!(u64).range(1..))]
     pub fisherman_batch_deletion_limit: u64,
+
+    /// Filtering strategy for pending deletions.
+    #[arg(
+        long,
+        value_enum,
+        default_value = "none",
+        help_heading = "Fisherman Strategy Options"
+    )]
+    pub fisherman_filtering: FishermanFiltering,
+
+    /// Ordering strategy for pending deletions.
+    #[arg(
+        long,
+        value_enum,
+        default_value = "chronological",
+        help_heading = "Fisherman Strategy Options"
+    )]
+    pub fisherman_ordering: FishermanOrdering,
+
+    /// TTL threshold in seconds for pending deletions.
+    /// Files that have been pending deletion for longer than this threshold are skipped.
+    /// Required when --fisherman-filtering=ttl.
+    #[arg(
+        long,
+        value_parser = clap::value_parser!(u64).range(1..),
+        required_if_eq("fisherman_filtering", "ttl"),
+        help_heading = "Fisherman Strategy Options"
+    )]
+    pub fisherman_ttl_threshold_seconds: Option<u64>,
 }
 
 impl FishermanConfigurations {
     pub fn fisherman_options(&self, maintenance_mode: bool) -> Option<FishermanOptions> {
         if self.fisherman {
+            // Convert CLI enums to indexer-db enums
+            let filtering = match self.fisherman_filtering {
+                FishermanFiltering::None => FileFiltering::None,
+                FishermanFiltering::Ttl => FileFiltering::Ttl {
+                    threshold_seconds: self
+                        .fisherman_ttl_threshold_seconds
+                        .expect("Required when filtering=ttl"),
+                },
+            };
+
+            let ordering = match self.fisherman_ordering {
+                FishermanOrdering::Chronological => FileOrdering::Chronological,
+                FishermanOrdering::Randomized => FileOrdering::Randomized,
+            };
+
             Some(FishermanOptions {
                 database_url: self
                     .fisherman_database_url
@@ -660,6 +725,8 @@ impl FishermanConfigurations {
                 batch_interval_seconds: self.fisherman_batch_interval_seconds,
                 batch_deletion_limit: self.fisherman_batch_deletion_limit,
                 maintenance_mode,
+                filtering,
+                ordering,
             })
         } else {
             None
@@ -746,12 +813,11 @@ pub struct Cli {
         "storage_layer", "storage_path", "extrinsic_retry_timeout",
         "check_for_pending_proofs_period",
         "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
-        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip",
+        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", "msp_database_url",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
-        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts",
-        "provider_database_url",
+        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts"
     ])]
     pub provider_config_file: Option<String>,
 
