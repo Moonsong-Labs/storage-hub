@@ -946,7 +946,7 @@ where
     /// filtered by the specified deletion type.
     ///
     /// For incomplete deletions, this also validates each file against runtime metadata to filter
-    /// out stale entries (e.g. if another fisherman node already deleted the file from a provider).
+    /// out stale entries.
     ///
     /// # Parameters
     /// * `deletion_type` - Type of deletion to query ([`FileDeletionType::User`] or [`FileDeletionType::Incomplete`])

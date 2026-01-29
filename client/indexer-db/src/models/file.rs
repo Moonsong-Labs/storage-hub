@@ -71,8 +71,6 @@ pub enum FileFiltering {
     #[default]
     None,
     /// TTL-based filtering: skip files older than the threshold.
-    /// Files pending longer than `threshold_seconds` are assumed to be handled
-    /// by another fisherman node and are excluded from processing.
     Ttl {
         /// TTL threshold in seconds. Files pending longer than this are skipped.
         threshold_seconds: u64,
