@@ -1303,12 +1303,36 @@ where
     /// 3. Accumulates valid requests up to the batch size
     /// 4. Re-queues pending volunteer requests at the end (avoiding infinite loops where we pop → filter (re-queue) → pop same item again).
     /// 5. Returns the valid (non-stale) requests.
+    ///
+    /// Note: Pending volunteer requests are always re-queued, even if an error occurs during
+    /// processing. This ensures requests are not lost due to transient failures.
     async fn pull_and_filter_confirm_requests(
         &self,
         max_batch_size: u32,
     ) -> anyhow::Result<Vec<ConfirmStoringRequest<Runtime>>> {
-        let mut valid_requests = Vec::new();
         let mut pending_volunteer_requests = Vec::new();
+
+        // Run the main logic, capturing any error
+        let result = self
+            .pull_and_filter_confirm_requests_inner(max_batch_size, &mut pending_volunteer_requests)
+            .await;
+
+        // Always re-queue pending volunteer requests (best effort, errors logged)
+        self.requeue_pending_volunteer_requests(pending_volunteer_requests)
+            .await;
+
+        result
+    }
+
+    /// Inner implementation of pull_and_filter_confirm_requests.
+    ///
+    /// Separated to allow cleanup (re-queuing pending volunteer requests) even on error.
+    async fn pull_and_filter_confirm_requests_inner(
+        &self,
+        max_batch_size: u32,
+        pending_volunteer_requests: &mut Vec<ConfirmStoringRequest<Runtime>>,
+    ) -> anyhow::Result<Vec<ConfirmStoringRequest<Runtime>>> {
+        let mut valid_requests = Vec::new();
         let mut remaining_slots = max_batch_size as usize;
 
         while remaining_slots > 0 {
@@ -1349,15 +1373,38 @@ where
             }
         }
 
-        // Re-queue pending volunteer requests at the end.
-        for request in pending_volunteer_requests {
-            self.storage_hub_handler
-                .blockchain
-                .queue_confirm_bsp_request(request)
-                .await?;
-        }
-
         Ok(valid_requests)
+    }
+
+    /// Re-queues pending volunteer requests on a best-effort basis.
+    ///
+    /// Errors are logged but not propagated, ensuring cleanup completes even if
+    /// some re-queue operations fail.
+    async fn requeue_pending_volunteer_requests(
+        &self,
+        pending_volunteer_requests: Vec<ConfirmStoringRequest<Runtime>>,
+    ) {
+        for request in pending_volunteer_requests {
+            trace!(
+                target: LOG_TARGET,
+                "Re-queuing pending volunteer request for file key [{:x}]",
+                request.file_key
+            );
+
+            if let Err(e) = self
+                .storage_hub_handler
+                .blockchain
+                .queue_confirm_bsp_request(request.clone())
+                .await
+            {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to re-queue pending volunteer request for file key [{:x}]: {:?}",
+                    request.file_key,
+                    e
+                );
+            }
+        }
     }
 
     /// Re-queues confirm storing requests for retry.
