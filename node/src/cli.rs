@@ -659,8 +659,7 @@ pub struct FishermanConfigurations {
     pub fisherman_ordering: FishermanOrdering,
 
     /// TTL threshold in seconds for pending deletions.
-    /// Files that have been pending deletion for longer than this threshold are skipped,
-    /// as they are assumed to have been handled by another fisherman node.
+    /// Files that have been pending deletion for longer than this threshold are skipped.
     /// Required when --fisherman-filtering=ttl.
     #[arg(
         long,
