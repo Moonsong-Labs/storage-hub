@@ -797,7 +797,7 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// Tracks file keys with pending volunteer transactions.
     /// When a volunteer tx is submitted, the file key is added.
     /// When the volunteer is verified on-chain, the file key is removed.
-    /// This is used in the `QueryPendingBspConfirmStorageRequests` command to prevent a race condition
+    /// This is used in the `FilterConfirmStoringRequests` command to prevent a race condition
     /// where a BSP could attempt to send a storage confirmation, before it saw the volunteer transaction
     /// succeed on-chain.
     pub(crate) pending_volunteer_file_keys: HashSet<FileKey>,

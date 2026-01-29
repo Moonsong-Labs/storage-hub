@@ -1,12 +1,12 @@
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
-use std::{sync::Arc, u32};
+use std::sync::Arc;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_core::{Get, U256};
+use sp_core::U256;
 use sp_runtime::traits::{Block as BlockT, Zero};
 
 use pallet_proofs_dealer_runtime_api::{
@@ -19,8 +19,8 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     typed_store::CFDequeAPI,
     types::{
-        BackupStorageProviderId, BlockNumber, FileKey, Fingerprint, MaxBatchConfirmStorageRequests,
-        StorageEnableEvents, TrieMutation,
+        BackupStorageProviderId, BlockNumber, FileKey, Fingerprint, StorageEnableEvents,
+        TrieMutation,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -446,30 +446,13 @@ where
 
         // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
         if next_event_data.is_none() {
-            let max_batch_confirm = <MaxBatchConfirmStorageRequests<Runtime> as Get<u32>>::get();
+            let queue_size = state_store_context
+                .pending_confirm_storing_request_deque::<Runtime>()
+                .size();
 
-            // Batch multiple confirm file storing taking the runtime maximum.
-            let mut confirm_storing_requests = Vec::new();
-            for _ in 0..max_batch_confirm {
-                if let Some(request) = state_store_context
-                    .pending_confirm_storing_request_deque::<Runtime>()
-                    .pop_front()
-                {
-                    trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
-                    confirm_storing_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 confirm storing request, send the process event.
-            if confirm_storing_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessConfirmStoringRequestData {
-                        confirm_storing_requests,
-                    }
-                    .into(),
-                );
+            if queue_size > 0 {
+                trace!(target: LOG_TARGET, "Triggering ProcessConfirmStoringRequest with {} items in queue", queue_size);
+                next_event_data = Some(ProcessConfirmStoringRequestData::new().into());
             }
         }
 

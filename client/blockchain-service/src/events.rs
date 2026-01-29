@@ -14,9 +14,7 @@ use shc_common::{
     },
 };
 
-use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest,
-};
+use crate::types::{FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest};
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
 
@@ -152,9 +150,30 @@ pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntime> {
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
+/// Data for ProcessConfirmStoringRequest event.
+///
+/// Note: The task pulls requests via commands (PopConfirmStoringRequests,
+/// FilterConfirmStoringRequests), so this struct exists only for compatibility
+/// with the ForestWriteLockTaskData enum.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessConfirmStoringRequestData<Runtime: StorageEnableRuntime> {
-    pub confirm_storing_requests: Vec<ConfirmStoringRequest<Runtime>>,
+    // PhantomData to keep the Runtime generic parameter
+    _phantom: core::marker::PhantomData<Runtime>,
+}
+
+impl<Runtime: StorageEnableRuntime> ProcessConfirmStoringRequestData<Runtime> {
+    /// Create a new ProcessConfirmStoringRequestData.
+    pub fn new() -> Self {
+        Self {
+            _phantom: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<Runtime: StorageEnableRuntime> Default for ProcessConfirmStoringRequestData<Runtime> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone, ActorEvent)]
