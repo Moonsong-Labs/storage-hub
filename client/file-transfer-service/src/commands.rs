@@ -63,7 +63,7 @@ pub enum RequestError {
 )]
 pub enum FileTransferServiceCommand<Runtime: StorageEnableRuntime> {
     #[command(
-        mode = "AsyncResponse", 
+        mode = "AsyncResponse",
         success_type = (Vec<u8>, ProtocolName),
         inner_channel_type = futures::channel::oneshot::Receiver,
         error_type = RequestFailure

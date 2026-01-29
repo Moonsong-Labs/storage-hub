@@ -59,6 +59,14 @@ export const NODE_INFOS = {
   },
   backend: {
     containerName: "storage-hub-sh-backend-1"
+  },
+  prometheus: {
+    containerName: "storage-hub-sh-prometheus-1",
+    port: 9099
+  },
+  grafana: {
+    containerName: "storage-hub-sh-grafana-1",
+    port: 3030
   }
 } as const;
 

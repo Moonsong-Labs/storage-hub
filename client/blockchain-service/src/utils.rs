@@ -52,7 +52,7 @@ use crate::{
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     handler::LOG_TARGET,
-    state::LastProcessedBlockCf,
+    state::{LastFinalisedBlockCf, LastProcessedBlockCf},
     transaction_watchers::spawn_transaction_watcher,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
@@ -350,11 +350,10 @@ where
     ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::NewBestBlock`].
     /// 3. The block is the new best block, and its parent is NOT the previous best block (i.e. it's a reorg).
     ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::Reorg`].
-    pub(crate) fn register_best_block_and_check_reorg(
+    pub(crate) fn register_current_block_and_check_reorg(
         &mut self,
         block_import_notification: &BlockImportNotification<OpaqueBlock>,
     ) -> NewBlockNotificationKind<Runtime> {
-        let last_best_block = self.best_block;
         let new_block_info: MinimalBlockInfo<Runtime> = block_import_notification.into();
 
         // If the new block is NOT the new best, this is a block from a non-best fork branch.
@@ -363,17 +362,17 @@ where
             return NewBlockNotificationKind::NewNonBestBlock(new_block_info);
         }
 
-        // At this point we know that the new block is a new best block.
-        trace!(target: LOG_TARGET, "New best block imported: {:?}", new_block_info);
-        self.best_block = new_block_info;
+        // At this point we know that the new block is the new best block and we're now processing it.
+        trace!(target: LOG_TARGET, "New best block imported, now processing: {:?}", new_block_info);
+        self.current_block = new_block_info;
 
         // If `tree_route` is `None`, this means that there was NO reorg while importing the block.
         if block_import_notification.tree_route.is_none() {
-            // Construct the tree route from the last best block processed and the new best block.
-            // Fetch the parents of the new best block until:
+            // Construct the tree route from the last processed block to the new block.
+            // Fetch the parents of the new block until:
             // - We reach the genesis block, or
             // - The parent block is not found, or
-            // - We reach the last best block processed.
+            // - We reach the last processed block.
             let mut route = vec![new_block_info.into()];
             let mut last_block_added = new_block_info;
             loop {
@@ -415,9 +414,9 @@ where
                     hash: parent_block.block.hash(),
                 };
 
-                // Check if we reached the last best block processed.
-                if parent_block_info.hash == last_best_block.hash {
-                    trace!(target: LOG_TARGET, "Reached last best block processed while building tree route for new best block");
+                // Check if we reached the last processed block.
+                if parent_block_info.hash == self.last_block_processed.hash {
+                    trace!(target: LOG_TARGET, "Reached last processed block while building tree route for new best block");
                     break;
                 }
 
@@ -428,11 +427,11 @@ where
                 last_block_added = parent_block_info;
             }
 
-            // The first element in the route is the last best block processed, which will also be the
+            // The first element in the route is the last processed block, which will also be the
             // `pivot`, so it will be ignored when processing the `tree_route`.
-            route.push(last_best_block.into());
+            route.push(self.last_block_processed.into());
 
-            // Revert the route so that it is in ascending order of blocks, from the last best block processed up to the new imported best block.
+            // Revert the route so that it is in ascending order of blocks, from the last processed block up to the new imported best block.
             route.reverse();
 
             // Build the tree route.
@@ -441,7 +440,7 @@ where
             );
 
             return NewBlockNotificationKind::NewBestBlock {
-                last_best_block_processed: last_best_block,
+                last_best_block_processed: self.last_block_processed,
                 new_best_block: new_block_info,
                 tree_route,
             };
@@ -472,7 +471,7 @@ where
         info!(target: LOG_TARGET, "🔀 New best block caused a reorg: {:?}", new_block_info);
         info!(target: LOG_TARGET, "⛓️ Tree route: {:?}", tree_route);
         NewBlockNotificationKind::Reorg {
-            old_best_block: last_best_block,
+            old_best_block: self.last_block_processed,
             new_best_block: new_block_info,
             tree_route,
         }
@@ -1839,15 +1838,24 @@ where
         // MSP Follower nodes do not create the Forests in the tasks when there is a new
         // storage request, because they do not handle these events. So this is useful for them.
         let forest_key = forest_key.into();
-        let fs = if let Some(existing) = self.forest_storage_handler.get(&forest_key).await {
-            existing
-        } else {
-            info!(
-                target: LOG_TARGET,
-                "Forest storage for key [{:?}] not found while applying mutation; creating new instance",
-                forest_key
-            );
-            self.forest_storage_handler.create(&forest_key).await
+        let fs = match self.forest_storage_handler.get(&forest_key).await {
+            Some(existing) => existing,
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "Forest storage for key [{:?}] not found while applying mutation; creating new instance",
+                    forest_key
+                );
+                self.forest_storage_handler
+                    .create(&forest_key)
+                    .await
+                    .map_err(|e| {
+                        anyhow!(
+                            "CRITICAL ❗️❗️❗️: Failed to create forest storage for key [{:?}] while applying mutation: {:?}",
+                            forest_key, e
+                        )
+                    })?
+            }
         };
 
         // Write lock is released when exiting the scope of this `match` statement.
@@ -2132,6 +2140,7 @@ where
                 number: block_number,
                 hash: *block_hash,
             };
+            self.update_last_finalised_block_info(self.last_finalised_block_processed);
         }
     }
 
@@ -2174,11 +2183,12 @@ where
         // This ensures file storage cleanup happens for finalised blocks during sync
         self.process_finality_events_if_finalised(block_hash, block_number);
 
-        // Update the last processed block in persistent storage for tracking
-        self.update_last_processed_block_info(MinimalBlockInfo {
+        // Update both the in-memory tracker and persistent storage
+        self.last_block_processed = MinimalBlockInfo {
             number: block_number,
             hash: *block_hash,
-        });
+        };
+        self.update_last_processed_block_info(self.last_block_processed);
 
         info!(target: LOG_TARGET, "🛬 Initial sync block #{}: {:x} processed successfully", block_number, block_hash);
     }
@@ -2215,7 +2225,8 @@ where
             self.process_finality_events_if_finalised(&block.hash, block_num);
         }
 
-        // Update the last processed block to the new best
+        // Update both the in-memory tracker and persistent storage
+        self.last_block_processed = new_best_block;
         self.update_last_processed_block_info(new_best_block);
 
         info!(target: LOG_TARGET, "🔀 Reorg during sync: {} retracted, {} enacted processed successfully", tree_route.retracted().len(), tree_route.enacted().len());
@@ -2272,7 +2283,7 @@ where
     /// by properly reverting mutations from the old chain before applying mutations
     /// from the new chain.
     ///
-    /// This function also initializes `self.best_block` to the client's actual best block,
+    /// This function also initializes `self.current_block` to the client's actual best block,
     /// ensuring we start from the correct position regardless of whether there are missed blocks.
     pub(crate) async fn catch_up_missed_blocks(&mut self) {
         // Get the best block saved in the node's Substrate client database
@@ -2280,8 +2291,8 @@ where
         let best_number: BlockNumber<Runtime> = chain_info.best_number.saturated_into();
         let best_hash = chain_info.best_hash;
 
-        // Initialize self.best_block to match the client's actual state
-        self.best_block = MinimalBlockInfo {
+        // Initialize self.current_block to match the client's actual state
+        self.current_block = MinimalBlockInfo {
             number: best_number,
             hash: best_hash,
         };
@@ -2293,6 +2304,16 @@ where
             info!(target: LOG_TARGET, "No last processed block found in persistent storage. Skipping startup catch up.");
             return;
         };
+
+        // Initialize last_block_processed from persistent storage.
+        // This is used to track which block we've fully processed, for coordinating with finality.
+        self.last_block_processed = last_processed;
+
+        // Initialize last_finalised_block_processed from persistent storage if available.
+        // This avoids redundant re-processing of finality events on restart.
+        if let Some(last_finalised) = self.get_last_finalised_block_info() {
+            self.last_finalised_block_processed = last_finalised;
+        }
 
         // If we're already at the best block, there's nothing to catch up on
         // Note: There are three other possible conditions and all three require a catch up:
@@ -2360,12 +2381,9 @@ where
             self.process_finality_events_if_finalised(&block.hash, block_num);
         }
 
-        // Update the local best block and last processed block to reflect the catch up
-        self.best_block = MinimalBlockInfo {
-            number: best_number,
-            hash: best_hash,
-        };
-        self.update_last_processed_block_info(self.best_block);
+        // Update the last processed block to reflect the catch up
+        self.last_block_processed = self.current_block;
+        self.update_last_processed_block_info(self.current_block);
 
         // Update last_finalised_block_processed based on how far we've caught up
         // If best_number <= finalised_number, all caught-up blocks are finalised
@@ -2374,6 +2392,7 @@ where
                 number: best_number,
                 hash: best_hash,
             };
+            self.update_last_finalised_block_info(self.last_finalised_block_processed);
         } else {
             // Only some blocks are finalised, update to the finalised block
             if let Ok(Some(finalised_hash)) = self.client.hash(finalised_number.saturated_into()) {
@@ -2381,6 +2400,7 @@ where
                     number: finalised_number,
                     hash: finalised_hash,
                 };
+                self.update_last_finalised_block_info(self.last_finalised_block_processed);
             }
         }
 
@@ -2466,5 +2486,31 @@ where
             number: block_number,
             hash: block_hash,
         })
+    }
+
+    /// Update the last finalised block processed in persistent storage.
+    ///
+    /// This value is used on startup to avoid redundant re-processing of finality events.
+    pub(crate) fn update_last_finalised_block_info(&self, block_info: MinimalBlockInfo<Runtime>) {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        state_store_context
+            .access_value(&LastFinalisedBlockCf::<Runtime> {
+                phantom: Default::default(),
+            })
+            .write(&block_info);
+        state_store_context.commit();
+    }
+
+    /// Read the last finalised block processed from persistent storage.
+    ///
+    /// Returns `None` if no finalised block has been processed yet (first run or upgrade from
+    /// older version that didn't persist this value).
+    pub(crate) fn get_last_finalised_block_info(&self) -> Option<MinimalBlockInfo<Runtime>> {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        state_store_context
+            .access_value(&LastFinalisedBlockCf::<Runtime> {
+                phantom: Default::default(),
+            })
+            .read()
     }
 }

@@ -15,6 +15,7 @@ sp_api::decl_runtime_apis! {
     {
         fn get_users_with_debt_over_threshold(provider_id: &ProviderId, threshold: Balance) -> Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>;
         fn get_users_of_payment_streams_of_provider(provider_id: &ProviderId) -> Vec<AccountId>;
+        fn get_number_of_active_users_of_provider(provider_id: &ProviderId) -> u32;
         fn get_providers_with_payment_streams_with_user(user_account: &AccountId) -> Vec<ProviderId>;
         fn get_current_price_per_giga_unit_per_tick() -> Balance;
     }

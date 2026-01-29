@@ -5,6 +5,7 @@ use std::{
 use tokio::sync::RwLock;
 
 use shc_actors_derive::{subscribe_actor_event, subscribe_actor_event_map};
+
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::EventHandler,
@@ -33,7 +34,11 @@ use shc_file_transfer_service::{
 };
 use shc_fisherman_service::events::BatchFileDeletions;
 use shc_forest_manager::traits::ForestStorageHandler;
-use shc_indexer_db::DbPool;
+use shc_indexer_db::{
+    models::{FileFiltering, FileOrdering},
+    DbPool,
+};
+use shc_telemetry::{MetricsLink, StorageHubMetrics};
 
 use crate::{
     bsp_peer_manager::BspPeerManager,
@@ -45,7 +50,7 @@ use crate::{
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
-        fisherman_process_batch_deletions::FishermanTask,
+        fisherman_process_batch_deletions::{FileDeletionStrategy, FishermanTask},
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask,
@@ -88,6 +93,15 @@ where
     pub capacity_config: CapacityConfig<Runtime>,
 }
 
+/// Configuration parameters for Fisherman nodes.
+#[derive(Clone, Debug, Default)]
+pub struct FishermanConfig {
+    /// Filtering strategy for pending deletions.
+    pub filtering: FileFiltering,
+    /// Ordering strategy for pending deletions.
+    pub ordering: FileOrdering,
+}
+
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<NT, Runtime>
 where
@@ -114,6 +128,10 @@ where
     pub file_download_manager: Arc<FileDownloadManager<Runtime>>,
     /// The fisherman service handle (only used for FishermanRole)
     pub fisherman: Option<ActorHandle<shc_fisherman_service::FishermanService<Runtime>>>,
+    /// Configuration for fisherman nodes (only used for FishermanRole)
+    pub fisherman_config: Option<FishermanConfig>,
+    /// The Prometheus metrics for this client.
+    metrics: MetricsLink,
 }
 
 impl<NT, Runtime> Debug for StorageHubHandler<NT, Runtime>
@@ -145,6 +163,8 @@ where
             peer_manager: self.peer_manager.clone(),
             file_download_manager: self.file_download_manager.clone(),
             fisherman: self.fisherman.clone(),
+            fisherman_config: self.fisherman_config.clone(),
+            metrics: self.metrics.clone(),
         }
     }
 }
@@ -164,6 +184,8 @@ where
         indexer_db_pool: Option<DbPool>,
         peer_manager: Arc<BspPeerManager>,
         fisherman: Option<ActorHandle<shc_fisherman_service::FishermanService<Runtime>>>,
+        fisherman_config: Option<FishermanConfig>,
+        metrics: MetricsLink,
     ) -> Self {
         // Get the data directory path from the peer manager's directory
         // This assumes the peer manager stores data in a similar location to where we want our download state
@@ -186,7 +208,16 @@ where
             peer_manager,
             file_download_manager,
             fisherman,
+            fisherman_config,
+            metrics,
         }
+    }
+
+    /// Get a reference to the Prometheus metrics.
+    ///
+    /// Returns `None` if metrics are disabled (no Prometheus registry provided).
+    pub fn metrics(&self) -> Option<&StorageHubMetrics> {
+        self.metrics.as_ref()
     }
 }
 
@@ -261,6 +292,7 @@ where
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: true,
             [
                 // Override critical for NewStorageRequest to make it non-critical
@@ -294,6 +326,7 @@ where
             service: &self.file_transfer,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: false,
             [
                 RemoteUploadRequest<Runtime> => MspUploadFileTask,
@@ -305,6 +338,7 @@ where
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: true,
             [
                 NewStorageRequest<Runtime> => MspUploadFileTask,
@@ -339,7 +373,8 @@ where
         let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
         self.forest_storage_handler
             .create(&current_forest_key)
-            .await;
+            .await
+            .expect("Failed to create initial BSP forest storage instance");
     }
 
     fn start_bsp_tasks(&self) {
@@ -359,6 +394,7 @@ where
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: true,
             [
                 NewStorageRequest<Runtime> => BspUploadFileTask,
@@ -398,6 +434,7 @@ where
             service: &self.file_transfer,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: false,
             [
                 RemoteDownloadRequest<Runtime> => BspDownloadFileTask,
@@ -421,16 +458,32 @@ where
             .as_ref()
             .expect("Fisherman service not set for FishermanRole");
 
+        // Build strategy from configured filtering and ordering
+        let config = self
+            .fisherman_config
+            .as_ref()
+            .expect("FishermanConfig not set for FishermanRole");
+        let strategy = FileDeletionStrategy {
+            filtering: config.filtering,
+            ordering: config.ordering,
+        };
+
+        // Create the task with explicit strategy configuration
+        let task = FishermanTask::new(self.clone(), strategy);
+
         // Register FishermanTask to handle BatchFileDeletions events
-        subscribe_actor_event_map!(
+        // This task processes batched file deletions (for user deletion requests
+        // and incomplete storage requests) after every configured interval.
+        subscribe_actor_event!(
+            event: BatchFileDeletions,
+            task: (task.clone()),
             service: fisherman,
             spawner: &self.task_spawner,
-            context: self.clone(),
             critical: true,
-            [
-                // This task processes batched file deletions (for user deletion requests and incomplete storage requests) after every configured interval (`fisherman_batch_interval_seconds`) of time.
-                BatchFileDeletions => FishermanTask,
-            ]
+            metrics: Some(shc_actors_framework::event_bus::EventMetricsConfig::new(
+                self.metrics.clone(),
+                "batch_file_deletions",
+            )),
         );
 
         log::info!("🎣 Fisherman batch processing task registered");

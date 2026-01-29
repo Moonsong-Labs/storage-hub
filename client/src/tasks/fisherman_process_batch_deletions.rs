@@ -29,6 +29,7 @@
 
 use anyhow::anyhow;
 use codec::Decode;
+use frame_support::BoundedVec;
 use futures::future::join_all;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
@@ -38,7 +39,8 @@ use shc_blockchain_service::{
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        BackupStorageProviderId, BucketId, FileDeletionRequest, ForestProof as CommonForestProof,
+        BackupStorageProviderId, BucketId, DisplayHexListExt, FileDeletionRequest, FileMetadata,
+        Fingerprint, ForestProof as CommonForestProof, MaxFileDeletionsPerExtrinsic,
         OffchainSignature, StorageProofsMerkleTrieLayout, StorageProviderId,
     },
 };
@@ -47,6 +49,7 @@ use shc_fisherman_service::{
     events::FileDeletionTarget, FileKeyOperation,
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
+use shc_indexer_db::models::{FileFiltering, FileOrdering};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
 use std::time::Duration;
@@ -93,6 +96,22 @@ pub struct BatchFileDeletionData<Runtime: StorageEnableRuntime> {
     pub signed_intention: Option<shc_common::types::FileOperationIntention<Runtime>>,
 }
 
+/// Strategy configuration for file deletion processing.
+///
+/// Combines filtering and ordering strategies to control how the fisherman
+/// selects and processes files for deletion.
+///
+/// # Pipeline
+/// 1. **Filtering** (`filtering`): Determines which files are eligible
+/// 2. **Ordering** (`ordering`): Determines processing order of eligible files
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FileDeletionStrategy {
+    /// Filtering strategy - which files to consider for processing.
+    pub filtering: FileFiltering,
+    /// Ordering strategy - how to order filtered files for processing.
+    pub ordering: FileOrdering,
+}
+
 /// Single task that handles [`BatchFileDeletions`] events.
 ///
 /// This task processes batch deletion events emitted periodically by the fisherman service.
@@ -112,6 +131,8 @@ where
 {
     /// Handler providing access to blockchain, indexer database, and forest storage
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
+    /// Strategy for selecting and ordering files for deletion
+    strategy: FileDeletionStrategy,
 }
 
 impl<NT, Runtime> Clone for FishermanTask<NT, Runtime>
@@ -123,6 +144,7 @@ where
     fn clone(&self) -> Self {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            strategy: self.strategy.clone(),
         }
     }
 }
@@ -141,13 +163,13 @@ where
 
         info!(
             target: LOG_TARGET,
-            "🎣 Processing batch file deletions for {:?} deletion type (limit: {})",
+            "🎣 Processing batch file deletions for {:?} deletion type (limit: {}, strategy: {:?})",
             event.deletion_type,
-            event.batch_deletion_limit
+            event.batch_deletion_limit,
+            self.strategy
         );
 
         // Query pending deletions with configured batch limit
-        // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
         let grouped_deletions = self
             .get_pending_deletions(
                 event.deletion_type,
@@ -155,18 +177,18 @@ where
                 None,
                 Some(event.batch_deletion_limit as i64),
                 None,
+                self.strategy,
             )
             .await?;
 
-        debug!(
+        info!(
             target: LOG_TARGET,
             "🎣 Found {} BSP groups and {} bucket groups to process",
             grouped_deletions.bsp_deletions.len(),
             grouped_deletions.bucket_deletions.len()
         );
 
-        // Spawn futures for each target
-        let mut futures = Vec::new();
+        let mut target_futures: Vec<(FileDeletionTarget<Runtime>, _)> = Vec::new();
 
         // Spawn for each BSP group
         for (bsp_id, files) in grouped_deletions.bsp_deletions {
@@ -177,12 +199,13 @@ where
                 files.len()
             );
 
+            let deletion_target = FileDeletionTarget::BspId(bsp_id);
             let future = self.batch_delete_files_for_target(
-                FileDeletionTarget::BspId(bsp_id),
+                deletion_target.clone(),
                 files,
                 event.deletion_type,
             );
-            futures.push(future);
+            target_futures.push((deletion_target, future));
         }
 
         // Spawn for each Bucket group
@@ -194,13 +217,16 @@ where
                 files.len()
             );
 
+            let deletion_target = FileDeletionTarget::BucketId(bucket_id);
             let future = self.batch_delete_files_for_target(
-                FileDeletionTarget::BucketId(bucket_id),
+                deletion_target.clone(),
                 files,
                 event.deletion_type,
             );
-            futures.push(future);
+            target_futures.push((deletion_target, future));
         }
+
+        let (targets, futures): (Vec<_>, Vec<_>) = target_futures.into_iter().unzip();
 
         // Check if there's any work to do
         if futures.is_empty() {
@@ -236,13 +262,12 @@ where
                 failures
             );
 
-            // Log individual errors
-            for (idx, result) in results.iter().enumerate() {
+            for (target, result) in targets.iter().zip(results.iter()) {
                 if let Err(e) = result {
                     error!(
                         target: LOG_TARGET,
-                        "🎣 Target {} failed: {:?}",
-                        idx,
+                        "🎣 Target {:?} batch deletion failed: {:?}",
+                        target,
                         e
                     );
                 }
@@ -276,9 +301,14 @@ where
     ///
     /// # Arguments
     /// * `storage_hub_handler` - Handler providing access to required services
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
+    /// * `strategy` - Strategy for filtering and ordering files for deletion
+    pub fn new(
+        storage_hub_handler: StorageHubHandler<NT, Runtime>,
+        strategy: FileDeletionStrategy,
+    ) -> Self {
         Self {
             storage_hub_handler,
+            strategy,
         }
     }
 
@@ -303,15 +333,32 @@ where
         files: Vec<BatchFileDeletionData<Runtime>>,
         deletion_type: shc_indexer_db::models::FileDeletionType,
     ) -> anyhow::Result<()> {
+        // Convert to BoundedVec, truncating if necessary.
+        // Note: `truncate_from` is optimal - if the vec length is less than the bound, `Vec::truncate`
+        // performs only a single comparison and returns early. If equal, it does minimal pointer
+        // arithmetic but no elements are dropped (no-op).
+        let original_len = files.len();
+        let files_bounded: BoundedVec<_, MaxFileDeletionsPerExtrinsic<Runtime>> =
+            BoundedVec::truncate_from(files);
+        if files_bounded.len() < original_len {
+            info!(
+                target: LOG_TARGET,
+                "🎣 Target {:?} has {} files, truncating to {} for this cycle. Remaining files will be processed in subsequent cycles.",
+                target,
+                original_len,
+                files_bounded.len()
+            );
+        }
+
+        let file_keys: Vec<_> = files_bounded.iter().map(|f| f.file_key).collect();
+
         info!(
             target: LOG_TARGET,
-            "🎣 Processing {} files for target {:?}",
-            files.len(),
-            target
+            "🎣 Processing {} files for target {:?}: [{}]",
+            files_bounded.len(),
+            target,
+            file_keys.display_hex_list()
         );
-
-        // Extract file keys from files
-        let file_keys: Vec<_> = files.iter().map(|f| f.file_key).collect();
 
         // Generate forest proof for all files in this target's batch
         // Returns only the file_keys that actually exist in the forest after catch-up
@@ -322,16 +369,17 @@ where
 
         // Filter files to only include those with valid file keys
         // This ensures we only submit extrinsics for files that can be proven
-        let remaining_files: Vec<_> = files
+        let remaining_files: Vec<_> = files_bounded
             .into_iter()
             .filter(|f| remaining_file_keys.contains(&f.file_key))
             .collect();
 
-        debug!(
+        info!(
             target: LOG_TARGET,
-            "🎣 Filtered {} files down to {} valid files for target {:?}",
+            "🎣 Filtered {} file keys down to {} valid file keys. Remaining file keys to delete: [{}] for target {:?}",
             file_keys.len(),
-            remaining_files.len(),
+            remaining_file_keys.len(),
+            remaining_file_keys.display_hex_list(),
             target
         );
 
@@ -373,9 +421,10 @@ where
 
         info!(
             target: LOG_TARGET,
-            "🎣 Successfully processed {} files for target {:?}",
+            "🎣 Successfully deleted {} files for target {:?}: [{}]",
             remaining_files.len(),
-            target
+            target,
+            remaining_file_keys.display_hex_list()
         );
 
         Ok(())
@@ -513,57 +562,48 @@ where
             last_indexed_finalized_block
         );
 
-        // Fetch all file keys for the deletion target from finalized data
-        let all_file_keys = match &deletion_target {
+        // Fetch all files for the deletion target from finalized data (single query)
+        let all_files = match &deletion_target {
             FileDeletionTarget::BspId(bsp_id) => {
                 // Convert H256 to OnchainBspId for database query
                 let onchain_bsp_id = shc_indexer_db::OnchainBspId::from(*bsp_id);
-                shc_indexer_db::models::BspFile::get_all_file_keys_for_bsp(
-                    &mut conn,
-                    onchain_bsp_id,
-                )
-                .await
-                .map_err(|e| anyhow!("Failed to get all file keys for BSP: {:?}", e))?
+                shc_indexer_db::models::BspFile::get_all_files_for_bsp(&mut conn, onchain_bsp_id)
+                    .await
+                    .map_err(|e| anyhow!("Failed to get all files for BSP: {:?}", e))?
             }
             FileDeletionTarget::BucketId(bucket_id) => {
                 // Only get files that are in the bucket's forest
-                shc_indexer_db::models::file::File::get_all_file_keys_for_bucket(
+                shc_indexer_db::models::file::File::get_all_files_for_bucket(
                     &mut conn,
                     bucket_id.as_ref(),
                     Some(true),
                 )
                 .await
-                .map_err(|e| anyhow!("Failed to get all file keys for bucket: {:?}", e))?
+                .map_err(|e| anyhow!("Failed to get all files for bucket: {:?}", e))?
             }
         };
 
-        // Fetch all files and convert to FileMetadata
-        let mut all_file_metadatas = Vec::new();
-        for key in &all_file_keys {
-            let file_records = shc_indexer_db::models::File::get_by_file_key(&mut conn, key)
-                .await
-                .map_err(|e| anyhow!("Failed to get file records: {:?}", e))?;
-
-            // There can be multiple file records for a given file key if there were multiple
-            // storage requests for the same file key. Any of them is good to use to get the file metadata,
-            // so we just pick the first one.
-            let file = file_records
-                .first()
-                .ok_or_else(|| anyhow!("No file records found for file key: {:?}", key))?;
-
-            let metadata = file
-                .to_file_metadata(file.onchain_bucket_id.clone())
-                .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
-
-            all_file_metadatas.push(metadata);
-        }
+        // Convert to file metadata for forest operations
+        let all_file_metadatas: Vec<_> = all_files
+            .iter()
+            .map(|f| {
+                FileMetadata::new(
+                    f.account.clone(),
+                    f.onchain_bucket_id.clone(),
+                    f.location.clone(),
+                    f.size as u64,
+                    Fingerprint::from(f.fingerprint.as_slice()),
+                )
+            })
+            .collect::<Result<_, _>>()
+            .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
 
         drop(conn);
 
         trace!(
             target: LOG_TARGET,
             "Building ephemeral trie with {} file keys from finalized data",
-            all_file_keys.len(),
+            all_file_metadatas.len(),
         );
 
         // Create ephemeral in-memory forest storage
@@ -731,7 +771,6 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
-        // Build Vec<FileDeletionRequest> for all files in the batch
         let mut file_deletion_requests = Vec::new();
         for file in files.iter() {
             // Extract signature and signed_intention from BatchFileDeletionData
@@ -768,14 +807,26 @@ where
             file_deletion_requests.push(file_deletion);
         }
 
-        // Convert to BoundedVec
-        let file_deletions = file_deletion_requests
-            .try_into()
-            .map_err(|_| anyhow!("Batch size exceeds MaxFileDeletionsPerExtrinsic limit"))?;
+        // Convert to runtime's expected BoundedVec,
+        // truncating if necessary (should not be needed since we truncate earlier).
+        let original_len = file_deletion_requests.len();
+        let file_deletion_requests_bounded: BoundedVec<
+            FileDeletionRequest<Runtime>,
+            MaxFileDeletionsPerExtrinsic<Runtime>,
+        > = BoundedVec::truncate_from(file_deletion_requests);
+        let file_deletion_requests_bounded_len = file_deletion_requests_bounded.len();
+        if file_deletion_requests_bounded_len < original_len {
+            warn!(
+                target: LOG_TARGET,
+                "🎣 File deletion requests were truncated from {} to {} - this should not happen as truncation should occur earlier in the processing pipeline",
+                original_len,
+                file_deletion_requests_bounded_len
+            );
+        }
 
         // Build the delete_files extrinsic call
         let call = pallet_file_system::Call::<Runtime>::delete_files {
-            file_deletions,
+            file_deletions: file_deletion_requests_bounded,
             bsp_id: maybe_bsp_id,
             forest_proof: forest_proof.proof,
         };
@@ -796,7 +847,7 @@ where
                 error!(
                     target: LOG_TARGET,
                     "Failed to submit delete_files extrinsic for {} files: {:?}",
-                    files.len(),
+                    file_deletion_requests_bounded_len,
                     e
                 );
                 anyhow!("Failed to submit delete_files extrinsic: {:?}", e)
@@ -805,7 +856,7 @@ where
         info!(
             target: LOG_TARGET,
             "🎣 Successfully submitted delete_files extrinsic for {} files",
-            files.len()
+            file_deletion_requests_bounded_len
         );
 
         Ok(())
@@ -832,11 +883,20 @@ where
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
-        // Convert file keys to the required format and wrap in BoundedVec
-        let file_keys_vec: Vec<_> = file_keys.iter().map(|k| (*k).into()).collect();
-        let file_keys_bounded = file_keys_vec
-            .try_into()
-            .map_err(|_| anyhow!("Batch size exceeds MaxFileDeletionsPerExtrinsic limit"))?;
+        // Convert to runtime's expected BoundedVec,
+        // truncating if necessary (should not be needed since we truncate earlier).
+        let original_len = file_keys.len();
+        let file_keys_bounded: BoundedVec<Runtime::Hash, MaxFileDeletionsPerExtrinsic<Runtime>> =
+            BoundedVec::truncate_from(file_keys.to_vec());
+        let file_keys_bounded_len = file_keys_bounded.len();
+        if file_keys_bounded_len < original_len {
+            warn!(
+                target: LOG_TARGET,
+                "🎣 File keys were truncated from {} to {} - this should not happen as truncation should occur earlier in the processing pipeline",
+                original_len,
+                file_keys_bounded_len
+            );
+        }
 
         // Build the delete_files_for_incomplete_storage_request extrinsic call
         let call =
@@ -862,7 +922,7 @@ where
                 error!(
                     target: LOG_TARGET,
                     "Failed to submit delete_files_for_incomplete_storage_request extrinsic for {} files: {:?}",
-                    file_keys.len(),
+                    file_keys_bounded_len,
                     e
                 );
                 anyhow!(
@@ -874,7 +934,7 @@ where
         info!(
             target: LOG_TARGET,
             "🎣 Successfully submitted delete_files_for_incomplete_storage_request extrinsic for {} files",
-            file_keys.len()
+            file_keys_bounded_len
         );
 
         Ok(())
@@ -886,7 +946,7 @@ where
     /// filtered by the specified deletion type.
     ///
     /// For incomplete deletions, this also validates each file against runtime metadata to filter
-    /// out stale entries (e.g. if another fisherman node already deleted the file from a provider).
+    /// out stale entries.
     ///
     /// # Parameters
     /// * `deletion_type` - Type of deletion to query ([`FileDeletionType::User`] or [`FileDeletionType::Incomplete`])
@@ -894,6 +954,7 @@ where
     /// * `bsp_id` - Optional filter to only return files from a specific BSP
     /// * `limit` - Maximum number of files to return (default: 1000)
     /// * `offset` - Number of files to skip for pagination (default: 0)
+    /// * `strategy` - Strategy configuration for file deletion processing (contains TTL threshold)
     async fn get_pending_deletions(
         &self,
         deletion_type: shc_indexer_db::models::FileDeletionType,
@@ -901,6 +962,7 @@ where
         bsp_id: Option<BackupStorageProviderId<Runtime>>,
         limit: Option<i64>,
         offset: Option<i64>,
+        strategy: FileDeletionStrategy,
     ) -> anyhow::Result<PendingDeletionsGrouped<Runtime>> {
         trace!(
             target: LOG_TARGET,
@@ -940,6 +1002,8 @@ where
                 Some(true),
                 limit,
                 offset,
+                strategy.filtering,
+                strategy.ordering,
             )
             .await?;
 
@@ -967,6 +1031,8 @@ where
                 bsp_id_db,
                 limit,
                 offset,
+                strategy.filtering,
+                strategy.ordering,
             )
             .await?;
 

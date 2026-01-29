@@ -7,7 +7,10 @@ use diesel_async::RunQueryDsl;
 
 use crate::{
     models::{
-        file::{FileDeletionType, DEFAULT_BATCH_QUERY_LIMIT},
+        file::{
+            FileDeletionType, FileFiltering, FileMetadataQuery, FileOrdering,
+            DEFAULT_BATCH_QUERY_LIMIT,
+        },
         multiaddress::MultiAddress,
         File,
     },
@@ -263,20 +266,23 @@ impl BspFile {
     }
 
     // TODO: Add paging for performance
-    // TODO: Make this and other db model functions return actual types instead of raw bytes for example
-    pub async fn get_all_file_keys_for_bsp<'a>(
+    /// Get all file metadata for a BSP.
+    ///
+    /// Returns lightweight [`FileMetadataQuery`] records containing only the fields required for
+    /// conversion to [`FileMetadata`](shc_common::types::FileMetadata).
+    pub async fn get_all_files_for_bsp<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bsp_id: OnchainBspId,
-    ) -> Result<Vec<Vec<u8>>, diesel::result::Error> {
-        let file_keys: Vec<Vec<u8>> = bsp_file::table
+    ) -> Result<Vec<FileMetadataQuery>, diesel::result::Error> {
+        let files: Vec<FileMetadataQuery> = bsp_file::table
             .inner_join(bsp::table.on(bsp_file::bsp_id.eq(bsp::id)))
             .inner_join(file::table.on(bsp_file::file_id.eq(file::id)))
             .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id))
-            .select(file::file_key)
-            .load::<Vec<u8>>(conn)
+            .select(FileMetadataQuery::as_select())
+            .load::<FileMetadataQuery>(conn)
             .await?;
 
-        Ok(file_keys)
+        Ok(files)
     }
 
     /// Get files pending deletion grouped by BSP.
@@ -303,6 +309,8 @@ impl BspFile {
         bsp_id: Option<OnchainBspId>,
         limit: Option<i64>,
         offset: Option<i64>,
+        filtering: FileFiltering,
+        ordering: FileOrdering,
     ) -> Result<HashMap<OnchainBspId, Vec<File>>, diesel::result::Error> {
         use crate::models::file::FileDeletionStatus;
 
@@ -326,18 +334,43 @@ impl BspFile {
             query = query.filter(bsp::onchain_bsp_id.eq(bsp_id));
         }
 
-        // Load both file and BSP ID
-        let results: Vec<(File, OnchainBspId)> = query
-            .select((File::as_select(), bsp::onchain_bsp_id))
-            .order_by((
-                bsp::onchain_bsp_id.asc(),
-                file::deletion_requested_at.asc(),
-                file::file_key.asc(),
-            ))
-            .limit(limit)
-            .offset(offset)
-            .load(conn)
-            .await?;
+        // Apply filtering strategy
+        match filtering {
+            FileFiltering::None => { /* No additional filtering */ }
+            FileFiltering::Ttl { threshold_seconds } => {
+                let cutoff_time = chrono::Utc::now().naive_utc()
+                    - chrono::Duration::seconds(threshold_seconds as i64);
+                query = query.filter(file::deletion_requested_at.gt(cutoff_time));
+            }
+        }
+
+        // Apply ordering strategy
+        let results: Vec<(File, OnchainBspId)> = match ordering {
+            FileOrdering::Chronological => {
+                query
+                    .select((File::as_select(), bsp::onchain_bsp_id))
+                    .order_by((
+                        bsp::onchain_bsp_id.asc(),
+                        file::deletion_requested_at.asc(),
+                        file::file_key.asc(),
+                    ))
+                    .limit(limit)
+                    .offset(offset)
+                    .load(conn)
+                    .await?
+            }
+            FileOrdering::Randomized => {
+                // PostgreSQL RANDOM() function for randomized ordering
+                diesel::define_sql_function!(fn random() -> diesel::sql_types::Float);
+                query
+                    .select((File::as_select(), bsp::onchain_bsp_id))
+                    .order_by(random())
+                    .limit(limit)
+                    .offset(offset)
+                    .load(conn)
+                    .await?
+            }
+        };
 
         // Group files by BSP ID
         let mut grouped: HashMap<OnchainBspId, Vec<File>> = HashMap::new();
@@ -371,6 +404,8 @@ impl BspFile {
         bsp_id: Option<OnchainBspId>,
         limit: Option<i64>,
         offset: Option<i64>,
+        filtering: FileFiltering,
+        ordering: FileOrdering,
     ) -> Result<HashMap<OnchainBspId, Vec<File>>, diesel::result::Error> {
         let files_map = Self::get_files_pending_deletion_grouped_by_bsp(
             conn,
@@ -378,6 +413,8 @@ impl BspFile {
             bsp_id,
             limit,
             offset,
+            filtering,
+            ordering,
         )
         .await?;
 

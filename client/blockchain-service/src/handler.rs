@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use futures::prelude::*;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashSet, VecDeque},
     path::PathBuf,
     sync::Arc,
 };
@@ -16,6 +16,7 @@ use sc_transaction_pool_api::TransactionStatus;
 use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
+use sp_core::H256;
 use sp_keystore::KeystorePtr;
 use sp_runtime::{traits::Header, SaturatedConversion, Saturating};
 
@@ -39,9 +40,10 @@ use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxSt
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::CFDequeAPI,
-    types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
+    types::{AccountId, BlockNumber, FileKey, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
+use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
 
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
@@ -83,11 +85,21 @@ where
     /// This is used to manage Forest Storage instances and update their roots when there are
     /// Forest-root-changing events on-chain, for the Storage Provider managed by this service.
     pub(crate) forest_storage_handler: FSH,
-    /// The hash and number of the last best block processed by the BlockchainService.
+    /// The hash and number of the block currently being processed by the BlockchainService.
     ///
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
-    pub(crate) best_block: MinimalBlockInfo<Runtime>,
+    ///
+    /// Note: This is updated at the START of block processing, so it doesn't indicate that
+    /// processing has completed. Use `last_block_processed` for that.
+    pub(crate) current_block: MinimalBlockInfo<Runtime>,
+    /// The hash and number of the last block for which we've completed import processing.
+    ///
+    /// Unlike `current_block` which is updated at the start of block processing, this field is
+    /// updated at the END of block import processing. This is important for coordinating with
+    /// finality notifications, as we should only process finality for blocks that have been
+    /// fully import-processed.
+    pub(crate) last_block_processed: MinimalBlockInfo<Runtime>,
     /// The hash and number of the last finalised block processed by the BlockchainService.
     pub(crate) last_finalised_block_processed: MinimalBlockInfo<Runtime>,
     /// Nonce counter for the extrinsics.
@@ -155,6 +167,22 @@ where
     pub(crate) role: MultiInstancesNodeRole,
     /// Dedicated leadership connection used to hold advisory locks when DB is enabled.
     pub(crate) leadership_conn: Option<LeadershipClient>,
+    /// Queue for finality notifications that arrive before their corresponding block import.
+    ///
+    /// This handles the race condition where finality notifications can outpace block import
+    /// notifications if the block import processing is lagging behind.
+    /// When a finality notification arrives for a block that hasn't been
+    /// import-processed yet (`finality_block_number > last_block_processed.number`),
+    /// it's queued here and processed after block import catches up.
+    ///
+    /// The queue is drained at the end of each block import notification, processing any
+    /// queued finality notifications whose block numbers are now <= last_block_processed.number.
+    pub(crate) pending_finality_notifications: VecDeque<FinalityNotification<OpaqueBlock>>,
+    /// Metrics link for recording telemetry.
+    ///
+    /// Used for recording command lifecycle metrics (pending count, processing duration)
+    /// and block processing metrics (block import/finality durations).
+    pub(crate) metrics: MetricsLink,
 }
 
 #[derive(Debug, Clone)]
@@ -179,6 +207,12 @@ where
     pub enable_msp_distribute_files: bool,
     /// Optional Postgres URL for the pending transactions DB. If None, DB is disabled.
     pub pending_db_url: Option<String>,
+
+    /// Maximum number of BSP confirm storing requests to batch together.
+    pub bsp_confirm_file_batch_size: u32,
+
+    /// Maximum number of MSP respond storage requests to batch together.
+    pub msp_respond_storage_batch_size: u32,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -192,6 +226,8 @@ where
             peer_id: None,
             enable_msp_distribute_files: false,
             pending_db_url: None,
+            bsp_confirm_file_batch_size: 20,
+            msp_respond_storage_batch_size: 20,
         }
     }
 }
@@ -374,7 +410,18 @@ where
         &mut self,
         message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
-        async {
+        // Extract command name before the match (since message will be partially moved)
+        let command_name = message.command_name();
+        // Clone metrics link for use in async block
+        let metrics = self.metrics.clone();
+
+        async move {
+            // Start timer for command processing
+            let start = std::time::Instant::now();
+
+            // Track command success/failure for metrics
+            let mut command_succeeded = true;
+
             match message {
                 BlockchainServiceCommand::SendExtrinsic {
                     call,
@@ -394,6 +441,7 @@ where
                     }
                     Err(e) => {
                         warn!(target: LOG_TARGET, "Failed to send extrinsic: {:?}", e);
+                        command_succeeded = false;
 
                         match callback.send(Err(e)) {
                             Ok(_) => {
@@ -427,6 +475,7 @@ where
                         }
                         Err(e) => {
                             warn!(target: LOG_TARGET, "Failed to retrieve extrinsic: {:?}", e);
+                            command_succeeded = false;
                             match callback.send(Err(e)) {
                                 Ok(_) => {
                                     trace!(target: LOG_TARGET, "Receiver sent successfully");
@@ -439,7 +488,7 @@ where
                     }
                 }
                 BlockchainServiceCommand::GetBestBlockInfo { callback } => {
-                    let best_block_info = self.best_block;
+                    let best_block_info = self.last_block_processed;
                     match callback.send(Ok(best_block_info)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Best block info sent successfully");
@@ -537,6 +586,7 @@ where
                             }
                         }
                         Err(e) => {
+                            command_succeeded = false;
                             // If there is an API error, we notify the task about it immediately.
                             match tx.send(Err(e)) {
                                 Ok(_) => {}
@@ -564,6 +614,7 @@ where
                         .runtime_api()
                         .query_earliest_change_capacity_block(current_block_hash, &bsp_id)
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "Failed to query earliest block to change capacity");
                             Err(QueryEarliestChangeCapacityBlockError::InternalError)
                         });
@@ -588,6 +639,7 @@ where
                         .runtime_api()
                         .is_storage_request_open_to_volunteers(current_block_hash, file_key)
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             Err(IsStorageRequestOpenToVolunteersError::InternalError)
                         });
 
@@ -616,6 +668,7 @@ where
                             file_key,
                         )
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             Err(QueryFileEarliestVolunteerTickError::InternalError)
                         });
 
@@ -655,6 +708,7 @@ where
                             file_key,
                         )
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             Err(QueryBspConfirmChunksToProveForFileError::InternalError)
                         });
 
@@ -683,6 +737,7 @@ where
                             file_key,
                         )
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             Err(QueryMspConfirmChunksToProveForFileError::InternalError)
                         });
 
@@ -706,7 +761,10 @@ where
                         .client
                         .runtime_api()
                         .query_bsps_volunteered_for_file(current_block_hash, file_key)
-                        .unwrap_or_else(|_| Err(QueryBspsVolunteeredForFileError::InternalError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(QueryBspsVolunteeredForFileError::InternalError)
+                        });
 
                     let volunteered = bsps_volunteered.map(|bsps| bsps.contains(&bsp_id));
 
@@ -730,6 +788,7 @@ where
                         .runtime_api()
                         .query_provider_multiaddresses(current_block_hash, &provider_id)
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "Failed to query provider multiaddresses");
                             Err(QueryProviderMultiaddressesError::InternalError)
                         })
@@ -800,7 +859,10 @@ where
                         .client
                         .runtime_api()
                         .get_last_tick_provider_submitted_proof(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| Err(GetProofSubmissionRecordError::InternalApiError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(GetProofSubmissionRecordError::InternalApiError)
+                        });
 
                     match callback.send(last_tick) {
                         Ok(_) => {
@@ -822,6 +884,7 @@ where
                         .runtime_api()
                         .get_challenge_period(current_block_hash, &provider_id)
                         .unwrap_or_else(|_| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "Failed to query challenge period for provider [{:?}]", provider_id);
                             Err(GetChallengePeriodError::InternalApiError)
                         });
@@ -875,7 +938,10 @@ where
                         .client
                         .runtime_api()
                         .get_checkpoint_challenges(current_block_hash, tick)
-                        .unwrap_or_else(|_| Err(GetCheckpointChallengesError::InternalApiError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(GetCheckpointChallengesError::InternalApiError)
+                        });
 
                     match callback.send(checkpoint_challenges) {
                         Ok(_) => {
@@ -896,7 +962,10 @@ where
                         .client
                         .runtime_api()
                         .get_bsp_info(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| Err(GetBspInfoError::InternalApiError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(GetBspInfoError::InternalApiError)
+                        });
 
                     let root = bsp_info.map(|bsp_info| bsp_info.root);
 
@@ -919,7 +988,10 @@ where
                         .client
                         .runtime_api()
                         .query_storage_provider_capacity(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| Err(QueryStorageProviderCapacityError::InternalError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(QueryStorageProviderCapacityError::InternalError)
+                        });
 
                     match callback.send(capacity) {
                         Ok(_) => {
@@ -940,7 +1012,10 @@ where
                         .client
                         .runtime_api()
                         .query_available_storage_capacity(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| Err(QueryAvailableStorageCapacityError::InternalError));
+                        .unwrap_or_else(|_| {
+                            command_succeeded = false;
+                            Err(QueryAvailableStorageCapacityError::InternalError)
+                        });
 
                     match callback.send(capacity) {
                         Ok(_) => {
@@ -953,12 +1028,7 @@ where
                 }
                 BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
                     if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
-                        let state_store_context =
-                            self.persistent_state.open_rw_context_with_overlay();
-                        state_store_context
-                            .pending_confirm_storing_request_deque::<Runtime>()
-                            .push_back(request);
-                        state_store_context.commit();
+                        self.queue_confirm_storing_requests(std::iter::once(request));
                         // We check right away if we can process the request so we don't waste time.
                         self.bsp_assign_forest_root_write_lock();
                         match callback.send(Ok(())) {
@@ -968,6 +1038,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a QueueConfirmBspRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a QueueConfirmBspRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team."))) {
                         Ok(_) => {}
@@ -1016,6 +1087,7 @@ where
                             );
                         }
                     } else {
+                        command_succeeded = false;
                         // Log the invariant violation but don't fail - this is fire-and-forget
                         error!(
                             target: LOG_TARGET,
@@ -1047,6 +1119,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a QueueSubmitProofRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a QueueSubmitProofRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
@@ -1092,6 +1165,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a QueueStopStoringForInsolventUserRequest command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a QueueStopStoringForInsolventUserRequest command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
@@ -1115,7 +1189,10 @@ where
                         .client
                         .runtime_api()
                         .get_storage_provider_id(current_block_hash, &node_pub_key)
-                        .map_err(|_| anyhow!("Internal API error"));
+                        .map_err(|_| {
+                            command_succeeded = false;
+                            anyhow!("Internal API error")
+                        });
 
                     match callback.send(provider_id) {
                         Ok(_) => {}
@@ -1140,6 +1217,7 @@ where
                             min_debt,
                         )
                         .unwrap_or_else(|e| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "{}", e);
                             Err(GetUsersWithDebtOverThresholdError::InternalApiError)
                         });
@@ -1211,6 +1289,7 @@ where
                         .runtime_api()
                         .query_msp_id_of_bucket_id(current_block_hash, &bucket_id)
                         .unwrap_or_else(|e| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "{}", e);
                             Err(QueryMspIdOfBucketIdError::BucketNotFound)
                         });
@@ -1234,6 +1313,7 @@ where
                         .runtime_api()
                         .query_buckets_of_user_stored_by_msp(current_block_hash, &msp_id, &user)
                         .unwrap_or_else(|e| {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "{}", e);
                             Err(QueryBucketsOfUserStoredByMspError::InternalError)
                         });
@@ -1261,6 +1341,7 @@ where
                         // Register BSP as one for which the file is being distributed already.
                         // Error if the BSP is already registered.
                         if !entry.bsps_distributing.insert(bsp_id) {
+                            command_succeeded = false;
                             error!(target: LOG_TARGET, "BSP {:?} is already registered as distributing file [{:x}]", bsp_id, file_key);
                             match callback.send(Err(anyhow!(
                                 "BSP {:?} is already registered as distributing file [{:x}]",
@@ -1272,16 +1353,16 @@ where
                                     error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
                                 }
                             }
-                            return;
-                        }
-
-                        match callback.send(Ok(())) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        } else {
+                            match callback.send(Ok(())) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                }
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a RegisterBspDistributing command while not managing a MSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a RegisterBspDistributing command while not managing a MSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
@@ -1310,6 +1391,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received an UnregisterBspDistributing command while not managing an MSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received an UnregisterBspDistributing command while not managing an MSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
@@ -1323,11 +1405,88 @@ where
                     maybe_file_keys,
                     callback,
                 } => {
-                    let managed_msp_id = match &self.maybe_managed_provider {
-                        Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
+                    if let Some(ManagedProvider::Msp(msp_handler)) = &self.maybe_managed_provider {
+                        let managed_msp_id = msp_handler.msp_id.clone();
+                        let current_block_hash = self.client.info().best_hash;
+
+                        // Query pending storage requests (not yet accepted by MSP)
+                        match self
+                            .client
+                            .runtime_api()
+                            .pending_storage_requests_by_msp(current_block_hash, managed_msp_id)
+                        {
+                            Ok(mut sr) => {
+                                // If specific file keys provided, filter to only those keys
+                                if let Some(file_keys) = maybe_file_keys {
+                                    let file_keys_set: HashSet<_> = file_keys
+                                        .into_iter()
+                                        .map(|k| sp_core::H256::from_slice(k.as_ref()))
+                                        .collect();
+
+                                    // From the pending storage requests for this MSP, only keep the ones that
+                                    // are in the provided file keys.
+                                    sr.retain(|file_key, _| file_keys_set.contains(file_key));
+                                }
+
+                                let new_storage_requests: Vec<NewStorageRequest<Runtime>> = sr
+                                    .into_iter()
+                                    .map(|(file_key, sr)| NewStorageRequest {
+                                        who: sr.owner,
+                                        file_key: file_key.into(),
+                                        bucket_id: sr.bucket_id,
+                                        location: sr.location,
+                                        fingerprint: sr.fingerprint.as_ref().into(),
+                                        size: sr.size,
+                                        user_peer_ids: sr.user_peer_ids,
+                                        expires_at: sr.expires_at,
+                                    })
+                                    .collect();
+
+                                match callback.send(Ok(new_storage_requests)) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Failed to send pending storage requests: {:?}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                command_succeeded = false;
+                                error!(target: LOG_TARGET, "Failed to get pending storage requests: {:?}", e);
+                                match callback
+                                    .send(Err(anyhow!("Failed to get pending storage requests")))
+                                {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        command_succeeded = false;
+                        error!(target: LOG_TARGET, "`QueryPendingStorageRequests` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                        match callback.send(Err(anyhow!("Node is not managing an MSP"))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                            }
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryPendingBspConfirmStorageRequests {
+                    confirm_storing_requests,
+                    callback,
+                } => {
+                    let (managed_bsp_id, pending_volunteer_file_keys) = match &self
+                        .maybe_managed_provider
+                    {
+                        Some(ManagedProvider::Bsp(bsp_handler)) => (
+                            bsp_handler.bsp_id.clone(),
+                            &bsp_handler.pending_volunteer_file_keys,
+                        ),
                         _ => {
-                            error!(target: LOG_TARGET, "`QueryPendingStorageRequests` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                            match callback.send(Err(anyhow!("Node is not managing an MSP"))) {
+                            error!(target: LOG_TARGET, "`QueryPendingBspConfirmStorageRequests` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                            match callback.send(Err(anyhow!("Node is not managing a BSP"))) {
                                 Ok(_) => {}
                                 Err(e) => {
                                     error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
@@ -1337,63 +1496,87 @@ where
                         }
                     };
 
+                    // Pre-filter: separate requests with pending volunteer transactions from those ready to query.
+                    let (requests_to_requeue, requests_to_query): (Vec<_>, Vec<_>) =
+                        confirm_storing_requests.into_iter().partition(|request| {
+                            let file_key: FileKey = request.file_key.as_ref().into();
+                            pending_volunteer_file_keys.contains(&file_key)
+                        });
+
+                    // Re-queue pending volunteer requests for later processing.
+                    // We re-queue them here to avoid filtering them out in the runtime API call below,
+                    // and not attempt the confirmation ever again. This way we ensure that once this node
+                    // sees the volunteer transaction succeed on-chain, it will be able to send the storage confirmation.
+                    for request in &requests_to_requeue {
+                        info!(
+                            target: LOG_TARGET,
+                            "Volunteer pending for file key [{:?}], re-queuing confirm request",
+                            request.file_key
+                        );
+                    }
+                    self.queue_confirm_storing_requests(requests_to_requeue);
+
                     let current_block_hash = self.client.info().best_hash;
 
-                    // Query pending storage requests (not yet accepted by MSP)
-                    let storage_requests = match self
+                    let file_keys: Vec<H256> = requests_to_query
+                        .iter()
+                        .map(|r| H256::from_slice(r.file_key.as_ref()))
+                        .collect();
+
+                    // Query the runtime API to filter file keys to only those pending confirmation
+                    let pending_file_keys = match self
                         .client
                         .runtime_api()
-                        .pending_storage_requests_by_msp(current_block_hash, managed_msp_id)
-                    {
-                        Ok(mut sr) => {
-                            // If specific file keys provided, filter to only those keys
-                            if let Some(file_keys) = maybe_file_keys {
-                                let file_keys_set: HashSet<_> = file_keys
-                                    .into_iter()
-                                    .map(|k| sp_core::H256::from_slice(k.as_ref()))
-                                    .collect();
-
-                                // From the pending storage requests for this MSP, only keep the ones that
-                                // are in the provided file keys.
-                                sr.retain(|file_key, _| file_keys_set.contains(file_key));
-                            }
-
-                            // Return the filtered pending storage requests.
-                            sr
-                        }
+                        .query_pending_bsp_confirm_storage_requests(
+                            current_block_hash,
+                            managed_bsp_id,
+                            file_keys,
+                        ) {
+                        Ok(keys) => keys,
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to get pending storage requests: {:?}", e);
-                            match callback
-                                .send(Err(anyhow!("Failed to get pending storage requests")))
-                            {
+                            error!(target: LOG_TARGET, "Failed to query pending BSP confirm storage requests: {:?}", e);
+                            match callback.send(Err(anyhow!(
+                                "Failed to query pending BSP confirm storage requests"
+                            ))) {
                                 Ok(_) => {}
                                 Err(e) => {
-                                    error!(target: LOG_TARGET, "Failed to send empty result: {:?}", e);
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
                                 }
                             }
                             return;
                         }
                     };
 
-                    let new_storage_requests: Vec<NewStorageRequest<Runtime>> = storage_requests
+                    let result: Vec<FileKey> = pending_file_keys
                         .into_iter()
-                        .map(|(file_key, sr)| NewStorageRequest {
-                            who: sr.owner,
-                            file_key: file_key.into(),
-                            bucket_id: sr.bucket_id,
-                            location: sr.location,
-                            fingerprint: sr.fingerprint.as_ref().into(),
-                            size: sr.size,
-                            user_peer_ids: sr.user_peer_ids,
-                            expires_at: sr.expires_at,
-                        })
+                        .map(|k| k.as_ref().into())
                         .collect();
 
-                    match callback.send(Ok(new_storage_requests)) {
+                    match callback.send(Ok(result)) {
                         Ok(_) => {}
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send pending storage requests: {:?}", e);
+                            error!(target: LOG_TARGET, "Failed to send pending BSP confirm storage requests: {:?}", e);
                         }
+                    }
+                }
+                BlockchainServiceCommand::AddPendingVolunteerFileKey { file_key } => {
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        debug!(target: LOG_TARGET, "Adding file key [{:?}] to pending volunteer tracking", file_key);
+                        bsp_handler.pending_volunteer_file_keys.insert(file_key);
+                    } else {
+                        error!(target: LOG_TARGET, "AddPendingVolunteerFileKey received while not managing a BSP. This should never happen.");
+                    }
+                }
+                BlockchainServiceCommand::RemovePendingVolunteerFileKey { file_key } => {
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        debug!(target: LOG_TARGET, "Removing file key [{:?}] from pending volunteer tracking", file_key);
+                        bsp_handler.pending_volunteer_file_keys.remove(&file_key);
+                    } else {
+                        error!(target: LOG_TARGET, "RemovePendingVolunteerFileKey received while not managing a BSP. This should never happen.");
                     }
                 }
                 BlockchainServiceCommand::SetFileKeyStatus { file_key, status } => {
@@ -1410,6 +1593,7 @@ where
                             .file_key_statuses
                             .insert(file_key, status.into());
                     } else {
+                        command_succeeded = false;
                         // Fire-and-forget command, just log the invariant violation
                         error!(
                             target: LOG_TARGET,
@@ -1429,6 +1613,7 @@ where
                         );
                         msp_handler.file_key_statuses.remove(&file_key);
                     } else {
+                        command_succeeded = false;
                         // Fire-and-forget command, just log the invariant violation
                         error!(
                             target: LOG_TARGET,
@@ -1468,6 +1653,7 @@ where
                             }
                         }
                     } else {
+                        command_succeeded = false;
                         error!(target: LOG_TARGET, "Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
                         match callback.send(Err(anyhow!("Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team."))) {
                             Ok(_) => {}
@@ -1493,6 +1679,14 @@ where
                     }
                 }
             }
+
+            // Record command completion
+            let status = if command_succeeded {
+                STATUS_SUCCESS
+            } else {
+                STATUS_FAILURE
+            };
+            observe_histogram!(metrics: metrics.as_ref(), command_processing_seconds, labels: &[command_name, status], start.elapsed().as_secs_f64());
         }
     }
 
@@ -1517,6 +1711,7 @@ where
         notify_period: Option<u32>,
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
+        metrics: MetricsLink,
     ) -> Self {
         let genesis_hash = client.info().genesis_hash;
         Self {
@@ -1526,7 +1721,11 @@ where
             keystore,
             rpc_handlers,
             forest_storage_handler,
-            best_block: MinimalBlockInfo {
+            current_block: MinimalBlockInfo {
+                number: 0u32.into(),
+                hash: genesis_hash,
+            },
+            last_block_processed: MinimalBlockInfo {
                 number: 0u32.into(),
                 hash: genesis_hash,
             },
@@ -1552,6 +1751,8 @@ where
             pending_tx_store: None,
             role: MultiInstancesNodeRole::Standalone,
             leadership_conn: None,
+            pending_finality_notifications: VecDeque::new(),
+            metrics,
         }
     }
 
@@ -1569,13 +1770,14 @@ where
         // This prevents:
         // 1. Double-processing of reorgs during sync (which would trigger unwanted events)
         // 2. Premature triggering of `handle_initial_sync` during any reorgs during sync
-        // 3. Duplicate `register_best_block_and_check_reorg` calls
+        // 3. Duplicate `register_current_block_and_check_reorg` calls
         if notification.origin == sp_consensus::BlockOrigin::NetworkInitialSync {
             return;
         }
 
         // Check if this new imported block is the new best, and if it causes a reorg.
-        let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
+        let new_block_notification_kind =
+            self.register_current_block_and_check_reorg(&notification);
 
         // Get the new best block info, and the `TreeRoute`, i.e. the blocks from the old best block to the new best block.
         // A new non-best block is ignored and not processed.
@@ -1597,6 +1799,9 @@ where
             hash: block_hash,
         } = block_info;
 
+        // Start timing block processing after early returns
+        let start = std::time::Instant::now();
+
         info!(target: LOG_TARGET, "📬 Block import notification (#{}): {}", block_number, block_hash);
 
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
@@ -1614,6 +1819,9 @@ where
             .await;
 
         info!(target: LOG_TARGET, "📭 Block import notification (#{}): {} processed successfully", block_number, block_hash);
+
+        // Record block processing duration
+        observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["block_import", STATUS_SUCCESS], start.elapsed().as_secs_f64());
     }
 
     /// Handle block notifications during network initial sync.
@@ -1674,7 +1882,8 @@ where
         }
 
         // Check if this new imported block is the new best, and if it causes a reorg.
-        let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
+        let new_block_notification_kind =
+            self.register_current_block_and_check_reorg(&notification);
 
         match new_block_notification_kind {
             NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => {
@@ -1847,10 +2056,12 @@ where
             }
         }
 
-        self.update_last_processed_block_info(MinimalBlockInfo {
+        // Update both the in-memory tracker and persistent storage
+        self.last_block_processed = MinimalBlockInfo {
             number: *block_number,
             hash: *block_hash,
-        });
+        };
+        self.update_last_processed_block_info(self.last_block_processed);
     }
 
     /// Handle a finality notification.
@@ -1858,6 +2069,10 @@ where
     /// This processes finality events for the finalised block and all implicitly finalised blocks
     /// in the `tree_route`. This is important for scenarios where finality jumps multiple blocks
     /// at once (e.g., after a node restart, network partition recovery or solved finality staleness).
+    ///
+    /// If the finality notification is for a block that hasn't been import-processed yet
+    /// (`block_number > last_block_processed.number`), it is queued for later processing. This handles
+    /// the race condition where finality notifications can arrive before block import notifications.
     async fn handle_finality_notification(
         &mut self,
         notification: FinalityNotification<OpaqueBlock>,
@@ -1870,6 +2085,13 @@ where
             trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping finality notification #{}: {}", block_number, block_hash);
             return;
         }
+
+        info!(target: LOG_TARGET, "📩 Received finality notification for block #{}: 0x{:x}", block_number, block_hash);
+
+        // Drain any pending finality notifications that can now be processed.
+        // This handles notifications that were queued because they arrived before their
+        // corresponding block import was processed.
+        self.drain_pending_finality_notifications().await;
 
         // Skip if this finalised block was already processed.
         // This can happen during sync when both `handle_sync_block_notification` (via
@@ -1886,7 +2108,99 @@ where
             return;
         }
 
-        info!(target: LOG_TARGET, "📩 Finality notification #{}: {:x}", block_number, block_hash);
+        // If this finality notification is for a block that hasn't been fully import-processed yet,
+        // queue it for later. This prevents processing finality events before the forest has
+        // been updated by block import, which would cause issues like failing to delete files
+        // because they're still in the forest.
+        if block_number > self.last_block_processed.number {
+            warn!(
+                target: LOG_TARGET,
+                "🛑 Finality notification for block #{} is ahead of last import-processed block #{}, deferring to queue",
+                block_number, self.last_block_processed.number
+            );
+            self.pending_finality_notifications.push_back(notification);
+            return;
+        }
+
+        // If the block number is the same as the last import-processed block number, but the hash is different,
+        // it means the block has been reorged and we need to wait for the new block that replaces it before processing
+        // the finality notification.
+        if block_number == self.last_block_processed.number
+            && block_hash != self.last_block_processed.hash
+        {
+            warn!(
+                target: LOG_TARGET,
+                "🔄 Finality notification for block #{}: finalised block 0x{:x} is a reorg of the last processed block 0x{:x}, deferring to queue",
+                block_number, block_hash, self.last_block_processed.hash
+            );
+            self.pending_finality_notifications.push_back(notification);
+            return;
+        }
+
+        // At this point, we know that the finality notification is for a block that has been import-processed,
+        // and it is not a reorg of the last processed block. Therefore, we can safely process it.
+        self.process_finality_notification(notification).await;
+    }
+
+    /// Drain and process any pending finality notifications that can now be processed.
+    ///
+    /// This is called at the start of finality notification handling to process any
+    /// notifications that were queued because they arrived before their corresponding
+    /// block import was processed.
+    async fn drain_pending_finality_notifications(&mut self) {
+        // Process notifications in order while they're <= last_block_processed
+        while let Some(notification) = self.pending_finality_notifications.front() {
+            let block_number: BlockNumber<Runtime> =
+                (*notification.header.number()).saturated_into();
+
+            if block_number > self.last_block_processed.number {
+                // Still ahead, stop draining
+                break;
+            }
+
+            if block_number == self.last_block_processed.number
+                && notification.hash != self.last_block_processed.hash
+            {
+                // The last processed block has been reorged, stop draining
+                break;
+            }
+
+            // Safe to process now
+            let notification = self.pending_finality_notifications.pop_front().unwrap();
+
+            // Skip if the finality has been already processed
+            if block_number <= self.last_finalised_block_processed.number {
+                warn!(
+                    target: LOG_TARGET,
+                    "🔁 Deferred finality notification #{} already processed, skipping",
+                    block_number
+                );
+                continue;
+            }
+
+            info!(
+                target: LOG_TARGET,
+                "⏰ Processing deferred finality notification #{} (queue size: {})",
+                block_number,
+                self.pending_finality_notifications.len()
+            );
+
+            self.process_finality_notification(notification).await;
+        }
+    }
+
+    /// Internal method to process a finality notification.
+    async fn process_finality_notification(
+        &mut self,
+        notification: FinalityNotification<OpaqueBlock>,
+    ) {
+        // Start timing finality notification processing
+        let start = std::time::Instant::now();
+
+        let block_hash = notification.hash;
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).saturated_into();
+
+        info!(target: LOG_TARGET, "📇 Processing finality notification for block #{}: 0x{:x}", block_number, block_hash);
 
         // Process finality events for all implicitly finalised blocks in tree_route.
         // tree_route contains all blocks from (old_finalised, new_finalised_parent), i.e., the blocks
@@ -1908,26 +2222,28 @@ where
 
             for intermediate_hash in notification.tree_route.iter() {
                 // Get the block number for this hash to check if we already processed it
-                let intermediate_number: BlockNumber<Runtime> =
-                    match self.client.number(*intermediate_hash) {
-                        Ok(Some(num)) => num.saturated_into(),
-                        Ok(None) => {
-                            warn!(
+                let intermediate_number: BlockNumber<Runtime> = match self
+                    .client
+                    .number(*intermediate_hash)
+                {
+                    Ok(Some(num)) => num.saturated_into(),
+                    Ok(None) => {
+                        warn!(
                                 target: LOG_TARGET,
                                 "Could not find block number for hash {:?} in tree_route, skipping",
                                 intermediate_hash
-                            );
-                            continue;
-                        }
-                        Err(e) => {
-                            warn!(
+                        );
+                        continue;
+                    }
+                    Err(e) => {
+                        warn!(
                                 target: LOG_TARGET,
                                 "Error getting block number for hash {:?}: {:?}, skipping",
                                 intermediate_hash, e
-                            );
-                            continue;
-                        }
-                    };
+                        );
+                        continue;
+                    }
+                };
 
                 // Skip if already processed
                 if intermediate_number <= last_processed {
@@ -1950,12 +2266,29 @@ where
                 .await;
         }
 
-        // Update the last finalised block processed.
+        // Update the last finalised block processed (in memory and persistent storage).
         self.last_finalised_block_processed = MinimalBlockInfo {
             number: block_number.saturated_into(),
             hash: block_hash,
         };
+        self.update_last_finalised_block_info(self.last_finalised_block_processed);
 
-        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:x} processed successfully", block_number, block_hash);
+        info!(target: LOG_TARGET, "📨 Finality notification for block #{}: 0x{:x} processed successfully", block_number, block_hash);
+
+        // Record finality notification processing duration
+        observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_SUCCESS], start.elapsed().as_secs_f64());
+    }
+
+    /// Queue one or more confirm storing requests to the pending deque.
+    pub(crate) fn queue_confirm_storing_requests(
+        &self,
+        requests: impl IntoIterator<Item = crate::types::ConfirmStoringRequest<Runtime>>,
+    ) {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let mut deque = state_store_context.pending_confirm_storing_request_deque::<Runtime>();
+        for request in requests {
+            deque.push_back(request);
+        }
+        state_store_context.commit();
     }
 }
