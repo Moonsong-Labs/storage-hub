@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
+use serde::Deserialize;
 
 use sc_network::{Multiaddr, PeerId};
 
@@ -60,6 +61,37 @@ pub enum FileDeletionType {
     Incomplete,
 }
 
+/// Filtering strategy for pending deletion queries.
+///
+/// Determines which files are eligible for processing before ordering is applied.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum FileFiltering {
+    /// No filtering - all pending files are eligible for processing.
+    #[default]
+    None,
+    /// TTL-based filtering: skip files older than the threshold.
+    Ttl {
+        /// TTL threshold in seconds. Files pending longer than this are skipped.
+        threshold_seconds: u64,
+    },
+    // Future: Backoff { ... }
+}
+
+/// Ordering strategy for pending deletion queries.
+///
+/// Determines how files are ordered when querying pending deletions.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileOrdering {
+    /// Chronological ordering by time deletion was requested (FIFO).
+    /// Processes oldest deletion requests first.
+    #[default]
+    Chronological,
+    /// Randomized ordering to reduce collision with other fisherman nodes.
+    Randomized,
+}
+
 /// Table that holds the Files (both ongoing requests and completed).
 #[derive(Debug, Clone, Queryable, Insertable, Selectable)]
 #[diesel(table_name = file)]
@@ -111,6 +143,18 @@ pub struct File {
     /// Contains the Ethereum transaction hash from `pallet_ethereum::Event::Executed` if the storage
     /// request was created via an EVM transaction. NULL for native Substrate transactions.
     pub tx_hash: Option<Vec<u8>>,
+}
+
+/// Lightweight struct containing only the fields needed for [`FileMetadata`](shc_common::types::FileMetadata) construction.
+#[derive(Debug, Clone, Queryable, Selectable)]
+#[diesel(table_name = file)]
+pub struct FileMetadataQuery {
+    pub file_key: Vec<u8>,
+    pub account: Vec<u8>,
+    pub onchain_bucket_id: Vec<u8>,
+    pub location: Vec<u8>,
+    pub size: i64,
+    pub fingerprint: Vec<u8>,
 }
 
 /// Association table between File and PeerId
@@ -565,11 +609,19 @@ impl File {
         Ok(files)
     }
 
-    pub async fn get_all_file_keys_for_bucket<'a>(
+    /// Get all file metadata for a bucket.
+    ///
+    /// Returns lightweight [`FileMetadataQuery`] records containing only the columns
+    /// required for [`FileMetadata`](shc_common::types::FileMetadata) construction.
+    ///
+    /// # Arguments
+    /// * `onchain_bucket_id` - The bucket's onchain ID
+    /// * `is_in_bucket` - Optional filter by whether files are in the bucket's forest
+    pub async fn get_all_files_for_bucket<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bucket_id: &[u8],
         is_in_bucket: Option<bool>,
-    ) -> Result<Vec<Vec<u8>>, diesel::result::Error> {
+    ) -> Result<Vec<FileMetadataQuery>, diesel::result::Error> {
         let mut query = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
             .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
@@ -580,9 +632,12 @@ impl File {
             query = query.filter(file::is_in_bucket.eq(is_in_bucket_value));
         }
 
-        let file_keys: Vec<Vec<u8>> = query.select(file::file_key).load::<Vec<u8>>(conn).await?;
+        let files = query
+            .select(FileMetadataQuery::as_select())
+            .load::<FileMetadataQuery>(conn)
+            .await?;
 
-        Ok(file_keys)
+        Ok(files)
     }
 
     /// Get all files pending user deletion (deletion_status = InProgress with signature).
@@ -688,6 +743,8 @@ impl File {
         is_in_bucket: Option<bool>,
         limit: Option<i64>,
         offset: Option<i64>,
+        filtering: FileFiltering,
+        ordering: FileOrdering,
     ) -> Result<HashMap<Vec<u8>, Vec<Self>>, diesel::result::Error> {
         let limit = limit.unwrap_or(DEFAULT_BATCH_QUERY_LIMIT);
         let offset = offset.unwrap_or(0);
@@ -713,17 +770,43 @@ impl File {
             query = query.filter(file::is_in_bucket.eq(is_in_bucket_value));
         }
 
-        let files: Vec<Self> = query
-            .select(File::as_select())
-            .order_by((
-                file::onchain_bucket_id.asc(),
-                file::deletion_requested_at.asc(),
-                file::file_key.asc(),
-            ))
-            .limit(limit)
-            .offset(offset)
-            .load(conn)
-            .await?;
+        // Apply filtering strategy
+        match filtering {
+            FileFiltering::None => { /* No additional filtering */ }
+            FileFiltering::Ttl { threshold_seconds } => {
+                let cutoff_time = chrono::Utc::now().naive_utc()
+                    - chrono::Duration::seconds(threshold_seconds as i64);
+                query = query.filter(file::deletion_requested_at.gt(cutoff_time));
+            }
+        }
+
+        // Apply ordering strategy
+        let files: Vec<Self> = match ordering {
+            FileOrdering::Chronological => {
+                query
+                    .select(File::as_select())
+                    .order_by((
+                        file::onchain_bucket_id.asc(),
+                        file::deletion_requested_at.asc(),
+                        file::file_key.asc(),
+                    ))
+                    .limit(limit)
+                    .offset(offset)
+                    .load(conn)
+                    .await?
+            }
+            FileOrdering::Randomized => {
+                // PostgreSQL RANDOM() function for randomized ordering
+                diesel::define_sql_function!(fn random() -> diesel::sql_types::Float);
+                query
+                    .select(File::as_select())
+                    .order_by(random())
+                    .limit(limit)
+                    .offset(offset)
+                    .load(conn)
+                    .await?
+            }
+        };
 
         // Group files by onchain_bucket_id
         let mut grouped: HashMap<Vec<u8>, Vec<Self>> = HashMap::new();
@@ -762,6 +845,8 @@ impl File {
         is_in_bucket: Option<bool>,
         limit: Option<i64>,
         offset: Option<i64>,
+        filtering: FileFiltering,
+        ordering: FileOrdering,
     ) -> Result<HashMap<Vec<u8>, Vec<Self>>, diesel::result::Error> {
         let files_map = Self::get_files_pending_deletion_grouped_by_bucket(
             conn,
@@ -770,6 +855,8 @@ impl File {
             is_in_bucket,
             limit,
             offset,
+            filtering,
+            ordering,
         )
         .await?;
 

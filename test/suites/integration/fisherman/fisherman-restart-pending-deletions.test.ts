@@ -1,5 +1,11 @@
 import assert from "node:assert";
-import { describeMspNet, type EnrichedBspApi, type SqlClient, shUser } from "../../../util";
+import {
+  describeMspNet,
+  type EnrichedBspApi,
+  type SqlClient,
+  shUser,
+  waitFor
+} from "../../../util";
 
 /**
  * FISHERMAN RESTART PENDING DELETIONS INTEGRATION TESTS
@@ -144,7 +150,7 @@ await describeMspNet(
         mspId,
         valuePropId,
         owner: shUser,
-        bspApi,
+        bspApis: [bspApi],
         mspApi: msp1Api
       });
 
@@ -293,11 +299,62 @@ await describeMspNet(
         mspId,
         valuePropId,
         owner: shUser,
-        bspApi,
+        bspApis: undefined, // Intentionally skip BSP checks; replicationTarget keeps request incomplete
         mspApi: msp1Api
       });
 
       const { fileKeys } = batchResult;
+
+      // Ensure the BSP confirms to store all files before continuing
+      // Due to race conditions, the BSP confirmations might come in multiple blocks, so we need to wait
+      // for all confirmations to complete.
+      const bspAddress = userApi.createType("Address", bspApi.accounts.bspKey.address);
+      let stillConfirming = true;
+      while (stillConfirming) {
+        try {
+          await userApi.wait.bspStored({
+            expectedExts: 1,
+            bspAccount: bspAddress,
+            timeoutMs: 6000
+          });
+        } catch (_) {
+          stillConfirming = false;
+        }
+      }
+
+      // Sanity check: this test assumes the (single) BSP is actually storing these files,
+      // otherwise the indexer will never observe BSP associations and fisherman won't have BSP deletions to process.
+      for (const [index, fileKey] of fileKeys.entries()) {
+        try {
+          await waitFor({
+            lambda: async () => {
+              const bspFileStorageResult =
+                await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+              return bspFileStorageResult.isFileFound;
+            }
+          });
+        } catch (error) {
+          throw new Error(
+            `BSP has not stored file in file storage: ${fileKey} at index ${index}: ${error}`
+          );
+        }
+
+        try {
+          await waitFor({
+            lambda: async () => {
+              const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(
+                null,
+                fileKey
+              );
+              return bspForestResult.isTrue;
+            }
+          });
+        } catch (error) {
+          throw new Error(
+            `BSP is not storing file in forest: ${fileKey} at index ${index}: ${error}`
+          );
+        }
+      }
 
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 

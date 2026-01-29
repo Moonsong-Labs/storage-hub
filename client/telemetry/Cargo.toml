@@ -1,0 +1,12 @@
+[package]
+name = "shc-telemetry"
+version = "0.1.0"
+edition = "2021"
+description = "Prometheus telemetry for StorageHub client"
+license = "GPL-3.0-only"
+
+[dependencies]
+log = { workspace = true }
+substrate-prometheus-endpoint = { workspace = true }
+tokio = { workspace = true, features = ["rt", "time", "net"] }
+sysinfo = { workspace = true }

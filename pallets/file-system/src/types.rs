@@ -351,6 +351,75 @@ pub enum BucketPrivacy {
     Private,
 }
 
+/// Bitmask representing which user operations are currently paused in the File System pallet.
+///
+/// This uses a 32-bit mask to allow for future expansion without requiring a storage migration.
+/// When a specific bit is set, the corresponding user operation is considered paused and any
+/// attempt to execute it should fail with `Error::UserOperationPaused`.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone, Copy, Default)]
+pub struct UserOperationPauseFlags(u32);
+
+impl UserOperationPauseFlags {
+    /// No user operations are paused.
+    pub const NONE: Self = Self(0);
+
+    /// Bit flag for creating buckets.
+    pub const FLAG_CREATE_BUCKET: u32 = 1 << 0;
+    /// Bit flag for requesting to move buckets.
+    pub const FLAG_REQUEST_MOVE_BUCKET: u32 = 1 << 1;
+    /// Bit flag for updating bucket privacy and creating/associating collections with buckets.
+    pub const FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION: u32 = 1 << 2;
+    /// Bit flag for deleting buckets.
+    pub const FLAG_DELETE_BUCKET: u32 = 1 << 3;
+    /// Bit flag for issuing storage requests.
+    pub const FLAG_ISSUE_STORAGE_REQUEST: u32 = 1 << 4;
+    /// Bit flag for requesting file deletions.
+    pub const FLAG_REQUEST_DELETE_FILE: u32 = 1 << 5;
+    /// Bit flag for executing file deletions.
+    pub const FLAG_DELETE_FILES: u32 = 1 << 6;
+
+    /// Convenience flag where all currently defined operations are paused.
+    pub const ALL: Self = Self(
+        Self::FLAG_CREATE_BUCKET
+            | Self::FLAG_REQUEST_MOVE_BUCKET
+            | Self::FLAG_UPDATE_BUCKET_PRIVACY_AND_COLLECTION
+            | Self::FLAG_DELETE_BUCKET
+            | Self::FLAG_ISSUE_STORAGE_REQUEST
+            | Self::FLAG_REQUEST_DELETE_FILE
+            | Self::FLAG_DELETE_FILES,
+    );
+
+    /// Create a new flags value from the raw bit representation.
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+
+    /// Return the underlying bit representation.
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+
+    /// Returns `true` if any of the bits in `mask` are set in this flags value.
+    pub const fn is_any_set(self, mask: u32) -> bool {
+        (self.0 & mask) != 0
+    }
+
+    /// Returns `true` if all of the bits in `mask` are set in this flags value.
+    pub const fn is_all_set(self, mask: u32) -> bool {
+        (self.0 & mask) == mask
+    }
+
+    /// Sets all bits present in `mask`.
+    pub fn set(&mut self, mask: u32) {
+        self.0 |= mask;
+    }
+
+    /// Clears all bits present in `mask`.
+    pub fn clear(&mut self, mask: u32) {
+        self.0 &= !mask;
+    }
+}
+
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct PendingFileDeletionRequest<T: Config> {

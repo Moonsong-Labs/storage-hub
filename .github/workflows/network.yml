@@ -860,6 +860,10 @@ jobs:
     name: "Integration Tests: Fisherman"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -904,6 +908,7 @@ jobs:
               --test-reporter=spec                 \
               --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
+              --test-shard=${{ matrix.shard }}/2   \
               ./suites/integration/fisherman/**.test.ts
 
       - name: Collect Docker logs on failure
@@ -937,6 +942,92 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fisherman-test-logs
+          path: test-logs/
+          retention-days: 5
+          if-no-files-found: warn
+
+  telemetry_test:
+    needs: [build_node, setup]
+    name: "Integration Tests: Telemetry"
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
+      - run: mkdir -p target/release/
+      - name: Get node binary from artefacts if changed
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Build local node Docker image
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Pull latest node Docker image if not changed
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+      - name: Run typegen
+        run: |
+          cd test
+          pnpm typegen
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: diesel_cli
+      - name: Run Telemetry tests
+        id: run_tests
+        run: |
+          cd test
+          pnpm i
+          node --import tsx                        \
+              --test                               \
+              --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
+              --test-reporter=spec                 \
+              --test-reporter-destination=stdout   \
+              --test-concurrency=1                 \
+              ./suites/integration/telemetry/**.test.ts
+
+      - name: Collect Docker logs on failure
+        if: failure() && steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::group::Docker Container Status"
+          docker ps -a
+          echo "::endgroup::"
+
+          mkdir -p test-logs
+
+          for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+            echo "Collecting logs from $container"
+            docker logs $container > "test-logs/${container}.log" 2>&1
+          done
+
+          SP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+
+          if [ ! -z "$SP_LOGS_DIR" ]; then
+            echo "Found logs directory: $SP_LOGS_DIR"
+            cp -r $SP_LOGS_DIR/* test-logs/ || true
+          else
+            echo "No sp-logs directory found in /tmp"
+          fi
+
+          echo "Collected log files:"
+          ls -la test-logs/
+
+      - name: Upload logs as artifact
+        if: failure() && steps.run_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: telemetry-test-logs
           path: test-logs/
           retention-days: 5
           if-no-files-found: warn

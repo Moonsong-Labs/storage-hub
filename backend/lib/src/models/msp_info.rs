@@ -21,7 +21,7 @@ pub struct InfoResponse {
     pub uptime: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct StatsResponse {
     pub capacity: Capacity,
     #[serde(rename = "activeUsers")]
@@ -34,7 +34,7 @@ pub struct StatsResponse {
     pub buckets_amount: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Capacity {
     #[serde(rename = "totalBytes")]
     pub total_bytes: String,

@@ -10,6 +10,7 @@ use shc_client::builder::{
     BspUploadFileOptions, FishermanOptions, IndexerOptions, MspChargeFeesOptions,
     MspMoveBucketOptions,
 };
+use shc_indexer_db::models::{FileFiltering, FileOrdering};
 use shc_indexer_service::IndexerMode;
 use shc_rpc::RpcConfig;
 
@@ -157,6 +158,14 @@ pub struct ProviderConfigurations {
     #[arg(long, required_if_eq("storage_layer", "rocks-db"))]
     pub storage_path: Option<String>,
 
+    /// Maximum number of forest storage instances to keep open simultaneously.
+    /// MSPs have one forest per bucket; this controls how many can be open at once.
+    /// BSPs only have one forest, so this setting is ignored for them.
+    /// Default: 512. With RocksDB's default of 512 open files per instance,
+    /// this results in a maximum of ~262K file descriptors.
+    #[arg(long, value_name = "COUNT", default_value = "512")]
+    pub max_open_forests: Option<usize>,
+
     /// Extrinsic retry timeout in seconds.
     #[arg(long, default_value = "60")]
     pub extrinsic_retry_timeout: Option<u64>,
@@ -218,6 +227,16 @@ pub struct ProviderConfigurations {
     /// The number of 1KB (FILE_CHUNK_SIZE) chunks we batch and queue from the db while transferring the file on a save_file_to_disk call.
     #[arg(long, value_name = "COUNT", default_value = "1024")]
     pub internal_buffer_size: Option<u64>,
+
+    // ============== MSP Upload File task options ==============
+    /// Maximum number of MSP respond storage requests to batch together (default: 20)
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "Blockchain Service Options",
+        default_value = "20"
+    )]
+    pub msp_respond_storage_batch_size: Option<u32>,
 
     // ============== MSP Charge Fees task options ==============
     /// Enable and configure MSP Charge Fees task.
@@ -301,6 +320,15 @@ pub struct ProviderConfigurations {
         ])
     )]
     pub bsp_upload_file_max_tip: Option<u128>,
+
+    /// Maximum number of BSP confirm storing requests to batch together (default: 20)
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "Blockchain Service Options",
+        default_value = "20"
+    )]
+    pub bsp_confirm_file_batch_size: Option<u32>,
 
     // ============== BSP Move Bucket task options ==============
     /// Enable and configure BSP Move Bucket task.
@@ -500,6 +528,16 @@ impl ProviderConfigurations {
             bs_changed = true;
         }
 
+        if let Some(bsp_confirm_file_batch_size) = self.bsp_confirm_file_batch_size {
+            bs_options.bsp_confirm_file_batch_size = Some(bsp_confirm_file_batch_size);
+            bs_changed = true;
+        }
+
+        if let Some(msp_respond_storage_batch_size) = self.msp_respond_storage_batch_size {
+            bs_options.msp_respond_storage_batch_size = Some(msp_respond_storage_batch_size);
+            bs_changed = true;
+        }
+
         // Set MSP distribution flag if provided on CLI and role is MSP
         if self.msp_distribute_files && provider_type == ProviderType::Msp {
             bs_options.enable_msp_distribute_files = Some(true);
@@ -523,6 +561,7 @@ impl ProviderConfigurations {
                 .clone()
                 .expect("Storage layer is required"),
             storage_path: self.storage_path.clone(),
+            max_open_forests: self.max_open_forests,
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
             rpc_config: rpc_config,
@@ -585,6 +624,26 @@ impl IndexerConfigurations {
     }
 }
 
+/// Filtering strategy for fisherman pending deletion queries.
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum FishermanFiltering {
+    /// No filtering - process all pending deletions (default).
+    #[default]
+    None,
+    /// TTL-based filtering - skip deletions pending longer than threshold.
+    Ttl,
+}
+
+/// Ordering strategy for fisherman pending deletion queries.
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum FishermanOrdering {
+    /// Chronological ordering - process oldest deletions first (FIFO, default).
+    #[default]
+    Chronological,
+    /// Randomized ordering - shuffle processing order.
+    Randomized,
+}
+
 #[derive(Debug, Parser, Clone)]
 pub struct FishermanConfigurations {
     /// Enable the fisherman service.
@@ -609,11 +668,55 @@ pub struct FishermanConfigurations {
     /// Maximum number of files to process per batch deletion cycle.
     #[arg(long, default_value = "1000", value_parser = clap::value_parser!(u64).range(1..))]
     pub fisherman_batch_deletion_limit: u64,
+
+    /// Filtering strategy for pending deletions.
+    #[arg(
+        long,
+        value_enum,
+        default_value = "none",
+        help_heading = "Fisherman Strategy Options"
+    )]
+    pub fisherman_filtering: FishermanFiltering,
+
+    /// Ordering strategy for pending deletions.
+    #[arg(
+        long,
+        value_enum,
+        default_value = "chronological",
+        help_heading = "Fisherman Strategy Options"
+    )]
+    pub fisherman_ordering: FishermanOrdering,
+
+    /// TTL threshold in seconds for pending deletions.
+    /// Files that have been pending deletion for longer than this threshold are skipped.
+    /// Required when --fisherman-filtering=ttl.
+    #[arg(
+        long,
+        value_parser = clap::value_parser!(u64).range(1..),
+        required_if_eq("fisherman_filtering", "ttl"),
+        help_heading = "Fisherman Strategy Options"
+    )]
+    pub fisherman_ttl_threshold_seconds: Option<u64>,
 }
 
 impl FishermanConfigurations {
     pub fn fisherman_options(&self, maintenance_mode: bool) -> Option<FishermanOptions> {
         if self.fisherman {
+            // Convert CLI enums to indexer-db enums
+            let filtering = match self.fisherman_filtering {
+                FishermanFiltering::None => FileFiltering::None,
+                FishermanFiltering::Ttl => FileFiltering::Ttl {
+                    threshold_seconds: self
+                        .fisherman_ttl_threshold_seconds
+                        .expect("Required when filtering=ttl"),
+                },
+            };
+
+            let ordering = match self.fisherman_ordering {
+                FishermanOrdering::Chronological => FileOrdering::Chronological,
+                FishermanOrdering::Randomized => FileOrdering::Randomized,
+            };
+
             Some(FishermanOptions {
                 database_url: self
                     .fisherman_database_url
@@ -622,6 +725,8 @@ impl FishermanConfigurations {
                 batch_interval_seconds: self.fisherman_batch_interval_seconds,
                 batch_deletion_limit: self.fisherman_batch_deletion_limit,
                 maintenance_mode,
+                filtering,
+                ordering,
             })
         } else {
             None
@@ -708,12 +813,11 @@ pub struct Cli {
         "storage_layer", "storage_path", "extrinsic_retry_timeout",
         "check_for_pending_proofs_period",
         "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
-        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip",
+        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", "msp_database_url",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
-        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts",
-        "provider_database_url",
+        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts"
     ])]
     pub provider_config_file: Option<String>,
 

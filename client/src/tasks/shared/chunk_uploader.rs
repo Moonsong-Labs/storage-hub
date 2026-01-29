@@ -12,6 +12,8 @@ use shc_common::{
 };
 use shp_file_metadata::ChunkId;
 
+use shc_telemetry::{observe_histogram, STATUS_FAILURE, STATUS_SUCCESS};
+
 use crate::{handler::StorageHubHandler, types::ShNodeType};
 use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
 use shc_file_manager::traits::FileStorage;
@@ -68,7 +70,8 @@ where
             }
 
             Err(anyhow::anyhow!(
-                "Failed to send file {:?} to any of the peers",
+                "Failed to send file with file key [0x{:x}] and fingerprint [{:x}] to any of the peers",
+                file_key,
                 file_metadata.fingerprint()
             ))
         }
@@ -102,6 +105,8 @@ where
         chunk_count: u64,
     ) -> impl core::future::Future<Output = Result<(), anyhow::Error>> + 'a {
         async move {
+            let start_time = std::time::Instant::now();
+
             debug!(target: LOG_TARGET, "Attempting to send chunks of file key [{:x}] to peer {:?}", file_key, peer_id);
 
             let mut current_batch = Vec::new();
@@ -174,6 +179,13 @@ where
                                     })?;
 
                                 if r.file_complete {
+                                    // Record success metrics
+                                    observe_histogram!(
+                                        handler: self.as_handler(),
+                                        file_transfer_seconds,
+                                        STATUS_SUCCESS,
+                                        start_time.elapsed().as_secs_f64()
+                                    );
                                     info!(
                                         target: LOG_TARGET,
                                         "Stopping file upload process. Peer {:?} has the entire file fingerprint {:x}",
@@ -214,13 +226,32 @@ where
                             Err(RequestFailure::Refused)
                             | Err(RequestFailure::Network(_))
                             | Err(RequestFailure::NotConnected) => {
-                                return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
+                                observe_histogram!(
+                                    handler: self.as_handler(),
+                                    file_transfer_seconds,
+                                    STATUS_FAILURE,
+                                    start_time.elapsed().as_secs_f64()
+                                );
+                                return Err(anyhow::anyhow!(
+                                    "Failed to send file with file key [0x{:x}] and fingerprint [{:x}] to peer {:?}",
+                                    file_key,
+                                    fingerprint,
+                                    peer_id
+                                ));
                             }
                             Err(e) => {
+                                observe_histogram!(
+                                    handler: self.as_handler(),
+                                    file_transfer_seconds,
+                                    STATUS_FAILURE,
+                                    start_time.elapsed().as_secs_f64()
+                                );
                                 return Err(anyhow::anyhow!(
-                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?})",
+                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?}) with file key [0x{:x}] and fingerprint [{:x}]",
                                     peer_id,
-                                    e
+                                    e,
+                                    file_key,
+                                    fingerprint
                                 ));
                             }
                         }
@@ -326,19 +357,46 @@ where
                             Err(RequestFailure::Refused)
                             | Err(RequestFailure::Network(_))
                             | Err(RequestFailure::NotConnected) => {
-                                return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
+                                observe_histogram!(
+                                    handler: self.as_handler(),
+                                    file_transfer_seconds,
+                                    STATUS_FAILURE,
+                                    start_time.elapsed().as_secs_f64()
+                                );
+                                return Err(anyhow::anyhow!(
+                                    "Failed to send file with file key [0x{:x}] and fingerprint [{:x}] to peer {:?}",
+                                    file_key,
+                                    fingerprint,
+                                    peer_id
+                                ));
                             }
                             Err(e) => {
+                                observe_histogram!(
+                                    handler: self.as_handler(),
+                                    file_transfer_seconds,
+                                    STATUS_FAILURE,
+                                    start_time.elapsed().as_secs_f64()
+                                );
                                 return Err(anyhow::anyhow!(
-                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?})",
+                                    "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?}) with file key [0x{:x}] and fingerprint [{:x}]",
                                     peer_id,
-                                    e
+                                    e,
+                                    file_key,
+                                    fingerprint
                                 ));
                             }
                         }
                     }
                 }
             }
+
+            // Record success metrics
+            observe_histogram!(
+                handler: self.as_handler(),
+                file_transfer_seconds,
+                STATUS_SUCCESS,
+                start_time.elapsed().as_secs_f64()
+            );
 
             info!(target: LOG_TARGET, "Successfully sent file fingerprint {:x} to peer {:?}", fingerprint, peer_id);
             Ok(())

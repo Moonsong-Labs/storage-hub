@@ -4,10 +4,14 @@ use sc_network::{config::IncomingRequest, service::traits::NetworkService, Proto
 use sc_network_types::PeerId;
 use sc_service::RpcHandlers;
 use serde::Deserialize;
-use shc_indexer_db::DbPool;
+use shc_indexer_db::{
+    models::{FileFiltering, FileOrdering},
+    DbPool,
+};
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::SaturatedConversion;
 use std::{path::PathBuf, sync::Arc};
+use substrate_prometheus_endpoint::Registry;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
@@ -23,6 +27,8 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
 
+use shc_telemetry::MetricsLink;
+
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
     bsp_submit_proof::BspSubmitProofConfig, bsp_upload_file::BspUploadFileConfig,
@@ -31,7 +37,7 @@ use crate::tasks::{
 
 use super::{
     bsp_peer_manager::BspPeerManager,
-    handler::{ProviderConfig, StorageHubHandler},
+    handler::{FishermanConfig, ProviderConfig, StorageHubHandler},
     trusted_file_transfer,
     types::{
         BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
@@ -71,7 +77,9 @@ where
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig<Runtime>>,
     peer_manager: Option<Arc<BspPeerManager>>,
+    metrics: MetricsLink,
     trusted_file_transfer_server_config: Option<trusted_file_transfer::server::Config>,
+    fisherman_config: Option<FishermanConfig>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -80,7 +88,11 @@ where
     (R, S): ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(task_spawner: TaskSpawner) -> Self {
+    /// Create a new StorageHubBuilder.
+    ///
+    /// If the Prometheus registry is provided, metrics will be registered and available for all services.
+    /// If `None`, metrics will be disabled (no-op).
+    pub fn new(task_spawner: TaskSpawner, prometheus_registry: Option<&Registry>) -> Self {
         Self {
             task_spawner: Some(task_spawner),
             file_transfer: None,
@@ -100,7 +112,9 @@ where
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
             peer_manager: None,
+            metrics: MetricsLink::new(prometheus_registry),
             trusted_file_transfer_server_config: None,
+            fisherman_config: None,
         }
     }
 
@@ -191,6 +205,7 @@ where
                 self.notify_period,
                 capacity_config,
                 maintenance_mode,
+                self.metrics.clone(),
             )
             .await;
 
@@ -244,10 +259,15 @@ where
             client,
             fisherman_options.batch_interval_seconds,
             fisherman_options.batch_deletion_limit,
+            self.metrics.clone(),
         )
         .await;
 
         self.fisherman = Some(fisherman_service_handle);
+        self.fisherman_config = Some(FishermanConfig {
+            filtering: fisherman_options.filtering,
+            ordering: fisherman_options.ordering,
+        });
 
         self
     }
@@ -409,6 +429,15 @@ where
             blockchain_service_config.pending_db_url = Some(pending_db_url);
         }
 
+        if let Some(bsp_confirm_file_batch_size) = config.bsp_confirm_file_batch_size {
+            blockchain_service_config.bsp_confirm_file_batch_size = bsp_confirm_file_batch_size;
+        }
+
+        if let Some(msp_respond_storage_batch_size) = config.msp_respond_storage_batch_size {
+            blockchain_service_config.msp_respond_storage_batch_size =
+                msp_respond_storage_batch_size;
+        }
+
         self.blockchain_service_config = Some(blockchain_service_config);
         self
     }
@@ -421,14 +450,22 @@ where
 ///
 /// This trait is implemented for `StorageHubBuilder<R, S>` where `R` is a [`ShRole`] and `S` is a [`ShStorageLayer`].
 pub trait StorageLayerBuilder {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
+    fn setup_storage_layer(
+        &mut self,
+        storage_path: Option<String>,
+        max_open_forests: usize,
+    ) -> &mut Self;
 }
 
 impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer, Runtime>
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler = Some(<(BspProvider, InMemoryStorageLayer) as ShNodeType<
             Runtime,
@@ -442,7 +479,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStor
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        storage_path: Option<String>,
+        max_open_forests: usize,
+    ) -> &mut Self {
         self.storage_path = storage_path.clone();
 
         let storage_path = storage_path.expect("Storage path not set");
@@ -459,7 +500,7 @@ where
 
         self.forest_storage_handler = Some(<(BspProvider, RocksDbStorageLayer) as ShNodeType<
             Runtime,
-        >>::FSH::new(storage_path));
+        >>::FSH::new(storage_path, max_open_forests));
 
         self
     }
@@ -469,7 +510,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, InMemorySto
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler = Some(<(MspProvider, InMemoryStorageLayer) as ShNodeType<
             Runtime,
@@ -483,7 +528,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStor
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        storage_path: Option<String>,
+        max_open_forests: usize,
+    ) -> &mut Self {
         let storage_path = storage_path.expect("Storage path not set");
 
         let mut path = PathBuf::new();
@@ -500,7 +549,7 @@ where
 
         self.forest_storage_handler = Some(<(MspProvider, RocksDbStorageLayer) as ShNodeType<
             Runtime,
-        >>::FSH::new(storage_path));
+        >>::FSH::new(storage_path, max_open_forests));
 
         self
     }
@@ -510,7 +559,11 @@ impl<Runtime> StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer
 where
     Runtime: StorageEnableRuntime,
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler =
             Some(<(UserRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH::new());
@@ -522,7 +575,11 @@ where
 impl<Runtime: StorageEnableRuntime> StorageLayerBuilder
     for StorageHubBuilder<FishermanRole, NoStorageLayer, Runtime>
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_open_forests: usize,
+    ) -> &mut Self {
         // Fisherman only needs forest storage for proof construction
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         // Ephemeral storage layer
@@ -584,6 +641,8 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            None, // FishermanConfig not used for BSP
+            self.metrics.clone(),
         )
     }
 }
@@ -630,6 +689,8 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            None, // FishermanConfig not used for MSP
+            self.metrics.clone(),
         )
     }
 }
@@ -677,6 +738,8 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            None, // FishermanConfig not used for User
+            self.metrics.clone(),
         )
     }
 }
@@ -732,6 +795,8 @@ where
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
+            self.fisherman_config,
+            self.metrics.clone(),
         )
     }
 }
@@ -847,6 +912,10 @@ pub struct BlockchainServiceOptions {
     pub enable_msp_distribute_files: Option<bool>,
     /// Postgres database URL for pending transactions persistence. If not provided, pending transactions will not be persisted.
     pub pending_db_url: Option<String>,
+    /// Maximum number of BSP confirm storing requests to batch together.
+    pub bsp_confirm_file_batch_size: Option<u32>,
+    /// Maximum number of MSP respond storage requests to batch together.
+    pub msp_respond_storage_batch_size: Option<u32>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
@@ -858,6 +927,8 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
                 .expect("Invalid peer ID when converting from bytes to PeerId")
         });
 
+        let default_config = BlockchainServiceConfig::<Runtime>::default();
+
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
             check_for_pending_proofs_period: self
@@ -867,6 +938,12 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
             peer_id,
             enable_msp_distribute_files: self.enable_msp_distribute_files.unwrap_or(false),
             pending_db_url: self.pending_db_url,
+            bsp_confirm_file_batch_size: self
+                .bsp_confirm_file_batch_size
+                .unwrap_or(default_config.bsp_confirm_file_batch_size),
+            msp_respond_storage_batch_size: self
+                .msp_respond_storage_batch_size
+                .unwrap_or(default_config.msp_respond_storage_batch_size),
         }
     }
 }
@@ -899,6 +976,12 @@ pub struct FishermanOptions {
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
+    /// Filtering strategy for pending deletions.
+    #[serde(default)]
+    pub filtering: FileFiltering,
+    /// Ordering strategy for pending deletions.
+    #[serde(default)]
+    pub ordering: FileOrdering,
 }
 
 /// Default value for batch deletion limit.

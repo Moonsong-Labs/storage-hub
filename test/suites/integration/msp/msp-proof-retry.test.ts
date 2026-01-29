@@ -1,8 +1,8 @@
 import assert from "node:assert";
-import { u8aToHex } from "@polkadot/util";
-import { decodeAddress } from "@polkadot/util-crypto";
 import type { ApiPromise } from "@polkadot/api";
 import type { EventRecord, SignedBlock } from "@polkadot/types/interfaces";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
 import { describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
 
 /**
@@ -109,7 +109,7 @@ await describeMspNet(
         mspId,
         valuePropId,
         owner: shUser,
-        bspApi,
+        bspApis: [bspApi],
         mspApi
       });
 

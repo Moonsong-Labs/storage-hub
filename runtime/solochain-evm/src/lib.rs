@@ -751,6 +751,10 @@ impl_runtime_apis! {
         fn list_incomplete_storage_request_keys(start_after: Option<H256>, limit: u32) -> Vec<H256> {
             FileSystem::list_incomplete_storage_request_keys(start_after, limit)
         }
+
+        fn query_pending_bsp_confirm_storage_requests(bsp_id: BackupStorageProviderId<Runtime>, file_keys: Vec<H256>) -> Vec<H256> {
+            FileSystem::query_pending_bsp_confirm_storage_requests(bsp_id, file_keys)
+        }
     }
 
     impl pallet_payment_streams_runtime_api::PaymentStreamsApi<Block, ProviderIdFor<Runtime>, Balance, AccountId> for Runtime {
@@ -759,6 +763,9 @@ impl_runtime_apis! {
         }
         fn get_users_of_payment_streams_of_provider(provider_id: &ProviderIdFor<Runtime>) -> Vec<AccountId> {
             PaymentStreams::get_users_of_payment_streams_of_provider(provider_id)
+        }
+        fn get_number_of_active_users_of_provider(provider_id: &ProviderIdFor<Runtime>) -> u32 {
+            PaymentStreams::get_number_of_active_users_of_provider(provider_id)
         }
         fn get_providers_with_payment_streams_with_user(user_account: &AccountId) -> Vec<ProviderIdFor<Runtime>> {
             PaymentStreams::get_providers_with_payment_streams_with_user(user_account)

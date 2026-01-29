@@ -41,6 +41,28 @@ impl LastProcessedBlockName {
     pub const NAME: &'static str = "last_processed_block";
 }
 
+/// Last finalised block processed (both number and hash).
+///
+/// This stores the full block info of the last finalised block we've processed finality events for.
+/// On restart, this is used to avoid redundant re-processing of finality events.
+///
+/// This is separate from `LastProcessedBlockCf` because finality processing happens asynchronously
+/// from block import processing, and we need to track both independently.
+pub struct LastFinalisedBlockCf<Runtime: StorageEnableRuntime> {
+    pub(crate) phantom: std::marker::PhantomData<Runtime>,
+}
+impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf for LastFinalisedBlockCf<Runtime> {
+    type Value = MinimalBlockInfo<Runtime>;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = LastFinalisedBlockName::NAME;
+}
+
+/// Non-generic name holder for the `LastFinalisedBlock` column family
+pub struct LastFinalisedBlockName;
+impl LastFinalisedBlockName {
+    pub const NAME: &'static str = "last_finalised_block";
+}
+
 /// Last processed block number (deprecated, kept for backward compatibility).
 ///
 /// # Deprecated
@@ -243,8 +265,9 @@ impl FileDeletionRequestRightIndexName {
 
 /// Current column families used by the blockchain service state store.
 #[allow(deprecated)]
-const CURRENT_COLUMN_FAMILIES: [&str; 11] = [
+const CURRENT_COLUMN_FAMILIES: [&str; 12] = [
     LastProcessedBlockName::NAME,
+    LastFinalisedBlockName::NAME,
     PendingConfirmStoringRequestLeftIndexName::NAME,
     PendingConfirmStoringRequestRightIndexName::NAME,
     PendingConfirmStoringRequestName::NAME,
