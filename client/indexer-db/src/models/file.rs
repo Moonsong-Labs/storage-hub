@@ -745,8 +745,8 @@ impl File {
         is_in_bucket: Option<bool>,
         limit: Option<i64>,
         offset: Option<i64>,
-        filtering: &FileFiltering,
-        ordering: &FileOrdering,
+        filtering: FileFiltering,
+        ordering: FileOrdering,
     ) -> Result<HashMap<Vec<u8>, Vec<Self>>, diesel::result::Error> {
         let limit = limit.unwrap_or(DEFAULT_BATCH_QUERY_LIMIT);
         let offset = offset.unwrap_or(0);
@@ -777,7 +777,7 @@ impl File {
             FileFiltering::None => { /* No additional filtering */ }
             FileFiltering::Ttl { threshold_seconds } => {
                 let cutoff_time = chrono::Utc::now().naive_utc()
-                    - chrono::Duration::seconds(*threshold_seconds as i64);
+                    - chrono::Duration::seconds(threshold_seconds as i64);
                 query = query.filter(file::deletion_requested_at.gt(cutoff_time));
             }
         }
@@ -847,8 +847,8 @@ impl File {
         is_in_bucket: Option<bool>,
         limit: Option<i64>,
         offset: Option<i64>,
-        filtering: &FileFiltering,
-        ordering: &FileOrdering,
+        filtering: FileFiltering,
+        ordering: FileOrdering,
     ) -> Result<HashMap<Vec<u8>, Vec<Self>>, diesel::result::Error> {
         let files_map = Self::get_files_pending_deletion_grouped_by_bucket(
             conn,

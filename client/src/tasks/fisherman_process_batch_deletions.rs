@@ -104,7 +104,7 @@ pub struct BatchFileDeletionData<Runtime: StorageEnableRuntime> {
 /// # Pipeline
 /// 1. **Filtering** (`filtering`): Determines which files are eligible
 /// 2. **Ordering** (`ordering`): Determines processing order of eligible files
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct FileDeletionStrategy {
     /// Filtering strategy - which files to consider for processing.
     pub filtering: FileFiltering,
@@ -177,7 +177,7 @@ where
                 None,
                 Some(event.batch_deletion_limit as i64),
                 None,
-                &self.strategy,
+                self.strategy,
             )
             .await?;
 
@@ -962,7 +962,7 @@ where
         bsp_id: Option<BackupStorageProviderId<Runtime>>,
         limit: Option<i64>,
         offset: Option<i64>,
-        strategy: &FileDeletionStrategy,
+        strategy: FileDeletionStrategy,
     ) -> anyhow::Result<PendingDeletionsGrouped<Runtime>> {
         trace!(
             target: LOG_TARGET,
@@ -980,8 +980,6 @@ where
         // Clone connection pools for parallel tasks
         let pool_for_bucket = indexer_db_pool.clone();
         let pool_for_bsp = indexer_db_pool.clone();
-        let filtering = strategy.filtering;
-        let ordering = strategy.ordering;
 
         // Execute both pipelines concurrently: each queries + converts its own data
         let bucket_task = async move {
@@ -1004,8 +1002,8 @@ where
                 Some(true),
                 limit,
                 offset,
-                &filtering,
-                &ordering,
+                strategy.filtering,
+                strategy.ordering,
             )
             .await?;
 
@@ -1033,8 +1031,8 @@ where
                 bsp_id_db,
                 limit,
                 offset,
-                &filtering,
-                &ordering,
+                strategy.filtering,
+                strategy.ordering,
             )
             .await?;
 

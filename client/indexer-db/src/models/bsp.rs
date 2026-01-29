@@ -309,8 +309,8 @@ impl BspFile {
         bsp_id: Option<OnchainBspId>,
         limit: Option<i64>,
         offset: Option<i64>,
-        filtering: &FileFiltering,
-        ordering: &FileOrdering,
+        filtering: FileFiltering,
+        ordering: FileOrdering,
     ) -> Result<HashMap<OnchainBspId, Vec<File>>, diesel::result::Error> {
         use crate::models::file::FileDeletionStatus;
 
@@ -339,7 +339,7 @@ impl BspFile {
             FileFiltering::None => { /* No additional filtering */ }
             FileFiltering::Ttl { threshold_seconds } => {
                 let cutoff_time = chrono::Utc::now().naive_utc()
-                    - chrono::Duration::seconds(*threshold_seconds as i64);
+                    - chrono::Duration::seconds(threshold_seconds as i64);
                 query = query.filter(file::deletion_requested_at.gt(cutoff_time));
             }
         }
@@ -404,8 +404,8 @@ impl BspFile {
         bsp_id: Option<OnchainBspId>,
         limit: Option<i64>,
         offset: Option<i64>,
-        filtering: &FileFiltering,
-        ordering: &FileOrdering,
+        filtering: FileFiltering,
+        ordering: FileOrdering,
     ) -> Result<HashMap<OnchainBspId, Vec<File>>, diesel::result::Error> {
         let files_map = Self::get_files_pending_deletion_grouped_by_bsp(
             conn,
