@@ -38,9 +38,6 @@ use crate::{
     BlockchainService,
 };
 
-// TODO: Make this configurable in the config file
-const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
-
 impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
@@ -526,7 +523,7 @@ where
                 msp_handler.pending_respond_storage_request_file_keys
             );
 
-            let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
+            let max_batch_respond = self.config.msp_respond_storage_batch_size;
 
             // Batch multiple respond storing requests up to the runtime configured maximum.
             let mut respond_storage_requests = Vec::new();
