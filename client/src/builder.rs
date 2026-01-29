@@ -4,7 +4,10 @@ use sc_network::{config::IncomingRequest, service::traits::NetworkService, Proto
 use sc_network_types::PeerId;
 use sc_service::RpcHandlers;
 use serde::Deserialize;
-use shc_indexer_db::DbPool;
+use shc_indexer_db::{
+    models::{FileFiltering, FileOrdering},
+    DbPool,
+};
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::SaturatedConversion;
 use std::{path::PathBuf, sync::Arc};
@@ -34,7 +37,7 @@ use crate::tasks::{
 
 use super::{
     bsp_peer_manager::BspPeerManager,
-    handler::{ProviderConfig, StorageHubHandler},
+    handler::{FishermanConfig, ProviderConfig, StorageHubHandler},
     trusted_file_transfer,
     types::{
         BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
@@ -76,6 +79,7 @@ where
     peer_manager: Option<Arc<BspPeerManager>>,
     metrics: MetricsLink,
     trusted_file_transfer_server_config: Option<trusted_file_transfer::server::Config>,
+    fisherman_config: Option<FishermanConfig>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -110,6 +114,7 @@ where
             peer_manager: None,
             metrics: MetricsLink::new(prometheus_registry),
             trusted_file_transfer_server_config: None,
+            fisherman_config: None,
         }
     }
 
@@ -263,6 +268,10 @@ where
         .await;
 
         self.fisherman = Some(fisherman_service_handle);
+        self.fisherman_config = Some(FishermanConfig {
+            filtering: fisherman_options.filtering,
+            ordering: fisherman_options.ordering,
+        });
 
         self
     }
@@ -422,6 +431,15 @@ where
 
         if let Some(pending_db_url) = config.pending_db_url {
             blockchain_service_config.pending_db_url = Some(pending_db_url);
+        }
+
+        if let Some(bsp_confirm_file_batch_size) = config.bsp_confirm_file_batch_size {
+            blockchain_service_config.bsp_confirm_file_batch_size = bsp_confirm_file_batch_size;
+        }
+
+        if let Some(msp_respond_storage_batch_size) = config.msp_respond_storage_batch_size {
+            blockchain_service_config.msp_respond_storage_batch_size =
+                msp_respond_storage_batch_size;
         }
 
         self.blockchain_service_config = Some(blockchain_service_config);
@@ -627,6 +645,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            None, // FishermanConfig not used for BSP
             self.metrics.clone(),
         )
     }
@@ -674,6 +693,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            None, // FishermanConfig not used for MSP
             self.metrics.clone(),
         )
     }
@@ -722,6 +742,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            None, // FishermanConfig not used for User
             self.metrics.clone(),
         )
     }
@@ -778,6 +799,7 @@ where
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
+            self.fisherman_config,
             self.metrics.clone(),
         )
     }
@@ -894,6 +916,10 @@ pub struct BlockchainServiceOptions {
     pub enable_msp_distribute_files: Option<bool>,
     /// Postgres database URL for pending transactions persistence. If not provided, pending transactions will not be persisted.
     pub pending_db_url: Option<String>,
+    /// Maximum number of BSP confirm storing requests to batch together.
+    pub bsp_confirm_file_batch_size: Option<u32>,
+    /// Maximum number of MSP respond storage requests to batch together.
+    pub msp_respond_storage_batch_size: Option<u32>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
@@ -905,6 +931,8 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
                 .expect("Invalid peer ID when converting from bytes to PeerId")
         });
 
+        let default_config = BlockchainServiceConfig::<Runtime>::default();
+
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
             check_for_pending_proofs_period: self
@@ -914,6 +942,12 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
             peer_id,
             enable_msp_distribute_files: self.enable_msp_distribute_files.unwrap_or(false),
             pending_db_url: self.pending_db_url,
+            bsp_confirm_file_batch_size: self
+                .bsp_confirm_file_batch_size
+                .unwrap_or(default_config.bsp_confirm_file_batch_size),
+            msp_respond_storage_batch_size: self
+                .msp_respond_storage_batch_size
+                .unwrap_or(default_config.msp_respond_storage_batch_size),
         }
     }
 }
@@ -946,6 +980,12 @@ pub struct FishermanOptions {
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
+    /// Filtering strategy for pending deletions.
+    #[serde(default)]
+    pub filtering: FileFiltering,
+    /// Ordering strategy for pending deletions.
+    #[serde(default)]
+    pub ordering: FileOrdering,
 }
 
 /// Default value for batch deletion limit.

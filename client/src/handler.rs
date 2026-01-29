@@ -34,7 +34,10 @@ use shc_file_transfer_service::{
 };
 use shc_fisherman_service::events::BatchFileDeletions;
 use shc_forest_manager::traits::ForestStorageHandler;
-use shc_indexer_db::DbPool;
+use shc_indexer_db::{
+    models::{FileFiltering, FileOrdering},
+    DbPool,
+};
 use shc_telemetry::{MetricsLink, StorageHubMetrics};
 
 use crate::{
@@ -47,7 +50,7 @@ use crate::{
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
-        fisherman_process_batch_deletions::FishermanTask,
+        fisherman_process_batch_deletions::{FileDeletionStrategy, FishermanTask},
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_check_bucket_file_storage::MspCheckBucketFileStorageTask,
         msp_delete_bucket::MspDeleteBucketTask,
@@ -91,6 +94,15 @@ where
     pub capacity_config: CapacityConfig<Runtime>,
 }
 
+/// Configuration parameters for Fisherman nodes.
+#[derive(Clone, Debug, Default)]
+pub struct FishermanConfig {
+    /// Filtering strategy for pending deletions.
+    pub filtering: FileFiltering,
+    /// Ordering strategy for pending deletions.
+    pub ordering: FileOrdering,
+}
+
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<NT, Runtime>
 where
@@ -117,6 +129,8 @@ where
     pub file_download_manager: Arc<FileDownloadManager<Runtime>>,
     /// The fisherman service handle (only used for FishermanRole)
     pub fisherman: Option<ActorHandle<shc_fisherman_service::FishermanService<Runtime>>>,
+    /// Configuration for fisherman nodes (only used for FishermanRole)
+    pub fisherman_config: Option<FishermanConfig>,
     /// The Prometheus metrics for this client.
     metrics: MetricsLink,
 }
@@ -150,6 +164,7 @@ where
             peer_manager: self.peer_manager.clone(),
             file_download_manager: self.file_download_manager.clone(),
             fisherman: self.fisherman.clone(),
+            fisherman_config: self.fisherman_config.clone(),
             metrics: self.metrics.clone(),
         }
     }
@@ -170,6 +185,7 @@ where
         indexer_db_pool: Option<DbPool>,
         peer_manager: Arc<BspPeerManager>,
         fisherman: Option<ActorHandle<shc_fisherman_service::FishermanService<Runtime>>>,
+        fisherman_config: Option<FishermanConfig>,
         metrics: MetricsLink,
     ) -> Self {
         // Get the data directory path from the peer manager's directory
@@ -193,6 +209,7 @@ where
             peer_manager,
             file_download_manager,
             fisherman,
+            fisherman_config,
             metrics,
         }
     }
@@ -442,17 +459,32 @@ where
             .as_ref()
             .expect("Fisherman service not set for FishermanRole");
 
+        // Build strategy from configured filtering and ordering
+        let config = self
+            .fisherman_config
+            .as_ref()
+            .expect("FishermanConfig not set for FishermanRole");
+        let strategy = FileDeletionStrategy {
+            filtering: config.filtering,
+            ordering: config.ordering,
+        };
+
+        // Create the task with explicit strategy configuration
+        let task = FishermanTask::new(self.clone(), strategy);
+
         // Register FishermanTask to handle BatchFileDeletions events
-        subscribe_actor_event_map!(
+        // This task processes batched file deletions (for user deletion requests
+        // and incomplete storage requests) after every configured interval.
+        subscribe_actor_event!(
+            event: BatchFileDeletions,
+            task: (task.clone()),
             service: fisherman,
             spawner: &self.task_spawner,
-            context: self.clone(),
-            metrics: self.metrics.clone(),
             critical: true,
-            [
-                // This task processes batched file deletions (for user deletion requests and incomplete storage requests) after every configured interval (`fisherman_batch_interval_seconds`) of time.
-                BatchFileDeletions => FishermanTask,
-            ]
+            metrics: Some(shc_actors_framework::event_bus::EventMetricsConfig::new(
+                self.metrics.clone(),
+                "batch_file_deletions",
+            )),
         );
 
         log::info!("🎣 Fisherman batch processing task registered");
