@@ -1,7 +1,7 @@
 [package]
 name = "shp-opaque"
 description = "Primitives for opaque types of StorageHub"
-version = "0.3.4"
+version = "0.3.5"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }

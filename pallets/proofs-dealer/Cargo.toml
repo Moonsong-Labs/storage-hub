@@ -1,7 +1,7 @@
 [package]
 name = "pallet-proofs-dealer"
 description = "Pallet for managing, challenging and verifying proofs submitted by providers, where each provider's information is stored as a Merkle Patricia Trie."
-version = "0.3.4"
+version = "0.3.5"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
