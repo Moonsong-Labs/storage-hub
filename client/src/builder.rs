@@ -420,6 +420,15 @@ where
             blockchain_service_config.pending_db_url = Some(pending_db_url);
         }
 
+        if let Some(bsp_confirm_file_batch_size) = config.bsp_confirm_file_batch_size {
+            blockchain_service_config.bsp_confirm_file_batch_size = bsp_confirm_file_batch_size;
+        }
+
+        if let Some(msp_respond_storage_batch_size) = config.msp_respond_storage_batch_size {
+            blockchain_service_config.msp_respond_storage_batch_size =
+                msp_respond_storage_batch_size;
+        }
+
         self.blockchain_service_config = Some(blockchain_service_config);
         self
     }
@@ -890,6 +899,10 @@ pub struct BlockchainServiceOptions {
     pub enable_msp_distribute_files: Option<bool>,
     /// Postgres database URL for pending transactions persistence. If not provided, pending transactions will not be persisted.
     pub pending_db_url: Option<String>,
+    /// Maximum number of BSP confirm storing requests to batch together.
+    pub bsp_confirm_file_batch_size: Option<u32>,
+    /// Maximum number of MSP respond storage requests to batch together.
+    pub msp_respond_storage_batch_size: Option<u32>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
@@ -901,6 +914,8 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
                 .expect("Invalid peer ID when converting from bytes to PeerId")
         });
 
+        let default_config = BlockchainServiceConfig::<Runtime>::default();
+
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
             check_for_pending_proofs_period: self
@@ -910,6 +925,12 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
             peer_id,
             enable_msp_distribute_files: self.enable_msp_distribute_files.unwrap_or(false),
             pending_db_url: self.pending_db_url,
+            bsp_confirm_file_batch_size: self
+                .bsp_confirm_file_batch_size
+                .unwrap_or(default_config.bsp_confirm_file_batch_size),
+            msp_respond_storage_batch_size: self
+                .msp_respond_storage_batch_size
+                .unwrap_or(default_config.msp_respond_storage_batch_size),
         }
     }
 }

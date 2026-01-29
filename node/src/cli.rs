@@ -227,6 +227,16 @@ pub struct ProviderConfigurations {
     #[arg(long, value_name = "COUNT", default_value = "1024")]
     pub internal_buffer_size: Option<u64>,
 
+    // ============== MSP Upload File task options ==============
+    /// Maximum number of MSP respond storage requests to batch together (default: 20)
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "Blockchain Service Options",
+        default_value = "20"
+    )]
+    pub msp_respond_storage_batch_size: Option<u32>,
+
     // ============== MSP Charge Fees task options ==============
     /// Enable and configure MSP Charge Fees task.
     #[arg(long)]
@@ -309,6 +319,15 @@ pub struct ProviderConfigurations {
         ])
     )]
     pub bsp_upload_file_max_tip: Option<u128>,
+
+    /// Maximum number of BSP confirm storing requests to batch together (default: 20)
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "Blockchain Service Options",
+        default_value = "20"
+    )]
+    pub bsp_confirm_file_batch_size: Option<u32>,
 
     // ============== BSP Move Bucket task options ==============
     /// Enable and configure BSP Move Bucket task.
@@ -505,6 +524,16 @@ impl ProviderConfigurations {
 
         if let Some(check_for_pending_proofs_period) = self.check_for_pending_proofs_period {
             bs_options.check_for_pending_proofs_period = Some(check_for_pending_proofs_period);
+            bs_changed = true;
+        }
+
+        if let Some(bsp_confirm_file_batch_size) = self.bsp_confirm_file_batch_size {
+            bs_options.bsp_confirm_file_batch_size = Some(bsp_confirm_file_batch_size);
+            bs_changed = true;
+        }
+
+        if let Some(msp_respond_storage_batch_size) = self.msp_respond_storage_batch_size {
+            bs_options.msp_respond_storage_batch_size = Some(msp_respond_storage_batch_size);
             bs_changed = true;
         }
 
