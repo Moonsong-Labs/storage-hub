@@ -207,6 +207,12 @@ where
     pub enable_msp_distribute_files: bool,
     /// Optional Postgres URL for the pending transactions DB. If None, DB is disabled.
     pub pending_db_url: Option<String>,
+
+    /// Maximum number of BSP confirm storing requests to batch together.
+    pub bsp_confirm_file_batch_size: u32,
+
+    /// Maximum number of MSP respond storage requests to batch together.
+    pub msp_respond_storage_batch_size: u32,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -220,6 +226,8 @@ where
             peer_id: None,
             enable_msp_distribute_files: false,
             pending_db_url: None,
+            bsp_confirm_file_batch_size: 20,
+            msp_respond_storage_batch_size: 20,
         }
     }
 }

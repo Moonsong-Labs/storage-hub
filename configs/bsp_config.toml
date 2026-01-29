@@ -40,6 +40,8 @@ max_submission_attempts = 5
 # Configuration for the Blockchain Service
 [provider.blockchain_service]
 extrinsic_retry_timeout = 10
+# Maximum number of BSP confirm storing requests to batch together (default: 20)
+bsp_confirm_file_batch_size = 20
 
 # RPC configuration
 [provider.rpc_config]
