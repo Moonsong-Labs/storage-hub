@@ -727,6 +727,12 @@ pub mod pallet {
                 <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(&provider_account)
                     .ok_or(Error::<T>::NotAProvider)?;
 
+            // Check that the provider is solvent
+            ensure!(
+                !<T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(provider_id),
+                Error::<T>::ProviderInsolvent
+            );
+
             // Execute checks and logic, update storage
             let (amount_charged, last_tick_charged) =
                 Self::do_charge_payment_streams(&provider_id, &user_account)?;
@@ -790,6 +796,12 @@ pub mod pallet {
             let provider_id =
                 <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(&provider_account)
                     .ok_or(Error::<T>::NotAProvider)?;
+
+            // Check that the provider is solvent
+            ensure!(
+                !<T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(provider_id),
+                Error::<T>::ProviderInsolvent
+            );
 
             // Execute checks and logic, update storage
             Self::do_charge_multiple_users_payment_streams(&provider_id, &user_accounts)?;
