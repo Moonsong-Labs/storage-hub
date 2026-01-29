@@ -3037,6 +3037,10 @@ where
             .collect()
     }
 
+    pub fn get_max_batch_confirm_storage_requests() -> u32 {
+        T::MaxBatchConfirmStorageRequests::get()
+    }
+
     /// Removes multiple file keys from the bucket's forest in a single operation, updating the bucket's root.
     ///
     /// Does not enforce the presence of an MSP storing the bucket. If no MSP is found to be
