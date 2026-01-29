@@ -49,6 +49,8 @@ max_tip = 100.0
 extrinsic_retry_timeout = 60
 # When true, the MSP will distribute accepted files to volunteering BSPs
 enable_msp_distribute_files = true
+# Maximum number of MSP respond storage requests to batch together (default: 20)
+msp_respond_storage_batch_size = 20
 # Optional: Pending Transactions Postgres DB URL for MSP (used by Blockchain Service)
 # If set, the MSP will persist pending extrinsics to this DB.
 # Example for Docker:

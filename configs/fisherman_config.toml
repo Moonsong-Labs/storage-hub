@@ -11,3 +11,23 @@ batch_interval_seconds = 60
 # Maximum number of files to process per batch deletion cycle.
 # This corresponds to the `--fisherman-batch-deletion-limit` CLI flag.
 batch_deletion_limit = 1000
+
+# Ordering strategy for pending deletions.
+# Options: "chronological" (default, FIFO - oldest first), "randomized" (reduces collision with other fisherman nodes).
+# This corresponds to the `--fisherman-ordering` CLI flag.
+ordering = "chronological"
+
+# Filtering strategy for pending deletions.
+# This corresponds to the `--fisherman-filtering` CLI flag.
+#
+# Options:
+# - No filtering (default):
+#   [fisherman.filtering]
+#   type = "none"
+#
+# - TTL-based filtering (skip files pending longer than threshold):
+#   [fisherman.filtering]
+#   type = "ttl"
+#   threshold_seconds = 3600
+[fisherman.filtering]
+type = "none"
