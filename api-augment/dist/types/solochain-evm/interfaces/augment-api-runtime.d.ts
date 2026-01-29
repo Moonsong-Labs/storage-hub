@@ -247,6 +247,10 @@ declare module '@polkadot/api-base/types/calls' {
              **/
             queryMspConfirmChunksToProveForFile: AugmentedCall<ApiType, (mspId: MainStorageProviderId | string | Uint8Array, fileKey: H256 | string | Uint8Array) => Observable<Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>>>;
             /**
+             * Query the file keys that a BSP still needs to confirm storing after volunteering.
+             **/
+            queryPendingBspConfirmStorageRequests: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array, fileKeys: Vec<H256> | (H256 | string | Uint8Array)[]) => Observable<Vec<H256>>>;
+            /**
              * Get the storage requests for a given MSP.
              **/
             storageRequestsByMsp: AugmentedCall<ApiType, (mspId: MainStorageProviderId | string | Uint8Array) => Observable<BTreeMap<H256, StorageRequestMetadata>>>;

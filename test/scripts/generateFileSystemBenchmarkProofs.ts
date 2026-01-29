@@ -1,11 +1,11 @@
-import { BspNetTestApi, waitFor } from "../util";
-import * as ShConsts from "../util/bspNet/consts";
-import { NetworkLauncher, type NetLaunchConfig } from "../util/netLaunch";
-import * as fs from "node:fs";
 import { exec } from "node:child_process";
+import * as fs from "node:fs";
 import type { Option } from "@polkadot/types";
 import type { H256 } from "@polkadot/types/interfaces";
+import { BspNetTestApi, waitFor } from "../util";
+import * as ShConsts from "../util/bspNet/consts";
 import type { EnrichedBspApi } from "../util/bspNet/test-api";
+import { type NetLaunchConfig, NetworkLauncher } from "../util/netLaunch";
 
 //! Configuration options for debugging
 const skipProofGeneration = false;
@@ -193,7 +193,7 @@ async function generateBenchmarkProofs() {
     const msp1BatchStorageRequestsResult = await userApi.file.batchStorageRequests({
       files: filesToUploadBatch1,
       owner: userApi.accounts.shUser,
-      bspApi: bspApi,
+      bspApis: [bspApi],
       mspId: ShConsts.DUMMY_MSP_ID,
       mspApi: msp1Api
     });
@@ -237,7 +237,7 @@ async function generateBenchmarkProofs() {
     const msp2BatchStorageRequestsResult = await userApi.file.batchStorageRequests({
       files: filesToUploadBatch2,
       owner: userApi.accounts.shUser,
-      bspApi: bspApi,
+      bspApis: undefined, // Intentionally skip BSP checks; replicationTarget keeps request incomplete
       mspId: ShConsts.DUMMY_MSP_ID_2,
       mspApi: msp2Api
     });

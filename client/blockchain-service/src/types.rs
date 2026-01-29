@@ -794,6 +794,13 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
     #[allow(dead_code)]
     pub(crate) forest_root_snapshots: BTreeSet<ForestStorageSnapshotInfo<Runtime>>,
+    /// Tracks file keys with pending volunteer transactions.
+    /// When a volunteer tx is submitted, the file key is added.
+    /// When the volunteer is verified on-chain, the file key is removed.
+    /// This is used in the `QueryPendingBspConfirmStorageRequests` command to prevent a race condition
+    /// where a BSP could attempt to send a storage confirmation, before it saw the volunteer transaction
+    /// succeed on-chain.
+    pub(crate) pending_volunteer_file_keys: HashSet<FileKey>,
 }
 
 impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
@@ -803,6 +810,7 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
             pending_submit_proof_requests: BTreeSet::new(),
             forest_root_write_lock: None,
             forest_root_snapshots: BTreeSet::new(),
+            pending_volunteer_file_keys: HashSet::new(),
         }
     }
 }

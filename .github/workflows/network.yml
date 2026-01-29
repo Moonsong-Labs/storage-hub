@@ -869,6 +869,10 @@ jobs:
     name: "Integration Tests: Fisherman"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -913,6 +917,7 @@ jobs:
               --test-reporter=spec                 \
               --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
+              --test-shard=${{ matrix.shard }}/2   \
               ./suites/integration/fisherman/**.test.ts
 
       - name: Collect Docker logs on failure

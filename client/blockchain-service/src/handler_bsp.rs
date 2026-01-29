@@ -1,12 +1,12 @@
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
-use std::{sync::Arc, u32};
+use std::sync::Arc;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_core::{Get, U256};
+use sp_core::U256;
 use sp_runtime::traits::{Block as BlockT, Zero};
 
 use pallet_proofs_dealer_runtime_api::{
@@ -19,8 +19,8 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     typed_store::CFDequeAPI,
     types::{
-        BackupStorageProviderId, BlockNumber, FileKey, Fingerprint, MaxBatchConfirmStorageRequests,
-        StorageEnableEvents, TrieMutation,
+        BackupStorageProviderId, BlockNumber, FileKey, Fingerprint, StorageEnableEvents,
+        TrieMutation,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -338,16 +338,16 @@ where
     ///
     /// This function is called every time a new block is imported and after each request is queued.
     ///
-    /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
+    /// _IMPORTANT: This check will be skipped if the block currently being processed does not match the client's best block._
     pub(crate) fn bsp_assign_forest_root_write_lock(&mut self) {
         let client_best_hash = self.client.info().best_hash;
         let client_best_number = self.client.info().best_number;
 
-        // Skip if the latest processed block doesn't match the current best block
-        if self.best_block.hash != client_best_hash
-            || self.best_block.number != client_best_number.into()
+        // Skip if the block currently being processed doesn't match the client's best block
+        if self.current_block.hash != client_best_hash
+            || self.current_block.number != client_best_number.into()
         {
-            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])", self.best_block.hash, self.best_block.number, client_best_hash, client_best_number);
+            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because block currently being processed does not match client's best block (current block hash and number [{}, {}], client best block hash and number [{}, {}])", self.current_block.hash, self.current_block.number, client_best_hash, client_best_number);
             return;
         }
 
@@ -446,9 +446,9 @@ where
 
         // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
         if next_event_data.is_none() {
-            let max_batch_confirm = <MaxBatchConfirmStorageRequests<Runtime> as Get<u32>>::get();
+            let max_batch_confirm = self.config.bsp_confirm_file_batch_size;
 
-            // Batch multiple confirm file storing taking the runtime maximum.
+            // Batch multiple confirm file storing taking the configured maximum.
             let mut confirm_storing_requests = Vec::new();
             for _ in 0..max_batch_confirm {
                 if let Some(request) = state_store_context
