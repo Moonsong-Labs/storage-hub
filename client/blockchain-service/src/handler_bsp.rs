@@ -352,7 +352,14 @@ where
 
         // Verify we have a BSP handler.
         let managed_bsp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id,
+            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                // Return early if the semaphore has no available permits.
+                if bsp_handler.forest_root_write_semaphore.available_permits() == 0 {
+                    trace!(target: LOG_TARGET, "Forest root write semaphore already acquired. Skipping assignment.");
+                    return;
+                }
+                bsp_handler.bsp_id
+            }
             _ => {
                 error!(target: LOG_TARGET, "`bsp_check_pending_forest_root_writes` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
@@ -365,7 +372,7 @@ where
         // would notify `permit_release_receiver`, which would call back into this method
         // even though there is no work to do.
         let has_pending_work = {
-            // In-memory queue (cheap).
+            // Check if there are any pending submit proof requests.
             let has_pending_submit_proof = match &self.maybe_managed_provider {
                 Some(ManagedProvider::Bsp(bsp_handler)) => {
                     !bsp_handler.pending_submit_proof_requests.is_empty()
@@ -376,12 +383,13 @@ where
             if has_pending_submit_proof {
                 true
             } else {
-                // Persistent deques (O(1) size checks).
+                // Check if there are any pending confirm storing requests.
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 let has_confirm = state_store_context
                     .pending_confirm_storing_request_deque::<Runtime>()
                     .size()
                     > 0;
+                // Check if there are any pending stop storing for insolvent user requests.
                 let has_stop_storing = state_store_context
                     .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
                     .size()

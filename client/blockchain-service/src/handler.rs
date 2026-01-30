@@ -164,7 +164,8 @@ where
     /// Channel for forest root write permit release notifications.
     ///
     /// When a [`ForestWritePermitGuard`][crate::types::ForestWritePermitGuard] is dropped from a task, it sends a notification through
-    /// this channel and is received by the [`BlockchainServiceEventLoop::permit_release_receiver`], which will trigger reassignment of the forest root write lock via [`BlockchainService::handle_permit_released`].
+    /// this channel and is received by the [`BlockchainServiceEventLoop::permit_release_receiver`], which will trigger reassignment
+    /// of the forest root write lock via [`BlockchainService::handle_permit_released`].
     pub(crate) permit_release_sender: tokio::sync::mpsc::UnboundedSender<()>,
     /// Optional pending tx store (Postgres). When present, tx sends and cleanups are persisted.
     pub(crate) pending_tx_store: Option<PendingTxStore>,
@@ -1912,9 +1913,6 @@ where
     ///
     /// This method is called when a `ForestWritePermitGuard` is dropped by a task,
     /// allowing the next pending forest write request to be processed.
-    ///
-    /// Depending on the provider type (BSP or MSP), it delegates to the appropriate
-    /// forest write lock assignment method.
     fn handle_permit_released(&mut self) {
         if let Some(managed_provider) = &self.maybe_managed_provider {
             match managed_provider {

@@ -818,7 +818,7 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
     /// various edge cases when restarting the node.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest<Runtime>>,
-    /// Semaphore to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    /// Semaphore to prevent multiple tasks from writing to the runtime Forest root at the same time.
     ///
     /// A permit is acquired before emitting forest-write events and automatically released when
     /// the task handler completes (permit dropped).
@@ -925,7 +925,7 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     pub(crate) msp_id: MainStorageProviderId<Runtime>,
     /// TODO: CHANGE THIS INTO MULTIPLE SEMAPHORES, ONE FOR EACH BUCKET.
     ///
-    /// Semaphore to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    /// Semaphore to prevent multiple tasks from writing to the runtime Forest root at the same time.
     ///
     /// A permit is acquired before emitting forest-write events and automatically released when
     /// the task handler completes (permit dropped).

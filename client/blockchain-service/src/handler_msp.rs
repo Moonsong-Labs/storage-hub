@@ -438,7 +438,13 @@ where
         }
 
         match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(_)) => {}
+            Some(ManagedProvider::Msp(msp_handler)) => {
+                // Return early if the semaphore has no available permits.
+                if msp_handler.forest_root_write_semaphore.available_permits() == 0 {
+                    trace!(target: LOG_TARGET, "Forest root write semaphore has no available permits. Skipping assignment.");
+                    return;
+                }
+            }
             _ => {
                 error!(target: LOG_TARGET, "`msp_check_pending_forest_root_writes` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
@@ -451,7 +457,7 @@ where
         // would notify `permit_release_receiver`, which would call back into this method
         // even though there is no work to do.
         let has_pending_work = {
-            // In-memory queue (cheap).
+            // Check if there are any pending respond storage requests.
             let has_pending_respond = match &self.maybe_managed_provider {
                 Some(ManagedProvider::Msp(msp_handler)) => {
                     !msp_handler.pending_respond_storage_requests.is_empty()
@@ -462,7 +468,7 @@ where
             if has_pending_respond {
                 true
             } else {
-                // Persistent deque (O(1) size check).
+                // Check if there are any pending stop storing for insolvent user requests.
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
                     .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
