@@ -326,6 +326,18 @@ impl IndexerOps for MockRepository {
             .ok_or_else(|| RepositoryError::not_found("File"))
     }
 
+    async fn get_number_of_files_stored_by_msp(
+        &self,
+        onchain_msp_id: &OnchainMspId,
+    ) -> RepositoryResult<u64> {
+        let files = self.files.read().await;
+        let file_count = files
+            .values()
+            .filter(|f| f.msp_id == onchain_msp_id)
+            .count();
+        Ok(file_count as u64)
+    }
+
     // ============ Payment Stream Operations ============
     async fn get_payment_streams_for_user(
         &self,
