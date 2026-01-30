@@ -188,7 +188,7 @@ impl xcm_executor::Config for XcmConfig {
     type HrmpChannelAcceptedHandler = ();
     type HrmpChannelClosingHandler = ();
     type XcmRecorder = ();
-    type XcmEventEmitter = ();
+    type XcmEventEmitter = pallet_xcm::Pallet<Runtime>;
 }
 
 /// Converts a local signed origin into an XCM location.

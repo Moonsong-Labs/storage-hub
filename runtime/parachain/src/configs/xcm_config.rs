@@ -184,7 +184,7 @@ impl xcm_executor::Config for XcmConfig {
     type SafeCallFilter = Everything;
     type Aliasers = Nothing;
     type TransactionalProcessor = FrameTransactionalProcessor;
-    type XcmEventEmitter = ();
+    type XcmEventEmitter = pallet_xcm::Pallet<Runtime>;
     // TODO: Implement these handlers if needed
     type HrmpNewChannelOpenRequestHandler = ();
     type HrmpChannelAcceptedHandler = ();

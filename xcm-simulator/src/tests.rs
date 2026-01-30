@@ -1,6 +1,6 @@
 use codec::Encode;
 use frame_support::{
-    assert_ok,
+    assert_noop, assert_ok,
     traits::{fungible::Inspect, OnFinalize, OnPoll},
     BoundedVec,
 };
@@ -14,7 +14,6 @@ use sp_weights::WeightMeter;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
 use xcm_simulator::TestExt;
-use xcm_simulator::XcmError::UntrustedReserveLocation;
 
 use crate::{
     constants::{ALICE, BOB, CENTS, INITIAL_BALANCE},
@@ -297,8 +296,16 @@ mod relay_token {
         // Scenario:
         // ALICE on a non-system parachain holds some of Relay Chain's native tokens derivatives.
         // She wants to transfer them to BOB's account on StorageHub using a reserve transfer.
-        // StorageHub does not allow this, as it only accepts teleports from the Relay Chain or a sibling system parachain.
-        // This means, the transfer should fail.
+        //
+        // Since polkadot-sdk stable2503, network native asset reserve transfers are blocked in
+        // `transfer_assets` as preparation for the Asset Hub Migration (see issue #9054).
+        // The transfer fails at the source (parachain) with `InvalidAssetUnknownReserve`.
+        //
+        // This test verifies that non-system parachains cannot transfer DOT to StorageHub via
+        // reserve transfer - the failure happens at the pallet_xcm level.
+        //
+        // TODO: rewrite the assertion tests once a new polkadot release introduces the fix
+        // to allow Asset Hub as a reserve system chain.
 
         // We reset storage and messages.
         MockNet::reset();
@@ -325,11 +332,8 @@ mod relay_token {
         });
 
         // ALICE on the non-system parachain tries to send some Relay Chain native tokens derivatives to BOB on StorageHub.
-        // The transfer is done with the `transfer_assets` extrinsic in the XCM pallet.
-        // The extrinsic does a remote reserve transfer (using the Relay Chain as reserve) and then sends an XCM to StorageHub
-        // with a ReserveAssetDeposited instruction.
-        // StorageHub, since it does not accept reserve transfers (only DOT teleports) will error out, and the assets will be trapped
-        // by XCM. The parachain will have to claim them back.
+        // The transfer fails with InvalidAssetUnknownReserve because network native asset reserve
+        // transfers are blocked in pallet_xcm for the Asset Hub Migration.
         MockParachain::execute_with(|| {
             // StorageHub's location as seen from the mocked parachain.
             let destination: Location = (Parent, Parachain(SH_PARA_ID)).into();
@@ -342,53 +346,37 @@ mod relay_token {
             // If we don't specify anything, it will be a `u64`, which the conversion
             // will turn into a non-fungible token instead of a fungible one.
             let assets: Assets = (Parent, 50u128 * CENTS).into();
-            assert_ok!(parachain::PolkadotXcm::transfer_assets(
-                parachain::RuntimeOrigin::signed(ALICE),
-                Box::new(VersionedLocation::V5(destination.clone())),
-                Box::new(VersionedLocation::V5(beneficiary)),
-                Box::new(VersionedAssets::V5(assets)),
-                0,
-                WeightLimit::Unlimited,
-            ),);
-
-            // ALICE's balance should have decreased
-            assert_eq!(
-                parachain::Balances::balance(&ALICE),
-                INITIAL_BALANCE - 50 * CENTS
+            assert_noop!(
+                parachain::PolkadotXcm::transfer_assets(
+                    parachain::RuntimeOrigin::signed(ALICE),
+                    Box::new(VersionedLocation::V5(destination.clone())),
+                    Box::new(VersionedLocation::V5(beneficiary)),
+                    Box::new(VersionedAssets::V5(assets)),
+                    0,
+                    WeightLimit::Unlimited,
+                ),
+                pallet_xcm::Error::<parachain::Runtime>::InvalidAssetUnknownReserve
             );
+
+            // ALICE's balance should not have changed since the transfer failed
+            assert_eq!(parachain::Balances::balance(&ALICE), INITIAL_BALANCE);
         });
 
-        // The balance of the parachain's sovereign account in the Relay Chain should have decreased
+        // The balance of the parachain's sovereign account in the Relay Chain should not have changed
         Relay::execute_with(|| {
             let location = Parachain(2004).into();
             let parachain_sovereign_account =
                 LocationConverter::convert_location(&location).unwrap();
             assert_eq!(
                 relay_chain::Balances::balance(&parachain_sovereign_account),
-                INITIAL_BALANCE - 50 * CENTS
+                INITIAL_BALANCE
             );
         });
 
-        // BOB still has INITIAL_BALANCE on StorageHub and an error should be in the events
+        // BOB still has INITIAL_BALANCE on StorageHub (no transfer occurred)
         StorageHub::execute_with(|| {
             assert_eq!(storagehub::Balances::balance(&BOB), INITIAL_BALANCE);
-
-            crate::storagehub::System::assert_has_event(crate::storagehub::RuntimeEvent::MsgQueue(
-                crate::mock_message_queue::Event::ExecutedDownward {
-                    outcome: Outcome::Incomplete {
-                        error: UntrustedReserveLocation,
-                        used: Weight::zero(),
-                    },
-                    message_id: [
-                        208, 42, 165, 221, 149, 7, 84, 6, 146, 180, 135, 148, 68, 17, 153, 29, 149,
-                        25, 65, 68, 157, 61, 255, 189, 78, 183, 206, 74, 217, 83, 118, 219,
-                    ],
-                }
-                .into(),
-            ));
         });
-
-        // This means the assets were trapped by XCM, and the parachain will have to claim them back.
     }
 }
 
