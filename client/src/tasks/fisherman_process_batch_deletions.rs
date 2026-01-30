@@ -49,6 +49,7 @@ use shc_fisherman_service::{
     events::FileDeletionTarget, FileKeyOperation,
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
+use shc_indexer_db::models::{FileFiltering, FileOrdering};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
 use std::time::Duration;
@@ -95,6 +96,22 @@ pub struct BatchFileDeletionData<Runtime: StorageEnableRuntime> {
     pub signed_intention: Option<shc_common::types::FileOperationIntention<Runtime>>,
 }
 
+/// Strategy configuration for file deletion processing.
+///
+/// Combines filtering and ordering strategies to control how the fisherman
+/// selects and processes files for deletion.
+///
+/// # Pipeline
+/// 1. **Filtering** (`filtering`): Determines which files are eligible
+/// 2. **Ordering** (`ordering`): Determines processing order of eligible files
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FileDeletionStrategy {
+    /// Filtering strategy - which files to consider for processing.
+    pub filtering: FileFiltering,
+    /// Ordering strategy - how to order filtered files for processing.
+    pub ordering: FileOrdering,
+}
+
 /// Single task that handles [`BatchFileDeletions`] events.
 ///
 /// This task processes batch deletion events emitted periodically by the fisherman service.
@@ -114,6 +131,8 @@ where
 {
     /// Handler providing access to blockchain, indexer database, and forest storage
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
+    /// Strategy for selecting and ordering files for deletion
+    strategy: FileDeletionStrategy,
 }
 
 impl<NT, Runtime> Clone for FishermanTask<NT, Runtime>
@@ -125,6 +144,7 @@ where
     fn clone(&self) -> Self {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            strategy: self.strategy.clone(),
         }
     }
 }
@@ -143,13 +163,13 @@ where
 
         info!(
             target: LOG_TARGET,
-            "🎣 Processing batch file deletions for {:?} deletion type (limit: {})",
+            "🎣 Processing batch file deletions for {:?} deletion type (limit: {}, strategy: {:?})",
             event.deletion_type,
-            event.batch_deletion_limit
+            event.batch_deletion_limit,
+            self.strategy
         );
 
         // Query pending deletions with configured batch limit
-        // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
         let grouped_deletions = self
             .get_pending_deletions(
                 event.deletion_type,
@@ -157,6 +177,7 @@ where
                 None,
                 Some(event.batch_deletion_limit as i64),
                 None,
+                self.strategy,
             )
             .await?;
 
@@ -280,9 +301,14 @@ where
     ///
     /// # Arguments
     /// * `storage_hub_handler` - Handler providing access to required services
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
+    /// * `strategy` - Strategy for filtering and ordering files for deletion
+    pub fn new(
+        storage_hub_handler: StorageHubHandler<NT, Runtime>,
+        strategy: FileDeletionStrategy,
+    ) -> Self {
         Self {
             storage_hub_handler,
+            strategy,
         }
     }
 
@@ -920,7 +946,7 @@ where
     /// filtered by the specified deletion type.
     ///
     /// For incomplete deletions, this also validates each file against runtime metadata to filter
-    /// out stale entries (e.g. if another fisherman node already deleted the file from a provider).
+    /// out stale entries.
     ///
     /// # Parameters
     /// * `deletion_type` - Type of deletion to query ([`FileDeletionType::User`] or [`FileDeletionType::Incomplete`])
@@ -928,6 +954,7 @@ where
     /// * `bsp_id` - Optional filter to only return files from a specific BSP
     /// * `limit` - Maximum number of files to return (default: 1000)
     /// * `offset` - Number of files to skip for pagination (default: 0)
+    /// * `strategy` - Strategy configuration for file deletion processing (contains TTL threshold)
     async fn get_pending_deletions(
         &self,
         deletion_type: shc_indexer_db::models::FileDeletionType,
@@ -935,6 +962,7 @@ where
         bsp_id: Option<BackupStorageProviderId<Runtime>>,
         limit: Option<i64>,
         offset: Option<i64>,
+        strategy: FileDeletionStrategy,
     ) -> anyhow::Result<PendingDeletionsGrouped<Runtime>> {
         trace!(
             target: LOG_TARGET,
@@ -974,6 +1002,8 @@ where
                 Some(true),
                 limit,
                 offset,
+                strategy.filtering,
+                strategy.ordering,
             )
             .await?;
 
@@ -1001,6 +1031,8 @@ where
                 bsp_id_db,
                 limit,
                 offset,
+                strategy.filtering,
+                strategy.ordering,
             )
             .await?;
 
