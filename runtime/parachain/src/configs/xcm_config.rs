@@ -16,9 +16,9 @@ use xcm::latest::prelude::*;
 use xcm_builder::{
     AccountId32Aliases, AllowExplicitUnpaidExecutionFrom, AllowHrmpNotificationsFromRelayChain,
     AllowKnownQueryResponses, AllowSubscriptionsFrom, AllowTopLevelPaidExecutionFrom,
-    DenyReserveTransferToRelayChain, DenyThenTry, DescribeAllTerminal, DescribeFamily,
-    EnsureXcmOrigin, FixedWeightBounds, FrameTransactionalProcessor, FungibleAdapter,
-    HashedDescription, IsConcrete, NativeAsset, ParentAsSuperuser, ParentIsPreset,
+    DenyRecursively, DenyReserveTransferToRelayChain, DenyThenTry, DescribeAllTerminal,
+    DescribeFamily, EnsureXcmOrigin, FixedWeightBounds, FrameTransactionalProcessor,
+    FungibleAdapter, HashedDescription, IsConcrete, NativeAsset, ParentAsSuperuser, ParentIsPreset,
     RelayChainAsNative, SiblingParachainAsNative, SiblingParachainConvertsVia,
     SignedAccountId32AsNative, SignedToAccountId32, SovereignSignedViaLocation, TakeWeightCredit,
     TrailingSetTopicAsId, UsingComponents, WithComputedOrigin, WithUniqueTopic,
@@ -124,7 +124,7 @@ impl Contains<Location> for ParentOrParentsExecutivePlurality {
 
 pub type Barrier = TrailingSetTopicAsId<
     DenyThenTry<
-        DenyReserveTransferToRelayChain,
+        DenyRecursively<DenyReserveTransferToRelayChain>,
         (
             TakeWeightCredit,
             // Expected responses are OK.
