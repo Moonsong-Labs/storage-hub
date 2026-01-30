@@ -127,7 +127,9 @@
 //! 4. **Abstraction**: Higher-level data structures hide RocksDB complexity
 //! 5. **Flexibility**: Easy to add new column families or data structures
 
-use crate::rocksdb::{default_db_options, open_db, open_db_with_migrations, MigrationRunner};
+use crate::rocksdb::{
+    default_db_options, open_db, open_db_with_migrations, DatabaseError, MigrationRunner,
+};
 use codec::{Decode, Encode};
 use rocksdb::{
     AsColumnFamilyRef, ColumnFamily, DBPinnableSlice, Direction, IteratorMode, ReadOptions,
@@ -139,9 +141,6 @@ use std::{
     marker::PhantomData,
     ops::RangeBounds,
 };
-
-// Re-export DatabaseError for convenience
-pub use crate::rocksdb::DatabaseError;
 
 /// Defines how types are encoded to and decoded from bytes for storage in RocksDB.
 ///
@@ -725,7 +724,8 @@ impl TypedRocksDB {
     ///
     /// # Schema Version Behavior
     ///
-    /// This method creates the `__schema_version__` column family and writes version 0.
+    /// This method creates the `__schema_version__` column family and writes version 0 (no migrations applied).
+    ///
     /// Since migrations must start at version 1, this ensures:
     ///
     /// - The database format is consistent with migration-enabled databases
@@ -766,6 +766,31 @@ impl TypedRocksDB {
     /// # Example
     ///
     /// ```ignore
+    /// use shc_common::rocksdb::Migration;
+    ///
+    /// // 1. Define your migration struct
+    /// struct MyStoreV1Migration;
+    ///
+    /// impl Migration for MyStoreV1Migration {
+    ///     fn version(&self) -> u32 {
+    ///         1  // Migrations start at version 1
+    ///     }
+    ///
+    ///     fn deprecated_column_families(&self) -> &'static [&'static str] {
+    ///         &["old_cf_to_remove", "another_old_cf"]
+    ///     }
+    ///
+    ///     fn description(&self) -> &'static str {
+    ///         "Remove deprecated column families from v0 schema"
+    ///     }
+    /// }
+    ///
+    /// // 2. Create a function returning all migrations for your store
+    /// fn my_store_migrations() -> Vec<Box<dyn Migration>> {
+    ///     vec![Box::new(MyStoreV1Migration)]
+    /// }
+    ///
+    /// // 3. Open the database with migrations
     /// const CURRENT_CFS: &[&str] = &["cf1", "cf2", "cf3"];
     /// let db = TypedRocksDB::open_with_migrations("/path/to/db", CURRENT_CFS, my_store_migrations())?;
     /// ```
@@ -2152,87 +2177,114 @@ mod tests {
         assert_eq!(keys.len(), 50); // Only odd-numbered keys remain
     }
 
-    /// Tests for `TypedRocksDB::open()` and `TypedRocksDB::open_with_migrations()`
-    /// with `TypedDbContext`.
+    /// Tests for `TypedRocksDB::open()` and `TypedRocksDB::open_with_migrations()`.
     ///
-    /// These tests verify that the TypedRocksDB open methods work correctly with
-    /// the typed context API.
+    /// These tests verify the database opening methods work correctly with the typed API.
     mod typed_rocks_db_open_tests {
         use super::*;
-        use crate::rocksdb::Migration;
+        use crate::rocksdb::{Migration, MigrationRunner};
 
-        // Define a simple CF for testing
+        // Test column family names
+        const DEPRECATED_CF: &str = "deprecated_cf";
+
+        // Test column family definition
         struct TestDataCf;
         impl ScaleEncodedCf for TestDataCf {
             type Key = u32;
             type Value = String;
             const SCALE_ENCODED_NAME: &'static str = "test_data_cf";
         }
-
         impl Default for TestDataCf {
             fn default() -> Self {
                 Self
             }
         }
 
-        #[test]
-        fn open_used_with_context() {
-            let temp_dir = tempdir().unwrap();
-            let path = temp_dir.path().to_str().unwrap();
-
-            let current_cfs = &[TestDataCf::SCALE_ENCODED_NAME];
-
-            // Create initial database
-            {
-                let mut opts = Options::default();
-                opts.create_if_missing(true);
-                opts.create_missing_column_families(true);
-
-                let cf_descriptors = vec![
-                    ColumnFamilyDescriptor::new("default", Options::default()),
-                    ColumnFamilyDescriptor::new(TestDataCf::SCALE_ENCODED_NAME, Options::default()),
-                ];
-
-                let _db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+        // Test migration definition
+        struct TestV1Migration;
+        impl Migration for TestV1Migration {
+            fn version(&self) -> u32 {
+                1
             }
+            fn deprecated_column_families(&self) -> &'static [&'static str] {
+                &[DEPRECATED_CF]
+            }
+            fn description(&self) -> &'static str {
+                "Remove deprecated column family"
+            }
+        }
 
-            let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
-
-            // Create a context and use the typed API
-            let write_support = BufferedWriteSupport::new(&typed_db);
-            let context = TypedDbContext::new(&typed_db, write_support);
-
-            // Write using typed API
-            context
-                .cf(&TestDataCf)
-                .put(&42u32, &"hello world".to_string());
-            context.flush();
-
-            // Read back
-            let value = context.cf(&TestDataCf).get(&42u32);
-            assert_eq!(value, Some("hello world".to_string()));
+        fn test_migrations() -> Vec<Box<dyn Migration>> {
+            vec![Box::new(TestV1Migration)]
         }
 
         #[test]
-        fn open_with_migrations_drops_deprecated_cfs_and_works_with_context() {
+        fn open_creates_fresh_db_and_works_with_typed_context() {
             let temp_dir = tempdir().unwrap();
             let path = temp_dir.path().to_str().unwrap();
 
-            // Define a test migration that drops a deprecated CF
-            struct TestV1Migration;
-            impl Migration for TestV1Migration {
-                fn version(&self) -> u32 {
-                    1
-                }
-                fn deprecated_column_families(&self) -> &'static [&'static str] {
-                    &["deprecated_cf"]
-                }
-                fn description(&self) -> &'static str {
-                    "Remove deprecated_cf"
-                }
-            }
+            // TypedRocksDB::open() creates the database from scratch
+            let typed_db = TypedRocksDB::open(path, &[TestDataCf::SCALE_ENCODED_NAME]).unwrap();
 
-            // Create initial database with a deprecated column family
+            // Use typed context API
+            let write_support = BufferedWriteSupport::new(&typed_db);
+            let context = TypedDbContext::new(&typed_db, write_support);
+
+            context.cf(&TestDataCf).put(&42u32, &"hello".to_string());
+            context.flush();
+
+            assert_eq!(
+                context.cf(&TestDataCf).get(&42u32),
+                Some("hello".to_string())
+            );
+        }
+
+        #[test]
+        fn open_sets_schema_version_to_zero() {
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
+
+            let typed_db = TypedRocksDB::open(path, &[TestDataCf::SCALE_ENCODED_NAME]).unwrap();
+
+            // Verify schema version is 0 (baseline for future migrations)
+            let version = MigrationRunner::read_schema_version(&typed_db.db).unwrap();
+            assert_eq!(version, Some(0));
+        }
+
+        #[test]
+        fn open_with_migrations_on_fresh_db_applies_all_migrations() {
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
+
+            // Open fresh database with migrations
+            let typed_db = TypedRocksDB::open_with_migrations(
+                path,
+                &[TestDataCf::SCALE_ENCODED_NAME],
+                test_migrations(),
+            )
+            .unwrap();
+
+            // Schema version should be at latest (v1)
+            let version = MigrationRunner::read_schema_version(&typed_db.db).unwrap();
+            assert_eq!(version, Some(1));
+
+            // Typed context should work
+            let write_support = BufferedWriteSupport::new(&typed_db);
+            let context = TypedDbContext::new(&typed_db, write_support);
+
+            context.cf(&TestDataCf).put(&1u32, &"data".to_string());
+            context.flush();
+            assert_eq!(context.cf(&TestDataCf).get(&1u32), Some("data".to_string()));
+        }
+
+        #[test]
+        fn open_with_migrations_drops_deprecated_cfs_from_existing_db() {
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
+
+            // Simulate an existing database with deprecated column families.
+            // This raw setup is necessary because we're testing the upgrade path
+            // where an old database has CFs that need to be removed.
             {
                 let mut opts = Options::default();
                 opts.create_if_missing(true);
@@ -2241,45 +2293,46 @@ mod tests {
                 let cf_descriptors = vec![
                     ColumnFamilyDescriptor::new("default", Options::default()),
                     ColumnFamilyDescriptor::new(TestDataCf::SCALE_ENCODED_NAME, Options::default()),
-                    ColumnFamilyDescriptor::new("deprecated_cf", Options::default()),
+                    ColumnFamilyDescriptor::new(DEPRECATED_CF, Options::default()),
                 ];
 
                 let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
 
-                // Write some data to both CFs
-                let active_cf = db.cf_handle(TestDataCf::SCALE_ENCODED_NAME).unwrap();
-                db.put_cf(&active_cf, b"key", b"value").unwrap();
-
-                let deprecated_cf = db.cf_handle("deprecated_cf").unwrap();
+                // Write data to the deprecated CF (simulating old data)
+                let deprecated_cf = db.cf_handle(DEPRECATED_CF).unwrap();
                 db.put_cf(&deprecated_cf, b"old_key", b"old_value").unwrap();
+
+                // Write data to the active CF (should survive migration)
+                let active_cf = db.cf_handle(TestDataCf::SCALE_ENCODED_NAME).unwrap();
+                db.put_cf(
+                    &active_cf,
+                    &1u32.encode(),
+                    &"preserved".to_string().encode(),
+                )
+                .unwrap();
             }
 
-            // Open with migrations - should drop deprecated_cf
-            let current_cfs = &[TestDataCf::SCALE_ENCODED_NAME];
-            let migrations: Vec<Box<dyn Migration>> = vec![Box::new(TestV1Migration)];
+            // Open with migrations - deprecated CF should be dropped
+            let typed_db = TypedRocksDB::open_with_migrations(
+                path,
+                &[TestDataCf::SCALE_ENCODED_NAME],
+                test_migrations(),
+            )
+            .unwrap();
 
-            let typed_db =
-                TypedRocksDB::open_with_migrations(path, current_cfs, migrations).unwrap();
-
-            // Verify deprecated CF was dropped
+            // Verify deprecated CF was removed
             assert!(
-                typed_db.db.cf_handle("deprecated_cf").is_none(),
-                "Deprecated CF should have been dropped by migration"
+                typed_db.db.cf_handle(DEPRECATED_CF).is_none(),
+                "Migration should have dropped deprecated CF"
             );
 
-            // Verify active CF still works with TypedDbContext
+            // Verify data in active CF was preserved
             let write_support = BufferedWriteSupport::new(&typed_db);
             let context = TypedDbContext::new(&typed_db, write_support);
-
-            // Write new data
-            context
-                .cf(&TestDataCf)
-                .put(&123u32, &"migrated data".to_string());
-            context.flush();
-
-            // Read back
-            let value = context.cf(&TestDataCf).get(&123u32);
-            assert_eq!(value, Some("migrated data".to_string()));
+            assert_eq!(
+                context.cf(&TestDataCf).get(&1u32),
+                Some("preserved".to_string())
+            );
         }
     }
 }

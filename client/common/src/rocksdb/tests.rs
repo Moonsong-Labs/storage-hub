@@ -99,11 +99,9 @@ mod migration_runner_tests {
 
         let runner = MigrationRunner::from(migrations);
 
-        // Validate that migrations are sorted correctly
-        let result = runner.validate_order();
         assert!(
-            result.is_ok(),
-            "Migrations should be auto-sorted and pass validation"
+            runner.validate_order().is_ok(),
+            "validate_order passing proves migrations were sorted"
         );
         assert_eq!(runner.latest_version(), 3);
     }
@@ -403,8 +401,8 @@ mod database_tests {
 
             let old_cfs = vec![
                 ColumnFamilyDescriptor::new("default", Options::default()),
-                ColumnFamilyDescriptor::new("test_deprecated_v1_cf_a", Options::default()),
-                ColumnFamilyDescriptor::new("test_deprecated_v1_cf_b", Options::default()),
+                ColumnFamilyDescriptor::new(test_migrations::V1_CF_A, Options::default()),
+                ColumnFamilyDescriptor::new(test_migrations::V1_CF_B, Options::default()),
                 ColumnFamilyDescriptor::new("current_cf", Options::default()),
             ];
 
@@ -418,8 +416,8 @@ mod database_tests {
         let db = open_db_with_migrations(&opts, path, &current_cfs, migrations).unwrap();
 
         assert!(db.cf_handle("current_cf").is_some());
-        assert!(db.cf_handle("test_deprecated_v1_cf_a").is_none());
-        assert!(db.cf_handle("test_deprecated_v1_cf_b").is_none());
+        assert!(db.cf_handle(test_migrations::V1_CF_A).is_none());
+        assert!(db.cf_handle(test_migrations::V1_CF_B).is_none());
     }
 
     #[test]
@@ -439,7 +437,7 @@ mod database_tests {
             let cfs = vec![
                 ColumnFamilyDescriptor::new("default", Options::default()),
                 ColumnFamilyDescriptor::new("active_cf", Options::default()),
-                ColumnFamilyDescriptor::new("test_deprecated_v1_cf_a", Options::default()),
+                ColumnFamilyDescriptor::new(test_migrations::V1_CF_A, Options::default()),
             ];
 
             let db = DB::open_cf_descriptors(&opts, path, cfs).unwrap();
@@ -504,7 +502,7 @@ mod database_tests {
             let cfs = vec![
                 ColumnFamilyDescriptor::new("default", Options::default()),
                 ColumnFamilyDescriptor::new("my_cf", Options::default()),
-                ColumnFamilyDescriptor::new("test_deprecated_v1_cf_a", Options::default()),
+                ColumnFamilyDescriptor::new(test_migrations::V1_CF_A, Options::default()),
             ];
 
             let _db = DB::open_cf_descriptors(&opts, path, cfs).unwrap();
@@ -737,8 +735,19 @@ mod database_tests {
 mod test_migrations {
     use super::*;
 
+    // V1 deprecated column family names
+    pub const V1_CF_A: &str = "test_deprecated_v1_cf_a";
+    pub const V1_CF_B: &str = "test_deprecated_v1_cf_b";
+    pub const V1_CF_C: &str = "test_deprecated_v1_cf_c";
+
+    // V2 deprecated column family names
+    pub const V2_CF: &str = "test_deprecated_v2_cf";
+    pub const V2_CF_INDEX: &str = "test_deprecated_v2_cf_index";
+
+    // V3 deprecated column family names
+    pub const V3_CF: &str = "test_deprecated_v3_cf";
+
     /// Test-only V1 migration for testing the migration framework.
-    /// Uses unique test-only CF names to avoid coupling with production code.
     pub struct TestV1Migration;
 
     impl Migration for TestV1Migration {
@@ -747,11 +756,7 @@ mod test_migrations {
         }
 
         fn deprecated_column_families(&self) -> &'static [&'static str] {
-            &[
-                "test_deprecated_v1_cf_a",
-                "test_deprecated_v1_cf_b",
-                "test_deprecated_v1_cf_c",
-            ]
+            &[V1_CF_A, V1_CF_B, V1_CF_C]
         }
 
         fn description(&self) -> &'static str {
@@ -768,7 +773,7 @@ mod test_migrations {
         }
 
         fn deprecated_column_families(&self) -> &'static [&'static str] {
-            &["test_deprecated_v2_cf", "test_deprecated_v2_cf_index"]
+            &[V2_CF, V2_CF_INDEX]
         }
 
         fn description(&self) -> &'static str {
@@ -785,7 +790,7 @@ mod test_migrations {
         }
 
         fn deprecated_column_families(&self) -> &'static [&'static str] {
-            &["test_deprecated_v3_cf"]
+            &[V3_CF]
         }
 
         fn description(&self) -> &'static str {
@@ -892,24 +897,11 @@ mod multi_version_tests {
     }
 
     #[test]
-    fn migrations_applied_in_version_order() {
+    fn unsorted_migrations_are_applied_in_version_order() {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().to_str().unwrap();
 
-        // Create migrations in non-sorted order
-        let mut all_migrations: Vec<Box<dyn Migration>> = vec![
-            Box::new(TestV3Migration),
-            Box::new(TestV1Migration),
-            Box::new(TestV2Migration),
-        ];
-
-        all_migrations.sort_by_key(|m| m.version());
-
-        assert_eq!(all_migrations[0].version(), 1);
-        assert_eq!(all_migrations[1].version(), 2);
-        assert_eq!(all_migrations[2].version(), 3);
-
-        // Create database with deprecated CFs
+        // Create database with all deprecated CFs from v1, v2, v3
         {
             let mut opts = Options::default();
             opts.create_if_missing(true);
@@ -917,33 +909,32 @@ mod multi_version_tests {
 
             let cf_descriptors = vec![
                 ColumnFamilyDescriptor::new("default", Options::default()),
-                ColumnFamilyDescriptor::new(SCHEMA_VERSION_CF, Options::default()),
-                ColumnFamilyDescriptor::new("test_deprecated_v1_cf_a", Options::default()),
-                ColumnFamilyDescriptor::new("test_deprecated_v2_cf", Options::default()),
-                ColumnFamilyDescriptor::new("test_deprecated_v3_cf", Options::default()),
+                ColumnFamilyDescriptor::new("current_cf", Options::default()),
+                ColumnFamilyDescriptor::new(V1_CF_A, Options::default()),
+                ColumnFamilyDescriptor::new(V2_CF, Options::default()),
+                ColumnFamilyDescriptor::new(V3_CF, Options::default()),
             ];
 
             let _db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
         }
 
-        // Run migrations
-        {
-            let opts = default_db_options();
-            let existing_cfs = DB::list_cf(&opts, path).unwrap();
-            let cf_descriptors: Vec<ColumnFamilyDescriptor> = existing_cfs
-                .iter()
-                .map(|name| ColumnFamilyDescriptor::new(name.clone(), Options::default()))
-                .collect();
+        // Pass migrations in reverse order - MigrationRunner should sort them
+        let migrations: Vec<Box<dyn Migration>> = vec![
+            Box::new(TestV3Migration),
+            Box::new(TestV1Migration),
+            Box::new(TestV2Migration),
+        ];
 
-            let mut db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
-            let runner = MigrationRunner::from(all_migrations);
-            let final_version = runner.run_pending(&mut db).unwrap();
+        let opts = default_db_options();
+        let db = open_db_with_migrations(&opts, path, &["current_cf"], migrations).unwrap();
 
-            assert_eq!(final_version, 3);
-            assert!(db.cf_handle("test_deprecated_v1_cf_a").is_none());
-            assert!(db.cf_handle("test_deprecated_v2_cf").is_none());
-            assert!(db.cf_handle("test_deprecated_v3_cf").is_none());
-        }
+        // All deprecated CFs should be dropped (proves all migrations ran)
+        assert!(db.cf_handle(V1_CF_A).is_none());
+        assert!(db.cf_handle(V2_CF).is_none());
+        assert!(db.cf_handle(V3_CF).is_none());
+
+        // Schema version should be at v3
+        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(3));
     }
 
     #[test]
@@ -960,8 +951,8 @@ mod multi_version_tests {
             let cf_descriptors = vec![
                 ColumnFamilyDescriptor::new("default", Options::default()),
                 ColumnFamilyDescriptor::new(SCHEMA_VERSION_CF, Options::default()),
-                ColumnFamilyDescriptor::new("test_deprecated_v2_cf", Options::default()),
-                ColumnFamilyDescriptor::new("test_deprecated_v3_cf", Options::default()),
+                ColumnFamilyDescriptor::new(V2_CF, Options::default()),
+                ColumnFamilyDescriptor::new(V3_CF, Options::default()),
             ];
 
             let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
@@ -987,8 +978,8 @@ mod multi_version_tests {
             let final_version = runner.run_pending(&mut db).unwrap();
 
             assert_eq!(final_version, 3);
-            assert!(db.cf_handle("test_deprecated_v2_cf").is_none());
-            assert!(db.cf_handle("test_deprecated_v3_cf").is_none());
+            assert!(db.cf_handle(V2_CF).is_none());
+            assert!(db.cf_handle(V3_CF).is_none());
         }
     }
 }
@@ -1078,173 +1069,6 @@ mod downgrade_tests {
     }
 }
 
-/// Tests simulating real store migration scenarios.
-mod store_simulation_tests {
-    use super::*;
-
-    #[test]
-    fn blockchain_service_store_migration() {
-        let temp_dir = TempDir::new().unwrap();
-        let path = temp_dir.path().to_str().unwrap();
-
-        let current_store_cfs = vec![
-            "last_processed_block_number",
-            "pending_confirm_storing_request_left_index",
-            "pending_confirm_storing_request_right_index",
-            "pending_confirm_storing_request",
-            "pending_stop_storing_for_insolvent_user_request_left_index",
-            "pending_stop_storing_for_insolvent_user_request_right_index",
-            "pending_stop_storing_for_insolvent_user_request",
-            "pending_file_deletion_request_left_index",
-            "pending_file_deletion_request_right_index",
-            "pending_file_deletion_request",
-        ];
-
-        let v1_migration = test_migrations::TestV1Migration;
-
-        // Create pre-migration database
-        {
-            let mut opts = Options::default();
-            opts.create_if_missing(true);
-            opts.create_missing_column_families(true);
-
-            let mut cf_descriptors: Vec<ColumnFamilyDescriptor> =
-                vec![ColumnFamilyDescriptor::new("default", Options::default())];
-
-            for cf_name in &current_store_cfs {
-                cf_descriptors.push(ColumnFamilyDescriptor::new(*cf_name, Options::default()));
-            }
-
-            for cf_name in v1_migration.deprecated_column_families() {
-                cf_descriptors.push(ColumnFamilyDescriptor::new(*cf_name, Options::default()));
-            }
-
-            let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
-
-            let cf = db.cf_handle("last_processed_block_number").unwrap();
-            db.put_cf(&cf, b"value", 42u64.to_le_bytes()).unwrap();
-
-            let deprecated_cf = db.cf_handle("test_deprecated_v1_cf_a").unwrap();
-            db.put_cf(&deprecated_cf, b"old_request_key", b"old_request_data")
-                .unwrap();
-        }
-
-        // Open with migration system
-        {
-            let opts = default_db_options();
-            let migrations = test_migrations::v1_migrations();
-            let db = open_db_with_migrations(&opts, path, &current_store_cfs, migrations).unwrap();
-
-            let cf = db.cf_handle("last_processed_block_number").unwrap();
-            let value = db.get_cf(&cf, b"value").unwrap();
-            assert!(value.is_some());
-            let bytes: [u8; 8] = value.unwrap()[..].try_into().unwrap();
-            assert_eq!(u64::from_le_bytes(bytes), 42);
-
-            let v1_migration = test_migrations::TestV1Migration;
-            for cf_name in v1_migration.deprecated_column_families() {
-                assert!(db.cf_handle(cf_name).is_none());
-            }
-
-            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
-        }
-    }
-
-    #[test]
-    fn full_v1_migration_scenario() {
-        let temp_dir = TempDir::new().unwrap();
-        let path = temp_dir.path().to_str().unwrap();
-
-        let v1_migration = test_migrations::TestV1Migration;
-        let deprecated_cfs = v1_migration.deprecated_column_families();
-        assert_eq!(deprecated_cfs.len(), 3, "V1 should deprecate exactly 3 CFs");
-
-        let current_cfs = vec![
-            "last_processed_block_number",
-            "pending_confirm_storing_request",
-            "pending_confirm_storing_request_left_index",
-            "pending_confirm_storing_request_right_index",
-            "pending_stop_storing_for_insolvent_user_request",
-            "pending_stop_storing_for_insolvent_user_request_left_index",
-            "pending_stop_storing_for_insolvent_user_request_right_index",
-            "pending_file_deletion_request",
-            "pending_file_deletion_request_left_index",
-            "pending_file_deletion_request_right_index",
-        ];
-
-        // Create old database
-        {
-            let mut opts = Options::default();
-            opts.create_if_missing(true);
-            opts.create_missing_column_families(true);
-
-            let mut all_cfs: Vec<ColumnFamilyDescriptor> = current_cfs
-                .iter()
-                .map(|name| ColumnFamilyDescriptor::new(*name, Options::default()))
-                .collect();
-
-            for cf_name in deprecated_cfs {
-                all_cfs.push(ColumnFamilyDescriptor::new(*cf_name, Options::default()));
-            }
-            all_cfs.push(ColumnFamilyDescriptor::new("default", Options::default()));
-
-            let db = DB::open_cf_descriptors(&opts, path, all_cfs).unwrap();
-
-            let cf = db.cf_handle("last_processed_block_number").unwrap();
-            db.put_cf(&cf, b"block", b"12345").unwrap();
-
-            let deprecated_cf = db.cf_handle("test_deprecated_v1_cf_a").unwrap();
-            db.put_cf(&deprecated_cf, b"old_key", b"old_value").unwrap();
-        }
-
-        // Open with migration
-        let opts = default_db_options();
-        let migrations = test_migrations::v1_migrations();
-        let db = open_db_with_migrations(&opts, path, &current_cfs, migrations).unwrap();
-
-        for cf_name in &current_cfs {
-            assert!(db.cf_handle(cf_name).is_some());
-        }
-
-        for cf_name in deprecated_cfs {
-            assert!(db.cf_handle(cf_name).is_none());
-        }
-
-        let cf = db.cf_handle("last_processed_block_number").unwrap();
-        assert_eq!(&db.get_cf(&cf, b"block").unwrap().unwrap()[..], b"12345");
-
-        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
-    }
-
-    #[test]
-    fn migration_does_not_fail_on_nonexistent_cf_drop() {
-        let temp_dir = TempDir::new().unwrap();
-        let path = temp_dir.path().to_str().unwrap();
-
-        // Create database WITHOUT deprecated CFs
-        {
-            let mut opts = Options::default();
-            opts.create_if_missing(true);
-            opts.create_missing_column_families(true);
-
-            let cf_descriptors = vec![
-                ColumnFamilyDescriptor::new("default", Options::default()),
-                ColumnFamilyDescriptor::new(SCHEMA_VERSION_CF, Options::default()),
-                ColumnFamilyDescriptor::new("current_cf", Options::default()),
-            ];
-
-            let _db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
-        }
-
-        // Should succeed even though deprecated CFs don't exist
-        let opts = default_db_options();
-        let migrations = test_migrations::v1_migrations();
-        let db = open_db_with_migrations(&opts, path, &["current_cf"], migrations).unwrap();
-
-        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
-    }
-}
-
 /// Tests for column family configuration guardrails.
 mod cf_guardrail_tests {
     use super::*;
@@ -1259,7 +1083,7 @@ mod cf_guardrail_tests {
         // Try to include a deprecated CF name from V1 migration
         let current_cfs = vec![
             "some_valid_cf",
-            "test_deprecated_v1_cf_a", // This is deprecated!
+            test_migrations::V1_CF_A, // This is deprecated!
         ];
 
         let migrations = test_migrations::v1_migrations();
@@ -1268,7 +1092,7 @@ mod cf_guardrail_tests {
         assert!(result.is_err());
         match result {
             Err(MigrationError::InvalidColumnFamilyConfig(msg)) => {
-                assert!(msg.contains("test_deprecated_v1_cf_a"));
+                assert!(msg.contains(test_migrations::V1_CF_A));
                 assert!(msg.contains("cannot be reused"));
             }
             _ => panic!("Expected InvalidColumnFamilyConfig error, got {:?}", result),
@@ -1304,9 +1128,9 @@ mod cf_guardrail_tests {
         let deprecated = runner.all_deprecated_column_families();
 
         // V1 migration deprecates 3 CFs
-        assert!(deprecated.contains("test_deprecated_v1_cf_a"));
-        assert!(deprecated.contains("test_deprecated_v1_cf_b"));
-        assert!(deprecated.contains("test_deprecated_v1_cf_c"));
+        assert!(deprecated.contains(test_migrations::V1_CF_A));
+        assert!(deprecated.contains(test_migrations::V1_CF_B));
+        assert!(deprecated.contains(test_migrations::V1_CF_C));
     }
 }
 
@@ -1334,7 +1158,7 @@ mod cleanup_resilience_tests {
                 ColumnFamilyDescriptor::new(SCHEMA_VERSION_CF, Options::default()),
                 ColumnFamilyDescriptor::new("current_cf", Options::default()),
                 // This deprecated CF should NOT exist at latest version, but we create it anyway
-                ColumnFamilyDescriptor::new("test_deprecated_v1_cf_a", Options::default()),
+                ColumnFamilyDescriptor::new(test_migrations::V1_CF_A, Options::default()),
             ];
 
             let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
@@ -1343,7 +1167,7 @@ mod cleanup_resilience_tests {
             MigrationRunner::write_schema_version(&db, latest_version).unwrap();
 
             // Verify the deprecated CF exists and has data
-            let cf = db.cf_handle("test_deprecated_v1_cf_a").unwrap();
+            let cf = db.cf_handle(test_migrations::V1_CF_A).unwrap();
             db.put_cf(&cf, b"tampered_key", b"tampered_value").unwrap();
         }
 
@@ -1354,7 +1178,7 @@ mod cleanup_resilience_tests {
 
         // Deprecated CF should be gone despite schema version already being latest
         assert!(
-            db.cf_handle("test_deprecated_v1_cf_a").is_none(),
+            db.cf_handle(test_migrations::V1_CF_A).is_none(),
             "Deprecated CF should have been cleaned up"
         );
 

@@ -2,9 +2,10 @@ use log::info;
 use std::path::PathBuf;
 
 use shc_common::{
+    rocksdb::DatabaseError,
     traits::StorageEnableRuntime,
     typed_store::{
-        BufferedWriteSupport, CFDequeAPI, DatabaseError, ProvidesDbContext, ProvidesTypedDbAccess,
+        BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
         ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedDbContext,
         TypedRocksDB,
     },
