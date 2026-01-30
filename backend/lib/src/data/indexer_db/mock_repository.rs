@@ -330,12 +330,27 @@ impl IndexerOps for MockRepository {
         &self,
         onchain_msp_id: &OnchainMspId,
     ) -> RepositoryResult<u64> {
-        let files = self.files.read().await;
-        let file_count = files
+        // Get the MSP to find its database ID
+        let msp = self.get_msp_by_onchain_id(onchain_msp_id).await?;
+        
+        // Get all buckets that belong to this MSP
+        let buckets = self.buckets.read().await;
+        let bucket_ids: Vec<i64> = buckets
             .values()
-            .filter(|f| f.msp_id == onchain_msp_id)
-            .count();
-        Ok(file_count as u64)
+            .filter(|b| b.msp_id == Some(msp.id))
+            .map(|b| b.id)
+            .collect();
+        drop(buckets);
+        
+        // Get all files that belong to these buckets and count distinct file_keys
+        let files = self.files.read().await;
+        let distinct_file_keys: std::collections::HashSet<Vec<u8>> = files
+            .values()
+            .filter(|f| bucket_ids.contains(&f.bucket_id))
+            .map(|f| f.file_key.clone())
+            .collect();
+        
+        Ok(distinct_file_keys.len() as u64)
     }
 
     // ============ Payment Stream Operations ============
