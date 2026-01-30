@@ -332,7 +332,7 @@ impl IndexerOps for MockRepository {
     ) -> RepositoryResult<u64> {
         // Get the MSP to find its database ID
         let msp = self.get_msp_by_onchain_id(onchain_msp_id).await?;
-        
+
         // Get all buckets that belong to this MSP
         let buckets = self.buckets.read().await;
         let bucket_ids: Vec<i64> = buckets
@@ -341,7 +341,7 @@ impl IndexerOps for MockRepository {
             .map(|b| b.id)
             .collect();
         drop(buckets);
-        
+
         // Get all files that belong to these buckets and count distinct file_keys
         let files = self.files.read().await;
         let distinct_file_keys: std::collections::HashSet<Vec<u8>> = files
@@ -349,7 +349,7 @@ impl IndexerOps for MockRepository {
             .filter(|f| bucket_ids.contains(&f.bucket_id))
             .map(|f| f.file_key.clone())
             .collect();
-        
+
         Ok(distinct_file_keys.len() as u64)
     }
 
