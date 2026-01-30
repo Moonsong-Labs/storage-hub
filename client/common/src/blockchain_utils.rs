@@ -19,6 +19,8 @@ use crate::{
     },
 };
 
+const LOG_TARGET: &str = "blockchain-utils";
+
 lazy_static! {
     // Static and lazily initialised `events_storage_key`
     static ref EVENTS_STORAGE_KEY: Vec<u8> = {
@@ -79,7 +81,7 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
 
     StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()).map_err(|e| {
         error!(
-            target: "blockchain-utils",
+            target: LOG_TARGET,
             "Failed to decode System.Events at block {:?}. This likely indicates a breaking change in a possible runtime upgrade since an event was likely 
             added or even worse an existing event was removed or updated and cannot be decoded. Underlying error: {:?}",
             block_hash, e
@@ -209,12 +211,12 @@ pub fn convert_raw_multiaddress_to_multiaddr(raw_multiaddr: &[u8]) -> Option<Mul
         Ok(s) => match Multiaddr::from_str(s) {
             Ok(multiaddr) => Some(multiaddr),
             Err(e) => {
-                error!("Failed to parse Multiaddress from string: {:?}", e);
+                error!(target: LOG_TARGET, "Failed to parse Multiaddress from string: {:?}", e);
                 None
             }
         },
         Err(e) => {
-            error!("Failed to parse Multiaddress from bytes: {:?}", e);
+            error!(target: LOG_TARGET, "Failed to parse Multiaddress from bytes: {:?}", e);
             None
         }
     }
