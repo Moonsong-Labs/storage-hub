@@ -157,8 +157,7 @@ where
     where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        self.forest_root_changes_catchup(&tree_route).await?;
-        Ok(())
+        self.forest_root_changes_catchup(&tree_route).await
     }
 
     /// Processes new block imported events that are only relevant for an MSP.
@@ -298,8 +297,9 @@ where
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
             _ => {
-                error!(target: LOG_TARGET, "`msp_process_finality_events` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return Ok(());
+                let err_msg = format!("`msp_process_finality_events` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                error!(target: LOG_TARGET, "{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
             }
         };
 
@@ -598,8 +598,9 @@ where
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
             _ => {
-                error!(target: LOG_TARGET, "`msp_process_forest_root_changing_events` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return Ok(());
+                let err_msg = format!("`msp_process_forest_root_changing_events` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                error!(target: LOG_TARGET, "{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
             }
         };
 
@@ -664,8 +665,9 @@ where
             )
             .await
             .map_err(|e| {
-                error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
-                anyhow::anyhow!("Failed to apply mutations and verify root for Bucket {:?}: {:?}", bucket_id, e)
+                let err_msg = format!("CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
+                error!(target: LOG_TARGET, "{}", err_msg);
+                anyhow::anyhow!(err_msg)
             })?;
 
             info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
@@ -806,7 +808,7 @@ where
                 Err(e) => match e {
                     QueryMspIdOfBucketIdError::BucketNotFound => {
                         // Bucket was deleted - this is a valid scenario
-                        trace!(target: LOG_TARGET, "Bucket [0x{:x}] not found (likely deleted).", bucket_id);
+                        trace!(target: LOG_TARGET, "Bucket [0x{:x}] not found.", bucket_id);
                         Ok(false)
                     }
                     QueryMspIdOfBucketIdError::InternalError => {

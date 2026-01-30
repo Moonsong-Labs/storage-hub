@@ -2252,7 +2252,7 @@ where
         self.forest_root_changes_catchup(tree_route).await?;
 
         // Process finality events for enacted blocks.
-        // If finality event processing fails, we return early without updating last_block_processed
+        // If finality event processing fails, we return early without updating `last_block_processed`
         // so the block can be retried on restart.
         for block in tree_route.enacted() {
             let block_num: BlockNumber<Runtime> = block.number.saturated_into();
@@ -2291,37 +2291,35 @@ where
         &mut self,
         block_hash: &Runtime::Hash,
     ) -> Result<(), anyhow::Error> {
-        let block_events =
-            get_events_at_block::<Runtime>(&self.client, block_hash).map_err(|e| {
+        match get_events_at_block::<Runtime>(&self.client, block_hash) {
+            Ok(block_events) => {
+                for ev in block_events {
+                    // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
+                    self.process_common_finality_events(ev.event.clone().into());
+
+                    // Process Provider-specific events.
+                    match &self.maybe_managed_provider {
+                        Some(ManagedProvider::Bsp(_)) => {
+                            self.bsp_process_finality_events(block_hash, ev.event.clone().into());
+                        }
+                        Some(ManagedProvider::Msp(_)) => {
+                            self.msp_process_finality_events(block_hash, ev.event.clone().into())?;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(())
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to get events for block {:?}: {:?}", block_hash, e);
                 // TODO: This can happen for older blocks where state has been pruned, or if
                 // we're parsing a block authored with an older version of the runtime
                 // using a node that has a newer version of the runtime. Consider using runtime APIs
                 // for getting old data of previous blocks, and this just for current blocks.
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to get events for block {:?}: {:?}",
-                    block_hash, e
-                );
-                e
-            })?;
-
-        for ev in block_events {
-            // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
-            self.process_common_finality_events(ev.event.clone().into());
-
-            // Process Provider-specific events.
-            match &self.maybe_managed_provider {
-                Some(ManagedProvider::Bsp(_)) => {
-                    self.bsp_process_finality_events(block_hash, ev.event.clone().into());
-                }
-                Some(ManagedProvider::Msp(_)) => {
-                    self.msp_process_finality_events(block_hash, ev.event.clone().into())?;
-                }
-                _ => {}
+                error!(target: LOG_TARGET, "{}", err_msg);
+                Err(anyhow::anyhow!(err_msg))
             }
         }
-
-        Ok(())
     }
 
     /// Catch up on any blocks that were imported to the database but not processed.

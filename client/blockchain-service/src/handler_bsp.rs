@@ -513,8 +513,9 @@ where
         let managed_bsp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => &bsp_handler.bsp_id,
             _ => {
-                error!(target: LOG_TARGET, "`bsp_process_forest_root_changing_events` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return Ok(());
+                let err_msg = format!("`bsp_process_forest_root_changing_events` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                error!(target: LOG_TARGET, "{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
             }
         };
 
@@ -569,8 +570,9 @@ where
                 )
                 .await
                 .map_err(|e| {
-                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for BSP [{:?}]. \nError: {:?}", provider_id, e);
-                    anyhow::anyhow!("Failed to apply mutations and verify root for BSP {:?}: {:?}", provider_id, e)
+                    let err_msg = format!("CRITICAL ❗️❗️ Failed to apply mutations and verify root for BSP [{:?}]. \nError: {:?}", provider_id, e);
+                    error!(target: LOG_TARGET, "{}", err_msg);
+                    anyhow::anyhow!(err_msg)
                 })?;
 
                 info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
