@@ -18,6 +18,8 @@ mod tests;
 // TODO #[cfg(feature = "runtime-benchmarks")]
 // TODO mod benchmarking;
 
+extern crate alloc;
+
 #[frame_support::pallet]
 pub mod pallet {
     use crate::weights::WeightInfo;

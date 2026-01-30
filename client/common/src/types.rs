@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fmt::{Debug, LowerHex},
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -38,7 +39,6 @@ use shp_traits::ProofsDealerInterface;
 use sp_core::Hasher;
 use sp_runtime::{generic, KeyTypeId};
 use sp_trie::CompactProof;
-use std::collections::BTreeMap;
 use trie_db::TrieLayout;
 
 /// Size of each batch in bytes (2 MiB)

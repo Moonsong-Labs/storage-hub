@@ -95,7 +95,10 @@ prost = "0.12"
 prost-build = "0.12.3"
 rand = "0.8.5"
 reference-trie = "0.29.1"
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
+rustls = { version = "0.23", default-features = false, features = [
+	"ring",
+	"tls12",
+] }
 rustls-platform-verifier = "0.5"
 rustls-pemfile = "2.2"
 scale-info = { version = "2.11.0", default-features = false, features = [
@@ -209,9 +212,7 @@ pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/parityt
 pallet-uniques = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }
 
 # Polkadot
-polkadot-cli = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", features = [
-	"rococo-native",
-], default-features = false }
+polkadot-cli = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }
 polkadot-core-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }
 polkadot-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }
 pallet-xcm = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }

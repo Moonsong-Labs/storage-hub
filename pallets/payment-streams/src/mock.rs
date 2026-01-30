@@ -278,6 +278,27 @@ parameter_types! {
     pub storage Features: PalletFeatures = PalletFeatures::all_enabled();
 }
 
+/// A helper struct to satisfy pallet_nfts BenchmarkHelper trait for test types
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TestNftsBenchmarkHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_nfts::BenchmarkHelper<u128, u128, sp_runtime::testing::UintAuthorityId, u64, TestSignature>
+    for TestNftsBenchmarkHelper
+{
+    fn collection(i: u16) -> u128 {
+        i.into()
+    }
+    fn item(i: u16) -> u128 {
+        i.into()
+    }
+    fn signer() -> (sp_runtime::testing::UintAuthorityId, u64) {
+        (sp_runtime::testing::UintAuthorityId(1), 1u64)
+    }
+    fn sign(_signer: &sp_runtime::testing::UintAuthorityId, _message: &[u8]) -> TestSignature {
+        TestSignature(1, Vec::new())
+    }
+}
+
 impl pallet_nfts::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type CollectionId = u128;
@@ -305,7 +326,7 @@ impl pallet_nfts::Config for Test {
     type WeightInfo = ();
     type BlockNumberProvider = frame_system::Pallet<Self>;
     pallet_nfts::runtime_benchmarks_enabled! {
-        type Helper = ();
+        type Helper = TestNftsBenchmarkHelper;
     }
 }
 

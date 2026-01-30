@@ -231,6 +231,7 @@ runtime-benchmarks = [
 	"pallet-collator-selection/runtime-benchmarks",
 	"pallet-ethereum/runtime-benchmarks",
 	"pallet-evm/runtime-benchmarks",
+	"pallet-evm-precompile-file-system/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-grandpa/runtime-benchmarks",
 	"pallet-nfts/runtime-benchmarks",
