@@ -212,7 +212,9 @@ pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/parityt
 pallet-uniques = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }
 
 # Polkadot
-polkadot-cli = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }
+polkadot-cli = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", features = [
+	"rococo-native",
+], default-features = false }
 polkadot-core-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }
 polkadot-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }
 pallet-xcm = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2503", default-features = false }
