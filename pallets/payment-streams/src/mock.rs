@@ -282,8 +282,14 @@ parameter_types! {
 #[cfg(feature = "runtime-benchmarks")]
 pub struct TestNftsBenchmarkHelper;
 #[cfg(feature = "runtime-benchmarks")]
-impl pallet_nfts::BenchmarkHelper<u128, u128, sp_runtime::testing::UintAuthorityId, u64, TestSignature>
-    for TestNftsBenchmarkHelper
+impl
+    pallet_nfts::BenchmarkHelper<
+        u128,
+        u128,
+        sp_runtime::testing::UintAuthorityId,
+        u64,
+        TestSignature,
+    > for TestNftsBenchmarkHelper
 {
     fn collection(i: u16) -> u128 {
         i.into()
