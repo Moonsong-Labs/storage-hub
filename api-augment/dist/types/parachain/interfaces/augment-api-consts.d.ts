@@ -3,7 +3,7 @@ import type { ApiTypes, AugmentedConst } from '@polkadot/api-base/types';
 import type { Option, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
 import type { Codec } from '@polkadot/types-codec/types';
 import type { AccountId32, H256, Perbill } from '@polkadot/types/interfaces/runtime';
-import type { FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpVersionRuntimeVersion, SpWeightsRuntimeDbWeight, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
+import type { FrameSupportPalletId, FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpVersionRuntimeVersion, SpWeightsRuntimeDbWeight, SpWeightsWeightV2Weight, StagingXcmV5Junctions } from '@polkadot/types/lookup';
 export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>;
 declare module '@polkadot/api-base/types/consts' {
     interface AugmentedConsts<ApiType extends ApiTypes> {
@@ -49,6 +49,37 @@ declare module '@polkadot/api-base/types/consts' {
              * Use of reserves is deprecated in favour of holds. See `https://github.com/paritytech/substrate/pull/12951/`
              **/
             maxReserves: u32 & AugmentedConst<ApiType>;
+            /**
+             * Generic const
+             **/
+            [key: string]: Codec;
+        };
+        collatorSelection: {
+            kickThreshold: u32 & AugmentedConst<ApiType>;
+            /**
+             * Maximum number of candidates that we should have.
+             *
+             * This does not take into account the invulnerables.
+             **/
+            maxCandidates: u32 & AugmentedConst<ApiType>;
+            /**
+             * Maximum number of invulnerables.
+             **/
+            maxInvulnerables: u32 & AugmentedConst<ApiType>;
+            /**
+             * Minimum number eligible collators. Should always be greater than zero. This includes
+             * Invulnerable collators. This ensures that there will always be one collator who can
+             * produce a block.
+             **/
+            minEligibleCollators: u32 & AugmentedConst<ApiType>;
+            /**
+             * Gets this pallet's derived pot account.
+             **/
+            potAccount: AccountId32 & AugmentedConst<ApiType>;
+            /**
+             * Account Identifier from which the internal Pot is generated.
+             **/
+            potId: FrameSupportPalletId & AugmentedConst<ApiType>;
             /**
              * Generic const
              **/
@@ -336,6 +367,29 @@ declare module '@polkadot/api-base/types/consts' {
              * and be able to pay for services again. If there's any outstanding debt when the flag is cleared, it will be paid.
              **/
             userWithoutFundsCooldown: u32 & AugmentedConst<ApiType>;
+            /**
+             * Generic const
+             **/
+            [key: string]: Codec;
+        };
+        polkadotXcm: {
+            /**
+             * The latest supported version that we advertise. Generally just set it to
+             * `pallet_xcm::CurrentXcmVersion`.
+             **/
+            advertisedXcmVersion: u32 & AugmentedConst<ApiType>;
+            /**
+             * The maximum number of local XCM locks that a single account may have.
+             **/
+            maxLockers: u32 & AugmentedConst<ApiType>;
+            /**
+             * The maximum number of consumers a single remote lock may have.
+             **/
+            maxRemoteLockConsumers: u32 & AugmentedConst<ApiType>;
+            /**
+             * This chain's Universal Location.
+             **/
+            universalLocation: StagingXcmV5Junctions & AugmentedConst<ApiType>;
             /**
              * Generic const
              **/

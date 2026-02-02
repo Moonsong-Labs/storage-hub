@@ -3,7 +3,7 @@ import type { ApiTypes, AugmentedSubmittable, SubmittableExtrinsic, SubmittableE
 import type { Bytes, Compact, Option, U256, Vec, bool, u128, u32, u64 } from '@polkadot/types-codec';
 import type { AnyNumber, IMethod, ITuple } from '@polkadot/types-codec/types';
 import type { AccountId20, Call, H160, H256 } from '@polkadot/types/interfaces/runtime';
-import type { EthereumTransactionTransactionV2, FpAccountEthereumSignature, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileDeletionRequest, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters, ShSolochainEvmRuntimeSessionKeys, SpConsensusBabeDigestsNextConfigDescriptor, SpConsensusGrandpaEquivocationProof, SpConsensusSlotsEquivocationProof, SpSessionMembershipProof, SpTrieStorageProofCompactProof, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
+import type { EthereumTransactionEip7702AuthorizationListItem, EthereumTransactionTransactionV3, FpAccountEthereumSignature, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileDeletionRequest, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters, ShSolochainEvmRuntimeSessionKeys, ShpTraitsShpCompactProof, SpConsensusBabeDigestsNextConfigDescriptor, SpConsensusGrandpaEquivocationProof, SpConsensusSlotsEquivocationProof, SpSessionMembershipProof, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
 export type __AugmentedSubmittable = AugmentedSubmittable<() => unknown>;
 export type __SubmittableExtrinsic<ApiType extends ApiTypes> = SubmittableExtrinsic<ApiType>;
 export type __SubmittableExtrinsicFunction<ApiType extends ApiTypes> = SubmittableExtrinsicFunction<ApiType>;
@@ -169,13 +169,15 @@ declare module '@polkadot/api-base/types/submittable' {
             /**
              * Transact an Ethereum transaction.
              **/
-            transact: AugmentedSubmittable<(transaction: EthereumTransactionTransactionV2 | {
+            transact: AugmentedSubmittable<(transaction: EthereumTransactionTransactionV3 | {
                 Legacy: any;
             } | {
                 EIP2930: any;
             } | {
                 EIP1559: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [EthereumTransactionTransactionV2]>;
+            } | {
+                EIP7702: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [EthereumTransactionTransactionV3]>;
             /**
              * Generic tx
              **/
@@ -185,16 +187,31 @@ declare module '@polkadot/api-base/types/submittable' {
             /**
              * Issue an EVM call operation. This is similar to a message call transaction in Ethereum.
              **/
-            call: AugmentedSubmittable<(source: H160 | string | Uint8Array, target: H160 | string | Uint8Array, input: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[]) => SubmittableExtrinsic<ApiType>, [H160, H160, Bytes, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>]>;
+            call: AugmentedSubmittable<(source: H160 | string | Uint8Array, target: H160 | string | Uint8Array, input: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[], authorizationList: Vec<EthereumTransactionEip7702AuthorizationListItem> | (EthereumTransactionEip7702AuthorizationListItem | {
+                chainId?: any;
+                address?: any;
+                nonce?: any;
+                signature?: any;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H160, H160, Bytes, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>, Vec<EthereumTransactionEip7702AuthorizationListItem>]>;
             /**
              * Issue an EVM create operation. This is similar to a contract creation transaction in
              * Ethereum.
              **/
-            create: AugmentedSubmittable<(source: H160 | string | Uint8Array, init: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[]) => SubmittableExtrinsic<ApiType>, [H160, Bytes, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>]>;
+            create: AugmentedSubmittable<(source: H160 | string | Uint8Array, init: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[], authorizationList: Vec<EthereumTransactionEip7702AuthorizationListItem> | (EthereumTransactionEip7702AuthorizationListItem | {
+                chainId?: any;
+                address?: any;
+                nonce?: any;
+                signature?: any;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H160, Bytes, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>, Vec<EthereumTransactionEip7702AuthorizationListItem>]>;
             /**
              * Issue an EVM create2 operation.
              **/
-            create2: AugmentedSubmittable<(source: H160 | string | Uint8Array, init: Bytes | string | Uint8Array, salt: H256 | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[]) => SubmittableExtrinsic<ApiType>, [H160, Bytes, H256, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>]>;
+            create2: AugmentedSubmittable<(source: H160 | string | Uint8Array, init: Bytes | string | Uint8Array, salt: H256 | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[], authorizationList: Vec<EthereumTransactionEip7702AuthorizationListItem> | (EthereumTransactionEip7702AuthorizationListItem | {
+                chainId?: any;
+                address?: any;
+                nonce?: any;
+                signature?: any;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H160, Bytes, H256, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>, Vec<EthereumTransactionEip7702AuthorizationListItem>]>;
             /**
              * Withdraw balance from EVM into currency/balances pallet.
              **/
@@ -232,18 +249,18 @@ declare module '@polkadot/api-base/types/submittable' {
              * - [`OperationNotAllowedWithInsolventUser`]: The file owner is insolvent (the BSP should use
              * [`stop_storing_for_insolvent_user`] instead)
              **/
-            bspConfirmStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+            bspConfirmStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, inclusionForestProof: ShpTraitsShpCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, SpTrieStorageProofCompactProof]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, ShpTraitsShpCompactProof]>;
             /**
              * Used by a BSP to confirm they are storing data of a storage request.
              **/
-            bspConfirmStoring: AugmentedSubmittable<(nonInclusionForestProof: SpTrieStorageProofCompactProof | {
+            bspConfirmStoring: AugmentedSubmittable<(nonInclusionForestProof: ShpTraitsShpCompactProof | {
                 encodedNodes?: any;
             } | string | Uint8Array, fileKeysAndProofs: Vec<PalletFileSystemFileKeyWithProof> | (PalletFileSystemFileKeyWithProof | {
                 fileKey?: any;
                 proof?: any;
-            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [SpTrieStorageProofCompactProof, Vec<PalletFileSystemFileKeyWithProof>]>;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [ShpTraitsShpCompactProof, Vec<PalletFileSystemFileKeyWithProof>]>;
             /**
              * Executed by a BSP to request to stop storing a file.
              *
@@ -287,9 +304,9 @@ declare module '@polkadot/api-base/types/submittable' {
              * This extrinsic will fail with [`FileHasIncompleteStorageRequest`] if an `IncompleteStorageRequest`
              * exists for the file key. The BSP must wait until fisherman nodes clean up the incomplete request.
              **/
-            bspRequestStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId20 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+            bspRequestStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId20 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array, inclusionForestProof: ShpTraitsShpCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId20, H256, u64, bool, SpTrieStorageProofCompactProof]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId20, H256, u64, bool, ShpTraitsShpCompactProof]>;
             /**
              * Used by a BSP to volunteer for storing a file.
              *
@@ -334,9 +351,9 @@ declare module '@polkadot/api-base/types/submittable' {
                 location?: any;
                 size_?: any;
                 fingerprint?: any;
-            } | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
+            } | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: ShpTraitsShpCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, SpTrieStorageProofCompactProof]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, ShpTraitsShpCompactProof]>;
             /**
              * Delete files from an incomplete (rejected, expired or revoked) storage request.
              *
@@ -347,9 +364,9 @@ declare module '@polkadot/api-base/types/submittable' {
              *
              * Multiple files can be deleted in a single call using one forest proof bounded by [`MaxFileDeletionsPerExtrinsic`](Config::MaxFileDeletionsPerExtrinsic).
              **/
-            deleteFilesForIncompleteStorageRequest: AugmentedSubmittable<(fileKeys: Vec<H256> | (H256 | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
+            deleteFilesForIncompleteStorageRequest: AugmentedSubmittable<(fileKeys: Vec<H256> | (H256 | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: ShpTraitsShpCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<H256>, Option<H256>, SpTrieStorageProofCompactProof]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<H256>, Option<H256>, ShpTraitsShpCompactProof]>;
             /**
              * Issue a new storage request for a file
              **/
@@ -435,9 +452,9 @@ declare module '@polkadot/api-base/types/submittable' {
              * The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
              * wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
              **/
-            stopStoringForInsolventUser: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId20 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+            stopStoringForInsolventUser: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId20 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, inclusionForestProof: ShpTraitsShpCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId20, H256, u64, SpTrieStorageProofCompactProof]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId20, H256, u64, ShpTraitsShpCompactProof]>;
             updateBucketPrivacy: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, private: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, bool]>;
             /**
              * Generic tx
