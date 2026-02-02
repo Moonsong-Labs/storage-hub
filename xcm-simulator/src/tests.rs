@@ -425,9 +425,7 @@ mod relay_token {
             let location: Location = Parachain(NON_SYS_PARA_ID).into();
             let parachain_sovereign_account =
                 LocationConverter::convert_location(&location).unwrap();
-            assert!(
-                relay_chain::Balances::balance(&parachain_sovereign_account) < INITIAL_BALANCE
-            );
+            assert!(relay_chain::Balances::balance(&parachain_sovereign_account) < INITIAL_BALANCE);
         });
 
         // BOB should receive the tokens on StorageHub

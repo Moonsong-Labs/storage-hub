@@ -13,8 +13,8 @@ use frame_support::{
 use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot, EnsureSigned};
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
-    CommitRevealRandomnessInterface, CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
-    CompactProofEncodedNodes, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
+    CommitRevealRandomnessInterface, CommitmentVerifier, CompactProofEncodedNodes, MaybeDebug,
+    ProofSubmittersInterface, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};

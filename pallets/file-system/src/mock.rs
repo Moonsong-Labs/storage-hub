@@ -17,8 +17,8 @@ use pallet_nfts::PalletFeatures;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitmentVerifier, IdentityAdapter, MaybeDebug, ProofSubmittersInterface,
-    ReadUserSolvencyInterface, CompactProofEncodedNodes, TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, CompactProofEncodedNodes, IdentityAdapter, MaybeDebug,
+    ProofSubmittersInterface, ReadUserSolvencyInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};

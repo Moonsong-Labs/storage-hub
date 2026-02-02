@@ -12,8 +12,8 @@ use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot, EnsureSigned};
 use pallet_nfts::PalletFeatures;
 use shp_constants::GIGAUNIT;
 use shp_traits::{
-    CommitRevealRandomnessInterface, CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
-    ReadProvidersInterface, CompactProofEncodedNodes, TrieMutation, TrieProofDeltaApplier,
+    CommitRevealRandomnessInterface, CommitmentVerifier, CompactProofEncodedNodes, MaybeDebug,
+    ProofSubmittersInterface, ReadProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};

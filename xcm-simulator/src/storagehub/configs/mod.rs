@@ -40,7 +40,8 @@ use runtime_params::RuntimeParameters;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitmentVerifier, IdentityAdapter, MaybeDebug, CompactProofEncodedNodes, TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, CompactProofEncodedNodes, IdentityAdapter, MaybeDebug, TrieMutation,
+    TrieProofDeltaApplier,
 };
 use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
