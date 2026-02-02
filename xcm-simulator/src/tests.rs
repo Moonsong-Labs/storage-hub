@@ -1,6 +1,6 @@
 use codec::Encode;
 use frame_support::{
-    assert_noop, assert_ok,
+    assert_ok,
     traits::{fungible::Inspect, OnFinalize, OnPoll},
     BoundedVec,
 };
@@ -292,32 +292,31 @@ mod relay_token {
     }
 
     #[test]
-    fn asset_transfer_does_not_work_from_other_non_system_parachain() {
+    fn relay_token_transfer_from_non_system_parachain_works() {
         // Scenario:
-        // ALICE on a non-system parachain holds some of Relay Chain's native tokens derivatives.
-        // She wants to transfer them to BOB's account on StorageHub using a reserve transfer.
+        // ALICE on a non-system parachain holds DOT derivatives (backed by DOT in
+        // the parachain's sovereign account on the relay chain).
+        // She transfers them to BOB on StorageHub using `execute` with explicit XCM
+        // instructions: InitiateReserveWithdraw to relay, then InitiateTeleport to StorageHub.
         //
-        // Since polkadot-sdk stable2503, network native asset reserve transfers are blocked in
-        // `transfer_assets` as preparation for the Asset Hub Migration (see issue #9054).
-        // The transfer fails at the source (parachain) with `InvalidAssetUnknownReserve`.
+        // This demonstrates the recommended approach after polkadot-sdk stable2503,
+        // where transfer_assets is disabled for network native asset reserve transfers.
+        // Apps should use transfer_assets_using_type_and_then or execute instead.
         //
-        // This test verifies that non-system parachains cannot transfer DOT to StorageHub via
-        // reserve transfer - the failure happens at the pallet_xcm level.
-        //
-        // TODO: rewrite the assertion tests once a new polkadot release introduces the fix
-        // to allow Asset Hub as a reserve system chain.
+        // Since StorageHub is a system chain that expects teleports (not reserve transfers)
+        // from the relay chain, we use execute with explicit InitiateReserveWithdraw +
+        // InitiateTeleport to properly route the transfer.
 
-        // We reset storage and messages.
         MockNet::reset();
 
-        // ALICE starts with INITIAL_BALANCE on the non-system parachain.
+        // Verify initial balances
         MockParachain::execute_with(|| {
             assert_eq!(parachain::Balances::balance(&ALICE), INITIAL_BALANCE);
         });
 
-        // Which should equal the balance of that parachain's sovereign account in the Relay Chain (ALICE is the sole user)
+        // Verify parachain's sovereign account on relay has funds
         Relay::execute_with(|| {
-            let location = Parachain(2004).into();
+            let location: Location = Parachain(NON_SYS_PARA_ID).into();
             let parachain_sovereign_account =
                 LocationConverter::convert_location(&location).unwrap();
             assert_eq!(
@@ -326,56 +325,114 @@ mod relay_token {
             );
         });
 
-        // BOB starts with INITIAL_BALANCE on StorageHub.
         StorageHub::execute_with(|| {
             assert_eq!(storagehub::Balances::balance(&BOB), INITIAL_BALANCE);
         });
 
-        // ALICE on the non-system parachain tries to send some Relay Chain native tokens derivatives to BOB on StorageHub.
-        // The transfer fails with InvalidAssetUnknownReserve because network native asset reserve
-        // transfers are blocked in pallet_xcm for the Asset Hub Migration.
+        // ALICE transfers DOT from non-system parachain to BOB on StorageHub
+        // using execute with InitiateReserveWithdraw + InitiateTeleport
         MockParachain::execute_with(|| {
-            // StorageHub's location as seen from the mocked parachain.
-            let destination: Location = (Parent, Parachain(SH_PARA_ID)).into();
-            let beneficiary: Location = AccountId32 {
-                id: BOB.clone().into(),
-                network: Some(NetworkId::Polkadot),
-            }
-            .into();
-            // We need to use `u128` here for the conversion to work properly.
-            // If we don't specify anything, it will be a `u64`, which the conversion
-            // will turn into a non-fungible token instead of a fungible one.
-            let assets: Assets = (Parent, 50u128 * CENTS).into();
-            assert_noop!(
-                parachain::PolkadotXcm::transfer_assets(
-                    parachain::RuntimeOrigin::signed(ALICE),
-                    Box::new(VersionedLocation::V5(destination.clone())),
-                    Box::new(VersionedLocation::V5(beneficiary)),
-                    Box::new(VersionedAssets::V5(assets)),
-                    0,
-                    WeightLimit::Unlimited,
-                ),
-                pallet_xcm::Error::<parachain::Runtime>::InvalidAssetUnknownReserve
+            // Build the XCM message that:
+            // 1. Withdraws DOT locally
+            // 2. Buys execution on the parachain
+            // 3. Initiates a reserve withdraw to the relay chain, which:
+            //    a. Withdraws from the parachain's sovereign account on relay
+            //    b. Initiates a teleport to StorageHub (since it's a system chain)
+            //    c. Deposits to BOB on StorageHub
+            // 4. Refunds any surplus fees locally
+            let message: VersionedXcm<parachain::RuntimeCall> = VersionedXcm::V5(
+                vec![
+                    WithdrawAsset(
+                        (
+                            Location {
+                                parents: 1,
+                                interior: Here.into(),
+                            },
+                            50u128 * CENTS,
+                        )
+                            .into(),
+                    ),
+                    BuyExecution {
+                        fees: (
+                            Location {
+                                parents: 1,
+                                interior: Here.into(),
+                            },
+                            10 * CENTS,
+                        )
+                            .into(),
+                        weight_limit: Unlimited,
+                    },
+                    InitiateReserveWithdraw {
+                        assets: Wild(AllOf {
+                            id: Location {
+                                parents: 1,
+                                interior: Here.into(),
+                            }
+                            .into(),
+                            fun: WildFungible,
+                        }),
+                        reserve: Location {
+                            parents: 1,
+                            interior: Here.into(),
+                        }
+                        .into(),
+                        xcm: vec![InitiateTeleport {
+                            assets: Wild(AllOf {
+                                id: Here.into(),
+                                fun: WildFungible,
+                            }),
+                            dest: (Parachain(SH_PARA_ID)).into(),
+                            xcm: vec![DepositAsset {
+                                assets: Wild(AllOf {
+                                    id: Parent.into(),
+                                    fun: WildFungible,
+                                }),
+                                beneficiary: AccountId32 {
+                                    network: Some(NetworkId::Polkadot),
+                                    id: BOB.clone().into(),
+                                }
+                                .into(),
+                            }]
+                            .into(),
+                        }]
+                        .into(),
+                    },
+                    RefundSurplus,
+                    DepositAsset {
+                        assets: Wild(All),
+                        beneficiary: AccountId32 {
+                            network: None,
+                            id: ALICE.into(),
+                        }
+                        .into(),
+                    },
+                ]
+                .into(),
             );
+            assert_ok!(parachain::PolkadotXcm::execute(
+                parachain::RuntimeOrigin::signed(ALICE),
+                message.into(),
+                Weight::MAX
+            ));
 
-            // ALICE's balance should not have changed since the transfer failed
-            assert_eq!(parachain::Balances::balance(&ALICE), INITIAL_BALANCE);
+            // ALICE's balance should decrease (minus any refunded fees)
+            assert!(parachain::Balances::balance(&ALICE) < INITIAL_BALANCE);
         });
 
-        // The balance of the parachain's sovereign account in the Relay Chain should not have changed
+        // Verify relay chain sovereign account balance decreased (reserve withdrawn)
         Relay::execute_with(|| {
-            let location = Parachain(2004).into();
+            let location: Location = Parachain(NON_SYS_PARA_ID).into();
             let parachain_sovereign_account =
                 LocationConverter::convert_location(&location).unwrap();
-            assert_eq!(
-                relay_chain::Balances::balance(&parachain_sovereign_account),
-                INITIAL_BALANCE
+            assert!(
+                relay_chain::Balances::balance(&parachain_sovereign_account) < INITIAL_BALANCE
             );
         });
 
-        // BOB still has INITIAL_BALANCE on StorageHub (no transfer occurred)
+        // BOB should receive the tokens on StorageHub
         StorageHub::execute_with(|| {
-            assert_eq!(storagehub::Balances::balance(&BOB), INITIAL_BALANCE);
+            assert!(storagehub::Balances::balance(&BOB) > INITIAL_BALANCE);
         });
     }
 }
