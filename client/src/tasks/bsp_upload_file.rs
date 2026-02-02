@@ -463,7 +463,7 @@ where
         // Build extrinsic.
         let call: Runtime::Call =
             pallet_file_system::Call::<Runtime>::bsp_confirm_storing {
-                non_inclusion_forest_proof: non_inclusion_forest_proof.proof.encoded_nodes.clone(),
+                non_inclusion_forest_proof: non_inclusion_forest_proof.proof.encoded_nodes,
                 file_keys_and_proofs: BoundedVec::try_from(file_keys_and_proofs)
                 .map_err(|_| {
                     error!("CRITICAL❗️❗️ This is a bug! Failed to convert file keys and proofs to BoundedVec. Please report it to the StorageHub team.");

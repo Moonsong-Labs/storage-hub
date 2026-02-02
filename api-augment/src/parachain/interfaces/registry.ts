@@ -228,7 +228,6 @@ import type {
   ShpFileKeyVerifierFileKeyProof,
   ShpFileMetadataFileMetadata,
   ShpFileMetadataFingerprint,
-  ShpTraitsShpCompactProof,
   ShpTraitsTrieAddMutation,
   ShpTraitsTrieMutation,
   ShpTraitsTrieRemoveMutation,
@@ -244,7 +243,6 @@ import type {
   SpRuntimeTokenError,
   SpRuntimeTransactionalError,
   SpTrieStorageProof,
-  SpTrieStorageProofCompactProof,
   SpVersionRuntimeVersion,
   SpWeightsRuntimeDbWeight,
   SpWeightsWeightV2Weight,
@@ -545,7 +543,6 @@ declare module "@polkadot/types/types/registry" {
     ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
     ShpFileMetadataFileMetadata: ShpFileMetadataFileMetadata;
     ShpFileMetadataFingerprint: ShpFileMetadataFingerprint;
-    ShpTraitsShpCompactProof: ShpTraitsShpCompactProof;
     ShpTraitsTrieAddMutation: ShpTraitsTrieAddMutation;
     ShpTraitsTrieMutation: ShpTraitsTrieMutation;
     ShpTraitsTrieRemoveMutation: ShpTraitsTrieRemoveMutation;
@@ -561,7 +558,6 @@ declare module "@polkadot/types/types/registry" {
     SpRuntimeTokenError: SpRuntimeTokenError;
     SpRuntimeTransactionalError: SpRuntimeTransactionalError;
     SpTrieStorageProof: SpTrieStorageProof;
-    SpTrieStorageProofCompactProof: SpTrieStorageProofCompactProof;
     SpVersionRuntimeVersion: SpVersionRuntimeVersion;
     SpWeightsRuntimeDbWeight: SpWeightsRuntimeDbWeight;
     SpWeightsWeightV2Weight: SpWeightsWeightV2Weight;

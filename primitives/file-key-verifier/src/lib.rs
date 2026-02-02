@@ -5,7 +5,7 @@ extern crate alloc;
 use alloc::collections::BTreeSet;
 use frame_support::sp_runtime::DispatchError;
 use shp_file_metadata::ChunkId;
-use shp_traits::{CommitmentVerifier, CompactProofEncodedNodes};
+use shp_traits::CommitmentVerifier;
 use sp_trie::{CompactProof, Trie, TrieDBBuilder, TrieLayout};
 use types::FileKeyProof;
 
