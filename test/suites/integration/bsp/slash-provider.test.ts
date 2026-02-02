@@ -85,7 +85,7 @@ await describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createB
     try {
       await userApi.assert.providerSlashed(bspApi.shConsts.DUMMY_BSP_ID);
       assert.fail("Provider should not be slashed when capacity is 0");
-    } catch (e) {
+    } catch (_e) {
       // Expected error
     }
   });
