@@ -39,11 +39,6 @@ impl<T> MaybeDebug for T {}
 /// This is required because `CompactProof` from `sp_trie` doesn't implement
 /// `DecodeWithMemTracking`, but this trait is needed for types used as pallet
 /// extrinsic parameters in polkadot-sdk stable2503+.
-/// Wrapper around `sp_trie::CompactProof` that implements `DecodeWithMemTracking`.
-///
-/// This is required because `CompactProof` from `sp_trie` doesn't implement
-/// `DecodeWithMemTracking`, but this trait is needed for types used as pallet
-/// extrinsic parameters in polkadot-sdk stable2503+.
 ///
 /// Note: We cannot use `#[derive(DecodeWithMemTracking)]` because that requires
 /// the inner type to also implement the trait, which `CompactProof` does not.
