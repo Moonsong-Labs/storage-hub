@@ -1126,7 +1126,7 @@ where
 
         // Construct full proof.
         let proof = StorageProof::<Runtime> {
-            forest_proof: proven_file_keys.proof.into(),
+            forest_proof: proven_file_keys.proof.encoded_nodes.clone(),
             key_proofs,
         };
         let encoded = proof.encode();

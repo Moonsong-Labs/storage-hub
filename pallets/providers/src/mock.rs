@@ -12,9 +12,9 @@ use pallet_proofs_dealer::SlashableProviders;
 use pallet_randomness::GetBabeData;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    CommitRevealRandomnessInterface, CommitmentVerifier, FileMetadataInterface, MaybeDebug,
-    ProofSubmittersInterface, ReadChallengeableProvidersInterface, ShpCompactProof, TrieMutation,
-    TrieProofDeltaApplier,
+    CommitRevealRandomnessInterface, CommitmentVerifier, CompactProofEncodedNodes,
+    FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
+    ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -244,19 +244,17 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = ShpCompactProof;
+    type Proof = CompactProofEncodedNodes;
     type Commitment = H256;
     type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: &ShpCompactProof,
+        proof: &CompactProofEncodedNodes,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.inner().encoded_nodes.len() > 0 {
+        if proof.len() > 0 {
             Ok(proof
-                .inner()
-                .encoded_nodes
                 .iter()
                 .map(|node| H256::from_slice(&node[..]))
                 .collect())
@@ -271,7 +269,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = ShpCompactProof;
+    type Proof = CompactProofEncodedNodes;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(

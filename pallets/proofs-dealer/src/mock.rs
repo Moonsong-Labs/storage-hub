@@ -14,7 +14,7 @@ use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot, EnsureSigned};
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
     CommitRevealRandomnessInterface, CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
-    ShpCompactProof, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
+    CompactProofEncodedNodes, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
@@ -388,16 +388,16 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = ShpCompactProof;
+    type Proof = CompactProofEncodedNodes;
     type Commitment = H256;
     type Challenge = C;
 
     fn verify_proof(
         _root: &Self::Commitment,
         challenges: &[Self::Challenge],
-        proof: &ShpCompactProof,
+        proof: &CompactProofEncodedNodes,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.inner().encoded_nodes.len() > 0 {
+        if proof.len() > 0 {
             let challenges: BTreeSet<Self::Challenge> = challenges.iter().cloned().collect();
             Ok(challenges)
         } else {
@@ -411,7 +411,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = ShpCompactProof;
+    type Proof = CompactProofEncodedNodes;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(

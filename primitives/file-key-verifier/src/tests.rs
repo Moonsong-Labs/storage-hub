@@ -232,7 +232,7 @@ fn commitment_verifier_many_challenges_success() {
 
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -291,7 +291,7 @@ fn commitment_verifier_many_challenges_random_file_success() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -350,7 +350,7 @@ fn commitment_verifier_many_challenges_keccak_success() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -410,7 +410,7 @@ fn commitment_verifier_many_challenges_one_chunk_success() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -470,7 +470,7 @@ fn commitment_verifier_many_challenges_two_chunks_success() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -527,7 +527,7 @@ fn commitment_verifier_no_challenges_failure() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -583,7 +583,7 @@ fn commitment_verifier_wrong_number_of_challenges_failure() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -639,7 +639,7 @@ fn commitment_verifier_wrong_file_key_failure() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -708,7 +708,7 @@ fn commitment_verifier_wrong_file_key_no_compact_encoding_failure() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -776,7 +776,7 @@ fn commitment_verifier_wrong_file_key_vec_fingerprint_failure() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -845,7 +845,7 @@ fn commitment_verifier_wrong_file_key_encoding_as_bytes_failure() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -879,7 +879,7 @@ fn commitment_verifier_empty_proof_failure() {
     };
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -923,7 +923,7 @@ fn commitment_verifier_empty_fingerprint_failure() {
 
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof
@@ -979,7 +979,7 @@ fn commitment_verifier_challenge_missing_from_proof_failure() {
         .expect("Failed to create compact proof from recorder");
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Change one challenge so that the proof is invalid.
@@ -1050,7 +1050,7 @@ fn commitment_verifier_challenge_with_none_value_failure() {
     // Using wrong file size (larger than it actually is)
     let file_key_proof = FileKeyProof {
         file_metadata,
-        proof: proof.into(),
+        proof: proof.encoded_nodes,
     };
 
     // Verify proof

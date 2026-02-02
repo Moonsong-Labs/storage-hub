@@ -7,7 +7,7 @@ use scale_info::TypeInfo;
 use shp_file_metadata::{
     Chunk, ChunkId, ChunkIdError, ChunkWithId, FileMetadata, Fingerprint, Leaf,
 };
-use shp_traits::ShpCompactProof;
+use shp_traits::CompactProofEncodedNodes;
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
 
@@ -15,14 +15,14 @@ use trie_db::Trie;
 pub struct FileKeyProof<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
     pub file_metadata: FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>,
-    pub proof: ShpCompactProof,
+    pub proof: CompactProofEncodedNodes,
 }
 
-/// Implement the `From<ShpCompactProof>` trait for the `FileKeyProof` struct.
+/// Implement the `From<CompactProofEncodedNodes>` trait for the `FileKeyProof` struct.
 impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
-    From<ShpCompactProof> for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
+    From<CompactProofEncodedNodes> for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
 {
-    fn from(proof: ShpCompactProof) -> Self {
+    fn from(proof: CompactProofEncodedNodes) -> Self {
         Self {
             file_metadata: Default::default(),
             proof,
@@ -37,16 +37,16 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     fn from(proof: CompactProof) -> Self {
         Self {
             file_metadata: Default::default(),
-            proof: proof.into(),
+            proof: proof.encoded_nodes,
         }
     }
 }
 
-/// Implement the `Into<ShpCompactProof>` trait for the `FileKeyProof` struct.
+/// Implement the `Into<CompactProofEncodedNodes>` trait for the `FileKeyProof` struct.
 impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
-    Into<ShpCompactProof> for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
+    Into<CompactProofEncodedNodes> for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
 {
-    fn into(self) -> ShpCompactProof {
+    fn into(self) -> CompactProofEncodedNodes {
         self.proof
     }
 }
@@ -56,7 +56,9 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
 {
     fn into(self) -> CompactProof {
-        self.proof.into_inner()
+        CompactProof {
+            encoded_nodes: self.proof,
+        }
     }
 }
 
@@ -91,7 +93,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         location: Vec<u8>,
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
-        proof: impl Into<ShpCompactProof>,
+        proof: impl Into<CompactProofEncodedNodes>,
     ) -> Result<Self, ProvenFileKeyError> {
         let file_metadata = FileMetadata::new(owner, bucket_id, location, size, fingerprint)
             .map_err(|_| ProvenFileKeyError::FailedToCreateFileMetadata)?;
@@ -115,10 +117,13 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
             .try_into()
             .map_err(|_| ProvenFileKeyError::FingerprintAndTrieHashMismatch)?;
 
+        // Convert Vec<Vec<u8>> to CompactProof
+        let compact_proof = CompactProof {
+            encoded_nodes: self.proof.clone(),
+        };
+
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
-        let (memdb, root) = self
-            .proof
-            .inner()
+        let (memdb, root) = compact_proof
             .to_memory_db::<<T as TrieLayout>::Hash>(Some(&expected_root))
             .map_err(|_| ProvenFileKeyError::TrieAndExpectedRootMismatch)?;
 

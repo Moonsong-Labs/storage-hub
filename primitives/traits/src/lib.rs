@@ -7,7 +7,6 @@ use alloc::{
     vec::Vec,
 };
 use codec::{Decode, DecodeWithMemTracking, Encode, FullCodec, HasCompact};
-use core::ops::Deref;
 use frame_support::{
     dispatch::DispatchResult,
     pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member},
@@ -25,6 +24,13 @@ use sp_runtime::{
     BoundedVec, DispatchError,
 };
 
+/// Type alias for the encoded nodes of a compact trie proof.
+///
+/// This represents the `encoded_nodes` field of `sp_trie::CompactProof` and is used
+/// as the proof type at extrinsic boundaries because it implements `DecodeWithMemTracking`
+/// (required by polkadot-sdk stable2503+), while `CompactProof` does not.
+pub type CompactProofEncodedNodes = Vec<Vec<u8>>;
+
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
 #[cfg(feature = "std")]
@@ -33,63 +39,6 @@ impl<T: Debug> MaybeDebug for T {}
 pub trait MaybeDebug {}
 #[cfg(not(feature = "std"))]
 impl<T> MaybeDebug for T {}
-
-/// Wrapper around `sp_trie::CompactProof` that implements `DecodeWithMemTracking`.
-///
-/// This is required because `CompactProof` from `sp_trie` doesn't implement
-/// `DecodeWithMemTracking`, but this trait is needed for types used as pallet
-/// extrinsic parameters in polkadot-sdk stable2503+.
-///
-/// Note: We cannot use `#[derive(DecodeWithMemTracking)]` because that requires
-/// the inner type to also implement the trait, which `CompactProof` does not.
-/// The empty impl is valid because `DecodeWithMemTracking` is a marker trait.
-#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode, TypeInfo)]
-pub struct ShpCompactProof(pub sp_trie::CompactProof);
-
-impl DecodeWithMemTracking for ShpCompactProof {}
-
-impl From<sp_trie::CompactProof> for ShpCompactProof {
-    fn from(proof: sp_trie::CompactProof) -> Self {
-        ShpCompactProof(proof)
-    }
-}
-
-impl From<ShpCompactProof> for sp_trie::CompactProof {
-    fn from(proof: ShpCompactProof) -> Self {
-        proof.0
-    }
-}
-
-impl Deref for ShpCompactProof {
-    type Target = sp_trie::CompactProof;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<sp_trie::CompactProof> for ShpCompactProof {
-    fn as_ref(&self) -> &sp_trie::CompactProof {
-        &self.0
-    }
-}
-
-impl ShpCompactProof {
-    /// Create a new `ShpCompactProof` from a `CompactProof`.
-    pub fn new(proof: sp_trie::CompactProof) -> Self {
-        ShpCompactProof(proof)
-    }
-
-    /// Get a reference to the inner `CompactProof`.
-    pub fn inner(&self) -> &sp_trie::CompactProof {
-        &self.0
-    }
-
-    /// Consume self and return the inner `CompactProof`.
-    pub fn into_inner(self) -> sp_trie::CompactProof {
-        self.0
-    }
-}
 
 #[derive(Encode)]
 pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);

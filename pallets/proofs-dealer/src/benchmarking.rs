@@ -12,8 +12,8 @@ use frame_benchmarking::v2::*;
         T: crate::Config<NativeBalance = pallet_balances::Pallet<T>>,
         // The `Balances` pallet is the `NativeBalance` pallet that `pallet_storage_providers::Config` requires.
         T: pallet_storage_providers::Config<NativeBalance = pallet_balances::Pallet<T>>,
-        // The `Proof` inner type of the `ForestVerifier` trait is `ShpCompactProof`.
-        <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = shp_traits::ShpCompactProof>,
+        // The `Proof` inner type of the `ForestVerifier` trait is `CompactProofEncodedNodes`.
+        <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = shp_traits::CompactProofEncodedNodes>,
         // The `Proof` inner type of the `KeyVerifier` trait is `CompactProof`.
         <<T as crate::Config>::KeyVerifier as shp_traits::CommitmentVerifier>::Proof: From<sp_trie::CompactProof>,
         // The Storage Providers pallet's `HoldReason` type can be converted into the Native Balance's `Reason`.
@@ -617,8 +617,8 @@ mod benchmarks {
         T: crate::Config<NativeBalance = pallet_balances::Pallet<T>>,
     // The `Balances` pallet is the `NativeBalance` pallet that `pallet_storage_providers::Config` requires.
         T: pallet_storage_providers::Config<NativeBalance = pallet_balances::Pallet<T>>,
-    // The `Proof` inner type of the `ForestVerifier` trait is `ShpCompactProof`.
-        <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = shp_traits::ShpCompactProof>,
+    // The `Proof` inner type of the `ForestVerifier` trait is `CompactProofEncodedNodes`.
+        <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = shp_traits::CompactProofEncodedNodes>,
     // The `Proof` inner type of the `KeyVerifier` trait is `CompactProof`.
         <<T as crate::Config>::KeyVerifier as shp_traits::CommitmentVerifier>::Proof: From<sp_trie::CompactProof>,
     // The Storage Providers pallet's `HoldReason` type can be converted into the Native Balance's `Reason`.
@@ -796,8 +796,8 @@ mod benchmarks {
         T: crate::Config<NativeBalance = pallet_balances::Pallet<T>>,
     // The `Balances` pallet is the `NativeBalance` pallet that `pallet_storage_providers::Config` requires.
         T: pallet_storage_providers::Config<NativeBalance = pallet_balances::Pallet<T>>,
-    // The `Proof` inner type of the `ForestVerifier` trait is `ShpCompactProof`.
-        <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = shp_traits::ShpCompactProof>,
+    // The `Proof` inner type of the `ForestVerifier` trait is `CompactProofEncodedNodes`.
+        <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = shp_traits::CompactProofEncodedNodes>,
     // The `Proof` inner type of the `KeyVerifier` trait is `CompactProof`.
         <<T as crate::Config>::KeyVerifier as shp_traits::CommitmentVerifier>::Proof: From<sp_trie::CompactProof>,
     // The Storage Providers pallet's `HoldReason` type can be converted into the Native Balance's `Reason`.
