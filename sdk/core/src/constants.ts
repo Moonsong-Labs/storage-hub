@@ -12,3 +12,8 @@ export const BATCH_SIZE_BYTES = Math.floor((128 * 1024 * 1024) / CHUNK_SIZE) * C
  * Merkle-Patricia trie risks exhausting 32-bit WASM linear memory.
  */
 export const MAX_WASM_FINGERPRINT_BYTES = 1_610_612_736; // ≈ 1.5 GiB
+
+
+// Encryiption constants
+export const ENCRYPTION_CHUNK_SIZE = 16 * 1024 * 1024; // 16 MB
+export const NONCE_SIZE = 12;

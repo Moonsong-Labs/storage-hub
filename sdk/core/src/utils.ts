@@ -21,6 +21,24 @@ export function removeHexPrefix(hex: string): string {
 }
 
 /**
+ * Checks if a string is a valid 0x-prefixed hex string.
+ *
+ * Mirrors this SDK's parsing expectations (`hexToBytes`):
+ * - must start with lowercase `0x`
+ * - must contain at least 1 byte (not just `0x`)
+ * - must have an even number of hex characters
+ * - must contain only [0-9a-fA-F]
+ */
+export function isHexString(v: string): v is `0x${string}` {
+  if (!v.startsWith("0x")) return false;
+  if (v.length === 2) return false; // bare "0x"
+
+  const hex = v.slice(2);
+  if (hex.length % 2 !== 0) return false;
+  return /^[0-9a-fA-F]+$/.test(hex);
+}
+
+/**
  * Converts a hex string to Uint8Array
  * @param hex - The hex string to convert (with or without 0x prefix)
  * @returns Uint8Array representation
