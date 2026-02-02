@@ -21,3 +21,23 @@ export interface FileInfo {
    */
   txHash?: `0x${string}`;
 }
+
+
+// Rust like Result type
+export type Result<T, E> =
+  | { ok: true; value: T }
+  | { ok: false; error: E };
+
+export type ResultWithUnwrap<T, E> = Result<T, E> & {
+  unwrap(): T;
+};
+
+export function withUnwrap<T, E>(res: Result<T, E>): ResultWithUnwrap<T, E> {
+  return {
+    ...res,
+    unwrap() {
+      if (this.ok) return this.value;
+      throw this.error;
+    },
+  };
+}
