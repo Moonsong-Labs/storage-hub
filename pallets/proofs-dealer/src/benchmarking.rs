@@ -14,8 +14,6 @@ use frame_benchmarking::v2::*;
         T: pallet_storage_providers::Config<NativeBalance = pallet_balances::Pallet<T>>,
         // The `Proof` inner type of the `ForestVerifier` trait is `CompactProofEncodedNodes`.
         <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = shp_traits::CompactProofEncodedNodes>,
-        // The `Proof` inner type of the `KeyVerifier` trait is `CompactProof`.
-        <<T as crate::Config>::KeyVerifier as shp_traits::CommitmentVerifier>::Proof: From<sp_trie::CompactProof>,
         // The Storage Providers pallet's `HoldReason` type can be converted into the Native Balance's `Reason`.
         pallet_storage_providers::HoldReason: Into<<<T as pallet::Config>::NativeBalance as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
         // The Storage Providers `MerklePatriciaRoot` type is the same as `frame_system::Hash`.
@@ -67,6 +65,13 @@ mod benchmarks {
         ValidProofSubmittersLastTicks,
     };
 
+    // TODO: This benchmark will not run successfully. It uses `RawOrigin::Signed` but the
+    // runtime configures `ChallengeOrigin = EnsureRoot`, causing it to fail with "Bad origin".
+    // Options to fix:
+    // 1. Change to `RawOrigin::Root` and add fee transfer overhead to the weight annotation:
+    //    #[pallet::weight(T::WeightInfo::challenge().saturating_add(T::DbWeight::get().reads_writes(3, 2)))]
+    // 2. Change the runtime config to `EnsureSigned` if users should be able to call challenge.
+    // See commit 1d3bca56 which introduced `ChallengeOrigin` but didn't update this benchmark.
     #[benchmark]
     fn challenge() -> Result<(), BenchmarkError> {
         // Setup initial conditions.
@@ -619,8 +624,6 @@ mod benchmarks {
         T: pallet_storage_providers::Config<NativeBalance = pallet_balances::Pallet<T>>,
     // The `Proof` inner type of the `ForestVerifier` trait is `CompactProofEncodedNodes`.
         <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = shp_traits::CompactProofEncodedNodes>,
-    // The `Proof` inner type of the `KeyVerifier` trait is `CompactProof`.
-        <<T as crate::Config>::KeyVerifier as shp_traits::CommitmentVerifier>::Proof: From<sp_trie::CompactProof>,
     // The Storage Providers pallet's `HoldReason` type can be converted into the Native Balance's `Reason`.
         pallet_storage_providers::HoldReason: Into<<<T as pallet::Config>::NativeBalance as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
     // The Storage Providers `MerklePatriciaRoot` type is the same as `frame_system::Hash`.
@@ -798,8 +801,6 @@ mod benchmarks {
         T: pallet_storage_providers::Config<NativeBalance = pallet_balances::Pallet<T>>,
     // The `Proof` inner type of the `ForestVerifier` trait is `CompactProofEncodedNodes`.
         <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = shp_traits::CompactProofEncodedNodes>,
-    // The `Proof` inner type of the `KeyVerifier` trait is `CompactProof`.
-        <<T as crate::Config>::KeyVerifier as shp_traits::CommitmentVerifier>::Proof: From<sp_trie::CompactProof>,
     // The Storage Providers pallet's `HoldReason` type can be converted into the Native Balance's `Reason`.
         pallet_storage_providers::HoldReason: Into<<<T as pallet::Config>::NativeBalance as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
     // The Storage Providers `MerklePatriciaRoot` type is the same as `frame_system::Hash`.

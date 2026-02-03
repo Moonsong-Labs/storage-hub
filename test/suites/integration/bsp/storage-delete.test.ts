@@ -1,5 +1,11 @@
 import assert, { strictEqual } from "node:assert";
-import { bspKey, describeBspNet, type EnrichedBspApi, waitFor } from "../../../util";
+import {
+  bspKey,
+  describeBspNet,
+  type EnrichedBspApi,
+  extractProofFromForestProof,
+  waitFor
+} from "../../../util";
 
 await describeBspNet(
   "BSPNet: Stop storing file and other BSPs taking the relay",
@@ -88,10 +94,12 @@ await describeBspNet(
       bspApi.rpc.storagehubclient.addToExcludeList(fileKey, "file");
 
       // Request to stop storing a file with Dummy BSP
-      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
-        fileKey
-      ]);
+      const inclusionForestProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
+        null,
+        [fileKey]
+      );
       await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
+      const decodedForestProof = extractProofFromForestProof(userApi, inclusionForestProofEncoded);
       await userApi.block.seal({
         calls: [
           bspApi.tx.fileSystem.bspRequestStopStoring(
@@ -102,7 +110,7 @@ await describeBspNet(
             fingerprint,
             fileSize,
             false,
-            inclusionForestProof.toString()
+            decodedForestProof
           )
         ],
         signer: bspKey
@@ -134,7 +142,7 @@ await describeBspNet(
       await userApi.block.skipTo(cooldown);
 
       await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, inclusionForestProof)],
+        calls: [userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, decodedForestProof)],
         signer: bspKey
       });
 
