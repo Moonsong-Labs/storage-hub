@@ -25,7 +25,7 @@ impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::TxExtens
     type Hash = shp_types::Hash;
 
     fn from_minimal_extension(minimal: MinimalExtension) -> Self {
-        (
+        let inner = (
             frame_system::CheckNonZeroSender::<crate::Runtime>::new(),
             frame_system::CheckSpecVersion::<crate::Runtime>::new(),
             frame_system::CheckTxVersion::<crate::Runtime>::new(),
@@ -37,7 +37,8 @@ impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::TxExtens
                 minimal.tip,
             ),
             frame_metadata_hash_extension::CheckMetadataHash::new(false),
-        )
+        );
+        cumulus_pallet_weight_reclaim::StorageWeightReclaim::new(inner)
     }
 }
 

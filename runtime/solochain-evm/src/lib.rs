@@ -147,17 +147,23 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 pub type BlockId = generic::BlockId<Block>;
 
 /// The TransactionExtension to the basic transaction logic.
-pub type TxExtension = (
-    frame_system::CheckNonZeroSender<Runtime>,
-    frame_system::CheckSpecVersion<Runtime>,
-    frame_system::CheckTxVersion<Runtime>,
-    frame_system::CheckGenesis<Runtime>,
-    frame_system::CheckEra<Runtime>,
-    frame_system::CheckNonce<Runtime>,
-    frame_system::CheckWeight<Runtime>,
-    pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
-    frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
-);
+///
+/// Note: `StorageWeightReclaim` must wrap all other extensions to accurately measure
+/// PoV size before and after execution.
+pub type TxExtension = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
+    Runtime,
+    (
+        frame_system::CheckNonZeroSender<Runtime>,
+        frame_system::CheckSpecVersion<Runtime>,
+        frame_system::CheckTxVersion<Runtime>,
+        frame_system::CheckGenesis<Runtime>,
+        frame_system::CheckEra<Runtime>,
+        frame_system::CheckNonce<Runtime>,
+        frame_system::CheckWeight<Runtime>,
+        pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+        frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
+    ),
+>;
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
@@ -886,7 +892,7 @@ impl_runtime_apis! {
         ) -> Result<alloc::vec::Vec<u8>, sp_runtime::transaction_validity::TransactionValidityError> {
             // Build the TxExtension tuple with minimal values; only `era` and `enable_metadata`
             // influence the implicit. Other extensions have `()` implicit.
-            let extra: crate::TxExtension = (
+            let inner = (
                 frame_system::CheckNonZeroSender::<Runtime>::new(),
                 frame_system::CheckSpecVersion::<Runtime>::new(),
                 frame_system::CheckTxVersion::<Runtime>::new(),
@@ -897,6 +903,7 @@ impl_runtime_apis! {
                 pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(<Balance as Default>::default()),
                 frame_metadata_hash_extension::CheckMetadataHash::<Runtime>::new(enable_metadata),
             );
+            let extra: crate::TxExtension = cumulus_pallet_weight_reclaim::StorageWeightReclaim::new(inner);
             let implicit = <crate::TxExtension as sp_runtime::traits::TransactionExtension<crate::RuntimeCall>>::implicit(&extra)?;
             Ok(implicit.encode())
         }
