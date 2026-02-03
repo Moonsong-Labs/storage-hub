@@ -347,6 +347,10 @@ await describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUser
       bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
       await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
 
+      // We seal a block to ensure the blockchain service is caught up
+      // TODO: consider doing this in nodeCatchUpToChainTip function
+      await userApi.block.seal();
+
       // Stop the other BSP so it doesn't volunteer for the files.
       await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
