@@ -33,9 +33,10 @@ use crate::{
         StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
+    state::BlockchainServiceStateStoreRwContext,
     types::{
         FileDistributionInfo, FileKeyStatus, ForestWritePermitGuard, ManagedProvider,
-        MultiInstancesNodeRole,
+        MspForestWriteQueue, MspForestWriteQueuePop, MspForestWriteWork, MultiInstancesNodeRole,
     },
     BlockchainService,
 };
@@ -456,30 +457,15 @@ where
         // This avoids a subtle event-loop spin: acquiring + immediately dropping the permit
         // would notify `permit_release_receiver`, which would call back into this method
         // even though there is no work to do.
-        let has_pending_work = {
-            // Check if there are any pending respond storage requests.
-            let has_pending_respond = match &self.maybe_managed_provider {
-                Some(ManagedProvider::Msp(msp_handler)) => {
-                    !msp_handler.pending_respond_storage_requests.is_empty()
-                }
-                _ => unreachable!("We just checked this is a MSP"),
-            };
-
-            if has_pending_respond {
-                true
-            } else {
-                // Check if there are any pending stop storing for insolvent user requests.
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
-                    .size()
-                    > 0
+        {
+            // Use a temporary state context just for checking pending work (no mutations).
+            let temp_state = self.persistent_state.open_rw_context_with_overlay();
+            if !Self::msp_forest_write_work(&mut self.maybe_managed_provider, &temp_state, None)
+                .has_pending_work
+            {
+                trace!(target: LOG_TARGET, "No pending MSP forest-write work; skipping semaphore acquisition");
+                return;
             }
-        };
-
-        if !has_pending_work {
-            trace!(target: LOG_TARGET, "No pending MSP forest-write work; skipping semaphore acquisition");
-            return;
         }
 
         // Try to acquire a permit from the semaphore.
@@ -504,45 +490,34 @@ where
         };
 
         // At this point we know that the lock is released and we can start processing new requests.
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let mut next_event_data: Option<ForestWriteLockTaskData<Runtime>> = None;
 
-        let msp_handler = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
-            _ => {
-                // If there's no MSP being managed, there's no point in checking for pending requests.
-                error!(target: LOG_TARGET, "`msp_assign_forest_root_write_lock` called but node is not managing an MSP");
-                return;
-            }
-        };
-
-        // Check for pending respond storing requests from in-memory queue.
+        // Check for pending RespondStorage requests.
         {
-            trace!(
-                target: LOG_TARGET,
-                "Checking pending respond storage requests. Queue size: {}, pending_file_keys: {:?}",
-                msp_handler.pending_respond_storage_requests.len(),
-                msp_handler.pending_respond_storage_request_file_keys
-            );
-
             let max_batch_respond = self.config.msp_respond_storage_batch_size;
 
-            // Batch multiple respond storing requests up to the runtime configured maximum.
+            // Batch multiple RespondStorage requests up to the configured maximum.
             let mut respond_storage_requests = Vec::new();
             for _ in 0..max_batch_respond {
-                if let Some(request) = msp_handler.pending_respond_storage_requests.pop_front() {
-                    trace!(
-                        target: LOG_TARGET,
-                        "Popped respond storage request for file key [{:x}] from queue",
-                        request.file_key
-                    );
-                    // Remove from dedup tracking set so the file key can be re-queued if needed.
-                    msp_handler
-                        .pending_respond_storage_request_file_keys
-                        .remove(&request.file_key);
-                    respond_storage_requests.push(request);
-                } else {
-                    break;
-                }
+                // Pop the next RespondStorage request from the queue.
+                match Self::msp_forest_write_work(
+                    &mut self.maybe_managed_provider,
+                    &state_store_context,
+                    Some(MspForestWriteQueue::RespondStorage),
+                )
+                .popped
+                {
+                    Some(MspForestWriteQueuePop::RespondStorage(request)) => {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Popped respond storage request for file key [{:x}] from queue",
+                            request.file_key
+                        );
+                        respond_storage_requests.push(request);
+                    }
+                    _ => break,
+                };
             }
 
             // If we have at least 1 respond storing request, send the process event.
@@ -563,19 +538,25 @@ where
             }
         }
 
-        // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
+        // If we have no pending storage requests to respond to, check for pending StopStoringForInsolventUser requests.
         if next_event_data.is_none() {
-            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-            if let Some(request) = state_store_context
-                .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
-                .pop_front()
+            // Pop the next StopStoringForInsolventUser request from the queue.
+            if let Some(MspForestWriteQueuePop::StopStoringForInsolventUser(request)) =
+                Self::msp_forest_write_work(
+                    &mut self.maybe_managed_provider,
+                    &state_store_context,
+                    Some(MspForestWriteQueue::StopStoringForInsolventUser),
+                )
+                .popped
             {
                 next_event_data = Some(
                     ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
                 );
             }
-            state_store_context.commit();
         }
+
+        // Commit the state store context.
+        state_store_context.commit();
 
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
@@ -589,6 +570,65 @@ where
             self.msp_emit_forest_write_event(event_data, forest_root_write_permit);
         } else {
             trace!(target: LOG_TARGET, "No event data to emit");
+        }
+    }
+
+    /// Checks for pending MSP forest-write work and optionally pops from a queue.
+    ///
+    /// If `pop` is `Some`, pops from that queue and returns whether it succeeded.
+    /// If `pop` is `None`, checks all queues for pending work without modifying state.
+    /// Caller must commit the state context after all operations.
+    fn msp_forest_write_work<'a>(
+        maybe_managed_provider: &mut Option<ManagedProvider<Runtime>>,
+        state: &'a BlockchainServiceStateStoreRwContext<'a>,
+        pop: Option<MspForestWriteQueue>,
+    ) -> MspForestWriteWork<Runtime> {
+        // Only check the relevant queue based on which pop is requested.
+        let (has_pending_work, popped) = match pop {
+            Some(MspForestWriteQueue::RespondStorage) => {
+                let msp_handler = match maybe_managed_provider {
+                    Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+                    _ => unreachable!("msp_forest_write_work should only be called for MSP"),
+                };
+                let popped = if let Some(request) =
+                    msp_handler.pending_respond_storage_requests.pop_front()
+                {
+                    // Remove from dedup tracking set so the file key can be re-queued if needed.
+                    msp_handler
+                        .pending_respond_storage_request_file_keys
+                        .remove(&request.file_key);
+                    Some(MspForestWriteQueuePop::RespondStorage(request))
+                } else {
+                    None
+                };
+                (popped.is_some(), popped)
+            }
+            Some(MspForestWriteQueue::StopStoringForInsolventUser) => {
+                let popped = state
+                    .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                    .pop_front()
+                    .map(MspForestWriteQueuePop::StopStoringForInsolventUser);
+                (popped.is_some(), popped)
+            }
+            None => {
+                // Check all queues when no pop is requested.
+                let has_pending_respond = match maybe_managed_provider {
+                    Some(ManagedProvider::Msp(msp_handler)) => {
+                        !msp_handler.pending_respond_storage_requests.is_empty()
+                    }
+                    _ => unreachable!("msp_forest_write_work should only be called for MSP"),
+                };
+                let has_pending_stop = state
+                    .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                    .size()
+                    > 0;
+                (has_pending_respond || has_pending_stop, None)
+            }
+        };
+
+        MspForestWriteWork {
+            has_pending_work,
+            popped,
         }
     }
 

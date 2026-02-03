@@ -990,6 +990,81 @@ impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
     }
 }
 
+/// Specifies which BSP forest-write request queue to pop from.
+///
+/// Used as a parameter to `bsp_forest_write_work` to indicate which pending
+/// request queue should have its front element removed.
+pub(crate) enum BspForestWriteQueue {
+    /// Pop from the in-memory submit proof requests (BTreeSet, pops lowest tick first).
+    SubmitProof,
+    /// Pop from the persistent confirm storing request deque.
+    ConfirmStoring,
+    /// Pop from the persistent stop storing for insolvent user request deque.
+    StopStoringForInsolventUser,
+}
+
+/// The result of popping from a BSP forest-write request queue.
+///
+/// Wraps the popped request with a discriminant indicating which queue it came from.
+pub(crate) enum BspForestWriteQueuePop<Runtime: StorageEnableRuntime> {
+    /// A submit proof request was popped from the in-memory BTreeSet.
+    SubmitProof(SubmitProofRequest<Runtime>),
+    /// A confirm storing request was popped from the persistent deque.
+    ConfirmStoring(ConfirmStoringRequest<Runtime>),
+    /// A stop storing for insolvent user request was popped from the persistent deque.
+    StopStoringForInsolventUser(StopStoringForInsolventUserRequest<Runtime>),
+}
+
+/// Result of checking for pending BSP forest-write work.
+///
+/// Returned by `bsp_forest_write_work` to provide both a work-availability flag
+/// and optionally a popped request in a single call.
+pub(crate) struct BspForestWriteWork<Runtime: StorageEnableRuntime> {
+    /// Whether there is any pending work across all BSP forest-write queues.
+    pub(crate) has_pending_work: bool,
+    /// The request popped from the specified queue, if `pop` was `Some`.
+    ///
+    /// This will be `None` if no `pop` parameter was provided or if the
+    /// requested queue was empty.
+    pub(crate) popped: Option<BspForestWriteQueuePop<Runtime>>,
+}
+
+/// Specifies which MSP forest-write request queue to pop from.
+///
+/// Used as a parameter to `msp_forest_write_work` to indicate which pending
+/// request queue should have its front element removed.
+pub(crate) enum MspForestWriteQueue {
+    /// Pop from the in-memory respond storage requests (VecDeque).
+    /// Also removes the file key from `pending_respond_storage_request_file_keys`.
+    RespondStorage,
+    /// Pop from the persistent stop storing for insolvent user request deque.
+    StopStoringForInsolventUser,
+}
+
+/// The result of popping from an MSP forest-write request queue.
+///
+/// Wraps the popped request with a discriminant indicating which queue it came from.
+pub(crate) enum MspForestWriteQueuePop<Runtime: StorageEnableRuntime> {
+    /// A respond storage request was popped from the in-memory VecDeque.
+    RespondStorage(RespondStorageRequest<Runtime>),
+    /// A stop storing for insolvent user request was popped from the persistent deque.
+    StopStoringForInsolventUser(StopStoringForInsolventUserRequest<Runtime>),
+}
+
+/// Result of checking for pending MSP forest-write work.
+///
+/// Returned by `msp_forest_write_work` to provide both a work-availability flag
+/// and optionally a popped request in a single call.
+pub(crate) struct MspForestWriteWork<Runtime: StorageEnableRuntime> {
+    /// Whether there is any pending work across all MSP forest-write queues.
+    pub(crate) has_pending_work: bool,
+    /// The request popped from the specified queue, if `pop` was `Some`.
+    ///
+    /// This will be `None` if no `pop` parameter was provided or if the
+    /// requested queue was empty.
+    pub(crate) popped: Option<MspForestWriteQueuePop<Runtime>>,
+}
+
 /// Role of this node in a group of multiple instances of nodes running the same MSP/BSP.
 ///
 /// - `Leader`: the only node allowed to submit extrinsics and manage nonces.
