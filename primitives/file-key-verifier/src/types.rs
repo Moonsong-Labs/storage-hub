@@ -18,50 +18,6 @@ pub struct FileKeyProof<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE
     pub proof: CompactProofEncodedNodes,
 }
 
-/// Implement the `From<CompactProofEncodedNodes>` trait for the `FileKeyProof` struct.
-impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
-    From<CompactProofEncodedNodes> for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
-{
-    fn from(proof: CompactProofEncodedNodes) -> Self {
-        Self {
-            file_metadata: Default::default(),
-            proof,
-        }
-    }
-}
-
-/// Implement the `From<CompactProof>` trait for the `FileKeyProof` struct.
-impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64> From<CompactProof>
-    for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
-{
-    fn from(proof: CompactProof) -> Self {
-        Self {
-            file_metadata: Default::default(),
-            proof: proof.encoded_nodes,
-        }
-    }
-}
-
-/// Implement the `Into<CompactProofEncodedNodes>` trait for the `FileKeyProof` struct.
-impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
-    Into<CompactProofEncodedNodes> for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
-{
-    fn into(self) -> CompactProofEncodedNodes {
-        self.proof
-    }
-}
-
-/// Implement the `Into<CompactProof>` trait for the `FileKeyProof` struct.
-impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64> Into<CompactProof>
-    for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
-{
-    fn into(self) -> CompactProof {
-        CompactProof {
-            encoded_nodes: self.proof,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProvenFileKeyError {
     /// The file metadata can not be created.
