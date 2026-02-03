@@ -77,22 +77,24 @@ pub mod dynamic_params {
         /// u = [`UpperExponentFactor`]
         /// system_utilisation = 1
         ///
-        /// [`MaxPrice`] = [`MostlyStablePrice`] + u * e ^ ( 1 - [`SystemUtilisationUpperThresholdPercentage`] )
+        /// [`MaxPrice`] = [`MostlyStablePrice`] + u * (e ^ ( 1 - [`SystemUtilisationUpperThresholdPercentage`] ) - 1)
         ///
-        /// 500 = 50 + u * (e ^ (1 - 0.95) - 1)
-        /// u = (500 - 50) / (e ^ (1 - 0.95) - 1) ≈ 8777
-        pub static UpperExponentFactor: u32 = 8777;
+        /// Note: The factor must be in the same units as price (i.e., scaled by NANOUNIT).
+        /// 500 * NANOUNIT = 50 * NANOUNIT + u * (e ^ (1 - 0.95) - 1)
+        /// u = (500_000 - 50_000) / (e ^ 0.05 - 1) ≈ 8_777_389
+        pub static UpperExponentFactor: Balance = 8_777_389;
 
         #[codec(index = 10)]
         #[allow(non_upper_case_globals)]
         /// l = [`LowerExponentFactor`]
         /// system_utilisation = 0
         ///
-        /// [`MinPrice`] = [`MostlyStablePrice`] - u * e ^ ( [`SystemUtilisationLowerThresholdPercentage`] - 0 )
+        /// [`MinPrice`] = [`MostlyStablePrice`] - l * (e ^ ( [`SystemUtilisationLowerThresholdPercentage`] - 0 ) - 1)
         ///
-        /// 10 = 50 - l * (e ^ (0.3 - 0) - 1)
-        /// l = (50 - 10) / (e ^ (0.3 - 0) - 1) ≈ 114
-        pub static LowerExponentFactor: u32 = 114;
+        /// Note: The factor must be in the same units as price (i.e., scaled by NANOUNIT).
+        /// 10 * NANOUNIT = 50 * NANOUNIT - l * (e ^ (0.3 - 0) - 1)
+        /// l = (50_000 - 10_000) / (e ^ 0.3 - 1) ≈ 114_318
+        pub static LowerExponentFactor: Balance = 114_318;
 
         #[codec(index = 11)]
         #[allow(non_upper_case_globals)]
