@@ -198,6 +198,11 @@ impl frame_system::Config for Runtime {
     type SystemWeightInfo = ();
 }
 
+/// Configure the weight reclaim extension.
+impl cumulus_pallet_weight_reclaim::Config for Runtime {
+    type WeightInfo = ();
+}
+
 // 1 in 4 blocks (on average, not counting collisions) will be primary babe blocks.
 pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
 /// The BABE epoch configuration at genesis.
