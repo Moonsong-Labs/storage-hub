@@ -85,73 +85,81 @@ function createBlake2s256Sink(): {
   };
 }
 
-describe("stream encryption / decryption benchmarks", () => {
-  for (const size of FILE_SIZES_MB) {
-    it(`benchmarks ${size}MB file`, async () => {
-      const path = join(RESOURCE_DIR, `random-${size}mb.bin`);
-      const fileSizeBytes = statSync(path).size;
+describe(
+  "stream encryption / decryption benchmarks",
+  () => {
+    for (const size of FILE_SIZES_MB) {
+      it(
+        `benchmarks ${size}MB file`,
+        async () => {
+          const path = join(RESOURCE_DIR, `random-${size}mb.bin`);
+          const fileSizeBytes = statSync(path).size;
 
-      // Use password flow for benchmarks to avoid requiring a wallet.
-      const password = "benchmark password (do not use)";
-      const { dek, baseNonce, header } = await generateEncryptionKey({
-        kind: "password",
-        password
-      });
+          // Use password flow for benchmarks to avoid requiring a wallet.
+          const password = "benchmark password (do not use)";
+          const { dek, baseNonce, header } = await generateEncryptionKey({
+            kind: "password",
+            password
+          });
 
-      // Output folder for benchmark artifacts
-      const outDir = join(RESOURCE_DIR, "benchmarks");
-      mkdirSync(outDir, { recursive: true });
-      const encryptedPath = join(outDir, `random-${size}mb.bin.enc`);
+          // Output folder for benchmark artifacts
+          const outDir = join(RESOURCE_DIR, "benchmarks");
+          mkdirSync(outDir, { recursive: true });
+          const encryptedPath = join(outDir, `random-${size}mb.bin.enc`);
 
-      // ── Original hash (BLAKE2s-256) ───────────────
-      const originalHash = await blake2s_256(
-        Readable.toWeb(createReadStream(path)) as unknown as ReadableStream<Uint8Array>
-      );
+          // ── Original hash (BLAKE2s-256) ───────────────
+          const originalHash = await blake2s_256(
+            Readable.toWeb(createReadStream(path)) as unknown as ReadableStream<Uint8Array>
+          );
 
-      // ── Encrypt (stream -> file) ──────────────────
-      const encStart = performance.now();
-      await encryptFile({
-        input: Readable.toWeb(createReadStream(path)) as unknown as ReadableStream<Uint8Array>,
-        output: Writable.toWeb(
-          createWriteStream(encryptedPath)
-        ) as unknown as WritableStream<Uint8Array>,
-        dek,
-        baseNonce,
-        header
-      });
-      const encTime = performance.now() - encStart;
+          // ── Encrypt (stream -> file) ──────────────────
+          const encStart = performance.now();
+          await encryptFile({
+            input: Readable.toWeb(createReadStream(path)) as unknown as ReadableStream<Uint8Array>,
+            output: Writable.toWeb(
+              createWriteStream(encryptedPath)
+            ) as unknown as WritableStream<Uint8Array>,
+            dek,
+            baseNonce,
+            header
+          });
+          const encTime = performance.now() - encStart;
 
-      // ── Decrypt (file -> BLAKE2s sink) ────────────
-      const decStart = performance.now();
-      const { writable: hashSink, digest: decryptedHashP } = createBlake2s256Sink();
-      await decryptFile({
-        input: Readable.toWeb(
-          createReadStream(encryptedPath)
-        ) as unknown as ReadableStream<Uint8Array>,
-        output: hashSink,
-        getIkm: async (hdr) => {
-          if (hdr.ikm !== "password") {
-            throw new Error(`benchmark expected password header, got ${hdr.ikm}`);
-          }
-          return IKM.fromPassword(password).unwrap();
-        }
-      });
-      const decTime = performance.now() - decStart;
-      const decryptedHash = await decryptedHashP;
+          // ── Decrypt (file -> BLAKE2s sink) ────────────
+          const decStart = performance.now();
+          const { writable: hashSink, digest: decryptedHashP } = createBlake2s256Sink();
+          await decryptFile({
+            input: Readable.toWeb(
+              createReadStream(encryptedPath)
+            ) as unknown as ReadableStream<Uint8Array>,
+            output: hashSink,
+            getIkm: async (hdr) => {
+              if (hdr.ikm !== "password") {
+                throw new Error(`benchmark expected password header, got ${hdr.ikm}`);
+              }
+              return IKM.fromPassword(password).unwrap();
+            }
+          });
+          const decTime = performance.now() - decStart;
+          const decryptedHash = await decryptedHashP;
 
-      // ── Validate ──────────────────────────────────
-      expect(decryptedHash).toBe(originalHash);
+          // ── Validate ──────────────────────────────────
+          expect(decryptedHash).toBe(originalHash);
 
-      // ── Report ────────────────────────────────────
-      const sizeMB = fileSizeBytes / (1024 * 1024);
-      console.log(`
+          // ── Report ────────────────────────────────────
+          const sizeMB = fileSizeBytes / (1024 * 1024);
+          console.log(`
 📦 File: ${sizeMB.toFixed(0)} MB
 🔐 Encrypt: ${(encTime / 1000).toFixed(2)} s  (${(sizeMB / (encTime / 1000)).toFixed(1)} MB/s)
 🔓 Decrypt + Hashing: ${(decTime / 1000).toFixed(2)} s  (${(sizeMB / (decTime / 1000)).toFixed(1)} MB/s)
 `);
-    }, BENCHMARK_TIMEOUT);
-  }
-}, BENCHMARK_TIMEOUT);
+        },
+        BENCHMARK_TIMEOUT
+      );
+    }
+  },
+  BENCHMARK_TIMEOUT
+);
 
 describe("E2E encryption / decryption", () => {
   it("encrypts/decrypts adolphus.jpg from signature", async () => {

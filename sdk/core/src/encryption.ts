@@ -226,11 +226,11 @@ export async function encryptFile({
 type EncryptionKeySource =
   | { kind: "password"; password: string }
   | {
-    kind: "signature";
-    walletClient: WalletClient;
-    account: Account | `0x${string}`;
-    message: string;
-  };
+      kind: "signature";
+      walletClient: WalletClient;
+      account: Account | `0x${string}`;
+      message: string;
+    };
 
 export type GeneratedEncryptionKey = {
   dek: DEK;
@@ -260,33 +260,33 @@ export async function generateEncryptionKey(
   };
 
   switch (source.kind) {
-  case "password": {
-    const ikm = IKM.fromPassword(source.password).unwrap();
-    const dek = DEK.derive(ikm, salt).unwrap();
-    const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
+    case "password": {
+      const ikm = IKM.fromPassword(source.password).unwrap();
+      const dek = DEK.derive(ikm, salt).unwrap();
+      const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
 
-    return {
-      dek,
-      baseNonce,
-      header
-    };
-  }
-  case "signature": {
-    const signature = await source.walletClient.signMessage({
-      account: source.account,
-      message: source.message
-    });
+      return {
+        dek,
+        baseNonce,
+        header
+      };
+    }
+    case "signature": {
+      const signature = await source.walletClient.signMessage({
+        account: source.account,
+        message: source.message
+      });
 
-    const ikm = IKM.fromSignature(signature).unwrap();
-    const dek = DEK.derive(ikm, salt).unwrap();
-    const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
+      const ikm = IKM.fromSignature(signature).unwrap();
+      const dek = DEK.derive(ikm, salt).unwrap();
+      const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
 
-    return {
-      dek,
-      baseNonce,
-      header
-    };
-  }
+      return {
+        dek,
+        baseNonce,
+        header
+      };
+    }
   }
   throw new Error("Unknown EncryptionKeySource");
 }
