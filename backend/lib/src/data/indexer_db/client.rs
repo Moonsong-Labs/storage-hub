@@ -243,6 +243,16 @@ impl DBClient {
             .await
             .map_err(Into::into)
     }
+
+    /// Get the number of files stored by the given MSP
+    pub async fn get_number_of_files_stored_by_msp(&self, msp: &OnchainMspId) -> Result<u64> {
+        debug!(target: "indexer_db::client::get_number_of_files_stored_by_msp", msp = %msp, "Fetching number of files stored by MSP");
+
+        self.repository
+            .get_number_of_files_stored_by_msp(msp)
+            .await
+            .map_err(Into::into)
+    }
 }
 
 // Test-only mutable operations

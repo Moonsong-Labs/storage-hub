@@ -86,4 +86,5 @@ export interface StatsResponse {
   lastCapacityChange: string;
   valuePropsAmount: string;
   bucketsAmount: string;
+  filesAmount: string;
 }

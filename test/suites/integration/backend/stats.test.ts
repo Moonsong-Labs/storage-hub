@@ -115,6 +115,14 @@ await describeMspNet(
         mspInfo.amountOfValueProps.toString(),
         "Value props amount should match on-chain data"
       );
+
+      // TODO: Once the RPC to get all files for a provider is merged (PR #663)[https://github.com/Moonsong-Labs/storage-hub/pull/663]
+      // we should update this to get the number of files using the RPC instead of hardcoding it.
+      strictEqual(
+        stats.filesAmount,
+        "1",
+        "Files amount should be 1 (since this test runs with `initialised: true` which creates one storage request)."
+      );
     });
   }
 );

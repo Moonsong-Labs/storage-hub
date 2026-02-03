@@ -32,6 +32,8 @@ pub struct StatsResponse {
     pub value_props_amount: String,
     #[serde(rename = "bucketsAmount")]
     pub buckets_amount: String,
+    #[serde(rename = "filesAmount")]
+    pub files_amount: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
