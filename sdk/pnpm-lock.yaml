@@ -41,9 +41,9 @@ importers:
       abitype:
         specifier: ^1.0.0
         version: 1.1.0(typescript@5.5.4)
-      cbor:
-        specifier: 10.0.11
-        version: 10.0.11
+      cborg:
+        specifier: ^4.5.8
+        version: 4.5.8
       ethers:
         specifier: ^6.15.0
         version: 6.15.0
@@ -1573,9 +1573,9 @@ packages:
   caniuse-lite@1.0.30001743:
     resolution: {integrity: sha512-e6Ojr7RV14Un7dz6ASD0aZDmQPT/A+eZU+nuTNfjqmRrmkmQlnTNWH0SKmqagx9PeW87UVqapSurtAXifmtdmw==}
 
-  cbor@10.0.11:
-    resolution: {integrity: sha512-vIwORDd/WyB8Nc23o2zNN5RrtFGlR6Fca61TtjkUXueI3Jf2DOZDl1zsshvBntZ3wZHBM9ztjnkXSmzQDaq3WA==}
-    engines: {node: '>=20'}
+  cborg@4.5.8:
+    resolution: {integrity: sha512-6/viltD51JklRhq4L7jC3zgy6gryuG5xfZ3kzpE+PravtyeQLeQmCYLREhQH7pWENg5pY4Yu/XCd6a7dKScVlw==}
+    hasBin: true
 
   chai@5.3.3:
     resolution: {integrity: sha512-4zNhdJD/iOjSH0A05ea+Ke6MU5mmpQcbQsSOkgdaUMJ9zTlDTD/GYlwohmIE2u0gaxHYiVHEn1Fw9mZ/ktJWgw==}
@@ -2000,10 +2000,6 @@ packages:
   node-stream-zip@1.15.0:
     resolution: {integrity: sha512-LN4fydt9TqhZhThkZIVQnF9cwjU3qmUH9h78Mx/K7d3VvfRqqwthLwJEUOEL0QPZ0XQmNN7be5Ggit5+4dq3Bw==}
     engines: {node: '>=0.12.0'}
-
-  nofilter@3.1.0:
-    resolution: {integrity: sha512-l2NNj07e9afPnhAhvgVrCD/oy2Ai1yfLpuo3EpiO1jFTsB4sFz6oIfAfSZyQzVpkZQ9xS8ZS5g1jCBgq4Hwo0g==}
-    engines: {node: '>=12.19'}
 
   onetime@7.0.0:
     resolution: {integrity: sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ==}
@@ -3684,9 +3680,7 @@ snapshots:
 
   caniuse-lite@1.0.30001743: {}
 
-  cbor@10.0.11:
-    dependencies:
-      nofilter: 3.1.0
+  cborg@4.5.8: {}
 
   chai@5.3.3:
     dependencies:
@@ -4083,8 +4077,6 @@ snapshots:
       - babel-plugin-macros
 
   node-stream-zip@1.15.0: {}
-
-  nofilter@3.1.0: {}
 
   onetime@7.0.0:
     dependencies:

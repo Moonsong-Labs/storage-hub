@@ -1,4 +1,4 @@
-import { decode, encodeCanonical } from "cbor";
+import { decode, encode, rfc8949EncodeOptions } from "cborg";
 
 export const EncryptionHeaderVersion = {
   V1: 1
@@ -55,10 +55,8 @@ export function createEncryptionHeader(params: EncryptionHeaderParams): Uint8Arr
     salt: params.salt
   };
 
-  // NOTE: `cbor.encode()` is variadic; passing `{ canonical: true }` would encode
-  // it as a *second* CBOR item. Use `encodeCanonical()` instead.
-  const cborHeader = encodeCanonical(header);
-  const cborBytes = cborHeader instanceof Uint8Array ? cborHeader : new Uint8Array(cborHeader);
+  // Deterministic encoding: RFC 8949 "deterministic mode" map sorting.
+  const cborBytes = encode(header, rfc8949EncodeOptions);
 
   const out = new Uint8Array(HEADER_MAGIC.length + 4 + cborBytes.length);
   let offset = 0;
