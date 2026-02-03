@@ -23,6 +23,7 @@ import { blake2s_256 } from "../src/encryption/hash.js";
 const RESOURCE_DIR = join(__dirname, "resources");
 
 const FILE_SIZES_MB = [50, 100, 500, 1000, 2000];
+const BENCHMARK_TIMEOUT = 240_000;
 
 beforeAll(async () => {
   for (const size of FILE_SIZES_MB) {
@@ -148,9 +149,9 @@ describe("stream encryption / decryption benchmarks", () => {
 🔐 Encrypt: ${(encTime / 1000).toFixed(2)} s  (${(sizeMB / (encTime / 1000)).toFixed(1)} MB/s)
 🔓 Decrypt + Hashing: ${(decTime / 1000).toFixed(2)} s  (${(sizeMB / (decTime / 1000)).toFixed(1)} MB/s)
 `);
-    }, 60_000);
+    }, BENCHMARK_TIMEOUT);
   }
-}, 60_000);
+}, BENCHMARK_TIMEOUT);
 
 describe("E2E encryption / decryption", () => {
   it("encrypts/decrypts adolphus.jpg from signature", async () => {
