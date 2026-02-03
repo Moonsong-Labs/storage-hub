@@ -505,7 +505,7 @@ where
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: CompactProofEncodedNodes,
+        proof: &CompactProofEncodedNodes,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         if proof.len() > 0 {
             Ok(proof
@@ -529,7 +529,7 @@ where
     fn apply_delta(
         root: &Self::Key,
         mutations: &[(Self::Key, TrieMutation)],
-        _proof: Self::Proof,
+        _proof: &Self::Proof,
     ) -> Result<
         (
             MemoryDB<T::Hash>,

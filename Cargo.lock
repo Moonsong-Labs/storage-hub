@@ -16172,6 +16172,7 @@ dependencies = [
  "cumulus-pallet-aura-ext",
  "cumulus-pallet-parachain-system 0.20.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "cumulus-pallet-session-benchmarking",
+ "cumulus-pallet-weight-reclaim",
  "cumulus-pallet-xcm",
  "cumulus-pallet-xcmp-queue",
  "cumulus-primitives-aura",
