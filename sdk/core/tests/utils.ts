@@ -1,15 +1,11 @@
-import { createWriteStream, existsSync, mkdirSync } from 'fs';
-import { randomBytes } from 'crypto';
-import { dirname } from 'path';
-import { sha256 } from '@noble/hashes/sha2.js';
-
+import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { dirname } from "node:path";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 const WRITE_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
 
-export async function generateRandomFile(
-  path: string,
-  sizeMB: number
-): Promise<void> {
+export async function generateRandomFile(path: string, sizeMB: number): Promise<void> {
   if (existsSync(path)) return;
 
   if (existsSync(path)) {
@@ -31,7 +27,7 @@ export async function generateRandomFile(
     const chunk = randomBytes(chunkSize);
 
     if (!stream.write(chunk)) {
-      await new Promise<void>((resolve) => stream.once('drain', () => resolve()));
+      await new Promise<void>((resolve) => stream.once("drain", () => resolve()));
     }
 
     written += chunkSize;
@@ -39,19 +35,15 @@ export async function generateRandomFile(
 
   await new Promise<void>((resolve, reject) => {
     stream.end(() => resolve());
-    stream.on('error', reject);
+    stream.on("error", reject);
   });
 }
-
-
 
 export async function hashWebStream(
   // Vitest runs in Node where `Readable.toWeb()` returns Node's `stream/web` types,
   // which differ slightly from DOM lib types (esp. with exactOptionalPropertyTypes).
   // Accept both and use runtime-compatible reader access.
-  stream:
-    | ReadableStream<Uint8Array>
-    | import('node:stream/web').ReadableStream<Uint8Array>
+  stream: ReadableStream<Uint8Array> | import("node:stream/web").ReadableStream<Uint8Array>
 ): Promise<Uint8Array> {
   const hasher = sha256.create();
   const reader = (stream as any).getReader() as ReadableStreamDefaultReader<Uint8Array>;

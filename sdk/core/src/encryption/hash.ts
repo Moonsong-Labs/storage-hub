@@ -6,9 +6,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
  *
  * Returns a 0x-prefixed 32-byte hex digest.
  */
-export async function blake2s_256(
-  stream: ReadableStream<Uint8Array>
-): Promise<`0x${string}`> {
+export async function blake2s_256(stream: ReadableStream<Uint8Array>): Promise<`0x${string}`> {
   const hasher = blake2s.create({ dkLen: 32 });
 
   const reader = stream.getReader();
@@ -26,4 +24,3 @@ export async function blake2s_256(
   const digest = hasher.digest();
   return `0x${bytesToHex(digest)}` as `0x${string}`;
 }
-

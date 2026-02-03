@@ -1,7 +1,7 @@
 import { decode, encodeCanonical } from "cbor";
 
 export const EncryptionHeaderVersion = {
-  V1: 1,
+  V1: 1
   // V2: 2,
 } as const;
 export type EncryptionHeaderVersion =
@@ -48,13 +48,11 @@ function isEncryptionHeaderV1(x: unknown): x is EncryptionHeaderV1 {
  * Layout:
  *   [ magic (3) ][ u32be header_len ][ cbor_header ]
  */
-export function createEncryptionHeader(
-  params: EncryptionHeaderParams
-): Uint8Array {
+export function createEncryptionHeader(params: EncryptionHeaderParams): Uint8Array {
   const header: EncryptionHeaderV1 = {
     v: EncryptionHeaderVersion.V1,
     ikm: params.ikm,
-    salt: params.salt,
+    salt: params.salt
   };
 
   // NOTE: `cbor.encode()` is variadic; passing `{ canonical: true }` would encode
@@ -68,16 +66,21 @@ export function createEncryptionHeader(
   out.set(HEADER_MAGIC, offset);
   offset += HEADER_MAGIC.length;
 
-  new DataView(out.buffer, out.byteOffset, out.byteLength).setUint32(offset, cborBytes.length, false);
+  new DataView(out.buffer, out.byteOffset, out.byteLength).setUint32(
+    offset,
+    cborBytes.length,
+    false
+  );
   offset += 4;
 
   out.set(cborBytes, offset);
   return out;
 }
 
-export function readEncryptionHeader(
-  input: Uint8Array
-): { header: EncryptionHeaderV1; headerLength: number } {
+export function readEncryptionHeader(input: Uint8Array): {
+  header: EncryptionHeaderV1;
+  headerLength: number;
+} {
   if (!(input instanceof Uint8Array)) {
     throw new TypeError("input must be Uint8Array");
   }
@@ -113,6 +116,6 @@ export function readEncryptionHeader(
 
   return {
     header: decoded,
-    headerLength: offset,
+    headerLength: offset
   };
 }

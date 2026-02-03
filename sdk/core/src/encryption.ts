@@ -1,12 +1,15 @@
-import { chacha20poly1305 } from '@noble/ciphers/chacha.js';
+import { chacha20poly1305 } from "@noble/ciphers/chacha.js";
 
-import { ENCRYPTION_CHUNK_SIZE } from './constants.js';
+import { ENCRYPTION_CHUNK_SIZE } from "./constants.js";
 
-import { WalletClient } from 'viem';
-import type { Account } from 'viem';
-import { DEK, BaseNonce, IKM, Salt } from './encryption/types.js';
-import type { DEK as DEKType, BaseNonce as BaseNonceType, IKM as IKMBrand } from './encryption/types.js';
-import { createEncryptionHeader, readEncryptionHeader, type EncryptionHeaderParams } from './encryption/cbor.js';
+import type { WalletClient } from "viem";
+import type { Account } from "viem";
+import { DEK, BaseNonce, IKM, Salt } from "./encryption/types.js";
+import {
+  createEncryptionHeader,
+  readEncryptionHeader,
+  type EncryptionHeaderParams
+} from "./encryption/cbor.js";
 
 const AEAD_TAG_SIZE_BYTES = 16;
 
@@ -42,7 +45,7 @@ class ByteQueue {
 
     while (outOffset < n) {
       const head = this.segments[0];
-      if (!head) throw new Error('ByteQueue.take: internal empty queue');
+      if (!head) throw new Error("ByteQueue.take: internal empty queue");
 
       const available = head.length - this.headOffset;
       const toCopy = Math.min(available, n - outOffset);
@@ -72,8 +75,8 @@ export type EncryptFileProgress = {
 
 type EncryptAndWriteChunkParams = {
   writer: WritableStreamDefaultWriter<Uint8Array>;
-  dek: DEKType;
-  baseNonce: BaseNonceType;
+  dek: DEK;
+  baseNonce: BaseNonce;
   chunkIndex: number;
   plaintext: Uint8Array;
   bytesProcessed: number;
@@ -87,7 +90,7 @@ async function encryptAndWriteChunk({
   chunkIndex,
   plaintext,
   bytesProcessed,
-  onProgress,
+  onProgress
 }: EncryptAndWriteChunkParams): Promise<number> {
   // Nonce is derived from BaseNonce + chunkIndex.
   const nonce = baseNonce.getNonce(chunkIndex).unwrap();
@@ -107,8 +110,8 @@ async function encryptAndWriteChunk({
 export type EncryptFileParams = {
   input: ReadableStream<Uint8Array>;
   output: WritableStream<Uint8Array>;
-  dek: DEKType;
-  baseNonce: BaseNonceType;
+  dek: DEK;
+  baseNonce: BaseNonce;
   /**
    * CBOR header fields written before any ciphertext.
    *
@@ -137,7 +140,7 @@ export async function encryptFile({
   baseNonce,
   header,
   onProgress,
-  chunkSizeBytes,
+  chunkSizeBytes
 }: EncryptFileParams): Promise<void> {
   // -------- parameters / defaults --------
   const chunkSize = chunkSizeBytes ?? ENCRYPTION_CHUNK_SIZE;
@@ -178,7 +181,7 @@ export async function encryptFile({
           chunkIndex,
           plaintext: plaintextChunk,
           bytesProcessed,
-          onProgress,
+          onProgress
         });
         chunkIndex++;
       }
@@ -194,7 +197,7 @@ export async function encryptFile({
         chunkIndex,
         plaintext: lastPlaintext,
         bytesProcessed,
-        onProgress,
+        onProgress
       });
     }
 
@@ -222,7 +225,12 @@ export async function encryptFile({
 
 type EncryptionKeySource =
   | { kind: "password"; password: string }
-  | { kind: "signature"; walletClient: WalletClient; account: Account | `0x${string}`; message: string };
+  | {
+    kind: "signature";
+    walletClient: WalletClient;
+    account: Account | `0x${string}`;
+    message: string;
+  };
 
 export type GeneratedEncryptionKey = {
   dek: DEK;
@@ -240,7 +248,6 @@ function randomSaltBytes(length = 32): Uint8Array {
   return salt;
 }
 
-
 export async function generateEncryptionKey(
   source: EncryptionKeySource
 ): Promise<GeneratedEncryptionKey> {
@@ -249,7 +256,7 @@ export async function generateEncryptionKey(
   const salt = Salt.fromBytes(saltBytes).unwrap();
   const header: EncryptionHeaderParams = {
     ikm: source.kind,
-    salt: saltBytes,
+    salt: saltBytes
   };
 
   switch (source.kind) {
@@ -261,13 +268,13 @@ export async function generateEncryptionKey(
     return {
       dek,
       baseNonce,
-      header,
+      header
     };
   }
   case "signature": {
     const signature = await source.walletClient.signMessage({
       account: source.account,
-      message: source.message,
+      message: source.message
     });
 
     const ikm = IKM.fromSignature(signature).unwrap();
@@ -277,7 +284,7 @@ export async function generateEncryptionKey(
     return {
       dek,
       baseNonce,
-      header,
+      header
     };
   }
   }
@@ -298,7 +305,7 @@ export type DecryptFileParams = {
    * - If header.ikm === "password": prompt for password and return `IKM.fromPassword(password).unwrap()`
    * - If header.ikm === "signature": produce the file-specific signature again and return `IKM.fromSignature(signature).unwrap()`
    */
-  getIkm: (header: EncryptionHeaderParams) => Promise<IKMBrand>;
+  getIkm: (header: EncryptionHeaderParams) => Promise<IKM>;
   onProgress?: (p: DecryptFileProgress) => void;
   /**
    * Plaintext chunk size used during encryption framing.
@@ -342,7 +349,10 @@ async function readHeaderFromStream(
     }
   }
 
-  const headerLen = new DataView(prefix.buffer, prefix.byteOffset, prefix.byteLength).getUint32(3, false);
+  const headerLen = new DataView(prefix.buffer, prefix.byteOffset, prefix.byteLength).getUint32(
+    3,
+    false
+  );
   if (headerLen > MAX_HEADER_LEN_BYTES) {
     throw new Error(`decryptFile: header too large (${headerLen} bytes)`);
   }
@@ -369,8 +379,8 @@ async function readHeaderFromStream(
 
 type DecryptAndWriteChunkParams = {
   writer: WritableStreamDefaultWriter<Uint8Array>;
-  dek: DEKType;
-  baseNonce: BaseNonceType;
+  dek: DEK;
+  baseNonce: BaseNonce;
   chunkIndex: number;
   ciphertext: Uint8Array;
   bytesProcessed: number;
@@ -384,7 +394,7 @@ async function decryptAndWriteChunk({
   chunkIndex,
   ciphertext,
   bytesProcessed,
-  onProgress,
+  onProgress
 }: DecryptAndWriteChunkParams): Promise<number> {
   const nonce = baseNonce.getNonce(chunkIndex).unwrap();
   const cipher = chacha20poly1305(dek, nonce);
@@ -409,7 +419,7 @@ export async function decryptFile({
   output,
   getIkm,
   onProgress,
-  chunkSizeBytes,
+  chunkSizeBytes
 }: DecryptFileParams): Promise<void> {
   const chunkSize = chunkSizeBytes ?? ENCRYPTION_CHUNK_SIZE;
   if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
@@ -448,7 +458,7 @@ export async function decryptFile({
           chunkIndex,
           ciphertext: ciphertextChunk,
           bytesProcessed,
-          onProgress,
+          onProgress
         });
         chunkIndex++;
       }
@@ -471,7 +481,7 @@ export async function decryptFile({
         chunkIndex,
         ciphertext: lastCiphertext,
         bytesProcessed,
-        onProgress,
+        onProgress
       });
     }
 
@@ -495,5 +505,3 @@ export async function decryptFile({
     reader.releaseLock();
   }
 }
-
-

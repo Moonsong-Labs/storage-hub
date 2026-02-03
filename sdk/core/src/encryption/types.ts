@@ -24,20 +24,20 @@ export const DEK = {
     if (!(bytes instanceof Uint8Array)) {
       return withUnwrap({
         ok: false,
-        error: new TypeError("DEK must be a Uint8Array"),
+        error: new TypeError("DEK must be a Uint8Array")
       });
     }
 
     if (bytes.length !== 32) {
       return withUnwrap({
         ok: false,
-        error: new Error(`DEK must be 32 bytes (got ${bytes.length})`),
+        error: new Error(`DEK must be 32 bytes (got ${bytes.length})`)
       });
     }
 
     return withUnwrap({
       ok: true,
-      value: bytes as DEK,
+      value: bytes as DEK
     });
   },
 
@@ -55,42 +55,37 @@ export const DEK = {
    *
    * Returns a Result like type with DEK (32 bytes) if everything was ok.
    */
-  derive(
-    ikm: IKM,
-    salt: Salt,
-  ) {
+  derive(ikm: IKM, salt: Salt) {
     const dekBytes = hkdf(sha256, ikm, salt, DEK_INFO, 32);
     return withUnwrap({
       ok: true,
-      value: dekBytes as DEK,
+      value: dekBytes as DEK
     });
-  },
+  }
 };
-
 
 export const Nonce = {
   fromBytes(bytes: Uint8Array): ResultWithUnwrap<Nonce, Error> {
     if (!(bytes instanceof Uint8Array)) {
       return withUnwrap({
         ok: false,
-        error: new TypeError("Nonce must be a Uint8Array"),
+        error: new TypeError("Nonce must be a Uint8Array")
       });
     }
 
     if (bytes.length !== 12) {
       return withUnwrap({
         ok: false,
-        error: new Error(`Nonce must be 12 bytes (got ${bytes.length})`),
+        error: new Error(`Nonce must be 12 bytes (got ${bytes.length})`)
       });
     }
 
     return withUnwrap({
       ok: true,
-      value: bytes as Nonce,
+      value: bytes as Nonce
     });
-  },
+  }
 };
-
 
 export type BaseNonce = {
   readonly bytes: Uint8Array;
@@ -100,11 +95,7 @@ export type BaseNonce = {
 /* ---------- constructor ---------- */
 
 export const BaseNonce = {
-
-  derive(
-    ikm: IKM,
-    salt: Salt,
-  ): ResultWithUnwrap<BaseNonce, Error> {
+  derive(ikm: IKM, salt: Salt): ResultWithUnwrap<BaseNonce, Error> {
     const nonceBytes = hkdf(sha256, ikm, salt, NONCE_INFO, 12);
     return BaseNonce.fromBytes(nonceBytes);
   },
@@ -113,14 +104,14 @@ export const BaseNonce = {
     if (!(bytes instanceof Uint8Array)) {
       return withUnwrap({
         ok: false,
-        error: new TypeError("BaseNonce must be a Uint8Array"),
+        error: new TypeError("BaseNonce must be a Uint8Array")
       });
     }
 
     if (bytes.length !== 12) {
       return withUnwrap({
         ok: false,
-        error: new Error(`BaseNonce must be 12 bytes (got ${bytes.length})`),
+        error: new Error(`BaseNonce must be 12 bytes (got ${bytes.length})`)
       });
     }
 
@@ -132,7 +123,7 @@ export const BaseNonce = {
         if (!Number.isSafeInteger(chunkIndex) || chunkIndex < 0) {
           return withUnwrap({
             ok: false,
-            error: new Error("chunkIndex must be a non-negative integer"),
+            error: new Error("chunkIndex must be a non-negative integer")
           });
         }
 
@@ -151,16 +142,15 @@ export const BaseNonce = {
         }
 
         return Nonce.fromBytes(nonce);
-      },
+      }
     });
 
     return withUnwrap({
       ok: true,
-      value,
+      value
     });
-  },
+  }
 };
-
 
 // Additional Authentication Data
 export const AAD = {
@@ -168,28 +158,19 @@ export const AAD = {
     if (!(bytes instanceof Uint8Array)) {
       return withUnwrap({
         ok: false,
-        error: new TypeError("AAD must be a Uint8Array"),
+        error: new TypeError("AAD must be a Uint8Array")
       });
     }
 
     return withUnwrap({
       ok: true,
-      value: bytes as AAD,
+      value: bytes as AAD
     });
-  },
+  }
 };
 
-
-function normalize(
-  input: Uint8Array,
-  context: string
-): Uint8Array {
-  return sha256(
-    new Uint8Array([
-      ...new TextEncoder().encode(context),
-      ...input,
-    ])
-  );
+function normalize(input: Uint8Array, context: string): Uint8Array {
+  return sha256(new Uint8Array([...new TextEncoder().encode(context), ...input]));
 }
 
 export const IKM = {
@@ -199,14 +180,14 @@ export const IKM = {
     if (raw.length < 8) {
       return withUnwrap({
         ok: false,
-        error: new Error("Password too short"),
+        error: new Error("Password too short")
       });
     }
 
     const normalized = normalize(raw, "ikm:password");
     return withUnwrap({
       ok: true,
-      value: normalized as IKM,
+      value: normalized as IKM
     });
   },
 
@@ -215,7 +196,7 @@ export const IKM = {
     if (!isHexString(signature)) {
       return withUnwrap({
         ok: false,
-        error: new Error("Signature must be a valid 0x-prefixed hex string"),
+        error: new Error("Signature must be a valid 0x-prefixed hex string")
       });
     }
 
@@ -224,7 +205,7 @@ export const IKM = {
 
     return withUnwrap({
       ok: true,
-      value: normalized as IKM,
+      value: normalized as IKM
     });
   },
 
@@ -232,21 +213,21 @@ export const IKM = {
     if (!(bytes instanceof Uint8Array)) {
       return withUnwrap({
         ok: false,
-        error: new TypeError("IKM must be Uint8Array"),
+        error: new TypeError("IKM must be Uint8Array")
       });
     }
 
     if (bytes.length < 32) {
       return withUnwrap({
         ok: false,
-        error: new Error("IKM requires at least 32 bytes"),
+        error: new Error("IKM requires at least 32 bytes")
       });
     }
 
     const normalized = normalize(bytes, "ikm:bytes");
     return withUnwrap({
       ok: true,
-      value: normalized as IKM,
+      value: normalized as IKM
     });
   },
 
@@ -262,7 +243,7 @@ export const IKM = {
     purpose: string,
     chainId: number,
     address: `0x${string}`,
-    fileHash: `0x${string}`,
+    fileHash: `0x${string}`
   ): string {
     return [
       `${appName} – Encryption Key Derivation`,
@@ -278,7 +259,7 @@ export const IKM = {
       "This signature does NOT authorize any blockchain transaction.",
       "This signature WILL be used to derive encryption keys.",
       "Anyone with access to this signature can decrypt the associated data.",
-      "Never share this signature with anyone.",
+      "Never share this signature with anyone."
     ].join("\n");
   },
 
@@ -295,22 +276,14 @@ export const IKM = {
     purpose: string,
     chainId: number,
     address: `0x${string}`,
-    stream: ReadableStream<Uint8Array>,
+    stream: ReadableStream<Uint8Array>
   ): Promise<{ message: string; fileHash: `0x${string}` }> {
     const fileHash = await blake2s_256(stream);
     return {
       fileHash,
-      message: IKM.createMessage(
-        appName,
-        domain,
-        version,
-        purpose,
-        chainId,
-        address,
-        fileHash,
-      ),
+      message: IKM.createMessage(appName, domain, version, purpose, chainId, address, fileHash)
     };
-  },
+  }
 };
 
 export const Salt = {
@@ -318,16 +291,16 @@ export const Salt = {
     if (!(bytes instanceof Uint8Array)) {
       return withUnwrap({
         ok: false,
-        error: new TypeError("Salt must be a Uint8Array"),
+        error: new TypeError("Salt must be a Uint8Array")
       });
     }
 
     // No fixed length requirement: HKDF salt can be any length (including empty).
     return withUnwrap({
       ok: true,
-      value: bytes as Salt,
+      value: bytes as Salt
     });
-  },
+  }
 };
 
 export const Info = {
@@ -335,14 +308,14 @@ export const Info = {
     if (!(bytes instanceof Uint8Array)) {
       return withUnwrap({
         ok: false,
-        error: new TypeError("Info must be a Uint8Array"),
+        error: new TypeError("Info must be a Uint8Array")
       });
     }
 
     // No fixed length requirement: HKDF info can be any length (including empty).
     return withUnwrap({
       ok: true,
-      value: bytes as Info,
+      value: bytes as Info
     });
-  },
+  }
 };
