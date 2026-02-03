@@ -363,7 +363,6 @@ mod runtime {
 #[cfg(feature = "runtime-benchmarks")]
 mod benches {
     frame_benchmarking::define_benchmarks!(
-        // StorageHub pallets only
         [pallet_bucket_nfts, BucketNfts]
         [pallet_file_system, FileSystem]
         [pallet_payment_streams, PaymentStreams]

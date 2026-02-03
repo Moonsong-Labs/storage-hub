@@ -205,31 +205,6 @@ parameter_types! {
     pub storage Features: PalletFeatures = PalletFeatures::all_enabled();
 }
 
-/// A helper struct to satisfy pallet_nfts BenchmarkHelper trait for Ethereum types
-#[cfg(feature = "runtime-benchmarks")]
-pub struct TestNftsBenchmarkHelper;
-#[cfg(feature = "runtime-benchmarks")]
-impl pallet_nfts::BenchmarkHelper<u128, u128, AccountPublic, AccountId, Signature>
-    for TestNftsBenchmarkHelper
-{
-    fn collection(i: u16) -> u128 {
-        i.into()
-    }
-    fn item(i: u16) -> u128 {
-        i.into()
-    }
-    fn signer() -> (AccountPublic, AccountId) {
-        // Create a dummy signer for benchmarks
-        let signer = fp_account::EthereumSigner::from([1u8; 20]);
-        let account = fp_account::AccountId20::from([1u8; 20]);
-        (signer, account)
-    }
-    fn sign(_signer: &AccountPublic, _message: &[u8]) -> Signature {
-        // Create a dummy signature for benchmarks - actual verification not needed in tests
-        fp_account::EthereumSignature::new(sp_core::ecdsa::Signature::from_raw([0u8; 65]))
-    }
-}
-
 impl pallet_nfts::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type CollectionId = u128;
@@ -256,9 +231,8 @@ impl pallet_nfts::Config for Test {
     type OffchainPublic = AccountPublic;
     type WeightInfo = ();
     type BlockNumberProvider = frame_system::Pallet<Self>;
-    pallet_nfts::runtime_benchmarks_enabled! {
-        type Helper = TestNftsBenchmarkHelper;
-    }
+    #[cfg(feature = "runtime-benchmarks")]
+    type Helper = ();
 }
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
@@ -531,7 +505,7 @@ where
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: &CompactProofEncodedNodes,
+        proof: CompactProofEncodedNodes,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         if proof.len() > 0 {
             Ok(proof
@@ -555,7 +529,7 @@ where
     fn apply_delta(
         root: &Self::Key,
         mutations: &[(Self::Key, TrieMutation)],
-        _proof: &Self::Proof,
+        _proof: Self::Proof,
     ) -> Result<
         (
             MemoryDB<T::Hash>,
