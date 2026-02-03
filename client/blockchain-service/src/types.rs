@@ -63,7 +63,9 @@ impl Drop for ForestWritePermitGuard {
     fn drop(&mut self) {
         // Send notification to the blockchain service event loop to process pending requests.
         // Ignore errors as the receiver may be dropped during shutdown.
-        let _ = self.release_notifier.send(());
+        if let Err(e) = self.release_notifier.send(()) {
+            warn!(target: LOG_TARGET, "Failed to send release notification: {}", e);
+        }
     }
 }
 
