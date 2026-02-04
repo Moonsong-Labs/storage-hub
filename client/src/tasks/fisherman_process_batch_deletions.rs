@@ -407,7 +407,15 @@ where
         match deletion_type {
             shc_indexer_db::models::FileDeletionType::User => {
                 self.submit_user_deletion_extrinsic(&remaining_files, provider_id, forest_proof)
-                    .await?;
+                    .await
+                    .map_err(|e| 
+                        anyhow!(
+                            "User deletion failed for {} files, target {:?}. File keys: [{}]. Error: {:?}", 
+                            remaining_files.len(), 
+                            target, 
+                            remaining_file_keys.display_hex_list(), 
+                            e
+                        ))?;
             }
             shc_indexer_db::models::FileDeletionType::Incomplete => {
                 self.submit_incomplete_deletion_extrinsic(
@@ -415,7 +423,15 @@ where
                     provider_id,
                     forest_proof,
                 )
-                .await?;
+                .await
+                .map_err(|e| 
+                    anyhow!(
+                        "Incomplete deletion failed for {} files, target {:?}. File keys: [{}]. Error: {:?}", 
+                        remaining_file_keys.len(), 
+                        target, 
+                        remaining_file_keys.display_hex_list(), 
+                        e
+                    ))?;
             }
         }
 
@@ -851,7 +867,10 @@ where
                     e
                 );
                 anyhow!("Failed to submit delete_files extrinsic: {:?}", e)
-            })?;
+            })?
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await
+            .map_err(|e| anyhow!("Failed to watch for success: {:?}", e))?;
 
         info!(
             target: LOG_TARGET,
@@ -929,7 +948,10 @@ where
                     "Failed to submit delete_files_for_incomplete_storage_request extrinsic: {:?}",
                     e
                 )
-            })?;
+            })?
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await
+            .map_err(|e| anyhow!("Failed to watch for success: {:?}", e))?;
 
         info!(
             target: LOG_TARGET,
