@@ -10,8 +10,8 @@ use crate::handler::LOG_TARGET;
 pub struct BatchDeletionPermitReleased {
     /// Whether the completed batch attempted at least one deletion target.
     ///
-    /// If `false`, the batch found no work and the scheduler should back off using the idle
-    /// poll interval rather than the cooldown.
+    /// If `false`, the batch found no work. The scheduler may choose to keep a fast cadence (e.g. using a
+    /// cooldown) or back off (e.g. using an idle poll interval) depending on its policy.
     pub did_work: bool,
 }
 

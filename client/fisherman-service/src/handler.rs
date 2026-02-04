@@ -27,6 +27,7 @@ use crate::{
 };
 
 pub(crate) const LOG_TARGET: &str = "fisherman-service";
+pub(crate) const CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD: u8 = 4;
 
 /// The main FishermanService actor
 ///
@@ -48,9 +49,27 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     /// Track last deletion type processed (for alternating User/Incomplete)
     last_deletion_type: Option<FileDeletionType>,
     /// Cooldown enforced after a completed batch that attempted work.
+    ///
+    /// After a batch deletion cycle that attempted work, the scheduler will back off for this
+    /// duration before starting the next batch deletion cycle. If the batch deletion cycle found no work
+    /// in the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`] batch cycles, the scheduler will wait
+    /// `idle_poll_interval_duration` before starting the next batch deletion cycle.
     batch_cooldown_duration: Duration,
     /// Idle poll interval enforced after a completed batch that found no work.
+    ///
+    /// After a batch deletion cycle that found no work for the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`]
+    /// consecutive batch cycles, the scheduler will wait this duration before starting the next batch deletion
+    /// cycle. If the batch deletion cycle attempted work, the scheduler will wait `batch_cooldown_duration`
+    /// before starting the next batch deletion cycle.
     idle_poll_interval_duration: Duration,
+    /// Number of consecutive completed batches that found no work (`did_work = false`).
+    ///
+    /// We only apply the slower `idle_poll_interval_duration` after we receive `did_work = false` for the last
+    /// [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`] consecutive batch cycles.
+    ///
+    /// This avoids stalling `User` deletions when `Incomplete` is temporarily empty (or vice-versa) while still
+    /// backing off when *both* kinds of work are absent regularly.
+    consecutive_no_work_batches: u8,
     /// When the next batch attempt is scheduled to run.
     next_scheduled_run: TokioInstant,
     /// Maximum number of files to process per batch deletion cycle
@@ -97,6 +116,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             last_deletion_type: None,
             batch_cooldown_duration: Duration::from_secs(batch_cooldown_seconds),
             idle_poll_interval_duration: Duration::from_secs(batch_interval_seconds),
+            consecutive_no_work_batches: 0,
             next_scheduled_run: TokioInstant::now(),
             batch_deletion_limit,
             metrics,
@@ -110,26 +130,37 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     /// `did_work` flag:
     /// - `did_work = true`: the batch attempted at least one deletion target, so we schedule the
     ///   next attempt after the configured cooldown.
-    /// - `did_work = false`: the batch found no work, so we back off using the idle poll interval
-    ///   (`batch_interval_seconds` config).
+    /// - `did_work = false`: the batch found no work. We keep a fast cadence using the cooldown on
+    ///   the first consecutive `false`, and only back off to the idle poll interval after the last
+    ///   [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`] consecutive `false` signals.
     ///
     /// This is the key mechanism that eliminates dead time: the scheduler is notified immediately
-    /// after the batch completes. If there is no work, the scheduler backs off for `batch_interval_seconds`
-    /// seconds before trying again. If there was work, the scheduler cools down for `batch_cooldown_seconds`
-    /// seconds and continues to the next batch deletion cycle.
+    /// after the batch completes. If there is no work for the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`]
+    /// consecutive batch cycles, the scheduler backs off for `idle_poll_interval_duration` seconds before
+    /// trying again.
+    /// If there was work for at least one of the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`]
+    /// consecutive batch cycles, the scheduler cools down for just `batch_cooldown_duration` seconds
+    /// before trying again.
     fn handle_batch_deletion_permit_released(&mut self, msg: BatchDeletionPermitReleased) {
         let now = TokioInstant::now();
         let delay = if msg.did_work {
+            self.consecutive_no_work_batches = 0;
             self.batch_cooldown_duration
         } else {
-            self.idle_poll_interval_duration
+            self.consecutive_no_work_batches = self.consecutive_no_work_batches.saturating_add(1);
+            if self.consecutive_no_work_batches >= CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD {
+                self.idle_poll_interval_duration
+            } else {
+                self.batch_cooldown_duration
+            }
         };
 
         self.next_scheduled_run = now + delay;
         debug!(
             target: LOG_TARGET,
-            "🎣 Batch deletion permit released (did_work: {}), next run scheduled in {:?}",
+            "🎣 Batch deletion permit released (did_work: {}, no_work_streak: {}), next run scheduled in {:?}",
             msg.did_work,
+            self.consecutive_no_work_batches,
             delay
         );
     }
@@ -606,9 +637,11 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
     /// - A **timer** fires when `next_scheduled_run` is reached, calling
     ///   `try_start_batch_deletion_cycle()`.
     /// - A **permit-drop notification** is received when a batch completes (success, error, or
-    ///   early return). This updates `next_scheduled_run` to `now + batch_cooldown_duration` if
-    ///   the batch attempted at least one deletion target, or `now + idle_poll_interval_duration`
-    ///   if the batch found no work.
+    ///   early return). This updates `next_scheduled_run`:
+    ///   - `did_work = true`: `now + batch_cooldown_duration`
+    ///   - `did_work = false`: keep a fast cadence on the first consecutive `false` (cooldown),
+    ///     and only back off to `idle_poll_interval_duration` after the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`]
+    ///     consecutive `false` signals.
     /// - **Commands** are handled as with other actor event loops.
     /// - A **health check** is performed every `health_check_interval_duration` seconds to ensure
     ///   the service is still running.
@@ -633,8 +666,7 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
                 }
 
                 // When a batch deletion cycle completes (because the permit guard was dropped), we update the next
-                // scheduled run. It will be `now + batch_cooldown_duration` if the batch attempted at least one
-                // deletion target, or `now + idle_poll_interval_duration` if the batch found no work.
+                // scheduled run.
                 Some(msg) = self.permit_release_receiver.recv() => {
                     self.service.handle_batch_deletion_permit_released(msg);
                 }
