@@ -165,6 +165,7 @@ describe("E2E encryption / decryption", () => {
   it("encrypts/decrypts adolphus.jpg from signature", async () => {
     const path = join(__dirname, "../../../docker/resource", "adolphus.jpg");
     const original = new Uint8Array(readFileSync(path));
+    const originalHash = await blake2s_256(bufferToWebReadable(original));
 
     console.log(`Adolphus path: ${path}`);
 
@@ -186,14 +187,13 @@ describe("E2E encryption / decryption", () => {
     const version = 1;
     const purpose = "In order to generate the encryption key, we need you to sign this message";
     const chainId = 181222;
-    const { message, fileHash } = await IKM.createEncryptionKeyMessage(
+    const { message, challenge } = IKM.createEncryptionKeyMessage(
       appName,
       domain,
       version,
       purpose,
       chainId,
-      account.address,
-      bufferToWebReadable(original)
+      account.address
     );
 
     console.log(`Message to sign: ${message}`);
@@ -201,7 +201,8 @@ describe("E2E encryption / decryption", () => {
       kind: "signature",
       walletClient,
       account,
-      message
+      message,
+      challenge
     });
 
     // Quick sanity checks before proceeding to encryption/decryption.
@@ -209,6 +210,7 @@ describe("E2E encryption / decryption", () => {
     expect(baseNonce.bytes.length).toBe(12);
     expect(header.ikm).toBe("signature");
     expect(header.salt.length).toBe(32);
+    expect(header.challenge?.length).toBe(32);
 
     // ── Encrypt to a repo-local folder (easy to find) ────────────────
     const outDir = join(RESOURCE_DIR, "encrypted");
@@ -231,6 +233,9 @@ describe("E2E encryption / decryption", () => {
     const { header: parsedHeader, headerLength } = readEncryptionHeader(encryptedBytes);
     expect(parsedHeader.ikm).toBe("signature");
     expect(Buffer.compare(Buffer.from(parsedHeader.salt), Buffer.from(header.salt))).toBe(0);
+    expect(Buffer.compare(Buffer.from(parsedHeader.challenge ?? []), Buffer.from(challenge))).toBe(
+      0
+    );
     expect(headerLength).toBeGreaterThan(0);
     expect(encryptedBytes.length).toBeGreaterThan(headerLength);
 
@@ -243,10 +248,23 @@ describe("E2E encryption / decryption", () => {
       output: Writable.toWeb(
         createWriteStream(decryptedPath)
       ) as unknown as WritableStream<Uint8Array>,
-      getIkm: async () => {
-        // In tests we can re-sign the same message. In real usage, the SDK will need
-        // enough info persisted to reproduce the message to sign.
-        const signature = await walletClient.signMessage({ account, message });
+      getIkm: async (hdr) => {
+        expect(hdr.ikm).toBe("signature");
+        expect(hdr.challenge?.length).toBe(32);
+        if (!hdr.challenge) {
+          throw new Error("missing challenge in signature header");
+        }
+        const { message: messageForDec } = IKM.createEncryptionKeyMessage(
+          appName,
+          domain,
+          version,
+          purpose,
+          chainId,
+          account.address,
+          hdr.challenge
+        );
+        // messageForDec is now derived purely from header.challenge
+        const signature = await walletClient.signMessage({ account, message: messageForDec });
         return IKM.fromSignature(signature).unwrap();
       }
     });
@@ -255,7 +273,7 @@ describe("E2E encryption / decryption", () => {
       Readable.toWeb(createReadStream(decryptedPath)) as unknown as ReadableStream<Uint8Array>
     );
     console.log(`Decrypted file hash: ${decryptedHash}`);
-    expect(decryptedHash).toBe(fileHash);
+    expect(decryptedHash).toBe(originalHash);
   });
 });
 
