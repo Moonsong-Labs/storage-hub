@@ -970,6 +970,12 @@ pub struct FishermanOptions {
     pub database_url: String,
     /// Duration between batch deletion processing cycles (in seconds).
     pub batch_interval_seconds: u64,
+    /// Cooldown between batch deletion attempts (in seconds).
+    ///
+    /// This is used to avoid tight loops when there is continuous work.
+    /// Set to `0` to disable cooldown.
+    #[serde(default = "default_batch_cooldown_seconds")]
+    pub batch_cooldown_seconds: u64,
     /// Maximum number of files to process per batch deletion cycle.
     #[serde(default = "default_batch_deletion_limit")]
     pub batch_deletion_limit: u64,
@@ -987,4 +993,9 @@ pub struct FishermanOptions {
 /// Default value for batch deletion limit.
 fn default_batch_deletion_limit() -> u64 {
     1000
+}
+
+/// Default value for batch cooldown (in seconds).
+fn default_batch_cooldown_seconds() -> u64 {
+    1
 }

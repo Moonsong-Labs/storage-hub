@@ -665,6 +665,12 @@ pub struct FishermanConfigurations {
     #[arg(long, default_value = "60", value_parser = clap::value_parser!(u64).range(1..))]
     pub fisherman_batch_interval_seconds: u64,
 
+    /// Cooldown between batch deletion attempts (in seconds).
+    ///
+    /// Set to `0` to disable cooldown.
+    #[arg(long, default_value = "1", value_parser = clap::value_parser!(u64).range(0..))]
+    pub fisherman_batch_cooldown_seconds: u64,
+
     /// Maximum number of files to process per batch deletion cycle.
     #[arg(long, default_value = "1000", value_parser = clap::value_parser!(u64).range(1..))]
     pub fisherman_batch_deletion_limit: u64,
@@ -723,6 +729,7 @@ impl FishermanConfigurations {
                     .clone()
                     .expect("Fisherman database URL is required"),
                 batch_interval_seconds: self.fisherman_batch_interval_seconds,
+                batch_cooldown_seconds: self.fisherman_batch_cooldown_seconds,
                 batch_deletion_limit: self.fisherman_batch_deletion_limit,
                 maintenance_mode,
                 filtering,
