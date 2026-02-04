@@ -12,6 +12,8 @@ export type IKMType = "password" | "signature";
 export type EncryptionHeaderParams = {
   ikm: IKMType;
   salt: Uint8Array;
+  // Present only when `ikm === "signature"`.
+  challenge?: Uint8Array;
 };
 
 export type EncryptionHeaderV1 = {
@@ -19,8 +21,8 @@ export type EncryptionHeaderV1 = {
   v: typeof EncryptionHeaderVersion.V1;
   // Method to generate the IKM
   ikm: IKMType;
-  // hash(file | random number)
   salt: Uint8Array;
+  challenge?: Uint8Array;
 };
 
 const HEADER_MAGIC = new TextEncoder().encode("SHF"); // StorageHub File
@@ -39,6 +41,17 @@ function isEncryptionHeaderV1(x: unknown): x is EncryptionHeaderV1 {
   if (!isIKMType(obj.ikm)) return false;
   if (!(obj.salt instanceof Uint8Array)) return false;
 
+  const challenge = obj.challenge;
+  // Challenge is optional in the format, but required to make signature-based decryption recoverable.
+  // If it exists, it must be exactly 32 bytes.
+  if (challenge !== undefined) {
+    if (!(challenge instanceof Uint8Array)) return false;
+    if (challenge.length !== 32) return false;
+  }
+  if (obj.ikm === "signature" && challenge === undefined) {
+    return false;
+  }
+
   return true;
 }
 
@@ -52,7 +65,8 @@ export function createEncryptionHeader(params: EncryptionHeaderParams): Uint8Arr
   const header: EncryptionHeaderV1 = {
     v: EncryptionHeaderVersion.V1,
     ikm: params.ikm,
-    salt: params.salt
+    salt: params.salt,
+    ...(params.challenge ? { challenge: params.challenge } : {})
   };
 
   // Deterministic encoding: RFC 8949 "deterministic mode" map sorting.

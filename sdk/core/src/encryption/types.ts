@@ -2,7 +2,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { withUnwrap, type ResultWithUnwrap } from "../types";
 import { hexToBytes, utf8ToBytes } from "@noble/ciphers/utils.js";
 import { isHexString, removeHexPrefix } from "../utils.js";
-import { blake2s_256 } from "./hash.js";
+import { bytesToHex, randomBytes } from "@noble/hashes/utils.js";
 
 import { hkdf } from "@noble/hashes/hkdf.js";
 
@@ -235,6 +235,9 @@ export const IKM = {
    * Create the deterministic message that must be signed to derive the IKM.
    *
    * Keep this stable across SDK versions for recoverability.
+   *
+   * IMPORTANT: this message is now bound to a *random* per-file challenge (stored in the
+   * encryption header), not to the plaintext contents.
    */
   createMessage(
     appName: string,
@@ -243,7 +246,7 @@ export const IKM = {
     purpose: string,
     chainId: number,
     address: `0x${string}`,
-    fileHash: `0x${string}`
+    challenge: `0x${string}`
   ): string {
     return [
       `${appName} – Encryption Key Derivation`,
@@ -253,7 +256,7 @@ export const IKM = {
       `Domain: ${domain}`,
       `Chain ID: ${chainId}`,
       `Address: ${address}`,
-      `File Hash (blake2s-256): ${fileHash}`,
+      `Challenge (32 bytes): ${challenge}`,
       "",
       "⚠️ SECURITY NOTICE",
       "This signature does NOT authorize any blockchain transaction.",
@@ -264,24 +267,32 @@ export const IKM = {
   },
 
   /**
-   * SDK-owned helper: compute the file hash (BLAKE2s-256) and create the signature message.
+   * SDK-owned helper: create the signature message.
    *
-   * IMPORTANT: the provided `stream` is consumed (one-shot). If you need to encrypt afterwards,
-   * obtain a fresh stream from the same file/source.
+   * - If `challenge` is provided: it is used as-is (decryption flow).
+   * - Otherwise: a new random 32-byte challenge is generated (encryption flow).
    */
-  async createEncryptionKeyMessage(
+  createEncryptionKeyMessage(
     appName: string,
     domain: string,
     version: number,
     purpose: string,
     chainId: number,
     address: `0x${string}`,
-    stream: ReadableStream<Uint8Array>
-  ): Promise<{ message: string; fileHash: `0x${string}` }> {
-    const fileHash = await blake2s_256(stream);
+    salt?: Salt
+  ): { message: string; challenge: Salt } {
+    const challenge = (salt ?? Salt.fromBytes(randomBytes(32)).unwrap()) satisfies Uint8Array;
     return {
-      fileHash,
-      message: IKM.createMessage(appName, domain, version, purpose, chainId, address, fileHash)
+      challenge: challenge,
+      message: IKM.createMessage(
+        appName,
+        domain,
+        version,
+        purpose,
+        chainId,
+        address,
+        `0x${bytesToHex(challenge)}`
+      )
     };
   }
 };

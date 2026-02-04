@@ -230,6 +230,7 @@ type EncryptionKeySource =
       walletClient: WalletClient;
       account: Account | `0x${string}`;
       message: string;
+      challenge: Uint8Array;
     };
 
 export type GeneratedEncryptionKey = {
@@ -254,10 +255,17 @@ export async function generateEncryptionKey(
   // Public, random salt stored in the CBOR header.
   const saltBytes = randomSaltBytes(32);
   const salt = Salt.fromBytes(saltBytes).unwrap();
-  const header: EncryptionHeaderParams = {
-    ikm: source.kind,
-    salt: saltBytes
-  };
+  const header: EncryptionHeaderParams =
+    source.kind === "signature"
+      ? {
+          ikm: source.kind,
+          salt: saltBytes,
+          challenge: source.challenge
+        }
+      : {
+          ikm: source.kind,
+          salt: saltBytes
+        };
 
   switch (source.kind) {
     case "password": {
