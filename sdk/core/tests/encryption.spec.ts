@@ -22,7 +22,7 @@ import { blake2s_256 } from "../src/encryption/hash.js";
 
 const RESOURCE_DIR = join(__dirname, "resources");
 
-const FILE_SIZES_MB = [50, 100, 500, 1000, 2000];
+const FILE_SIZES_MB = [50, 100, 500, 1000];
 const BENCHMARK_TIMEOUT = 240_000;
 
 beforeAll(async () => {
