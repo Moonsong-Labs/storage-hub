@@ -13,6 +13,7 @@
 pub mod commands;
 pub mod events;
 pub mod handler;
+pub mod types;
 
 use std::sync::Arc;
 
@@ -25,6 +26,7 @@ pub use self::commands::{
 };
 pub use self::handler::{FileKeyChange, FileKeyOperation, FishermanService};
 pub use events::{BatchFileDeletions, FileDeletionTarget, FishermanServiceEventBusProvider};
+pub use types::{BatchDeletionPermitGuard, BatchDeletionPermitReleased};
 
 /// Spawn the fisherman service as an actor
 ///

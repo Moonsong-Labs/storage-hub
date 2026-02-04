@@ -156,10 +156,11 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<String> {
-        // Hold the Arc reference to the permit for the lifetime of this handler
-        // The permit will be automatically released when this handler completes or fails
-        // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
-        let permit_arc = event.permit;
+        // Hold the Arc reference to the permit guard for the lifetime of this handler.
+        //
+        // The underlying semaphore permit will be automatically released when this handler
+        // completes or fails, and the guard will notify the fisherman service event loop on drop.
+        let _permit_guard = event.permit;
 
         info!(
             target: LOG_TARGET,
@@ -279,10 +280,6 @@ where
                 successes
             );
         }
-
-        // Explicitly drop to release the semaphore permit
-        // Next batch deletion cycle will be able to acquire a new permit
-        drop(permit_arc);
 
         Ok(format!(
             "Processed batch file deletions: {} successes, {} failures",

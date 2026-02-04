@@ -11,7 +11,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::Semaphore;
+use tokio::sync::{mpsc, Semaphore};
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
@@ -26,6 +26,7 @@ use shp_types::Hash;
 use crate::{
     commands::{FishermanServiceCommand, FishermanServiceError},
     events::{FileDeletionTarget, FishermanServiceEventBusProvider},
+    types::{BatchDeletionPermitGuard, BatchDeletionPermitReleased},
 };
 
 pub(crate) const LOG_TARGET: &str = "fisherman-service";
@@ -42,6 +43,11 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     event_bus_provider: FishermanServiceEventBusProvider,
     /// Semaphore to prevent overlapping batch processing cycles (size 1)
     batch_processing_semaphore: Arc<Semaphore>,
+    /// Channel for batch deletion permit release notifications.
+    ///
+    /// When a [`BatchDeletionPermitGuard`][crate::types::BatchDeletionPermitGuard] is dropped from a task,
+    /// it sends a notification through this channel to the event loop.
+    permit_release_sender: mpsc::UnboundedSender<BatchDeletionPermitReleased>,
     /// Track last deletion type processed (for alternating User/Incomplete)
     last_deletion_type: Option<FileDeletionType>,
     /// Duration between batch deletion processing cycles.
@@ -84,10 +90,14 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         batch_deletion_limit: u64,
         metrics: MetricsLink,
     ) -> Self {
+        // Placeholder sender; overwritten in `FishermanServiceEventLoop::new`.
+        let (permit_release_sender, _permit_release_receiver) = mpsc::unbounded_channel();
+
         Self {
             client,
             event_bus_provider: FishermanServiceEventBusProvider::new(),
             batch_processing_semaphore: Arc::new(Semaphore::new(1)),
+            permit_release_sender,
             last_deletion_type: None,
             batch_interval_duration: Duration::from_secs(batch_interval_seconds),
             last_batch_time: None,
@@ -203,10 +213,14 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     self.last_deletion_type = Some(deletion_type);
                     self.last_batch_time = Some(Instant::now());
 
-                    // Wrap permit in Arc to satisfy Clone requirement for events
-                    // The permit will be held by the event handler for its lifetime,
-                    // automatically releasing when the handler completes or fails
-                    let permit_wrapper = Arc::new(permit);
+                    // Wrap permit in a guard that notifies the event loop on drop.
+                    // The guard is held by the event handler for its lifetime, ensuring:
+                    // - only one batch deletion cycle runs at a time (semaphore),
+                    // - the event loop can be notified promptly when the batch completes (Drop).
+                    let permit_wrapper = Arc::new(BatchDeletionPermitGuard::new(
+                        permit,
+                        self.permit_release_sender.clone(),
+                    ));
 
                     // Emit event to trigger batch processing
                     self.emit(crate::events::BatchFileDeletions {
@@ -552,6 +566,7 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
 enum MergedEventLoopMessage<Runtime: StorageEnableRuntime> {
     Command(FishermanServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<OpaqueBlock>),
+    BatchDeletionPermitReleased,
 }
 
 /// Event loop for the FishermanService actor
@@ -562,6 +577,7 @@ enum MergedEventLoopMessage<Runtime: StorageEnableRuntime> {
 pub struct FishermanServiceEventLoop<Runtime: StorageEnableRuntime> {
     service: FishermanService<Runtime>,
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand<Runtime>>,
+    permit_release_receiver: mpsc::UnboundedReceiver<BatchDeletionPermitReleased>,
 }
 
 impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
@@ -571,9 +587,16 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
         actor: FishermanService<Runtime>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand<Runtime>>,
     ) -> Self {
+        // Create permit release channel and wire sender into actor.
+        let (permit_release_sender, permit_release_receiver) = mpsc::unbounded_channel();
+
+        let mut actor = actor;
+        actor.permit_release_sender = permit_release_sender;
+
         Self {
             service: actor,
             receiver,
+            permit_release_receiver,
         }
     }
 
@@ -583,11 +606,25 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
         // Get import notification stream (not finality stream) to monitor all blocks
         let import_notification_stream = self.service.client.import_notification_stream();
 
-        // Create merged stream for commands and block notifications
-        let mut merged_stream = stream::select(
-            self.receiver.map(MergedEventLoopMessage::Command),
-            import_notification_stream.map(MergedEventLoopMessage::BlockImportNotification),
-        );
+        // Stream for batch deletion permit release notifications.
+        let permit_release_stream =
+            futures::stream::unfold(self.permit_release_receiver, |mut rx| async {
+                match rx.recv().await {
+                    Some(_msg) => Some((_msg, rx)),
+                    None => None,
+                }
+            });
+
+        // Create merged stream for commands, block notifications, and permit-release notifications.
+        let mut merged_stream = stream::select_all(vec![
+            self.receiver.map(MergedEventLoopMessage::Command).boxed(),
+            import_notification_stream
+                .map(MergedEventLoopMessage::BlockImportNotification)
+                .boxed(),
+            permit_release_stream
+                .map(|_| MergedEventLoopMessage::BatchDeletionPermitReleased)
+                .boxed(),
+        ]);
 
         loop {
             tokio::select! {
@@ -613,6 +650,13 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
                             {
                                 error!(target: LOG_TARGET, "Failed to monitor block: {:?}", e);
                             }
+                        }
+                        Some(MergedEventLoopMessage::BatchDeletionPermitReleased) => {
+                            // Drain permit release notifications.
+                            //
+                            // The scheduling behaviour is refactored in a later step; for now we
+                            // keep block-driven scheduling but ensure drop notifications are received.
+                            trace!(target: LOG_TARGET, "🎣 Batch deletion permit released");
                         }
                         None => {
                             warn!(target: LOG_TARGET, "Stream ended");

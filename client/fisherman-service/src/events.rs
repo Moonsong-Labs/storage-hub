@@ -5,6 +5,8 @@ use shc_common::{
 };
 use std::sync::Arc;
 
+use crate::types::BatchDeletionPermitGuard;
+
 /// Represent where a file should be deleted from for the deletion process
 #[derive(Clone, Debug)]
 pub enum FileDeletionTarget<Runtime: StorageEnableRuntime> {
@@ -26,10 +28,12 @@ pub struct BatchFileDeletions {
     pub deletion_type: shc_indexer_db::models::FileDeletionType,
     /// Maximum number of files to process in this batch cycle
     pub batch_deletion_limit: u64,
-    /// Semaphore permit wrapped in Arc to satisfy Clone requirement for events.
-    /// The permit is held by the event handler for its lifetime,
-    /// automatically releasing when the handler completes or fails.
-    pub permit: Arc<tokio::sync::OwnedSemaphorePermit>,
+    /// Semaphore permit guard wrapped in Arc to satisfy Clone requirement for events.
+    ///
+    /// The guard is held by the event handler for its lifetime, automatically releasing the
+    /// semaphore permit when the handler completes or fails. Additionally, when dropped it
+    /// notifies the fisherman service event loop so it can promptly schedule the next batch.
+    pub permit: Arc<BatchDeletionPermitGuard>,
 }
 
 /// Event bus provider for fisherman service events
