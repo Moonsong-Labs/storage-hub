@@ -61,7 +61,7 @@ shc-telemetry = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
-shp-tx-implicits-runtime-api = { workspace = true, features = ["std"] }
+shp-tx-implicits-runtime-api = { workspace = true }
 
 # Local pallets
 pallet-file-system = { workspace = true }
