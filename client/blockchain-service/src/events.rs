@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use codec::{Decode, Encode};
 use sc_network::Multiaddr;
-use tokio::sync::{oneshot, Mutex};
 
 use shc_actors_derive::{ActorEvent, ActorEventBus};
 use shc_common::{
@@ -15,7 +14,8 @@ use shc_common::{
 };
 
 use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest,
+    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, ForestWritePermitGuard,
+    RespondStorageRequest,
 };
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
@@ -149,7 +149,7 @@ pub struct ProcessSubmitProofRequestData<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessSubmitProofRequestData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -161,7 +161,7 @@ pub struct ProcessConfirmStoringRequestData<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessConfirmStoringRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessConfirmStoringRequestData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -173,7 +173,7 @@ pub struct ProcessMspRespondStoringRequestData<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessMspRespondStoringRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessMspRespondStoringRequestData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -185,7 +185,7 @@ pub struct ProcessStopStoringForInsolventUserRequestData<Runtime: StorageEnableR
 #[actor(actor = "blockchain_service")]
 pub struct ProcessStopStoringForInsolventUserRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessStopStoringForInsolventUserRequestData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
 /// Slashable Provider event.

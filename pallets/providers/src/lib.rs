@@ -521,12 +521,19 @@ pub mod pallet {
 
     // Events & Errors:
 
-    /// The events that can be emitted by this pallet
+    /// # Event Encoding/Decoding Stability
+    ///
+    /// All event variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Event emitted when a Main Storage Provider has requested to sign up successfully. Provides information about
         /// that MSP's account id, its multiaddresses, the total data it can store according to its stake, and its value proposition.
+        #[codec(index = 0)]
         MspRequestSignUpSuccess {
             who: T::AccountId,
             multiaddresses: Multiaddresses<T>,
@@ -535,6 +542,7 @@ pub mod pallet {
 
         /// Event emitted when a Main Storage Provider has confirmed its sign up successfully. Provides information about
         /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
+        #[codec(index = 1)]
         MspSignUpSuccess {
             who: T::AccountId,
             msp_id: MainStorageProviderId<T>,
@@ -545,6 +553,7 @@ pub mod pallet {
 
         /// Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
         /// that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
+        #[codec(index = 2)]
         BspRequestSignUpSuccess {
             who: T::AccountId,
             multiaddresses: Multiaddresses<T>,
@@ -554,6 +563,7 @@ pub mod pallet {
         /// Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
         /// that BSP's account id, the initial root of the Merkle Patricia Trie that it stores, the total data it can store
         /// according to its stake, and its multiaddress.
+        #[codec(index = 3)]
         BspSignUpSuccess {
             who: T::AccountId,
             bsp_id: BackupStorageProviderId<T>,
@@ -564,10 +574,12 @@ pub mod pallet {
 
         /// Event emitted when a sign up request has been canceled successfully. Provides information about
         /// the account id of the user that canceled the request.
+        #[codec(index = 4)]
         SignUpRequestCanceled { who: T::AccountId },
 
         /// Event emitted when a Main Storage Provider has signed off successfully. Provides information about
         /// that MSP's account id.
+        #[codec(index = 5)]
         MspSignOffSuccess {
             who: T::AccountId,
             msp_id: MainStorageProviderId<T>,
@@ -575,6 +587,7 @@ pub mod pallet {
 
         /// Event emitted when a Backup Storage Provider has signed off successfully. Provides information about
         /// that BSP's account id.
+        #[codec(index = 6)]
         BspSignOffSuccess {
             who: T::AccountId,
             bsp_id: BackupStorageProviderId<T>,
@@ -582,6 +595,7 @@ pub mod pallet {
 
         /// Event emitted when a SP has changed its capacity successfully. Provides information about
         /// that SP's account id, its old total data that could store, and the new total data.
+        #[codec(index = 7)]
         CapacityChanged {
             who: T::AccountId,
             provider_id: StorageProviderId<T>,
@@ -591,6 +605,7 @@ pub mod pallet {
         },
 
         /// Event emitted when a SP has been slashed.
+        #[codec(index = 8)]
         Slashed {
             provider_id: ProviderIdFor<T>,
             amount: BalanceOf<T>,
@@ -598,12 +613,14 @@ pub mod pallet {
 
         /// Event emitted when a provider has been slashed and they have reached a capacity deficit (i.e. the provider's capacity fell below their used capacity)
         /// signalling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
+        #[codec(index = 9)]
         AwaitingTopUp {
             provider_id: ProviderIdFor<T>,
             top_up_metadata: TopUpMetadata<T>,
         },
 
         /// Event emitted when an SP has topped up its deposit based on slash amount.
+        #[codec(index = 10)]
         TopUpFulfilled {
             provider_id: ProviderIdFor<T>,
             /// Amount that the provider has added to the held `StorageProviderDeposit` to pay for the outstanding slash amount.
@@ -611,9 +628,11 @@ pub mod pallet {
         },
 
         /// Event emitted when the account ID of a provider that has just been marked as insolvent can't be found in storage.
+        #[codec(index = 11)]
         FailedToGetOwnerAccountOfInsolventProvider { provider_id: ProviderIdFor<T> },
 
         /// Event emitted when there's an error slashing the now insolvent provider.
+        #[codec(index = 12)]
         FailedToSlashInsolventProvider {
             provider_id: ProviderIdFor<T>,
             amount_to_slash: BalanceOf<T>,
@@ -621,6 +640,7 @@ pub mod pallet {
         },
 
         /// Event emitted when there's an error stopping all cycles for an insolvent Backup Storage Provider.
+        #[codec(index = 13)]
         FailedToStopAllCyclesForInsolventBsp {
             provider_id: ProviderIdFor<T>,
             error: DispatchError,
@@ -632,6 +652,7 @@ pub mod pallet {
         ///
         /// The result of this is that the provider's top up expiration will be reinserted at the correct expiration tick based on the
         /// `TopUpMetadata` found in `AwaitingTopUpFromProviders` storage.
+        #[codec(index = 14)]
         FailedToInsertProviderTopUpExpiration {
             provider_id: ProviderIdFor<T>,
             expiration_tick: StorageHubTickNumber<T>,
@@ -641,16 +662,19 @@ pub mod pallet {
         ///
         /// This happens when the provider hasn't topped up their deposit within the grace period after being slashed
         /// and they have a capacity deficit (i.e. their capacity based on their stake is below their used capacity by the files it stores).
+        #[codec(index = 15)]
         ProviderInsolvent { provider_id: ProviderIdFor<T> },
 
         /// Event emitted when the provider that has been marked as insolvent was a MSP. It notifies the users of that MSP
         /// the buckets that it was holding, so they can take appropriate measures.
+        #[codec(index = 16)]
         BucketsOfInsolventMsp {
             msp_id: ProviderIdFor<T>,
             buckets: Vec<BucketId<T>>,
         },
 
         /// Event emitted when a bucket's root has been changed.
+        #[codec(index = 17)]
         BucketRootChanged {
             bucket_id: BucketId<T>,
             old_root: MerklePatriciaRoot<T>,
@@ -658,18 +682,21 @@ pub mod pallet {
         },
 
         /// Event emitted when a Provider has added a new MultiAddress to its account.
+        #[codec(index = 18)]
         MultiAddressAdded {
             provider_id: ProviderIdFor<T>,
             new_multiaddress: MultiAddress<T>,
         },
 
         /// Event emitted when a Provider has removed a MultiAddress from its account.
+        #[codec(index = 19)]
         MultiAddressRemoved {
             provider_id: ProviderIdFor<T>,
             removed_multiaddress: MultiAddress<T>,
         },
 
         /// Event emitted when an MSP adds a new value proposition.
+        #[codec(index = 20)]
         ValuePropAdded {
             msp_id: MainStorageProviderId<T>,
             value_prop_id: ValuePropIdFor<T>,
@@ -677,139 +704,200 @@ pub mod pallet {
         },
 
         /// Event emitted when an MSP's value proposition is made unavailable.
+        #[codec(index = 21)]
         ValuePropUnavailable {
             msp_id: MainStorageProviderId<T>,
             value_prop_id: ValuePropIdFor<T>,
         },
 
         /// Event emitted when an MSP has been deleted.
+        #[codec(index = 22)]
         MspDeleted { provider_id: ProviderIdFor<T> },
 
         /// Event emitted when a BSP has been deleted.
+        #[codec(index = 23)]
         BspDeleted { provider_id: ProviderIdFor<T> },
     }
 
-    /// The errors that can be thrown by this pallet to inform users about what went wrong
+    /// # Error Encoding/Decoding Stability
+    ///
+    /// All error variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::error]
     pub enum Error<T> {
         // Sign up errors:
         /// Error thrown when a user tries to sign up as a SP but is already registered as a MSP or BSP.
+        #[codec(index = 0)]
         AlreadyRegistered,
         /// Error thrown when a user tries to confirm a sign up that was not requested previously.
+        #[codec(index = 1)]
         SignUpNotRequested,
         /// Error thrown when a user tries to request to sign up when it already has a sign up request pending.
+        #[codec(index = 2)]
         SignUpRequestPending,
         /// Error thrown when a user tries to sign up without any multiaddress.
+        #[codec(index = 3)]
         NoMultiAddress,
         /// Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid.
+        #[codec(index = 4)]
         InvalidMultiAddress,
         /// Error thrown when a user tries to sign up or change its capacity to store less storage than the minimum required by the runtime.
+        #[codec(index = 5)]
         StorageTooLow,
 
         // Deposit errors:
         /// Error thrown when a user does not have enough balance to pay the deposit that it would incur by signing up as a SP or changing its capacity.
+        #[codec(index = 6)]
         NotEnoughBalance,
         /// Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
+        #[codec(index = 7)]
         CannotHoldDeposit,
 
         // Sign off errors:
         /// Error thrown when a user tries to sign off as a SP but still has used storage.
+        #[codec(index = 8)]
         StorageStillInUse,
         /// Error thrown when a user tries to sign off as a BSP but the sign off period has not passed yet.
+        #[codec(index = 9)]
         SignOffPeriodNotPassed,
 
         // Randomness errors:
         /// Error thrown when a user tries to confirm a sign up but the randomness is too fresh to be used yet.
+        #[codec(index = 10)]
         RandomnessNotValidYet,
         /// Error thrown when a user tries to confirm a sign up but too much time has passed since the request.
+        #[codec(index = 11)]
         SignUpRequestExpired,
 
         // Capacity change errors:
         /// Error thrown when a user tries to change its capacity to less than its used storage.
+        #[codec(index = 12)]
         NewCapacityLessThanUsedStorage,
         /// Error thrown when a user tries to change its capacity to the same value it already has.
+        #[codec(index = 13)]
         NewCapacityEqualsCurrentCapacity,
         /// Error thrown when a user tries to change its capacity to zero (there are specific extrinsics to sign off as a SP).
+        #[codec(index = 14)]
         NewCapacityCantBeZero,
         /// Error thrown when a SP tries to change its capacity but it has not been enough time since the last time it changed it.
+        #[codec(index = 15)]
         NotEnoughTimePassed,
         /// Error thrown when a SP tries to change its capacity but the new capacity is not enough to store the used storage.
+        #[codec(index = 16)]
         NewUsedCapacityExceedsStorageCapacity,
         /// Deposit too low to determine capacity.
+        #[codec(index = 17)]
         DepositTooLow,
 
         // General errors:
         /// Error thrown when a user tries to interact as a SP but is not registered as a MSP or BSP.
+        #[codec(index = 18)]
         NotRegistered,
         /// Error thrown when trying to get a root from a MSP without passing a User ID.
+        #[codec(index = 19)]
         NoUserId,
         /// Error thrown when trying to get a root from a MSP without passing a Bucket ID.
+        #[codec(index = 20)]
         NoBucketId,
         /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
+        #[codec(index = 21)]
         SpRegisteredButDataNotFound,
         /// Error thrown when a bucket ID is not found in storage.
+        #[codec(index = 22)]
         BucketNotFound,
         /// Error thrown when a bucket ID already exists in storage.
+        #[codec(index = 23)]
         BucketAlreadyExists,
         /// Bucket cannot be deleted because it is not empty.
+        #[codec(index = 24)]
         BucketNotEmpty,
         /// Error thrown when, after moving all buckets of a MSP when removing it from the system, the amount doesn't match the expected value.
+        #[codec(index = 25)]
         BucketsMovedAmountMismatch,
         /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
+        #[codec(index = 26)]
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
+        #[codec(index = 27)]
         ProviderNotSlashable,
         /// Error thrown when a provider attempts to top up their deposit when not required.
+        #[codec(index = 28)]
         TopUpNotRequired,
         /// Error thrown when an operation requires an MSP to be storing the bucket.
+        #[codec(index = 29)]
         BucketMustHaveMspForOperation,
         /// Error thrown when a Provider tries to add a new MultiAddress to its account but it already has the maximum amount of multiaddresses.
+        #[codec(index = 30)]
         MultiAddressesMaxAmountReached,
         /// Error thrown when a Provider tries to delete a MultiAddress from its account but it does not have that MultiAddress.
+        #[codec(index = 31)]
         MultiAddressNotFound,
         /// Error thrown when a Provider tries to add a new MultiAddress to its account but it already exists.
+        #[codec(index = 32)]
         MultiAddressAlreadyExists,
         /// Error thrown when a Provider tries to remove the last MultiAddress from its account.
+        #[codec(index = 33)]
         LastMultiAddressCantBeRemoved,
         /// Error thrown when the value proposition id is not found.
+        #[codec(index = 34)]
         ValuePropositionNotFound,
         /// Error thrown when value proposition under a given id already exists.
+        #[codec(index = 35)]
         ValuePropositionAlreadyExists,
         /// Error thrown when a value proposition is not available.
+        #[codec(index = 36)]
         ValuePropositionNotAvailable,
         /// Error thrown when a MSP tries to deactivate its last value proposition.
+        #[codec(index = 37)]
         CantDeactivateLastValueProp,
         /// Error thrown when, after deleting all value propositions of a MSP when removing it from the system, the amount doesn't match the expected value.
+        #[codec(index = 38)]
         ValuePropositionsDeletedAmountMismatch,
         /// Error thrown when a fixed payment stream is not found.
+        #[codec(index = 39)]
         FixedRatePaymentStreamNotFound,
         /// Error thrown when changing the MSP of a bucket to the same assigned MSP.
+        #[codec(index = 40)]
         MspAlreadyAssignedToBucket,
         /// Error thrown when a user exceeded the bucket data limit based on the associated value proposition.
+        #[codec(index = 41)]
         BucketSizeExceedsLimit,
         /// Error thrown when a bucket has no value proposition.
+        #[codec(index = 42)]
         BucketHasNoValueProposition,
         /// Congratulations, you either lived long enough or were born late enough to see this error.
+        #[codec(index = 43)]
         MaxBlockNumberReached,
         /// Operation not allowed for insolvent provider
+        #[codec(index = 44)]
         OperationNotAllowedForInsolventProvider,
         /// Failed to delete a provider due to conditions not being met.
         ///
         /// Call `can_delete_provider` runtime API to check if the provider can be deleted.
+        #[codec(index = 45)]
         DeleteProviderConditionsNotMet,
         /// Cannot stop BSP cycles without a default root
+        #[codec(index = 46)]
         CannotStopCycleWithNonDefaultRoot,
         /// An operation dedicated to BSPs only
+        #[codec(index = 47)]
         BspOnlyOperation,
         /// An operation dedicated to MSPs only
+        #[codec(index = 48)]
         MspOnlyOperation,
 
         // `MutateChallengeableProvidersInterface` errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
+        #[codec(index = 49)]
         InvalidEncodedFileMetadata,
         /// Error thrown when failing to decode the owner Account ID from the received metadata.
+        #[codec(index = 50)]
         InvalidEncodedAccountId,
         /// Error thrown when trying to update a payment stream that does not exist.
+        #[codec(index = 51)]
         PaymentStreamNotFound,
     }
 
