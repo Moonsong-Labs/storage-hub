@@ -662,7 +662,7 @@ pub struct FishermanConfigurations {
     pub fisherman_database_url: Option<String>,
 
     /// Duration between batch deletion processing cycles (in seconds).
-    #[arg(long, default_value = "60", value_parser = clap::value_parser!(u64).range(1..))]
+    #[arg(long, default_value = "30", value_parser = clap::value_parser!(u64).range(1..))]
     pub fisherman_batch_interval_seconds: u64,
 
     /// Cooldown between batch deletion attempts (in seconds).
