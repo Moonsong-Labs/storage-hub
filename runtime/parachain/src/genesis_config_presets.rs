@@ -4,6 +4,7 @@ use crate::*;
 use alloc::{format, vec, vec::Vec};
 use configs::{ExistentialDeposit, TreasuryAccount};
 use cumulus_primitives_core::ParaId;
+use frame_support::build_struct_json_patch;
 use serde_json::Value;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Get, Pair, Public};
@@ -53,23 +54,20 @@ fn storagehub_genesis(
     root: Option<AccountId>,
     id: ParaId,
 ) -> Value {
-    let config = RuntimeGenesisConfig {
+    build_struct_json_patch!(RuntimeGenesisConfig {
         balances: BalancesConfig {
             balances: endowed_accounts
                 .iter()
                 .cloned()
                 .map(|k| (k, endowment))
                 .collect(),
-            ..Default::default()
         },
         parachain_info: ParachainInfoConfig {
             parachain_id: id,
-            ..Default::default()
         },
         collator_selection: CollatorSelectionConfig {
             invulnerables: invulnerables.iter().cloned().map(|(acc, _)| acc).collect(),
             candidacy_bond: STORAGEHUB_ED * 16,
-            ..Default::default()
         },
         session: SessionConfig {
             keys: invulnerables
@@ -82,17 +80,12 @@ fn storagehub_genesis(
                     )
                 })
                 .collect(),
-            ..Default::default()
         },
         polkadot_xcm: PolkadotXcmConfig {
             safe_xcm_version: Some(SAFE_XCM_VERSION),
-            ..Default::default()
         },
         sudo: SudoConfig { key: root },
-        ..Default::default()
-    };
-
-    serde_json::to_value(config).expect("Could not build genesis config.")
+    })
 }
 
 /// Encapsulates names of predefined genesis config presets.
