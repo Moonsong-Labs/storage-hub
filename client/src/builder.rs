@@ -258,6 +258,7 @@ where
                 .expect("Task spawner is not set."),
             client,
             fisherman_options.batch_interval_seconds,
+            fisherman_options.batch_cooldown_seconds,
             fisherman_options.batch_deletion_limit,
             self.metrics.clone(),
         )

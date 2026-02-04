@@ -160,7 +160,7 @@ where
         //
         // The underlying semaphore permit will be automatically released when this handler
         // completes or fails, and the guard will notify the fisherman service event loop on drop.
-        let _permit_guard = event.permit;
+        let permit_guard = event.permit;
 
         info!(
             target: LOG_TARGET,
@@ -242,6 +242,9 @@ where
                 event.deletion_type
             ));
         }
+
+        // Mark that we found work so the scheduler can apply cooldown rather than idle backoff.
+        permit_guard.mark_did_work();
 
         // Await all futures
         debug!(

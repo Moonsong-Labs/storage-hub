@@ -36,6 +36,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
     client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     batch_interval_seconds: u64,
+    batch_cooldown_seconds: u64,
     batch_deletion_limit: u64,
     metrics: MetricsLink,
 ) -> ActorHandle<FishermanService<Runtime>> {
@@ -48,6 +49,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     let fisherman_service = FishermanService::new(
         client,
         batch_interval_seconds,
+        batch_cooldown_seconds,
         batch_deletion_limit,
         metrics,
     );
