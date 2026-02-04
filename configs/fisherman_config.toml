@@ -6,7 +6,7 @@ fisherman_database_url = "postgresql://postgres:postgres@localhost:5432/fisherma
 
 # Duration between batch deletion processing cycles (in seconds).
 # This corresponds to the `--fisherman-batch-interval-seconds` CLI flag.
-batch_interval_seconds = 60
+batch_interval_seconds = 30
 
 # Cooldown between batch deletion attempts (in seconds).
 # This corresponds to the `--fisherman-batch-cooldown-seconds` CLI flag.
