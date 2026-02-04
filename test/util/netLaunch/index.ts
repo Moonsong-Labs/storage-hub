@@ -16,7 +16,9 @@ import {
   getContainerPeerId,
   ShConsts,
   type ToxicInfo,
-  waitFor
+  waitFor,
+  waitForLog,
+  waitForNodeToCatchUpToChainTip
 } from "../bspNet";
 import { DUMMY_MSP_ID } from "../bspNet/consts";
 import { MILLIUNIT, UNIT } from "../constants";
@@ -396,6 +398,16 @@ export class NetworkLauncher {
       log: verbose
     });
 
+    // Wait for BSP to be fully initialized (including P2P networking) before starting other nodes.
+    // This ensures the bootnode is ready to accept connections from MSPs and user nodes.
+    verbose && console.log("Waiting for BSP to be ready...");
+    await waitForLog({
+      containerName: ShConsts.NODE_INFOS.bsp.containerName,
+      searchString: "💤 Idle",
+      timeout: 30000
+    });
+    verbose && console.log("BSP is ready");
+
     const bspIp = await getContainerIp(
       this.config.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
     );
@@ -470,21 +482,9 @@ export class NetworkLauncher {
       }
     }
 
-    // Start backend only if backend flag is enabled (depends on postgres, so requires indexer)
-    if (this.config.backend) {
-      if (!this.config.indexer) {
-        throw new Error("Backend requires indexer to be enabled");
-      }
-      await compose.upOne("sh-backend", {
-        cwd: cwd,
-        config: tmpFile,
-        log: verbose,
-        env: {
-          ...process.env,
-          JWT_SECRET: JWT_SECRET
-        }
-      });
-    }
+    // NOTE: Backend is started later in create() after MSP registration
+    // because the backend requires the MSP to be registered on-chain
+    // to discover its provider ID.
 
     await compose.upOne("sh-user", {
       cwd: cwd,
@@ -545,6 +545,33 @@ export class NetworkLauncher {
   public async stopNetwork() {
     const services = Object.keys(this.composeYaml.services);
     console.log(services);
+  }
+
+  /**
+   * Start the backend service after MSPs have been registered on-chain.
+   * The backend requires the MSP to be registered to discover its provider ID.
+   */
+  public async startBackend(verbose = false) {
+    if (!this.config.backend) {
+      return;
+    }
+
+    if (!this.config.indexer) {
+      throw new Error("Backend requires indexer to be enabled");
+    }
+
+    const cwd = path.resolve(process.cwd(), "..", "docker");
+    const tmpFile = this.remapComposeYaml();
+
+    await compose.upOne("sh-backend", {
+      cwd: cwd,
+      config: tmpFile,
+      log: verbose,
+      env: {
+        ...process.env,
+        JWT_SECRET: JWT_SECRET
+      }
+    });
   }
 
   private async runMigrations(verbose = false) {
@@ -1105,6 +1132,15 @@ export class NetworkLauncher {
         }
         await launchedNetwork.setupMsp(userApi, mspAddress, multiAddressMsp, mspId);
       }
+
+      // Wait for MSP-1 node to sync the registration block before starting backend.
+      // The backend connects to MSP-1's RPC and needs the registration to be visible there.
+      const msp1Api = await launchedNetwork.getApi("sh-msp-1");
+      await waitForNodeToCatchUpToChainTip(bspApi, msp1Api);
+      await msp1Api.disconnect();
+
+      // Start the backend after MSPs are registered AND MSP-1 has synced
+      await launchedNetwork.startBackend(verbose);
     }
 
     if (launchedNetwork.type === "bspnet") {
