@@ -7,7 +7,6 @@ services:
     command:
       [
         "--dev",
-        "--network-backend", "libp2p",
         "--unsafe-rpc-external",
         "--rpc-cors=all",
         "--tmp",

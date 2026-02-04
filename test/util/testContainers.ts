@@ -86,8 +86,6 @@ export const devnodeSetup = async (options?: TCTestOptions): Promise<TestApis> =
     .withExposedPorts(9944)
     .withCommand([
       "--dev",
-      "--network-backend",
-      "libp2p",
       "--rpc-cors=all",
       "--no-hardware-benchmarks",
       "--no-telemetry",

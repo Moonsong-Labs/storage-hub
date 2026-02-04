@@ -12,7 +12,6 @@ services:
     command:
       [
         "--dev",
-        "--network-backend", "libp2p",
         "--provider",
         "--provider-type=bsp",
         "--max-storage-capacity=4294967295",
@@ -42,7 +41,6 @@ services:
     command:
       [
         "--dev",
-        "--network-backend", "libp2p",
         "--name=sh-user",
         "--provider",
         "--provider-type=user",
