@@ -1,6 +1,7 @@
 import '@polkadot/types/lookup';
 import type { BTreeMap, Bytes, Compact, Enum, Null, Option, Result, Struct, Text, U256, U8aFixed, Vec, bool, u128, u32, u64, u8 } from '@polkadot/types-codec';
 import type { ITuple } from '@polkadot/types-codec/types';
+import type { Era } from '@polkadot/types/interfaces/extrinsics';
 import type { AccountId20, Call, H160, H256, Perbill } from '@polkadot/types/interfaces/runtime';
 import type { Event } from '@polkadot/types/interfaces/system';
 declare module '@polkadot/types/lookup' {
@@ -3450,32 +3451,35 @@ declare module '@polkadot/types/lookup' {
         readonly isWitnessRequired: boolean;
         readonly type: 'NoPermission' | 'UnknownCollection' | 'AlreadyExists' | 'ApprovalExpired' | 'WrongOwner' | 'BadWitness' | 'CollectionIdInUse' | 'ItemsNonTransferable' | 'NotDelegate' | 'WrongDelegate' | 'Unapproved' | 'Unaccepted' | 'ItemLocked' | 'LockedItemAttributes' | 'LockedCollectionAttributes' | 'LockedItemMetadata' | 'LockedCollectionMetadata' | 'MaxSupplyReached' | 'MaxSupplyLocked' | 'MaxSupplyTooSmall' | 'UnknownItem' | 'UnknownSwap' | 'MetadataNotFound' | 'AttributeNotFound' | 'NotForSale' | 'BidTooLow' | 'ReachedApprovalLimit' | 'DeadlineExpired' | 'WrongDuration' | 'MethodDisabled' | 'WrongSetting' | 'InconsistentItemConfig' | 'NoConfig' | 'RolesNotCleared' | 'MintNotStarted' | 'MintEnded' | 'AlreadyClaimed' | 'IncorrectData' | 'WrongOrigin' | 'WrongSignature' | 'IncorrectMetadata' | 'MaxAttributesLimitReached' | 'WrongNamespace' | 'CollectionNotEmpty' | 'WitnessRequired';
     }
-    /** @name FrameSystemExtensionsCheckNonZeroSender (411) */
+    /** @name CumulusPalletWeightReclaimStorageWeightReclaim (410) */
+    interface CumulusPalletWeightReclaimStorageWeightReclaim extends ITuple<[FrameSystemExtensionsCheckNonZeroSender, FrameSystemExtensionsCheckSpecVersion, FrameSystemExtensionsCheckTxVersion, FrameSystemExtensionsCheckGenesis, Era, FrameSystemExtensionsCheckNonce, FrameSystemExtensionsCheckWeight, PalletTransactionPaymentChargeTransactionPayment, FrameMetadataHashExtensionCheckMetadataHash]> {
+    }
+    /** @name FrameSystemExtensionsCheckNonZeroSender (412) */
     type FrameSystemExtensionsCheckNonZeroSender = Null;
-    /** @name FrameSystemExtensionsCheckSpecVersion (412) */
+    /** @name FrameSystemExtensionsCheckSpecVersion (413) */
     type FrameSystemExtensionsCheckSpecVersion = Null;
-    /** @name FrameSystemExtensionsCheckTxVersion (413) */
+    /** @name FrameSystemExtensionsCheckTxVersion (414) */
     type FrameSystemExtensionsCheckTxVersion = Null;
-    /** @name FrameSystemExtensionsCheckGenesis (414) */
+    /** @name FrameSystemExtensionsCheckGenesis (415) */
     type FrameSystemExtensionsCheckGenesis = Null;
-    /** @name FrameSystemExtensionsCheckNonce (417) */
+    /** @name FrameSystemExtensionsCheckNonce (418) */
     interface FrameSystemExtensionsCheckNonce extends Compact<u32> {
     }
-    /** @name FrameSystemExtensionsCheckWeight (418) */
+    /** @name FrameSystemExtensionsCheckWeight (419) */
     type FrameSystemExtensionsCheckWeight = Null;
-    /** @name PalletTransactionPaymentChargeTransactionPayment (419) */
+    /** @name PalletTransactionPaymentChargeTransactionPayment (420) */
     interface PalletTransactionPaymentChargeTransactionPayment extends Compact<u128> {
     }
-    /** @name FrameMetadataHashExtensionCheckMetadataHash (420) */
+    /** @name FrameMetadataHashExtensionCheckMetadataHash (421) */
     interface FrameMetadataHashExtensionCheckMetadataHash extends Struct {
         readonly mode: FrameMetadataHashExtensionMode;
     }
-    /** @name FrameMetadataHashExtensionMode (421) */
+    /** @name FrameMetadataHashExtensionMode (422) */
     interface FrameMetadataHashExtensionMode extends Enum {
         readonly isDisabled: boolean;
         readonly isEnabled: boolean;
         readonly type: 'Disabled' | 'Enabled';
     }
-    /** @name ShSolochainEvmRuntimeRuntime (423) */
+    /** @name ShSolochainEvmRuntimeRuntime (424) */
     type ShSolochainEvmRuntimeRuntime = Null;
 }

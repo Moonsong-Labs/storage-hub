@@ -6,6 +6,7 @@
 import "@polkadot/types/types/registry";
 
 import type {
+  CumulusPalletWeightReclaimStorageWeightReclaim,
   EthbloomBloom,
   EthereumBlock,
   EthereumHeader,
@@ -260,6 +261,7 @@ import type {
 
 declare module "@polkadot/types/types/registry" {
   interface InterfaceTypes {
+    CumulusPalletWeightReclaimStorageWeightReclaim: CumulusPalletWeightReclaimStorageWeightReclaim;
     EthbloomBloom: EthbloomBloom;
     EthereumBlock: EthereumBlock;
     EthereumHeader: EthereumHeader;

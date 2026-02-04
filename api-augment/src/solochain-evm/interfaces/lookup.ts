@@ -3746,47 +3746,52 @@ export default {
     ]
   },
   /**
-   * Lookup411: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
+   * Lookup410: cumulus_pallet_weight_reclaim::StorageWeightReclaim<T, S>
+   **/
+  CumulusPalletWeightReclaimStorageWeightReclaim:
+    "(FrameSystemExtensionsCheckNonZeroSender,FrameSystemExtensionsCheckSpecVersion,FrameSystemExtensionsCheckTxVersion,FrameSystemExtensionsCheckGenesis,Era,FrameSystemExtensionsCheckNonce,FrameSystemExtensionsCheckWeight,PalletTransactionPaymentChargeTransactionPayment,FrameMetadataHashExtensionCheckMetadataHash)",
+  /**
+   * Lookup412: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
    **/
   FrameSystemExtensionsCheckNonZeroSender: "Null",
   /**
-   * Lookup412: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
+   * Lookup413: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
    **/
   FrameSystemExtensionsCheckSpecVersion: "Null",
   /**
-   * Lookup413: frame_system::extensions::check_tx_version::CheckTxVersion<T>
+   * Lookup414: frame_system::extensions::check_tx_version::CheckTxVersion<T>
    **/
   FrameSystemExtensionsCheckTxVersion: "Null",
   /**
-   * Lookup414: frame_system::extensions::check_genesis::CheckGenesis<T>
+   * Lookup415: frame_system::extensions::check_genesis::CheckGenesis<T>
    **/
   FrameSystemExtensionsCheckGenesis: "Null",
   /**
-   * Lookup417: frame_system::extensions::check_nonce::CheckNonce<T>
+   * Lookup418: frame_system::extensions::check_nonce::CheckNonce<T>
    **/
   FrameSystemExtensionsCheckNonce: "Compact<u32>",
   /**
-   * Lookup418: frame_system::extensions::check_weight::CheckWeight<T>
+   * Lookup419: frame_system::extensions::check_weight::CheckWeight<T>
    **/
   FrameSystemExtensionsCheckWeight: "Null",
   /**
-   * Lookup419: pallet_transaction_payment::ChargeTransactionPayment<T>
+   * Lookup420: pallet_transaction_payment::ChargeTransactionPayment<T>
    **/
   PalletTransactionPaymentChargeTransactionPayment: "Compact<u128>",
   /**
-   * Lookup420: frame_metadata_hash_extension::CheckMetadataHash<T>
+   * Lookup421: frame_metadata_hash_extension::CheckMetadataHash<T>
    **/
   FrameMetadataHashExtensionCheckMetadataHash: {
     mode: "FrameMetadataHashExtensionMode"
   },
   /**
-   * Lookup421: frame_metadata_hash_extension::Mode
+   * Lookup422: frame_metadata_hash_extension::Mode
    **/
   FrameMetadataHashExtensionMode: {
     _enum: ["Disabled", "Enabled"]
   },
   /**
-   * Lookup423: sh_solochain_evm_runtime::Runtime
+   * Lookup424: sh_solochain_evm_runtime::Runtime
    **/
   ShSolochainEvmRuntimeRuntime: "Null"
 };
