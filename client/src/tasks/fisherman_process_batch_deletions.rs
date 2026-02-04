@@ -408,12 +408,12 @@ where
             shc_indexer_db::models::FileDeletionType::User => {
                 self.submit_user_deletion_extrinsic(&remaining_files, provider_id, forest_proof)
                     .await
-                    .map_err(|e| 
+                    .map_err(|e|
                         anyhow!(
-                            "User deletion failed for {} files, target {:?}. File keys: [{}]. Error: {:?}", 
-                            remaining_files.len(), 
-                            target, 
-                            remaining_file_keys.display_hex_list(), 
+                            "User deletion failed for {} files, target {:?}. File keys: [{}]. Error: {:?}",
+                            remaining_files.len(),
+                            target,
+                            remaining_file_keys.display_hex_list(),
                             e
                         ))?;
             }
@@ -421,15 +421,15 @@ where
                 self.submit_incomplete_deletion_extrinsic(
                     &remaining_file_keys,
                     provider_id,
-                    forest_proof,
+                    forest_proof
                 )
                 .await
-                .map_err(|e| 
+                .map_err(|e|
                     anyhow!(
-                        "Incomplete deletion failed for {} files, target {:?}. File keys: [{}]. Error: {:?}", 
-                        remaining_file_keys.len(), 
-                        target, 
-                        remaining_file_keys.display_hex_list(), 
+                        "Incomplete deletion failed for {} files, target {:?}. File keys: [{}]. Error: {:?}",
+                        remaining_file_keys.len(),
+                        target,
+                        remaining_file_keys.display_hex_list(),
                         e
                     ))?;
             }
