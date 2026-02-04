@@ -62,9 +62,7 @@ fn storagehub_genesis(
                 .map(|k| (k, endowment))
                 .collect(),
         },
-        parachain_info: ParachainInfoConfig {
-            parachain_id: id,
-        },
+        parachain_info: ParachainInfoConfig { parachain_id: id },
         collator_selection: CollatorSelectionConfig {
             invulnerables: invulnerables.iter().cloned().map(|(acc, _)| acc).collect(),
             candidacy_bond: STORAGEHUB_ED * 16,

@@ -404,6 +404,8 @@ const addContainer = async (
     },
     Cmd: [
       "--dev",
+      "--network-backend",
+      "libp2p",
       "--sealing=manual",
       "--provider",
       `--provider-type=${providerType}`,
