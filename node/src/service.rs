@@ -2161,18 +2161,16 @@ where
     // litep2p (the default network backend) kills all P2P connections if any registered
     // notification protocol's service is dropped. This task drains events to keep the
     // GRANDPA protocol handler alive without running actual consensus.
-    task_manager.spawn_handle().spawn(
-        "grandpa-notification-keepalive",
-        None,
-        async move {
+    task_manager
+        .spawn_handle()
+        .spawn("grandpa-notification-keepalive", None, async move {
             let mut service = grandpa_notification_service;
             loop {
                 if service.next_event().await.is_none() {
                     break;
                 }
             }
-        },
-    );
+        });
 
     if config.offchain_worker.enabled {
         use futures::FutureExt;
