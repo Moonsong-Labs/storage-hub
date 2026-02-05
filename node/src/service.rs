@@ -2130,7 +2130,7 @@ where
         .expect("Genesis block exists; qed");
     let grandpa_protocol_name =
         sc_consensus_grandpa::protocol_standard_name(&genesis_hash, &config.chain_spec);
-    let (grandpa_protocol_config, _grandpa_notification_service) =
+    let (grandpa_protocol_config, grandpa_notification_service) =
         sc_consensus_grandpa::grandpa_peers_set_config::<_, Network>(
             grandpa_protocol_name.clone(),
             metrics.clone(),
@@ -2151,6 +2151,28 @@ where
             block_relay: None,
             metrics,
         })?;
+
+    // Keep the GRANDPA notification service alive for the lifetime of the node.
+    //
+    // In dev mode, the GRANDPA voter is not started (manual sealing replaces consensus),
+    // but the GRANDPA notification protocol is still registered for P2P negotiation.
+    // In production mode, the voter holds this service alive implicitly.
+    //
+    // litep2p (the default network backend) kills all P2P connections if any registered
+    // notification protocol's service is dropped. This task drains events to keep the
+    // GRANDPA protocol handler alive without running actual consensus.
+    task_manager.spawn_handle().spawn(
+        "grandpa-notification-keepalive",
+        None,
+        async move {
+            let mut service = grandpa_notification_service;
+            loop {
+                if service.next_event().await.is_none() {
+                    break;
+                }
+            }
+        },
+    );
 
     if config.offchain_worker.enabled {
         use futures::FutureExt;
@@ -2592,11 +2614,23 @@ pub fn new_partial_solochain_evm(
         .with_runtime_cache_size(config.executor.runtime_cache_size)
         .build();
 
+    // Use `new_full_parts_record_import` with `enable_import_proof_recording=true` so that
+    // the Client registers `ProofSizeExt` during block import.
+    //
+    // Frontier EVM (stable2503) calls `get_proof_size()` at multiple points
+    // to measure actual proof size via the `ProofSizeExt` host extension.
+    // If `ProofSizeExt` is present during block building (`ProposerFactory::with_proof_recording`)
+    // but absent during block import on syncing nodes, `get_proof_size()` returns different
+    // values on each path → different gas/weight → different state root → digest mismatch panic.
+    //
+    // Enabling proof recording on import ensures syncing BSP/MSP nodes also have `ProofSizeExt`
+    // registered, matching the block building path.
     let (client, backend, keystore_container, task_manager) =
-        sc_service::new_full_parts::<Block, SolochainEvmRuntimeApi, _>(
+        sc_service::new_full_parts_record_import::<Block, SolochainEvmRuntimeApi, _>(
             config,
             telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
             executor,
+            true,
         )?;
 
     let client = Arc::new(client);
@@ -3001,7 +3035,7 @@ where
 
     // Start BABE (block production)
     if is_authority_role {
-        let proposer_factory = sc_basic_authorship::ProposerFactory::new(
+        let proposer_factory = sc_basic_authorship::ProposerFactory::with_proof_recording(
             task_manager.spawn_handle(),
             client.clone(),
             transaction_pool.clone(),

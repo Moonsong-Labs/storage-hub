@@ -148,8 +148,10 @@ pub type BlockId = generic::BlockId<Block>;
 
 /// The TransactionExtension to the basic transaction logic.
 ///
-/// Note: `StorageWeightReclaim` must wrap all other extensions to accurately measure
-/// PoV size before and after execution.
+/// `StorageWeightReclaim` wraps all inner extensions to accurately reclaim unused proof size
+/// weight, including weight consumed by the extensions themselves. This requires `ProofSizeExt`
+/// to be registered during both block building (`ProposerFactory::with_proof_recording`) and
+/// block import (`enable_import_proof_recording=true` on the Client).
 pub type TxExtension = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
     Runtime,
     (
@@ -889,9 +891,12 @@ impl_runtime_apis! {
             era: sp_runtime::generic::Era,
             enable_metadata: bool,
         ) -> Result<alloc::vec::Vec<u8>, sp_runtime::transaction_validity::TransactionValidityError> {
-            // Build the TxExtension tuple with minimal values; only `era` and `enable_metadata`
+            // Build the TxExtension with minimal values; only `era` and `enable_metadata`
             // influence the implicit. Other extensions have `()` implicit.
-            let inner = (
+            let extra: crate::TxExtension = cumulus_pallet_weight_reclaim::StorageWeightReclaim::<
+                Runtime,
+                _,
+            >::new((
                 frame_system::CheckNonZeroSender::<Runtime>::new(),
                 frame_system::CheckSpecVersion::<Runtime>::new(),
                 frame_system::CheckTxVersion::<Runtime>::new(),
@@ -901,8 +906,7 @@ impl_runtime_apis! {
                 frame_system::CheckWeight::<Runtime>::new(),
                 pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(<Balance as Default>::default()),
                 frame_metadata_hash_extension::CheckMetadataHash::<Runtime>::new(enable_metadata),
-            );
-            let extra: crate::TxExtension = cumulus_pallet_weight_reclaim::StorageWeightReclaim::new(inner);
+            ));
             let implicit = <crate::TxExtension as sp_runtime::traits::TransactionExtension<crate::RuntimeCall>>::implicit(&extra)?;
             Ok(implicit.encode())
         }
