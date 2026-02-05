@@ -1116,7 +1116,6 @@ export class NetworkLauncher {
         }
         await launchedNetwork.setupMsp(userApi, mspAddress, multiAddressMsp, mspId);
       }
-
     }
 
     if (launchedNetwork.type === "bspnet") {
