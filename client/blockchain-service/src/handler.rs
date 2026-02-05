@@ -161,6 +161,12 @@ where
         Runtime::Hash,
         TransactionStatus<Runtime::Hash, Runtime::Hash>,
     )>,
+    /// Channel for forest root write permit release notifications.
+    ///
+    /// When a [`ForestWritePermitGuard`][crate::types::ForestWritePermitGuard] is dropped from a task, it sends a notification through
+    /// this channel and is received by the [`BlockchainServiceEventLoop::permit_release_receiver`], which will trigger reassignment
+    /// of the forest root write lock via [`BlockchainService::handle_permit_released`].
+    pub(crate) permit_release_sender: tokio::sync::mpsc::UnboundedSender<()>,
     /// Optional pending tx store (Postgres). When present, tx sends and cleanups are persisted.
     pub(crate) pending_tx_store: Option<PendingTxStore>,
     /// Current role of this node in the HA group.
@@ -245,6 +251,11 @@ where
         Runtime::Hash,
         TransactionStatus<Runtime::Hash, Runtime::Hash>,
     )>,
+    /// Receiver for forest root write permit release notifications.
+    ///
+    /// Receives notifications when [`ForestWritePermitGuard`][crate::types::ForestWritePermitGuard] instances are dropped,
+    /// triggering the processing of pending forest write requests.
+    permit_release_receiver: tokio::sync::mpsc::UnboundedReceiver<()>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
@@ -263,6 +274,11 @@ where
             TransactionStatus<Runtime::Hash, Runtime::Hash>,
         ),
     ),
+    /// Notification that a forest root write permit has been released.
+    ///
+    /// Sent by `ForestWritePermitGuard::drop()` when a task with the forest write lock succeeds, fails or panics.
+    /// Triggers [`BlockchainService::handle_permit_released`] to process any pending forest write requests.
+    ForestRootWritePermitReleased,
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
@@ -278,13 +294,20 @@ where
     ) -> Self {
         // Create transaction status channel and wire sender into actor
         let (tx_status_sender, tx_status_receiver) = tokio::sync::mpsc::unbounded_channel();
+
+        // Create permit release channel for forest root write lock notifications
+        let (permit_release_sender, permit_release_receiver) =
+            tokio::sync::mpsc::unbounded_channel();
+
         let mut actor = actor;
         actor.tx_status_sender = tx_status_sender;
+        actor.permit_release_sender = permit_release_sender;
 
         Self {
             actor,
             receiver,
             tx_status_receiver,
+            permit_release_receiver,
         }
     }
 
@@ -349,6 +372,15 @@ where
             }
         });
 
+        // Stream for forest root write permit release notifications.
+        let permit_release_stream =
+            futures::stream::unfold(self.permit_release_receiver, |mut rx| async {
+                match rx.recv().await {
+                    Some(()) => Some(((), rx)),
+                    None => None,
+                }
+            });
+
         let mut merged_stream = stream::select_all(vec![
             self.receiver
                 .map(MergedEventLoopMessage::<Runtime>::Command)
@@ -364,6 +396,9 @@ where
                 .boxed(),
             tx_status_stream
                 .map(MergedEventLoopMessage::<Runtime>::TxStatusUpdate)
+                .boxed(),
+            permit_release_stream
+                .map(|_| MergedEventLoopMessage::<Runtime>::ForestRootWritePermitReleased)
                 .boxed(),
         ]);
 
@@ -390,6 +425,9 @@ where
                     self.actor
                         .handle_transaction_status_update(nonce, tx_hash, status)
                         .await;
+                }
+                MergedEventLoopMessage::ForestRootWritePermitReleased => {
+                    self.actor.handle_permit_released();
                 }
             };
         }
@@ -1622,47 +1660,6 @@ where
                         );
                     }
                 }
-                BlockchainServiceCommand::ReleaseForestRootWriteLock {
-                    forest_root_write_tx,
-                    callback,
-                } => {
-                    if let Some(managed_bsp_or_msp) = &self.maybe_managed_provider {
-                        // Release the forest root write "lock".
-                        let forest_root_write_result = forest_root_write_tx.send(()).map_err(|e| {
-                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team. \nError while sending the release message: {:?}", e);
-                            anyhow!("CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.")
-                        });
-
-                        // Check if there are any pending requests to use the forest root write lock.
-                        // If so, we give them the lock right away.
-                        if forest_root_write_result.is_ok() {
-                            match managed_bsp_or_msp {
-                                ManagedProvider::Msp(_) => {
-                                    self.msp_assign_forest_root_write_lock();
-                                }
-                                ManagedProvider::Bsp(_) => {
-                                    self.bsp_assign_forest_root_write_lock();
-                                }
-                            }
-                        }
-
-                        match callback.send(forest_root_write_result) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send forest write lock release result: {:?}", e);
-                            }
-                        }
-                    } else {
-                        command_succeeded = false;
-                        error!(target: LOG_TARGET, "Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
-                        match callback.send(Err(anyhow!("Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team."))) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
-                    }
-                }
                 BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
@@ -1745,6 +1742,11 @@ where
             transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
             // Temporary sender, will be replaced by the event loop during startup
             tx_status_sender: {
+                let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+                tx
+            },
+            // Temporary sender, will be replaced by the event loop during startup
+            permit_release_sender: {
                 let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
                 tx
             },
@@ -1903,6 +1905,22 @@ where
                 // Process the reorg
                 self.process_sync_reorg(&tree_route, new_best_block).await;
             }
+        }
+    }
+
+    /// Handle a forest root write permit release notification by assigning the forest
+    /// root write lock to the next pending forest write request.
+    ///
+    /// This method is called when a `ForestWritePermitGuard` is dropped by a task,
+    /// allowing the next pending forest write request to be processed.
+    fn handle_permit_released(&mut self) {
+        if let Some(managed_provider) = &self.maybe_managed_provider {
+            match managed_provider {
+                ManagedProvider::Bsp(_) => self.bsp_assign_forest_root_write_lock(),
+                ManagedProvider::Msp(_) => self.msp_assign_forest_root_write_lock(),
+            }
+        } else {
+            error!(target: LOG_TARGET, "Tried to handle a forest root write permit release notification while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
         }
     }
 
