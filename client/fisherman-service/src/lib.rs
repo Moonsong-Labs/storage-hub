@@ -37,6 +37,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     batch_interval_seconds: u64,
     batch_cooldown_seconds: u64,
+    consecutive_no_work_batches_threshold: u8,
     batch_deletion_limit: u64,
     metrics: MetricsLink,
 ) -> ActorHandle<FishermanService<Runtime>> {
@@ -50,6 +51,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
         client,
         batch_interval_seconds,
         batch_cooldown_seconds,
+        consecutive_no_work_batches_threshold,
         batch_deletion_limit,
         metrics,
     );

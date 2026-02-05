@@ -27,7 +27,6 @@ use crate::{
 };
 
 pub(crate) const LOG_TARGET: &str = "fisherman-service";
-pub(crate) const CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD: u8 = 4;
 
 /// The main FishermanService actor
 ///
@@ -52,20 +51,22 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     ///
     /// After a batch deletion cycle that attempted work, the scheduler will back off for this
     /// duration before starting the next batch deletion cycle. If the batch deletion cycle found no work
-    /// in the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`] batch cycles, the scheduler will wait
+    /// in the last `consecutive_no_work_batches_threshold` batch cycles, the scheduler will wait
     /// `idle_poll_interval_duration` before starting the next batch deletion cycle.
     batch_cooldown_duration: Duration,
     /// Idle poll interval enforced after a completed batch that found no work.
     ///
-    /// After a batch deletion cycle that found no work for the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`]
+    /// After a batch deletion cycle that found no work for the last `consecutive_no_work_batches_threshold`
     /// consecutive batch cycles, the scheduler will wait this duration before starting the next batch deletion
     /// cycle. If the batch deletion cycle attempted work, the scheduler will wait `batch_cooldown_duration`
     /// before starting the next batch deletion cycle.
     idle_poll_interval_duration: Duration,
+    /// Number of consecutive no-work batches required before switching to the slower idle polling interval.
+    consecutive_no_work_batches_threshold: u8,
     /// Number of consecutive completed batches that found no work (`did_work = false`).
     ///
     /// We only apply the slower `idle_poll_interval_duration` after we receive `did_work = false` for the last
-    /// [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`] consecutive batch cycles.
+    /// `consecutive_no_work_batches_threshold` consecutive batch cycles.
     ///
     /// This avoids stalling `User` deletions when `Incomplete` is temporarily empty (or vice-versa) while still
     /// backing off when *both* kinds of work are absent regularly.
@@ -102,9 +103,15 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         batch_interval_seconds: u64,
         batch_cooldown_seconds: u64,
+        consecutive_no_work_batches_threshold: u8,
         batch_deletion_limit: u64,
         metrics: MetricsLink,
     ) -> Self {
+        // The minimum value is 2 because there are two kinds of work: User and Incomplete.
+        // If we set the value to 1, a non-work batch in one kind of work will trigger the idle poll interval
+        // on the other kind of work.
+        let consecutive_no_work_batches_threshold = consecutive_no_work_batches_threshold.max(2);
+
         // Placeholder sender; overwritten in `FishermanServiceEventLoop::new`.
         let (permit_release_sender, _permit_release_receiver) = mpsc::unbounded_channel();
 
@@ -116,6 +123,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             last_deletion_type: None,
             batch_cooldown_duration: Duration::from_secs(batch_cooldown_seconds),
             idle_poll_interval_duration: Duration::from_secs(batch_interval_seconds),
+            consecutive_no_work_batches_threshold,
             consecutive_no_work_batches: 0,
             next_scheduled_run: TokioInstant::now(),
             batch_deletion_limit,
@@ -132,13 +140,13 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     ///   next attempt after the configured cooldown.
     /// - `did_work = false`: the batch found no work. We keep a fast cadence using the cooldown on
     ///   the first consecutive `false`, and only back off to the idle poll interval after the last
-    ///   [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`] consecutive `false` signals.
+    ///   `consecutive_no_work_batches_threshold` consecutive `false` signals.
     ///
     /// This is the key mechanism that eliminates dead time: the scheduler is notified immediately
-    /// after the batch completes. If there is no work for the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`]
+    /// after the batch completes. If there is no work for the last `consecutive_no_work_batches_threshold`
     /// consecutive batch cycles, the scheduler backs off for `idle_poll_interval_duration` seconds before
     /// trying again.
-    /// If there was work for at least one of the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`]
+    /// If there was work for at least one of the last `consecutive_no_work_batches_threshold`
     /// consecutive batch cycles, the scheduler cools down for just `batch_cooldown_duration` seconds
     /// before trying again.
     fn handle_batch_deletion_permit_released(&mut self, msg: BatchDeletionPermitReleased) {
@@ -148,7 +156,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             self.batch_cooldown_duration
         } else {
             self.consecutive_no_work_batches = self.consecutive_no_work_batches.saturating_add(1);
-            if self.consecutive_no_work_batches >= CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD {
+            if self.consecutive_no_work_batches >= self.consecutive_no_work_batches_threshold {
                 self.idle_poll_interval_duration
             } else {
                 self.batch_cooldown_duration
@@ -640,7 +648,7 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
     ///   early return). This updates `next_scheduled_run`:
     ///   - `did_work = true`: `now + batch_cooldown_duration`
     ///   - `did_work = false`: keep a fast cadence on the first consecutive `false` (cooldown),
-    ///     and only back off to `idle_poll_interval_duration` after the last [`CONSECUTIVE_NO_WORK_BATCHES_THRESHOLD`]
+    ///     and only back off to `idle_poll_interval_duration` after the last `consecutive_no_work_batches_threshold`
     ///     consecutive `false` signals.
     /// - **Commands** are handled as with other actor event loops.
     /// - A **health check** is performed every `health_check_interval_duration` seconds to ensure

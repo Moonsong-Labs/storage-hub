@@ -14,7 +14,7 @@ pub enum FileDeletionTarget<Runtime: StorageEnableRuntime> {
     BucketId(BucketId<Runtime>),
 }
 
-/// Event triggered by the Fisherman scheduler to process batched file deletions.
+/// Event triggered by the Fisherman scheduler (see `FishermanServiceEventLoop::run`) to process batched file deletions.
 ///
 /// Contains the deletion type to process in this cycle. FishermanService alternates between
 /// User and Incomplete deletion types across batch cycles.

@@ -17,8 +17,6 @@ pub struct BatchDeletionPermitReleased {
 
 /// RAII wrapper for batch deletion permits that notifies the fisherman service
 /// when the permit is dropped via the `release_notifier` channel.
-///
-/// This mirrors the `ForestWritePermitGuard` pattern used by the blockchain service.
 #[derive(Debug)]
 pub struct BatchDeletionPermitGuard {
     _permit: OwnedSemaphorePermit,
