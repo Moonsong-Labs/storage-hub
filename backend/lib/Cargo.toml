@@ -72,6 +72,7 @@ pallet-storage-providers = { workspace = true, features = ["std"] }
 sh-solochain-evm-runtime = { workspace = true, features = [
 	"std",
 ], optional = true }
+mime_guess = "2.0.5"
 
 [dev-dependencies]
 alloy-signer = "0.8"
