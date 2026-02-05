@@ -11,6 +11,25 @@
 //! - **Batch processing**: Queries pending deletions from indexer database, grouped by target
 //! - **Parallel execution**: Processes each target (BSP/Bucket) concurrently in parallel futures
 //! - **Lock management**: Always releases the global lock after processing, even on errors
+//! - **Scheduler signalling**: When any work is discovered, the handler must call
+//!   `permit_guard.mark_did_work()` so the fisherman scheduler can choose the correct backoff
+//!   strategy for the next cycle
+//!
+//! ## Scheduler signalling (`permit_guard.mark_did_work()`)
+//!
+//! The fisherman scheduler is driven by the drop of the batch semaphore guard held inside the
+//! [`BatchFileDeletions`] event. When the guard is dropped, it notifies the fisherman service
+//! event loop with a `did_work` boolean:
+//!
+//! - If `did_work = true`, the scheduler applies the normal **cooldown** (fast cadence).
+//! - If `did_work = false`, the scheduler increments the "no work" streak and may eventually
+//!   switch to the slower **idle poll interval**.
+//!
+//! This task **must** call `permit_guard.mark_did_work()` once it has determined there is at
+//! least one deletion target to process (i.e. it will spawn at least one target future). If this
+//! call is omitted, the scheduler will incorrectly treat the cycle as "no work", which can push
+//! it into idle backoff even while deletions exist — increasing end-to-end deletion latency and
+//! reducing throughput.
 //!
 //! ## Processing Flow
 //!
