@@ -16,7 +16,6 @@ use sc_transaction_pool_api::TransactionStatus;
 use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
-use sp_core::H256;
 use sp_keystore::KeystorePtr;
 use sp_runtime::{traits::Header, SaturatedConversion, Saturating};
 
@@ -40,7 +39,7 @@ use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxSt
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::CFDequeAPI,
-    types::{AccountId, BlockNumber, FileKey, OpaqueBlock, StorageHubClient, TickNumber},
+    types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
@@ -1619,19 +1618,7 @@ where
                 }
                 BlockchainServiceCommand::PopConfirmStoringRequests { count, callback } => {
                     if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
-                        let state_store_context =
-                            self.persistent_state.open_rw_context_with_overlay();
-                        let mut deque =
-                            state_store_context.pending_confirm_storing_request_deque::<Runtime>();
-                        let mut popped = Vec::new();
-                        for _ in 0..count {
-                            if let Some(request) = deque.pop_front() {
-                                popped.push(request);
-                            } else {
-                                break;
-                            }
-                        }
-                        state_store_context.commit();
+                        let popped = self.pop_confirm_storing_requests(count);
                         match callback.send(Ok(popped)) {
                             Ok(_) => {}
                             Err(e) => {
@@ -1650,81 +1637,24 @@ where
                     }
                 }
                 BlockchainServiceCommand::FilterConfirmStoringRequests { requests, callback } => {
-                    let (managed_bsp_id, pending_volunteer_file_keys) = match &self
-                        .maybe_managed_provider
-                    {
-                        Some(ManagedProvider::Bsp(bsp_handler)) => (
-                            bsp_handler.bsp_id.clone(),
-                            &bsp_handler.pending_volunteer_file_keys,
-                        ),
-                        _ => {
-                            error!(target: LOG_TARGET, "`FilterConfirmStoringRequests` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                            match callback.send(Err(anyhow!("Node is not managing a BSP"))) {
+                    match self.filter_confirm_storing_requests(requests) {
+                        Ok(result) => {
+                            match callback.send(Ok(result)) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send filtered confirm storing requests: {:?}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            command_succeeded = false;
+                            error!(target: LOG_TARGET, "FilterConfirmStoringRequests failed: {:?}", e);
+                            match callback.send(Err(e)) {
                                 Ok(_) => {}
                                 Err(e) => {
                                     error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
                                 }
                             }
-                            return;
-                        }
-                    };
-
-                    // Separate requests with pending volunteer transactions from those ready to query.
-                    let (pending_volunteer, requests_to_query): (Vec<_>, Vec<_>) =
-                        requests.into_iter().partition(|request| {
-                            let file_key: FileKey = request.file_key.as_ref().into();
-                            pending_volunteer_file_keys.contains(&file_key)
-                        });
-
-                    let current_block_hash = self.client.info().best_hash;
-
-                    let file_keys: Vec<H256> = requests_to_query
-                        .iter()
-                        .map(|r| H256::from_slice(r.file_key.as_ref()))
-                        .collect();
-
-                    // Query the runtime API to filter file keys to only those pending confirmation
-                    let pending_file_keys = match self
-                        .client
-                        .runtime_api()
-                        .query_pending_bsp_confirm_storage_requests(
-                            current_block_hash,
-                            managed_bsp_id,
-                            file_keys,
-                        ) {
-                        Ok(keys) => keys,
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to query pending BSP confirm storage requests: {:?}", e);
-                            match callback.send(Err(anyhow!(
-                                "Failed to query pending BSP confirm storage requests"
-                            ))) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
-                                }
-                            }
-                            return;
-                        }
-                    };
-
-                    let pending_file_keys_set: HashSet<FileKey> = pending_file_keys
-                        .into_iter()
-                        .map(|k| k.as_ref().into())
-                        .collect();
-
-                    // Filter to only those that are still pending confirmation
-                    let pending_confirmation: Vec<_> = requests_to_query
-                        .into_iter()
-                        .filter(|request| {
-                            let file_key: FileKey = request.file_key.as_ref().into();
-                            pending_file_keys_set.contains(&file_key)
-                        })
-                        .collect();
-
-                    match callback.send(Ok((pending_confirmation, pending_volunteer))) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send filtered confirm storing requests: {:?}", e);
                         }
                     }
                 }

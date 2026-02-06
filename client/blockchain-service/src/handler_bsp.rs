@@ -1,13 +1,14 @@
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_core::U256;
+use sp_core::{H256, U256};
 use sp_runtime::traits::{Block as BlockT, Zero};
 
+use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
 };
@@ -36,8 +37,8 @@ use crate::{
     handler::LOG_TARGET,
     state::BlockchainServiceStateStoreRwContext,
     types::{
-        BspForestWriteQueue, BspForestWriteQueuePop, BspForestWriteWork, ForestWritePermitGuard,
-        ManagedProvider, MultiInstancesNodeRole,
+        BspForestWriteQueue, BspForestWriteQueuePop, BspForestWriteWork, ConfirmStoringRequest,
+        ForestWritePermitGuard, ManagedProvider, MultiInstancesNodeRole,
     },
     BlockchainService,
 };
@@ -836,5 +837,102 @@ where
                 unreachable!("BSPs do not respond to storage requests as MSPs do.")
             }
         }
+    }
+
+    /// Pop up to `count` confirm storing requests from the persistent deque.
+    ///
+    /// Returns the items without filtering; the caller is responsible for
+    /// filtering stale requests and re-queuing if needed.
+    pub(crate) fn pop_confirm_storing_requests(
+        &self,
+        count: u32,
+    ) -> Vec<ConfirmStoringRequest<Runtime>> {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let mut deque = state_store_context.pending_confirm_storing_request_deque::<Runtime>();
+        let mut popped = Vec::new();
+        for _ in 0..count {
+            if let Some(request) = deque.pop_front() {
+                popped.push(request);
+            } else {
+                break;
+            }
+        }
+        state_store_context.commit();
+        popped
+    }
+
+    /// Filter confirm storing requests by checking on-chain state and pending
+    /// volunteer transactions.
+    ///
+    /// Returns `(ready, pending_volunteer)` where:
+    /// - `ready`: requests whose BSP has volunteered and are still pending confirmation on-chain.
+    /// - `pending_volunteer`: requests whose volunteer transaction has not yet landed on-chain.
+    ///
+    /// This does **not** re-queue pending volunteer requests.
+    pub(crate) fn filter_confirm_storing_requests(
+        &self,
+        requests: Vec<ConfirmStoringRequest<Runtime>>,
+    ) -> anyhow::Result<(
+        Vec<ConfirmStoringRequest<Runtime>>,
+        Vec<ConfirmStoringRequest<Runtime>>,
+    )> {
+        let (managed_bsp_id, pending_volunteer_file_keys) = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => (
+                bsp_handler.bsp_id.clone(),
+                &bsp_handler.pending_volunteer_file_keys,
+            ),
+            _ => {
+                anyhow::bail!(
+                    "`filter_confirm_storing_requests` should only be called if the node is managing a BSP. Found [{:?}] instead.",
+                    self.maybe_managed_provider,
+                );
+            }
+        };
+
+        // Separate requests with pending volunteer transactions from those ready to query.
+        let (pending_volunteer, requests_to_query): (Vec<_>, Vec<_>) =
+            requests.into_iter().partition(|request| {
+                let file_key: FileKey = request.file_key.as_ref().into();
+                pending_volunteer_file_keys.contains(&file_key)
+            });
+
+        let current_block_hash = self.client.info().best_hash;
+
+        let file_keys: Vec<H256> = requests_to_query
+            .iter()
+            .map(|r| H256::from_slice(r.file_key.as_ref()))
+            .collect();
+
+        // Query the runtime API to filter file keys to only those pending confirmation.
+        let pending_file_keys = self
+            .client
+            .runtime_api()
+            .query_pending_bsp_confirm_storage_requests(
+                current_block_hash,
+                managed_bsp_id,
+                file_keys,
+            )
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to query pending BSP confirm storage requests: {:?}",
+                    e
+                )
+            })?;
+
+        let pending_file_keys_set: HashSet<FileKey> = pending_file_keys
+            .into_iter()
+            .map(|k| k.as_ref().into())
+            .collect();
+
+        // Filter to only those that are still pending confirmation.
+        let pending_confirmation: Vec<_> = requests_to_query
+            .into_iter()
+            .filter(|request| {
+                let file_key: FileKey = request.file_key.as_ref().into();
+                pending_file_keys_set.contains(&file_key)
+            })
+            .collect();
+
+        Ok((pending_confirmation, pending_volunteer))
     }
 }
