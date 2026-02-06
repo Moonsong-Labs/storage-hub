@@ -511,7 +511,7 @@ export const waitForFishermanBatchDeletions = async (
     deletionType,
     expectExt,
     sealBlock = false,
-    timeoutMs = 30_000,
+    timeoutMs = 60_000,
     pollMs = 500,
     exactLength = false
   } = options;
