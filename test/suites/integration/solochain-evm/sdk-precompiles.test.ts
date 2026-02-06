@@ -1,13 +1,17 @@
 // @ts-nocheck - SDK dependencies are not available during general typecheck in CI
 import assert, { strictEqual } from "node:assert";
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, readFileSync, statSync } from "node:fs";
 import { Readable } from "node:stream";
 import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
   type FileInfo,
+  decryptFile,
+  encryptFile,
   FileManager,
+  generateEncryptionKey,
   type HttpClientConfig,
+  IKM,
   ReplicationLevel,
   SH_FILE_SYSTEM_PRECOMPILE_ADDRESS,
   StorageHubClient
@@ -26,6 +30,20 @@ import type { StatsResponse } from "../../../util/backend/types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 import { fileURLToPath } from "node:url";
+
+function bytesToWebReadable(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  const body = new Response(bytes).body;
+  if (!body) throw new Error("bytesToWebReadable: Response.body missing");
+  return body as ReadableStream<Uint8Array>;
+}
+
+function createBytesSink(): { writable: WritableStream<Uint8Array>; result: Promise<Uint8Array> } {
+  const ts = new TransformStream<Uint8Array, Uint8Array>();
+  return {
+    writable: ts.writable,
+    result: new Response(ts.readable).arrayBuffer().then((b) => new Uint8Array(b))
+  };
+}
 
 await describeMspNet(
   "Solochain EVM SDK Precompiles Integration",
@@ -53,6 +71,22 @@ await describeMspNet(
     let storageRequestTxHash: `0x${string}`;
     let fileLocation: string;
     let mspClient: MspClient;
+
+    // Encryption-stage shared state (split across multiple tests)
+    let encryptedOriginalBytes: Uint8Array | undefined;
+    let encryptedSigFileKey: H256 | undefined;
+    let encryptedPwFileKey: H256 | undefined;
+
+    // Encryption-stage constants
+    const ENC_LOCATION_SIG = "/test/adolphus.jpg.enc.sig";
+    const ENC_LOCATION_PW = "/test/adolphus.jpg.enc.pw";
+    const ENC_PASSWORD = "integration-test-password";
+
+    // Common dApp params for signature message generation (encryption tests)
+    const ENC_APP_NAME = "StorageHub";
+    const ENC_DOMAIN = "localhost:3000";
+    const ENC_VERSION = 1;
+    const ENC_PURPOSE = "Integration test: derive encryption keys for file upload";
 
     before(async () => {
       userApi = await createUserApi();
@@ -710,5 +744,244 @@ await describeMspNet(
       const bucketAfterDeletion = await userApi.query.providers.buckets(testBucketId);
       assert(bucketAfterDeletion.isNone, "Bucket should not exist after deletion");
     });
+
+    it("Should encrypt and upload encrypted variant (signature)", async () => {
+      // Load original file bytes once (small resource ~450kB).
+      if (!encryptedOriginalBytes) {
+        const originalPath = fileURLToPath(
+          new URL("../../../../docker/resource/adolphus.jpg", import.meta.url)
+        );
+        encryptedOriginalBytes = new Uint8Array(readFileSync(originalPath));
+      }
+
+      const chainId = SH_EVM_SOLOCHAIN_CHAIN_ID;
+
+      const { message: messageForEnc, challenge } = IKM.createEncryptionKeyMessage(
+        ENC_APP_NAME,
+        ENC_DOMAIN,
+        ENC_VERSION,
+        ENC_PURPOSE,
+        chainId,
+        account.address
+      );
+
+      const sigKeys = await generateEncryptionKey({
+        kind: "signature",
+        walletClient,
+        account,
+        message: messageForEnc,
+        challenge
+      });
+
+      const { writable: sigEncSink, result: sigEncryptedP } = createBytesSink();
+      await encryptFile({
+        input: bytesToWebReadable(encryptedOriginalBytes),
+        output: sigEncSink,
+        dek: sigKeys.dek,
+        baseNonce: sigKeys.baseNonce,
+        header: sigKeys.header
+      });
+      const sigEncryptedBytes = await sigEncryptedP;
+
+      const encryptedSigFm = new FileManager({
+        size: sigEncryptedBytes.length,
+        stream: () => bytesToWebReadable(sigEncryptedBytes)
+      });
+
+      const registry = new TypeRegistry();
+      const owner = registry.createType("AccountId20", account.address) as AccountId20;
+      const bucketIdH256 = registry.createType("H256", bucketId) as H256;
+
+      const sigFingerprint = await encryptedSigFm.getFingerprint();
+      const sigFileKey = await encryptedSigFm.computeFileKey(owner, bucketIdH256, ENC_LOCATION_SIG);
+      encryptedSigFileKey = sigFileKey;
+
+      const peerIds = [userApi.shConsts.NODE_INFOS.msp1.expectedPeerId];
+      const replicationLevel = ReplicationLevel.Custom;
+      const replicas = 1;
+
+      const sigTxHash = await storageHubClient.issueStorageRequest(
+        bucketId as `0x${string}`,
+        ENC_LOCATION_SIG,
+        sigFingerprint.toHex() as `0x${string}`,
+        BigInt(sigEncryptedBytes.length),
+        userApi.shConsts.DUMMY_MSP_ID as `0x${string}`,
+        peerIds,
+        replicationLevel,
+        replicas
+      );
+      await userApi.wait.waitForTxInPool({ module: "ethereum", method: "transact" });
+      await userApi.block.seal();
+      const sigReceipt = await publicClient.waitForTransactionReceipt({ hash: sigTxHash });
+      assert(sigReceipt.status === "success", "Encrypted(signature) storage request failed");
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      const uploadSig = await mspClient.files.uploadFile(
+        bucketId,
+        sigFileKey.toHex(),
+        new Blob([sigEncryptedBytes]),
+        account.address,
+        ENC_LOCATION_SIG
+      );
+      strictEqual(uploadSig.status, "upload_successful", "Encrypted(signature) upload failed");
+
+      await msp1Api.wait.fileStorageComplete(sigFileKey.toHex());
+      await userApi.wait.mspResponseInTxPool(1);
+      await userApi.block.seal();
+
+      // Wait until the storage request is fulfilled / removed from chain storage.
+      await userApi.wait.storageRequestNotOnChain(sigFileKey);
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      const info = await mspClient.files.getFileInfo(bucketId, sigFileKey.toHex());
+      assert(info.fileKey === sigFileKey.toHex());
+    }, 300_000);
+
+    it("Should encrypt and upload encrypted variant (password)", async () => {
+      if (!encryptedOriginalBytes) {
+        const originalPath = fileURLToPath(
+          new URL("../../../../docker/resource/adolphus.jpg", import.meta.url)
+        );
+        encryptedOriginalBytes = new Uint8Array(readFileSync(originalPath));
+      }
+
+      const pwKeys = await generateEncryptionKey({
+        kind: "password",
+        password: ENC_PASSWORD
+      });
+
+      const { writable: pwEncSink, result: pwEncryptedP } = createBytesSink();
+      await encryptFile({
+        input: bytesToWebReadable(encryptedOriginalBytes),
+        output: pwEncSink,
+        dek: pwKeys.dek,
+        baseNonce: pwKeys.baseNonce,
+        header: pwKeys.header
+      });
+      const pwEncryptedBytes = await pwEncryptedP;
+
+      const encryptedPwFm = new FileManager({
+        size: pwEncryptedBytes.length,
+        stream: () => bytesToWebReadable(pwEncryptedBytes)
+      });
+
+      const registry = new TypeRegistry();
+      const owner = registry.createType("AccountId20", account.address) as AccountId20;
+      const bucketIdH256 = registry.createType("H256", bucketId) as H256;
+
+      const pwFingerprint = await encryptedPwFm.getFingerprint();
+      const pwFileKey = await encryptedPwFm.computeFileKey(owner, bucketIdH256, ENC_LOCATION_PW);
+      encryptedPwFileKey = pwFileKey;
+
+      const peerIds = [userApi.shConsts.NODE_INFOS.msp1.expectedPeerId];
+      const replicationLevel = ReplicationLevel.Custom;
+      const replicas = 1;
+
+      const pwTxHash = await storageHubClient.issueStorageRequest(
+        bucketId as `0x${string}`,
+        ENC_LOCATION_PW,
+        pwFingerprint.toHex() as `0x${string}`,
+        BigInt(pwEncryptedBytes.length),
+        userApi.shConsts.DUMMY_MSP_ID as `0x${string}`,
+        peerIds,
+        replicationLevel,
+        replicas
+      );
+      await userApi.wait.waitForTxInPool({ module: "ethereum", method: "transact" });
+      await userApi.block.seal();
+      const pwReceipt = await publicClient.waitForTransactionReceipt({ hash: pwTxHash });
+      assert(pwReceipt.status === "success", "Encrypted(password) storage request failed");
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      const uploadPw = await mspClient.files.uploadFile(
+        bucketId,
+        pwFileKey.toHex(),
+        new Blob([pwEncryptedBytes]),
+        account.address,
+        ENC_LOCATION_PW
+      );
+      strictEqual(uploadPw.status, "upload_successful", "Encrypted(password) upload failed");
+
+      await msp1Api.wait.fileStorageComplete(pwFileKey.toHex());
+      await userApi.wait.mspResponseInTxPool(1);
+      await userApi.block.seal();
+
+      await userApi.wait.storageRequestNotOnChain(pwFileKey);
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      const info = await mspClient.files.getFileInfo(bucketId, pwFileKey.toHex());
+      assert(info.fileKey === pwFileKey.toHex());
+    }, 300_000);
+
+    it("Should download and decrypt encrypted variant (signature)", async () => {
+      assert(encryptedOriginalBytes, "encryption/upload tests must run first");
+      assert(encryptedSigFileKey, "missing signature encrypted fileKey");
+
+      const chainId = SH_EVM_SOLOCHAIN_CHAIN_ID;
+      const fkHex = encryptedSigFileKey.toHex();
+
+      const dlSig = await mspClient.files.downloadFile(fkHex);
+      strictEqual(dlSig.status, 200, "Encrypted(signature) download should succeed");
+      const dlSigBytes = new Uint8Array(await new Response(dlSig.stream).arrayBuffer());
+
+      const { writable: sigDecSink, result: sigDecryptedP } = createBytesSink();
+      await decryptFile({
+        input: bytesToWebReadable(dlSigBytes),
+        output: sigDecSink,
+        getIkm: async (hdr) => {
+          assert(hdr.ikm === "signature", "Encrypted(signature) header should indicate signature");
+          assert(
+            hdr.challenge?.length === 32,
+            "Encrypted(signature) header should include challenge"
+          );
+          const { message } = IKM.createEncryptionKeyMessage(
+            ENC_APP_NAME,
+            ENC_DOMAIN,
+            ENC_VERSION,
+            ENC_PURPOSE,
+            chainId,
+            account.address,
+            hdr.challenge as Uint8Array
+          );
+          const signature = await walletClient.signMessage({ account, message });
+          return IKM.fromSignature(signature).unwrap();
+        }
+      });
+
+      const sigDecryptedBytes = await sigDecryptedP;
+      assert(
+        Buffer.from(sigDecryptedBytes).equals(Buffer.from(encryptedOriginalBytes)),
+        "Decrypted(signature) file should match original"
+      );
+    }, 300_000);
+
+    it("Should download and decrypt encrypted variant (password)", async () => {
+      assert(encryptedOriginalBytes, "encryption/upload tests must run first");
+      assert(encryptedPwFileKey, "missing password encrypted fileKey");
+
+      const fkHex = encryptedPwFileKey.toHex();
+
+      const dlPw = await mspClient.files.downloadFile(fkHex);
+      strictEqual(dlPw.status, 200, "Encrypted(password) download should succeed");
+      const dlPwBytes = new Uint8Array(await new Response(dlPw.stream).arrayBuffer());
+
+      const { writable: pwDecSink, result: pwDecryptedP } = createBytesSink();
+      await decryptFile({
+        input: bytesToWebReadable(dlPwBytes),
+        output: pwDecSink,
+        getIkm: async (hdr) => {
+          assert(hdr.ikm === "password", "Encrypted(password) header should indicate password");
+          return IKM.fromPassword(ENC_PASSWORD).unwrap();
+        }
+      });
+
+      const pwDecryptedBytes = await pwDecryptedP;
+      assert(
+        Buffer.from(pwDecryptedBytes).equals(Buffer.from(encryptedOriginalBytes)),
+        "Decrypted(password) file should match original"
+      );
+    }, 300_000);
   }
 );

@@ -3,7 +3,18 @@
 import { useState, useRef, useCallback, useId } from 'react';
 import { Upload, Download, File, Folder, Hash, X, CheckCircle, AlertCircle, Plus, Database, ArrowLeft, Trash2 } from 'lucide-react';
 import type { WalletClient, PublicClient } from 'viem';
-import { FileManager as StorageHubFileManager, initWasm, type StorageHubClient, ReplicationLevel, type FileInfo as CoreFileInfo } from '@storagehub-sdk/core';
+import {
+  decryptFile,
+  encryptFile,
+  FileManager as StorageHubFileManager,
+  generateEncryptionKey,
+  IKM,
+  initWasm,
+  readEncryptionHeader,
+  type StorageHubClient,
+  ReplicationLevel,
+  type FileInfo as CoreFileInfo,
+} from '@storagehub-sdk/core';
 import type { MspClient } from '@storagehub-sdk/msp-client';
 import type { UploadReceipt, Bucket, FileTree } from '@storagehub-sdk/msp-client';
 
@@ -19,6 +30,10 @@ interface FileManagerProps {
 
 interface FileUploadState {
   file: File | null;
+  /**
+   * Fingerprint of the *selected* file before encryption.
+   * If encryption is enabled, the uploaded fingerprint will be computed later from the encrypted bytes.
+   */
   fingerprint: string | null;
   isComputing: boolean;
   isUploading: boolean;
@@ -65,10 +80,43 @@ interface FileDeleteState {
   deleteError: string | null;
 }
 
-export function FileManager({ publicClient, walletAddress, mspClient, storageHubClient }: FileManagerProps) {
+type UploadStep = 1 | 2 | 3;
+type EncryptionMode = 'none' | 'password' | 'signature';
+
+type DecryptUiState =
+  | { open: false }
+  | {
+    open: true;
+    fileName: string;
+    encryptedBytes: Uint8Array;
+    ikm: 'password' | 'signature';
+    // Keep only what we need for UI decisions; decryptFile will re-parse internally.
+    hasChallenge: boolean;
+  };
+
+export function FileManager({
+  walletClient,
+  publicClient,
+  walletAddress,
+  mspClient,
+  storageHubClient,
+}: FileManagerProps) {
   const bucketSelectId = useId();
   const folderNameInputId = useId();
+  const encPasswordInputId = useId();
+  const decPasswordInputId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [uploadStep, setUploadStep] = useState<UploadStep>(1);
+  const [encryptionMode, setEncryptionMode] = useState<EncryptionMode>('none');
+  const [encryptionPassword, setEncryptionPassword] = useState('');
+  const [uploadStageLabel, setUploadStageLabel] = useState<string | null>(null);
+
+  // Signature message params: keep stable to ensure recoverability across environments.
+  const ENC_APP_NAME = 'StorageHub';
+  const ENC_DOMAIN = 'storagehub-sdk-demo';
+  const ENC_VERSION = 1;
+  const ENC_PURPOSE = 'Encrypt file for StorageHub upload';
 
   const [uploadState, setUploadState] = useState<FileUploadState>({
     file: null,
@@ -124,6 +172,52 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
     deleteError: null,
   });
 
+  const [decryptState, setDecryptState] = useState<DecryptUiState>({ open: false });
+  const [decryptPassword, setDecryptPassword] = useState('');
+  const [isDecrypting, setIsDecrypting] = useState(false);
+
+  const downloadBytes = (bytes: Uint8Array, filename: string, contentType?: string) => {
+    const blob = new Blob([bytes], { type: contentType || 'application/octet-stream' });
+    const downloadUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement('a');
+    downloadLink.href = downloadUrl;
+    downloadLink.download = filename;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(downloadUrl);
+  };
+
+  const inferredType = (node: FileTree): 'file' | 'folder' => {
+    const n = node as unknown as Record<string, unknown>;
+    if (n.type === 'file' || typeof (n as { fileKey?: unknown }).fileKey === 'string') return 'file';
+    if (n.type === 'folder' || Array.isArray((n as { children?: unknown }).children)) return 'folder';
+    return 'file'; // default: treat unknown as file to keep actions available
+  };
+
+  const normalizeTreeChildren = (resp: unknown): FileTree[] => {
+    const r = resp as Record<string, unknown> | null;
+    if (!r) return [];
+
+    // Observed shapes:
+    // - { files: [ { children: [...] } ] }
+    // - { files: [ { tree: { children: [...] } } ] }
+    // - { tree: { children: [...] } }
+    const files = (r as { files?: unknown }).files;
+    const tree = (r as { tree?: unknown }).tree as Record<string, unknown> | undefined;
+
+    const first = Array.isArray(files) && files.length > 0 ? (files[0] as Record<string, unknown>) : undefined;
+    const firstTree = first && typeof first === 'object' ? ((first as { tree?: unknown }).tree as Record<string, unknown> | undefined) : undefined;
+
+    const root = (tree ?? firstTree ?? first) as Record<string, unknown> | undefined;
+    const children = root?.children;
+    if (Array.isArray(children)) return children as FileTree[];
+
+    // Fallback: if response already contains a flat list, return it.
+    if (Array.isArray(files)) return files as FileTree[];
+    return [];
+  };
+
   // File selection handler
   const handleFileSelect = useCallback(async (file: File) => {
     setUploadState(prev => ({
@@ -135,6 +229,9 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       receipt: null
     }));
 
+    // Reset wizard steps on new selection.
+    setUploadStep(1);
+
     // Compute fingerprint
     setUploadState(prev => ({ ...prev, isComputing: true }));
 
@@ -144,19 +241,9 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       const fileManager = new StorageHubFileManager({
         size: file.size,
         stream: () => {
-          return new ReadableStream<Uint8Array>({
-            start(controller) {
-              const reader = new FileReader();
-              reader.onload = () => {
-                const arrayBuffer = reader.result as ArrayBuffer;
-                const uint8Array = new Uint8Array(arrayBuffer);
-                controller.enqueue(uint8Array);
-                controller.close();
-              };
-              reader.onerror = () => controller.error(reader.error);
-              reader.readAsArrayBuffer(file);
-            }
-          });
+          const body = new Response(file).body;
+          if (!body) throw new Error('File stream is not available');
+          return body as ReadableStream<Uint8Array>;
         }
       });
 
@@ -297,21 +384,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       const fileListResponse = await mspClient.buckets.getFiles(bucketId, path ? { path } : undefined);
       console.log('📦 fileListResponse:', fileListResponse);
 
-      // Extract files from the hierarchical tree structure
-      let extractedFiles: FileTree[] = [];
-
-      if (fileListResponse?.files && fileListResponse.files.length > 0) {
-        const rootTree = fileListResponse.files[0]; // First element is the root folder
-
-        // The API returns a single FileTree with flattened structure
-        if (rootTree?.type === 'folder' && rootTree.children) {
-          // Extract direct children from the root folder
-          extractedFiles = rootTree.children;
-        } else {
-          // Fallback: treat as flat FileTree array
-          extractedFiles = fileListResponse.files as FileTree[];
-        }
-      }
+      const extractedFiles = normalizeTreeChildren(fileListResponse);
 
       setFileBrowserState(prev => ({
         ...prev,
@@ -336,49 +409,104 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
   // File upload function
   const uploadFile = async () => {
-    if (!uploadState.file || !uploadState.fingerprint || !mspClient || !storageHubClient || !walletAddress || !selectedBucketId) return;
+    if (!uploadState.file || !mspClient || !storageHubClient || !walletAddress || !selectedBucketId) return;
 
     setUploadState(prev => ({ ...prev, isUploading: true, error: null }));
+    setUploadStageLabel(null);
 
     try {
       await initWasm();
 
       // Use the selected upload path or default to root
       const basePath = uploadLocationState.selectedPath || '';
-      const fileLocation = basePath
-        ? `${basePath}/${uploadState.file.name}`
-        : uploadState.file.name;
+      const outputFileName =
+        encryptionMode === 'none' ? uploadState.file.name : `${uploadState.file.name}.enc`;
+      const fileLocation = basePath ? `${basePath}/${outputFileName}` : outputFileName;
 
-      // Ensure file size is valid
-      if (!uploadState.file.size || uploadState.file.size <= 0) {
-        throw new Error(`Invalid file size: ${uploadState.file.size}`);
+      setUploadState(prev => ({ ...prev, uploadProgress: 5 }));
+
+      // Build the Blob that we will actually upload.
+      let uploadBlob: Blob = uploadState.file;
+      if (encryptionMode !== 'none') {
+        if (encryptionMode === 'password') {
+          if (!encryptionPassword) {
+            throw new Error('Password is required to encrypt the file');
+          }
+          setUploadStageLabel('Generating encryption keys (password)…');
+        } else {
+          if (!walletClient) throw new Error('Wallet client not available for signature encryption');
+          setUploadStageLabel('Preparing signature message…');
+        }
+
+        const chainId =
+          walletClient && 'getChainId' in walletClient ? await walletClient.getChainId() : 0;
+
+        const keysPromise =
+          encryptionMode === 'password'
+            ? await generateEncryptionKey({ kind: 'password', password: encryptionPassword })
+            : (() => {
+                const { message, challenge } = IKM.createEncryptionKeyMessage(
+                  ENC_APP_NAME,
+                  ENC_DOMAIN,
+                  ENC_VERSION,
+                  ENC_PURPOSE,
+                  chainId,
+                  walletAddress as `0x${string}`
+                );
+                return generateEncryptionKey({
+                  kind: 'signature',
+                  walletClient: walletClient as WalletClient,
+                  account: walletAddress as `0x${string}`,
+                  message,
+                  challenge
+                });
+              })();
+        const keys = await keysPromise;
+
+        setUploadState(prev => ({ ...prev, uploadProgress: 10 }));
+        setUploadStageLabel('Encrypting file…');
+
+        const ts = new TransformStream<Uint8Array, Uint8Array>();
+        const encryptedBlobP = new Response(ts.readable).blob();
+
+        const inputBody = new Response(uploadState.file).body;
+        if (!inputBody) throw new Error('File stream is not available for encryption');
+
+        await encryptFile({
+          input: inputBody as ReadableStream<Uint8Array>,
+          output: ts.writable,
+          dek: keys.dek,
+          baseNonce: keys.baseNonce,
+          header: keys.header,
+          onProgress: ({ bytesProcessed }) => {
+            const total = uploadState.file?.size ?? 1;
+            const pct = Math.min(99, Math.floor((bytesProcessed / total) * 100));
+            // Map encryption into 10..25% of the overall bar.
+            const mapped = 10 + Math.floor((pct / 100) * 15);
+            setUploadState(prev => ({ ...prev, uploadProgress: Math.max(prev.uploadProgress, mapped) }));
+          }
+        });
+
+        uploadBlob = await encryptedBlobP;
+        setUploadState(prev => ({ ...prev, uploadProgress: 25 }));
       }
 
-      // Create FileManager to get fingerprint and compute file key
+      if (!uploadBlob.size || uploadBlob.size <= 0) {
+        throw new Error(`Invalid upload size: ${uploadBlob.size}`);
+      }
+
+      // Create FileManager for the *actual upload bytes* (plaintext or encrypted).
       const fileManager = new StorageHubFileManager({
-        size: uploadState.file.size,
+        size: uploadBlob.size,
         stream: () => {
-          return new ReadableStream<Uint8Array>({
-            start(controller) {
-              const reader = new FileReader();
-              reader.onload = () => {
-                const arrayBuffer = reader.result as ArrayBuffer;
-                const uint8Array = new Uint8Array(arrayBuffer);
-                controller.enqueue(uint8Array);
-                controller.close();
-              };
-              reader.onerror = () => controller.error(reader.error);
-              if (uploadState.file) {
-                reader.readAsArrayBuffer(uploadState.file);
-              } else {
-                controller.error(new Error('File not available'));
-              }
-            }
-          });
+          const body = new Response(uploadBlob).body;
+          if (!body) throw new Error('Upload blob stream is not available');
+          return body as ReadableStream<Uint8Array>;
         }
       });
 
       // Get file info from FileManager (like sdk-precompiles)
+      setUploadStageLabel('Computing upload fingerprint…');
       const fingerprint = await fileManager.getFingerprint();
       const fileSizeNumber = fileManager.getFileSize();
 
@@ -482,7 +610,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       let uploadReceipt: UploadReceipt | undefined;
       try {
         // Upload file to MSP (use exact same pattern as sdk-precompiles line 245-251)
-        const fileBlob = await fileManager.getFileBlob(); // Get Blob like sdk-precompiles
+        const fileBlob = uploadBlob; // upload the exact bytes we fingerprinted
         const fileKeyHex = finalFileKey.toHex();
 
         await new Promise(resolve => setTimeout(resolve, 3000)); // Add a 3 second delay before uploading
@@ -546,38 +674,14 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       const fileListResponse = await mspClient.buckets.getFiles(selectedBucketId, currentPath ? { path: currentPath } : undefined);
       console.log('API response for current path', currentPath, ':', fileListResponse);
 
-      if (fileListResponse?.files && fileListResponse.files.length > 0) {
-        const folderTree = fileListResponse.files[0];
-        console.log('Folder tree for current path', currentPath, ':', folderTree);
-
-        if (folderTree?.type === 'folder' && folderTree.children) {
-          const subfolders = folderTree.children.filter((child: FileTree) => child.type === 'folder');
-          console.log('Found subfolders in current path', currentPath, ':', subfolders);
-
-          setUploadLocationState(prev => ({
-            ...prev,
-            availableFolders: subfolders,
-            navigationHistory: currentPath ? [currentPath] : ['/'],
-            isLoadingFolders: false
-          }));
-        } else {
-          console.log('No subfolders found in current path', currentPath);
-          setUploadLocationState(prev => ({
-            ...prev,
-            availableFolders: [],
-            navigationHistory: currentPath ? [currentPath] : ['/'],
-            isLoadingFolders: false
-          }));
-        }
-      } else {
-        console.log('No files found in current path', currentPath);
-        setUploadLocationState(prev => ({
-          ...prev,
-          availableFolders: [],
-          navigationHistory: currentPath ? [currentPath] : ['/'],
-          isLoadingFolders: false
-        }));
-      }
+      const children = normalizeTreeChildren(fileListResponse);
+      const subfolders = children.filter((child) => inferredType(child) === 'folder');
+      setUploadLocationState(prev => ({
+        ...prev,
+        availableFolders: subfolders,
+        navigationHistory: currentPath ? [currentPath] : ['/'],
+        isLoadingFolders: false
+      }));
     } catch (error) {
       console.error('Failed to load folders:', error);
       setUploadLocationState(prev => ({ ...prev, isNavigating: false, isLoadingFolders: false }));
@@ -602,43 +706,15 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       const fileListResponse = await mspClient.buckets.getFiles(selectedBucketId, { path: newPath });
       console.log('API response for path', newPath, ':', fileListResponse);
 
-      if (fileListResponse?.files && fileListResponse.files.length > 0) {
-        const folderTree = fileListResponse.files[0];
-        console.log('Folder tree for path', newPath, ':', folderTree);
-
-        if (folderTree?.type === 'folder' && folderTree.children) {
-          const subfolders = folderTree.children.filter((child: FileTree) => child.type === 'folder');
-          console.log('Found subfolders in', newPath, ':', subfolders);
-
-          setUploadLocationState(prev => ({
-            ...prev,
-            selectedPath: newPath,
-            navigationHistory: [...prev.navigationHistory, newPath],
-            availableFolders: subfolders,
-            isLoadingFolders: false
-          }));
-        } else {
-          // If it's not a folder or has no children, show empty state
-          console.log('No subfolders found in', newPath);
-          setUploadLocationState(prev => ({
-            ...prev,
-            selectedPath: newPath,
-            navigationHistory: [...prev.navigationHistory, newPath],
-            availableFolders: [],
-            isLoadingFolders: false
-          }));
-        }
-      } else {
-        // No files found in this folder
-        console.log('No files found in path', newPath);
-        setUploadLocationState(prev => ({
-          ...prev,
-          selectedPath: newPath,
-          navigationHistory: [...prev.navigationHistory, newPath],
-          availableFolders: [],
-          isLoadingFolders: false
-        }));
-      }
+      const children = normalizeTreeChildren(fileListResponse);
+      const subfolders = children.filter((child) => inferredType(child) === 'folder');
+      setUploadLocationState(prev => ({
+        ...prev,
+        selectedPath: newPath,
+        navigationHistory: [...prev.navigationHistory, newPath],
+        availableFolders: subfolders,
+        isLoadingFolders: false
+      }));
     } catch (error) {
       console.error('Failed to load folder contents:', error);
       // Still update the path even if loading fails
@@ -668,31 +744,14 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
         // Load the contents of the parent folder
         const fileListResponse = await mspClient.buckets.getFiles(selectedBucketId, { path: newPath });
 
-        if (fileListResponse?.files && fileListResponse.files.length > 0) {
-          const folderTree = fileListResponse.files[0];
-          if (folderTree?.type === 'folder' && folderTree.children) {
-            setUploadLocationState(prev => ({
-              ...prev,
-              selectedPath: newPath,
-              navigationHistory: newHistory,
-              availableFolders: folderTree.children.filter((child: FileTree) => child.type === 'folder')
-            }));
-          } else {
-            setUploadLocationState(prev => ({
-              ...prev,
-              selectedPath: newPath,
-              navigationHistory: newHistory,
-              availableFolders: []
-            }));
-          }
-        } else {
-          setUploadLocationState(prev => ({
-            ...prev,
-            selectedPath: newPath,
-            navigationHistory: newHistory,
-            availableFolders: []
-          }));
-        }
+        const children = normalizeTreeChildren(fileListResponse);
+        const subfolders = children.filter((child) => inferredType(child) === 'folder');
+        setUploadLocationState(prev => ({
+          ...prev,
+          selectedPath: newPath,
+          navigationHistory: newHistory,
+          availableFolders: subfolders
+        }));
       } catch (error) {
         console.error('Failed to load parent folder contents:', error);
         setUploadLocationState(prev => ({
@@ -736,31 +795,14 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       // Load the root folder contents
       const fileListResponse = await mspClient.buckets.getFiles(selectedBucketId);
 
-      if (fileListResponse?.files && fileListResponse.files.length > 0) {
-        const rootTree = fileListResponse.files[0];
-        if (rootTree?.type === 'folder' && rootTree.children) {
-          setUploadLocationState(prev => ({
-            ...prev,
-            selectedPath: '',
-            navigationHistory: ['/'],
-            availableFolders: rootTree.children.filter((child: FileTree) => child.type === 'folder')
-          }));
-        } else {
-          setUploadLocationState(prev => ({
-            ...prev,
-            selectedPath: '',
-            navigationHistory: ['/'],
-            availableFolders: []
-          }));
-        }
-      } else {
-        setUploadLocationState(prev => ({
-          ...prev,
-          selectedPath: '',
-          navigationHistory: ['/'],
-          availableFolders: []
-        }));
-      }
+      const children = normalizeTreeChildren(fileListResponse);
+      const subfolders = children.filter((child) => inferredType(child) === 'folder');
+      setUploadLocationState(prev => ({
+        ...prev,
+        selectedPath: '',
+        navigationHistory: ['/'],
+        availableFolders: subfolders
+      }));
     } catch (error) {
       console.error('Failed to load root folder contents:', error);
       setUploadLocationState(prev => ({
@@ -826,29 +868,27 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       }
 
       // Create blob and download URL
-      const blob = new Blob([combinedArray], {
-        type: downloadResult.contentType || 'application/octet-stream'
-      });
+      // If file looks like an encrypted blob (StorageHub File header), offer decrypt.
+      try {
+        const { header } = readEncryptionHeader(combinedArray);
+        const ikm = header.ikm;
+        const hasChallenge = !!header.challenge;
+        if (ikm === 'password' || ikm === 'signature') {
+          setDecryptPassword('');
+          setDecryptState({
+            open: true,
+            fileName: file.name,
+            encryptedBytes: combinedArray,
+            ikm,
+            hasChallenge
+          });
+          return;
+        }
+      } catch {
+        // Not encrypted in our format; fall through.
+      }
 
-      console.log('📁 Created blob:', {
-        size: blob.size,
-        type: blob.type
-      });
-
-      // Create download link and trigger download
-      const downloadUrl = URL.createObjectURL(blob);
-      const downloadLink = document.createElement('a');
-      downloadLink.href = downloadUrl;
-      downloadLink.download = file.name;
-
-      // Append to body, click, and remove
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-
-      // Clean up the URL object
-      URL.revokeObjectURL(downloadUrl);
-
+      downloadBytes(combinedArray, file.name, downloadResult.contentType ?? undefined);
       console.log('✅ File download completed:', file.name);
 
     } catch (error: unknown) {
@@ -903,6 +943,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
         bucketId: to0x(info.bucketId),
         location: info.location,
         size: BigInt(info.size),
+        blockHash: to0x(info.blockHash),
       };
 
       const txHash = await storageHubClient.requestDeleteFile(coreInfo);
@@ -941,6 +982,10 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       success: false,
       receipt: null
     });
+    setUploadStep(1);
+    setEncryptionMode('none');
+    setEncryptionPassword('');
+    setUploadStageLabel(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -994,6 +1039,15 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
         <div className="flex items-center gap-2">
           <Upload className="h-5 w-5 text-blue-400" />
           <h3 className="text-lg font-medium">Upload File</h3>
+        </div>
+
+        {/* Mini wizard stepper */}
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <span className={uploadStep === 1 ? 'text-blue-400 font-medium' : ''}>1) Select</span>
+          <span>→</span>
+          <span className={uploadStep === 2 ? 'text-blue-400 font-medium' : ''}>2) Encryption</span>
+          <span>→</span>
+          <span className={uploadStep === 3 ? 'text-blue-400 font-medium' : ''}>3) Review</span>
         </div>
 
         {/* Bucket Selection */}
@@ -1075,27 +1129,34 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                 </button>
               </div>
 
-              {uploadState.isComputing && (
-                <div className="flex items-center gap-2 text-blue-400">
-                  <Hash className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Computing fingerprint...</span>
-                </div>
-              )}
+              {uploadStep === 1 && (
+                <>
+                  {uploadState.isComputing && (
+                    <div className="flex items-center gap-2 text-blue-400">
+                      <Hash className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Computing original fingerprint…</span>
+                    </div>
+                  )}
 
-              {uploadState.fingerprint && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-green-400">
-                    <CheckCircle className="h-4 w-4" />
-                    <span className="text-sm">Fingerprint computed</span>
-                  </div>
-                  <div className="text-xs text-gray-400 font-mono break-all">
-                    {uploadState.fingerprint}
-                  </div>
-                </div>
+                  {uploadState.fingerprint && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-green-400">
+                        <CheckCircle className="h-4 w-4" />
+                        <span className="text-sm">Original fingerprint computed</span>
+                      </div>
+                      <div className="text-xs text-gray-400 font-mono break-all">
+                        {uploadState.fingerprint}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        If you enable encryption, the uploaded fingerprint will be computed from the encrypted bytes.
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Upload Location Selector */}
-              {uploadState.fingerprint && (
+              {uploadStep === 1 && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Folder className="h-4 w-4 text-blue-400" />
@@ -1142,16 +1203,144 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                 </div>
               )}
 
-              {uploadState.fingerprint && selectedBucketId && (
-                <button
-                  type="button"
-                  onClick={uploadFile}
-                  disabled={uploadState.isUploading}
-                  className="w-full flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                >
-                  <Upload className="h-4 w-4" />
-                  {uploadState.isUploading ? `Uploading... ${uploadState.uploadProgress}%` : 'Upload File'}
-                </button>
+              {/* Wizard navigation + upload action */}
+              <div className="flex gap-2">
+                {uploadStep > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setUploadStep((s) => (s === 2 ? 1 : 2))}
+                    disabled={uploadState.isUploading}
+                    className="flex-1 rounded-md bg-gray-700 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-600 disabled:bg-gray-900 disabled:cursor-not-allowed"
+                  >
+                    Back
+                  </button>
+                )}
+
+                {uploadStep < 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setUploadStep((s) => (s === 1 ? 2 : 3))}
+                    disabled={
+                      uploadState.isUploading ||
+                      uploadState.isComputing ||
+                      !selectedBucketId ||
+                      !uploadState.file ||
+                      (uploadStep === 2 && encryptionMode === 'password' && !encryptionPassword) ||
+                      (uploadStep === 2 && encryptionMode === 'signature' && !walletClient)
+                    }
+                    className="flex-1 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                )}
+
+                {uploadStep === 3 && (
+                  <button
+                    type="button"
+                    onClick={uploadFile}
+                    disabled={uploadState.isUploading || !selectedBucketId}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {uploadState.isUploading ? `Uploading… ${uploadState.uploadProgress}%` : 'Upload'}
+                  </button>
+                )}
+              </div>
+
+              {uploadStep === 2 && (
+                <div className="rounded-md border border-gray-700 bg-gray-900 p-3 space-y-3">
+                  <div className="text-sm font-medium text-gray-200">Encryption</div>
+
+                  <div className="space-y-2 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="enc-mode"
+                        checked={encryptionMode === 'none'}
+                        onChange={() => setEncryptionMode('none')}
+                      />
+                      <span>No encryption</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="enc-mode"
+                        checked={encryptionMode === 'password'}
+                        onChange={() => setEncryptionMode('password')}
+                      />
+                      <span>Encrypt with password</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="enc-mode"
+                        checked={encryptionMode === 'signature'}
+                        onChange={() => setEncryptionMode('signature')}
+                      />
+                      <span>Encrypt with wallet signature</span>
+                    </label>
+                  </div>
+
+                  {encryptionMode === 'password' && (
+                    <div className="space-y-2">
+                      <label htmlFor={encPasswordInputId} className="block text-xs text-gray-400">
+                        Password
+                      </label>
+                      <input
+                        id={encPasswordInputId}
+                        type="password"
+                        value={encryptionPassword}
+                        onChange={(e) => setEncryptionPassword(e.target.value)}
+                        className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                        placeholder="Enter password to encrypt"
+                      />
+                      <div className="text-xs text-yellow-400">
+                        If you lose this password, you won’t be able to decrypt the file.
+                      </div>
+                    </div>
+                  )}
+
+                  {encryptionMode === 'signature' && (
+                    <div className="space-y-2 text-xs text-gray-300">
+                      <div className="text-yellow-400">
+                        MetaMask will prompt you to sign a message. This signature is used to derive encryption keys.
+                      </div>
+                      {!walletClient && (
+                        <div className="text-red-400">Wallet client not available.</div>
+                      )}
+                      <div className="text-gray-400">
+                        The SDK generates a file-specific random challenge (stored inside the encrypted file header) and includes it in the message.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {uploadStep === 3 && (
+                <div className="rounded-md border border-gray-700 bg-gray-900 p-3 space-y-2">
+                  <div className="text-sm font-medium text-gray-200">Review</div>
+                  <div className="text-xs text-gray-400">
+                    <div>
+                      <span className="text-gray-500">Upload name:</span>{' '}
+                      <span className="font-mono">
+                        {encryptionMode === 'none' ? uploadState.file.name : `${uploadState.file.name}.enc`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Location:</span>{' '}
+                      <span className="font-mono">{uploadLocationState.selectedPath || '/'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Encryption:</span>{' '}
+                      <span className="font-mono">{encryptionMode}</span>
+                    </div>
+                    {uploadStageLabel && (
+                      <div className="mt-2 text-blue-400">
+                        {uploadStageLabel}
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -1297,7 +1486,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          {file.type === 'folder' ? (
+                          {inferredType(file) === 'folder' ? (
                             <Folder className="h-5 w-5 text-blue-400" />
                           ) : (
                             <File className="h-5 w-5 text-gray-400" />
@@ -1305,7 +1494,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                           <div>
                             <div className="text-sm font-medium text-gray-200">{file.name}</div>
                             <div className="text-xs text-gray-500">
-                              {file.type === 'file' ? (
+                              {inferredType(file) === 'file' ? (
                                 <>
                                   {'sizeBytes' in file && typeof file.sizeBytes === 'number' ? `${(file.sizeBytes / 1024).toFixed(1)} KB` : 'Unknown size'}
                                   {'fileKey' in file && typeof file.fileKey === 'string' && (
@@ -1320,7 +1509,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {file.type === 'file' && 'fileKey' in file && file.fileKey && (
+                          {inferredType(file) === 'file' && 'fileKey' in file && file.fileKey && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1343,7 +1532,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                               )}
                             </button>
                           )}
-                          {file.type === 'file' && 'fileKey' in file && file.fileKey && (
+                          {inferredType(file) === 'file' && 'fileKey' in file && file.fileKey && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1366,7 +1555,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                               )}
                             </button>
                           )}
-                          {file.type === 'folder' && (
+                          {inferredType(file) === 'folder' && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1434,7 +1623,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
               <h4 className="text-sm font-medium text-gray-200 mb-2">File Information</h4>
               <div className="space-y-1 text-xs text-gray-400">
                 <div><strong>Name:</strong> {fileBrowserState.selectedFile.name}</div>
-                <div><strong>Type:</strong> {fileBrowserState.selectedFile.type}</div>
+                <div><strong>Type:</strong> {inferredType(fileBrowserState.selectedFile)}</div>
                 {'sizeBytes' in fileBrowserState.selectedFile && typeof fileBrowserState.selectedFile.sizeBytes === 'number' && (
                   <div><strong>Size:</strong> {(fileBrowserState.selectedFile.sizeBytes / 1024).toFixed(2)} KB</div>
                 )}
@@ -1446,6 +1635,130 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
           )}
         </div>
       </div>
+
+      {/* Decrypt Download Modal */}
+      {decryptState.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 w-full max-w-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-200">Encrypted file detected</h3>
+              <button
+                type="button"
+                onClick={() => setDecryptState({ open: false })}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-sm text-gray-300">
+              <div>
+                <span className="text-gray-400">File:</span> <span className="font-mono">{decryptState.fileName}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Key type:</span> <span className="font-mono">{decryptState.ikm}</span>
+              </div>
+            </div>
+
+            {decryptState.ikm === 'password' && (
+              <div className="mt-4 space-y-2">
+                <label className="block text-xs text-gray-400" htmlFor={decPasswordInputId}>
+                  Password
+                </label>
+                <input
+                  id={decPasswordInputId}
+                  type="password"
+                  value={decryptPassword}
+                  onChange={(e) => setDecryptPassword(e.target.value)}
+                  className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                  placeholder="Enter password to decrypt"
+                />
+              </div>
+            )}
+
+            {decryptState.ikm === 'signature' && (
+              <div className="mt-4 text-xs text-gray-400">
+                You’ll be prompted to sign a message to derive the decryption keys.
+              </div>
+            )}
+
+            <div className="mt-6 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  downloadBytes(decryptState.encryptedBytes, decryptState.fileName);
+                  setDecryptState({ open: false });
+                }}
+                className="flex-1 px-4 py-2 text-sm bg-gray-700 text-gray-200 rounded hover:bg-gray-600"
+              >
+                Download encrypted
+              </button>
+
+              <button
+                type="button"
+                disabled={isDecrypting || (decryptState.ikm === 'password' && !decryptPassword)}
+                onClick={async () => {
+                  try {
+                    setIsDecrypting(true);
+                    const ts = new TransformStream<Uint8Array, Uint8Array>();
+                    const decryptedP = new Response(ts.readable).arrayBuffer().then((b) => new Uint8Array(b));
+
+                    const chainId = walletClient ? await walletClient.getChainId() : 0;
+                    const inputBody = new Response(decryptState.encryptedBytes).body;
+                    if (!inputBody) throw new Error('Encrypted bytes stream is not available for decryption');
+                    await decryptFile({
+                      input: inputBody as ReadableStream<Uint8Array>,
+                      output: ts.writable,
+                      getIkm: async (hdr) => {
+                        if (hdr.ikm === 'password') {
+                          return IKM.fromPassword(decryptPassword).unwrap();
+                        }
+                        if (hdr.ikm === 'signature') {
+                          if (!walletClient || !walletAddress) throw new Error('Wallet not connected');
+                          if (!hdr.challenge) throw new Error('Missing challenge in encrypted header');
+                          const { message } = IKM.createEncryptionKeyMessage(
+                            ENC_APP_NAME,
+                            ENC_DOMAIN,
+                            ENC_VERSION,
+                            ENC_PURPOSE,
+                            chainId,
+                            walletAddress as `0x${string}`,
+                            hdr.challenge as any
+                          );
+                          const signature = await walletClient.signMessage({
+                            account: walletAddress as `0x${string}`,
+                            message
+                          });
+                          return IKM.fromSignature(signature).unwrap();
+                        }
+                        throw new Error('Unknown IKM type');
+                      }
+                    });
+
+                    const decrypted = await decryptedP;
+                    const outName = decryptState.fileName.endsWith('.enc')
+                      ? decryptState.fileName.slice(0, -4)
+                      : `${decryptState.fileName}.decrypted`;
+                    downloadBytes(decrypted, outName);
+                    setDecryptState({ open: false });
+                  } catch (e) {
+                    console.error('Decrypt failed:', e);
+                    setDownloadState(prev => ({
+                      ...prev,
+                      downloadError: e instanceof Error ? e.message : 'Decrypt failed'
+                    }));
+                  } finally {
+                    setIsDecrypting(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+              >
+                {isDecrypting ? 'Decrypting…' : 'Decrypt & download'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Folder Browser Modal */}
       {uploadLocationState.isNavigating && (

@@ -1,0 +1,133 @@
+import { decode, encode, rfc8949EncodeOptions } from "cborg";
+
+export const EncryptionHeaderVersion = {
+  V1: 1
+  // V2: 2,
+} as const;
+export type EncryptionHeaderVersion =
+  (typeof EncryptionHeaderVersion)[keyof typeof EncryptionHeaderVersion];
+
+export type IKMType = "password" | "signature";
+
+export type EncryptionHeaderParams = {
+  ikm: IKMType;
+  salt: Uint8Array;
+  // Present only when `ikm === "signature"`.
+  challenge?: Uint8Array;
+};
+
+export type EncryptionHeaderV1 = {
+  // Versioning to keep backward compatibility
+  v: typeof EncryptionHeaderVersion.V1;
+  // Method to generate the IKM
+  ikm: IKMType;
+  salt: Uint8Array;
+  challenge?: Uint8Array;
+};
+
+const HEADER_MAGIC = new TextEncoder().encode("SHF"); // StorageHub File
+
+function isIKMType(x: unknown): x is IKMType {
+  return x === "password" || x === "signature";
+}
+
+function isEncryptionHeaderV1(x: unknown): x is EncryptionHeaderV1 {
+  // `decode()` returns `unknown`, so we must validate before using fields.
+  if (typeof x !== "object" || x === null) return false;
+  const obj = x as Record<string, unknown>;
+
+  // V1 header requires v===1 (even if the value is provided externally).
+  if (typeof obj.v !== "number" || obj.v !== EncryptionHeaderVersion.V1) return false;
+  if (!isIKMType(obj.ikm)) return false;
+  if (!(obj.salt instanceof Uint8Array)) return false;
+
+  const challenge = obj.challenge;
+  // Challenge is optional in the format, but required to make signature-based decryption recoverable.
+  // If it exists, it must be exactly 32 bytes.
+  if (challenge !== undefined) {
+    if (!(challenge instanceof Uint8Array)) return false;
+    if (challenge.length !== 32) return false;
+  }
+  if (obj.ikm === "signature" && challenge === undefined) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Create a CBOR-encoded encryption header.
+ *
+ * Layout:
+ *   [ magic (3) ][ u32be header_len ][ cbor_header ]
+ */
+export function createEncryptionHeader(params: EncryptionHeaderParams): Uint8Array {
+  const header: EncryptionHeaderV1 = {
+    v: EncryptionHeaderVersion.V1,
+    ikm: params.ikm,
+    salt: params.salt,
+    ...(params.challenge ? { challenge: params.challenge } : {})
+  };
+
+  // Deterministic encoding: RFC 8949 "deterministic mode" map sorting.
+  const cborBytes = encode(header, rfc8949EncodeOptions);
+
+  const out = new Uint8Array(HEADER_MAGIC.length + 4 + cborBytes.length);
+  let offset = 0;
+
+  out.set(HEADER_MAGIC, offset);
+  offset += HEADER_MAGIC.length;
+
+  new DataView(out.buffer, out.byteOffset, out.byteLength).setUint32(
+    offset,
+    cborBytes.length,
+    false
+  );
+  offset += 4;
+
+  out.set(cborBytes, offset);
+  return out;
+}
+
+export function readEncryptionHeader(input: Uint8Array): {
+  header: EncryptionHeaderV1;
+  headerLength: number;
+} {
+  if (!(input instanceof Uint8Array)) {
+    throw new TypeError("input must be Uint8Array");
+  }
+  if (input.length < HEADER_MAGIC.length + 4) {
+    throw new Error("Invalid file format (truncated header)");
+  }
+
+  let offset = 0;
+
+  // Magic check
+  for (let i = 0; i < HEADER_MAGIC.length; i++) {
+    if (input[i] !== HEADER_MAGIC[i]) {
+      throw new Error("Invalid file format (magic mismatch)");
+    }
+  }
+  offset += HEADER_MAGIC.length;
+
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
+  const headerLen = view.getUint32(offset, false);
+  offset += 4;
+
+  if (headerLen > input.length - offset) {
+    throw new Error("Invalid file format (header length out of bounds)");
+  }
+
+  const headerBytes = input.subarray(offset, offset + headerLen);
+  offset += headerLen;
+
+  const decoded = decode(headerBytes);
+  if (!isEncryptionHeaderV1(decoded)) {
+    throw new Error("Invalid encryption header");
+  }
+
+  return {
+    header: decoded,
+    headerLength: offset
+  };
+}
