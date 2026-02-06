@@ -8,7 +8,8 @@ import {
   type EnrichedBspApi,
   ferdie,
   ShConsts,
-  sleep
+  sleep,
+  waitFor
 } from "../../../util";
 
 await describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi }) => {
@@ -334,7 +335,7 @@ await describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUser
       const MAX_STORAGE_CAPACITY = 416600;
 
       // Add a second BSP with the configured maximum storage capacity limit.
-      const { rpcPort } = await addBsp(userApi, bspTwoKey, userApi.accounts.sudo, {
+      const { rpcPort, peerId } = await addBsp(userApi, bspTwoKey, userApi.accounts.sudo, {
         name: "sh-bsp-two",
         bspId: ShConsts.BSP_TWO_ID,
         maxStorageCapacity: MAX_STORAGE_CAPACITY,
@@ -346,6 +347,16 @@ await describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUser
       // Wait until the new BSP catches up to the chain tip.
       bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
       await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
+
+      // Wait until the user node has a direct P2P connection to the new BSP.
+      // Without this, the new BSP may only be connected to BSP 1 (the bootnode), and when
+      // BSP 1 is paused, the new BSP would be isolated from the network.
+      await waitFor({
+        lambda: async () => {
+          const peers = (await userApi.rpc.system.peers()).map(({ peerId: id }) => id.toString());
+          return peers.includes(peerId);
+        }
+      });
 
       // We seal a block to ensure the blockchain service is caught up
       // TODO: consider doing this in nodeCatchUpToChainTip function
