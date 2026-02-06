@@ -1,6 +1,21 @@
-import type { Bucket, FileListResponse, GetFilesOptions, FileTree, FileStatus } from "../types.js";
+import type {
+  Bucket,
+  FileListResponse,
+  GetFilesOptions,
+  FileTree,
+  FileStatus,
+  ListBucketsByPage
+} from "../types.js";
 import { ModuleBase } from "../base.js";
 import { ensure0xPrefix, parseDate } from "@storagehub-sdk/core";
+
+const BACKEND_MAX_BUCKETS_PER_PAGE = 500;
+
+type BucketWire = Omit<Bucket, "bucketId" | "root" | "valuePropId"> & {
+  bucketId: string;
+  root: string;
+  valuePropId: string;
+};
 
 // Wire types received from backend JSON responses
 type FileTreeWireFile = {
@@ -24,6 +39,18 @@ type FileListResponseWire =
   | { bucketId: string; files: readonly FileTreeWire[] }
   | { bucketId: string; tree: FileTreeWireFolder };
 
+function fixBucket(bucket: BucketWire): Bucket {
+  return {
+    bucketId: ensure0xPrefix(bucket.bucketId),
+    name: bucket.name,
+    root: ensure0xPrefix(bucket.root),
+    isPublic: bucket.isPublic,
+    sizeBytes: bucket.sizeBytes,
+    valuePropId: ensure0xPrefix(bucket.valuePropId),
+    fileCount: bucket.fileCount
+  };
+}
+
 /** Recursively fix hex prefixes in FileTree structures */
 function fixFileTree(item: FileTreeWire): FileTree {
   if (item.type === "file") {
@@ -44,23 +71,33 @@ function fixFileTree(item: FileTreeWire): FileTree {
 }
 
 export class BucketsModule extends ModuleBase {
-  /** List all buckets for the current authenticated user */
-  async listBuckets(signal?: AbortSignal): Promise<Bucket[]> {
+  /**
+   * List buckets for the current authenticated user (single request).
+   *
+   * - `limit` defaults to 100
+   * - `limit` is capped at 500 (backend max)
+   */
+  async listBuckets(signal?: AbortSignal, limit = 100): Promise<Bucket[]> {
+    const cappedLimit = Math.min(Math.max(0, limit), BACKEND_MAX_BUCKETS_PER_PAGE);
+
+    const res = await this.listBucketsByPage(signal, cappedLimit, 0);
+    return res.buckets;
+  }
+
+  /** Fetch a single page of buckets using backend pagination (`page` + `limit`). */
+  async listBucketsByPage(signal?: AbortSignal, limit = 100, page = 0): Promise<ListBucketsByPage> {
     const headers = await this.withAuth();
-    const wire = await this.ctx.http.get<Bucket[]>("/buckets", {
+    const cappedLimit = Math.min(Math.max(0, limit), BACKEND_MAX_BUCKETS_PER_PAGE);
+    const safePage = Math.max(0, Math.floor(page));
+
+    const wire = await this.ctx.http.get<BucketWire[]>("/buckets", {
       ...(headers ? { headers } : {}),
-      ...(signal ? { signal } : {})
+      ...(signal ? { signal } : {}),
+      query: { page: safePage, limit: cappedLimit }
     });
 
-    return wire.map((bucket: Bucket) => ({
-      bucketId: ensure0xPrefix(bucket.bucketId),
-      name: bucket.name,
-      root: ensure0xPrefix(bucket.root),
-      isPublic: bucket.isPublic,
-      sizeBytes: bucket.sizeBytes,
-      valuePropId: ensure0xPrefix(bucket.valuePropId),
-      fileCount: bucket.fileCount
-    }));
+    const buckets = wire.map(fixBucket);
+    return { buckets, page: safePage, limit: cappedLimit, hasMore: buckets.length === cappedLimit };
   }
 
   /** Get a specific bucket's metadata by its bucket ID */
@@ -68,20 +105,12 @@ export class BucketsModule extends ModuleBase {
     const headers = await this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}`;
 
-    const wire = await this.ctx.http.get<Bucket>(path, {
+    const wire = await this.ctx.http.get<BucketWire>(path, {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
     });
 
-    return {
-      bucketId: ensure0xPrefix(wire.bucketId),
-      name: wire.name,
-      root: ensure0xPrefix(wire.root),
-      isPublic: wire.isPublic,
-      sizeBytes: wire.sizeBytes,
-      valuePropId: ensure0xPrefix(wire.valuePropId),
-      fileCount: wire.fileCount
-    };
+    return fixBucket(wire);
   }
 
   /** List files/folders under a path for a bucket (root if no path) */
