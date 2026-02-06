@@ -294,12 +294,19 @@ where
         };
         let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
-        // Query the maximum batch size for confirm storing requests.
-        let max_batch_size = self
+        // Determine the effective batch size: take the minimum of the runtime limit
+        // and the client-side safety cap.
+        let runtime_max = self
             .storage_hub_handler
             .blockchain
             .query_max_batch_confirm_storage_requests()
             .await?;
+        let client_max = self
+            .storage_hub_handler
+            .provider_config
+            .blockchain_service
+            .bsp_confirm_file_batch_size;
+        let max_batch_size = std::cmp::min(runtime_max, client_max);
 
         // Pull and filter requests from the queue until we have a full batch or the queue is empty.
         // This approach ensures we fill the batch with valid requests even if many are stale.
