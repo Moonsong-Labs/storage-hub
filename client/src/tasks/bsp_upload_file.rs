@@ -323,8 +323,13 @@ where
 
         info!(
             target: LOG_TARGET,
-            "Processing {} confirm storing requests",
-            confirm_storing_requests.len()
+            "Processing {} confirm storing requests: [{}]",
+            confirm_storing_requests.len(),
+            confirm_storing_requests
+                .iter()
+                .map(|request| format!("0x{:x}", request.file_key))
+                .collect::<Vec<_>>()
+                .join(", ")
         );
 
         // Query runtime for the chunks to prove for the file.
