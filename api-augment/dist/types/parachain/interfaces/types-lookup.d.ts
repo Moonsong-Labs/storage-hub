@@ -2470,9 +2470,9 @@ declare module '@polkadot/types/lookup' {
         readonly isMinPrice: boolean;
         readonly asMinPrice: u128;
         readonly isUpperExponentFactor: boolean;
-        readonly asUpperExponentFactor: u32;
+        readonly asUpperExponentFactor: u128;
         readonly isLowerExponentFactor: boolean;
-        readonly asLowerExponentFactor: u32;
+        readonly asLowerExponentFactor: u128;
         readonly isZeroSizeBucketFixedRate: boolean;
         readonly asZeroSizeBucketFixedRate: u128;
         readonly isIdealUtilisationRate: boolean;
@@ -4385,9 +4385,9 @@ declare module '@polkadot/types/lookup' {
         readonly isMinPrice: boolean;
         readonly asMinPrice: ITuple<[ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice, Option<u128>]>;
         readonly isUpperExponentFactor: boolean;
-        readonly asUpperExponentFactor: ITuple<[ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor, Option<u32>]>;
+        readonly asUpperExponentFactor: ITuple<[ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor, Option<u128>]>;
         readonly isLowerExponentFactor: boolean;
-        readonly asLowerExponentFactor: ITuple<[ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor, Option<u32>]>;
+        readonly asLowerExponentFactor: ITuple<[ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor, Option<u128>]>;
         readonly isZeroSizeBucketFixedRate: boolean;
         readonly asZeroSizeBucketFixedRate: ITuple<[ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate, Option<u128>]>;
         readonly isIdealUtilisationRate: boolean;
