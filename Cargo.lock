@@ -16236,6 +16236,7 @@ dependencies = [
  "http 1.4.0",
  "jsonrpsee 0.24.10",
  "jsonwebtoken",
+ "mime_guess",
  "pallet-storage-providers",
  "parity-scale-codec",
  "parking_lot 0.12.5",
