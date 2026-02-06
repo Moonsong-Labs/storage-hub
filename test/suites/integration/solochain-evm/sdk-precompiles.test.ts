@@ -710,5 +710,76 @@ await describeMspNet(
       const bucketAfterDeletion = await userApi.query.providers.buckets(testBucketId);
       assert(bucketAfterDeletion.isNone, "Bucket should not exist after deletion");
     });
+
+    it("Should paginate buckets via the SDK (simple)", async () => {
+      // Create 10 buckets
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+      assert(valueProps.length > 0, "No value propositions found for MSP");
+      const valuePropId = valueProps[0].id.toHex();
+
+      const createdBucketNames: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const name = `sdk-pagination-bucket-${i}`;
+        createdBucketNames.push(name);
+        const id = (await storageHubClient.deriveBucketId(account.address, name)) as string;
+
+        const txHash = await storageHubClient.createBucket(
+          userApi.shConsts.DUMMY_MSP_ID as `0x${string}`,
+          name,
+          false,
+          valuePropId as `0x${string}`
+        );
+
+        await userApi.wait.waitForTxInPool({ module: "ethereum", method: "transact" });
+        await userApi.block.seal();
+
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+        assert(receipt.status === "success", "Create bucket transaction failed");
+
+        const created = await userApi.query.providers.buckets(id);
+        assert(created.isSome, "Bucket should exist after creation");
+      }
+
+      // Wait for the indexer/backend to catch up so /buckets reflects the new buckets
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      // listBuckets(limit)
+      const first5 = await mspClient.buckets.listBuckets(undefined, 5);
+      strictEqual(first5.length, 5, "listBuckets(5) should return exactly 5 buckets");
+
+      const first8 = await mspClient.buckets.listBuckets(undefined, 8);
+      strictEqual(first8.length, 8, "listBuckets(8) should return exactly 8 buckets");
+
+      // listBucketsByPage(limit=4), pages 0/1/2
+      const p0 = await mspClient.buckets.listBucketsByPage(undefined, 4, 0);
+      strictEqual(p0.buckets.length, 4, "page 0 should return 4 buckets");
+      strictEqual(p0.hasMore, true, "page 0 hasMore should be true");
+
+      const p1 = await mspClient.buckets.listBucketsByPage(undefined, 4, 1);
+      strictEqual(p1.buckets.length, 4, "page 1 should return 4 buckets");
+      strictEqual(p1.hasMore, true, "page 1 hasMore should be true");
+
+      const p2 = await mspClient.buckets.listBucketsByPage(undefined, 4, 2);
+      assert(p2.buckets.length <= 4, "page 2 should return <= 4 buckets");
+      strictEqual(p2.hasMore, false, "page 2 hasMore should be false");
+
+      // Sanity-check: pages contain different buckets (no overlap)
+      const p0Ids = new Set(p0.buckets.map((b) => b.bucketId));
+      const p1Ids = new Set(p1.buckets.map((b) => b.bucketId));
+      const p2Ids = new Set(p2.buckets.map((b) => b.bucketId));
+      for (const id of p1Ids) assert(!p0Ids.has(id), "page 0 and page 1 should not overlap");
+      for (const id of p2Ids) {
+        assert(!p0Ids.has(id), "page 0 and page 2 should not overlap");
+        assert(!p1Ids.has(id), "page 1 and page 2 should not overlap");
+      }
+
+      // Expect to see the buckets we just created within these 3 pages
+      const allPageNames = [...p0.buckets, ...p1.buckets, ...p2.buckets].map((b) => b.name);
+      for (const name of createdBucketNames) {
+        assert(allPageNames.includes(name), `Expected to see created bucket name: ${name}`);
+      }
+    });
   }
 );
