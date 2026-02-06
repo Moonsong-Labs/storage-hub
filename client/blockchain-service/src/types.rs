@@ -834,7 +834,7 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// Tracks file keys with pending volunteer transactions.
     /// When a volunteer tx is submitted, the file key is added.
     /// When the volunteer is verified on-chain, the file key is removed.
-    /// This is used in the `QueryPendingBspConfirmStorageRequests` command to prevent a race condition
+    /// This is used in the `FilterConfirmStoringRequests` command to prevent a race condition
     /// where a BSP could attempt to send a storage confirmation, before it saw the volunteer transaction
     /// succeed on-chain.
     pub(crate) pending_volunteer_file_keys: HashSet<FileKey>,
@@ -990,27 +990,29 @@ impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
     }
 }
 
-/// Specifies which BSP forest-write request queue to pop from.
+/// Specifies which BSP forest-write request queue to check or pop from.
 ///
 /// Used as a parameter to `bsp_forest_write_work` to indicate which pending
-/// request queue should have its front element removed.
+/// request queue should be checked or have its front element removed.
 pub(crate) enum BspForestWriteQueue {
     /// Pop from the in-memory submit proof requests (BTreeSet, pops lowest tick first).
     SubmitProof,
-    /// Pop from the persistent confirm storing request deque.
+    /// Check the persistent confirm storing request deque for pending work.
+    /// Does not pop; the task pulls requests via commands.
     ConfirmStoring,
     /// Pop from the persistent stop storing for insolvent user request deque.
     StopStoringForInsolventUser,
 }
 
-/// The result of popping from a BSP forest-write request queue.
+/// The result of checking or popping from a BSP forest-write request queue.
 ///
-/// Wraps the popped request with a discriminant indicating which queue it came from.
+/// Wraps the popped request (or a signal) with a discriminant indicating which queue it came from.
 pub(crate) enum BspForestWriteQueuePop<Runtime: StorageEnableRuntime> {
     /// A submit proof request was popped from the in-memory BTreeSet.
     SubmitProof(SubmitProofRequest<Runtime>),
-    /// A confirm storing request was popped from the persistent deque.
-    ConfirmStoring(ConfirmStoringRequest<Runtime>),
+    /// Signals that the confirm storing request deque is non-empty.
+    /// No data is popped; the task pulls requests via commands.
+    ConfirmStoring,
     /// A stop storing for insolvent user request was popped from the persistent deque.
     StopStoringForInsolventUser(StopStoringForInsolventUserRequest<Runtime>),
 }
