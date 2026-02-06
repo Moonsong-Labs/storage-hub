@@ -511,7 +511,7 @@ export const waitForFishermanBatchDeletions = async (
     deletionType,
     expectExt,
     sealBlock = false,
-    timeoutMs = 60_000,
+    timeoutMs = 30_000,
     pollMs = 500,
     exactLength = false
   } = options;
@@ -593,12 +593,17 @@ export const retryableWaitAndVerifyBatchDeletions = async (
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     // Wait for batch deletions and seal block
-    const deletionResult = await waitForFishermanBatchDeletions({
-      blockProducerApi,
-      deletionType,
-      expectExt,
-      sealBlock: true
-    });
+    let deletionResult: FishermanBatchDeletionsResult | undefined;
+    try {
+      deletionResult = await waitForFishermanBatchDeletions({
+        blockProducerApi,
+        deletionType,
+        expectExt,
+        sealBlock: true
+      });
+    } catch (_) {
+      continue;
+    }
 
     if (!deletionResult) {
       throw new Error("waitForBatchDeletions returned undefined when sealBlock is true");
