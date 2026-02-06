@@ -266,17 +266,6 @@ where
             "Processing ConfirmStoringRequest",
         );
 
-        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
-        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
-
         // Get the BSP ID of the Provider running this node and its current Forest root.
         let own_provider_id = self
             .storage_hub_handler
@@ -313,11 +302,6 @@ where
             .await?;
 
         if confirm_storing_requests.is_empty() {
-            // Release the forest root write lock before returning.
-            self.storage_hub_handler
-                .blockchain
-                .release_forest_root_write_lock(forest_root_write_tx)
-                .await?;
             return Ok(
                 "Skipped ProcessConfirmStoringRequest: no more requests to confirm after filtering"
                     .to_string(),
@@ -504,12 +488,6 @@ where
                 self.requeue_confirm_storing_requests(&confirming_file_keys)
                     .await;
 
-                // Release the forest root write lock before returning error
-                self.storage_hub_handler
-                    .blockchain
-                    .release_forest_root_write_lock(forest_root_write_tx)
-                    .await?;
-
                 return Err(anyhow!(
                     "Failed to confirm file after {} retries: {:?}",
                     self.config.max_try_count,
@@ -524,12 +502,6 @@ where
                     let err_msg = format!("Failed to handle confirm storing extrinsic result for {} file key(s): {:?}", confirming_file_keys.len(), err);
                     error!(target: LOG_TARGET, err_msg);
 
-                    // Release the forest root write lock before returning error
-                    self.storage_hub_handler
-                        .blockchain
-                        .release_forest_root_write_lock(forest_root_write_tx)
-                        .await?;
-
                     return Err(anyhow!(err_msg));
                 }
             }
@@ -543,12 +515,6 @@ where
                     .await;
             }
         }
-
-        // Release the forest root write "lock" and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await?;
 
         Ok(format!(
             "Processed ProcessConfirmStoringRequest for BSP [0x{:x}] for file keys: [{}]",
