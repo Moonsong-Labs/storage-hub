@@ -13,6 +13,7 @@ import { cleanupEnvironment, printDockerStatus } from "../helpers.ts";
 import { sleep } from "../timer.ts";
 import { sealBlock } from "./block.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
+import { waitFor } from "./waits";
 import * as ShConsts from "./consts.ts";
 import { addBspContainer, showContainers } from "./docker";
 import type { EnrichedBspApi } from "./test-api.ts";
@@ -283,6 +284,19 @@ export const addBsp = async (
     ),
     sudoSigner
   );
+
+  // Wait for the user node to establish a direct P2P connection to the new BSP.
+  // Without this, the BSP may only be connected to the bootnode and fail to
+  // receive file data from the user node needed to confirm storing.
+  await waitFor({
+    lambda: async () => {
+      const peers = (await api.rpc.system.peers()).map(({ peerId: id }) => id.toString());
+      return peers.includes(peerId);
+    }
+  });
+
+  // Seal a block to ensure the blockchain service is caught up.
+  await sealBlock(api);
 
   return { containerName, rpcPort, p2pPort, peerId };
 };
