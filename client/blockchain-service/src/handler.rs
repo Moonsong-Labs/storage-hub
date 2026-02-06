@@ -1638,14 +1638,12 @@ where
                 }
                 BlockchainServiceCommand::FilterConfirmStoringRequests { requests, callback } => {
                     match self.filter_confirm_storing_requests(requests) {
-                        Ok(result) => {
-                            match callback.send(Ok(result)) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    error!(target: LOG_TARGET, "Failed to send filtered confirm storing requests: {:?}", e);
-                                }
+                        Ok(result) => match callback.send(Ok(result)) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send filtered confirm storing requests: {:?}", e);
                             }
-                        }
+                        },
                         Err(e) => {
                             command_succeeded = false;
                             error!(target: LOG_TARGET, "FilterConfirmStoringRequests failed: {:?}", e);
