@@ -27,6 +27,7 @@ hex = { workspace = true }
 hex-literal = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
 jsonwebtoken = { workspace = true }
+mime_guess = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = [
@@ -72,7 +73,6 @@ pallet-storage-providers = { workspace = true, features = ["std"] }
 sh-solochain-evm-runtime = { workspace = true, features = [
 	"std",
 ], optional = true }
-mime_guess = "2.0.5"
 
 [dev-dependencies]
 alloy-signer = "0.8"
