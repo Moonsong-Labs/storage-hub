@@ -138,7 +138,8 @@ console.log('Folder files:', folderFiles);
   - `getValuePropositions(signal?)` – returns available value props/pricing
   - `getPaymentStreams(signal?)` – returns the authenticated user's payment streams
 - **`buckets`**: Buckets and file listings
-  - `listBuckets(signal?)` – returns all buckets for the current authenticated user
+  - `listBuckets(signal?, limit?)` – fetches the first page of buckets for the current authenticated user (default limit 100, backend max 500)
+  - `listBucketsByPage(signal?, limit?, page?)` – fetch a single bucket page (backend pagination)
   - `getBucket(bucketId, signal?)` – returns metadata for a specific bucket
   - `getFiles(bucketId, { path?, signal? })` – returns the file tree at root or at a subpath
 - **`files`**: File metadata, upload and download
