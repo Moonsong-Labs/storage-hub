@@ -728,7 +728,7 @@ where
                     forest_root_write_permit,
                 });
             }
-            ForestWriteLockTaskData::ConfirmStoringRequest(_) => {
+            ForestWriteLockTaskData::ConfirmStoringRequest => {
                 unreachable!("MSPs do not confirm storing requests the way BSPs do.")
             }
             ForestWriteLockTaskData::SubmitProofRequest(_) => {

@@ -261,6 +261,12 @@ where
         &mut self,
         event: ProcessConfirmStoringRequest<Runtime>,
     ) -> anyhow::Result<String> {
+        // Hold the forest root write permit for the duration of this handler.
+        // When this guard is dropped (on return, error, or panic), the semaphore
+        // permit is released and the blockchain service is notified to process
+        // the next pending forest-write request.
+        let _forest_root_write_permit = event.forest_root_write_permit;
+
         info!(
             target: LOG_TARGET,
             "Processing ConfirmStoringRequest",
@@ -357,11 +363,6 @@ where
         }
 
         if confirm_storing_requests_with_chunks_to_prove.iter().count() == 0 {
-            // Release the forest root write lock before returning.
-            self.storage_hub_handler
-                .blockchain
-                .release_forest_root_write_lock(forest_root_write_tx)
-                .await?;
             return Ok(
                 "Skipped ProcessConfirmStoringRequest: no keys to confirm after querying chunks"
                     .to_string(),

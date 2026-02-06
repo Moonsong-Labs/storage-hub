@@ -29,9 +29,9 @@ use crate::{
         FinalisedBspConfirmStoppedStoring, FinalisedTrieRemoveMutationsAppliedForBsp,
         ForestWriteLockTaskData, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
         MoveBucketRequested, MultipleNewChallengeSeeds, NewStorageRequest,
-        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
+        ProcessConfirmStoringRequest, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
+        ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
     state::BlockchainServiceStateStoreRwContext,
@@ -462,13 +462,15 @@ where
 
         // If we have no pending SubmitProof requests, check for pending ConfirmStoring requests.
         if next_event_data.is_none() {
-            let queue_size = state_store_context
-                .pending_confirm_storing_request_deque::<Runtime>()
-                .size();
-
-            if queue_size > 0 {
-                trace!(target: LOG_TARGET, "Triggering ProcessConfirmStoringRequest with {} items in queue", queue_size);
-                next_event_data = Some(ProcessConfirmStoringRequestData::new().into());
+            if let Some(BspForestWriteQueuePop::ConfirmStoring) = Self::bsp_forest_write_work(
+                &mut self.maybe_managed_provider,
+                &state_store_context,
+                Some(BspForestWriteQueue::ConfirmStoring),
+            )
+            .popped
+            {
+                trace!(target: LOG_TARGET, "Triggering ProcessConfirmStoringRequest");
+                next_event_data = Some(ForestWriteLockTaskData::ConfirmStoringRequest);
             }
         }
 
@@ -528,11 +530,17 @@ where
                 (popped.is_some(), popped)
             }
             Some(BspForestWriteQueue::ConfirmStoring) => {
-                let popped = state
+                // Check only (no pop). The task pulls requests via commands.
+                let has_pending = state
                     .pending_confirm_storing_request_deque::<Runtime>()
-                    .pop_front()
-                    .map(BspForestWriteQueuePop::ConfirmStoring);
-                (popped.is_some(), popped)
+                    .size()
+                    > 0;
+                let signal = if has_pending {
+                    Some(BspForestWriteQueuePop::ConfirmStoring)
+                } else {
+                    None
+                };
+                (has_pending, signal)
             }
             Some(BspForestWriteQueue::StopStoringForInsolventUser) => {
                 let popped = state
@@ -815,11 +823,8 @@ where
                     forest_root_write_permit,
                 });
             }
-            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
-                self.emit(ProcessConfirmStoringRequest {
-                    data,
-                    forest_root_write_permit,
-                });
+            ForestWriteLockTaskData::ConfirmStoringRequest => {
+                self.emit(ProcessConfirmStoringRequest::new(forest_root_write_permit));
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 self.emit(ProcessStopStoringForInsolventUserRequest {
