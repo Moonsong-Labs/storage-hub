@@ -163,6 +163,16 @@ export interface GetFilesOptions {
   signal?: AbortSignal;
 }
 
+export interface ListBucketsByPage {
+  buckets: Bucket[];
+  /** Zero-based page index used for the request */
+  page: number;
+  /** Limit used for the request */
+  limit: number;
+  /** Best-effort: true when `buckets.length === limit` */
+  hasMore: boolean;
+}
+
 // MSP info
 export interface InfoResponse {
   client: string;
