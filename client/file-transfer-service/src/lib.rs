@@ -8,7 +8,9 @@ use sc_network::{
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::{
     traits::StorageEnableRuntime,
-    types::{BlockHash, OpaqueBlock, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE},
+    types::{
+        BlockHash, OpaqueBlock, ProviderId, StorageHubClient, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+    },
 };
 
 pub use self::handler::FileTransferService;
@@ -91,13 +93,20 @@ pub async fn spawn_file_transfer_service<Runtime: StorageEnableRuntime>(
     request_receiver: async_channel::Receiver<IncomingRequest>,
     protocol_name: ProtocolName,
     network: Arc<dyn NetworkService>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
+    trusted_msps: Vec<ProviderId<Runtime>>,
 ) -> ActorHandle<FileTransferService<Runtime>> {
     let task_spawner = task_spawner
         .with_name("file-transfer-service")
         .with_group("network");
 
-    let file_transfer_service =
-        FileTransferService::<Runtime>::new(protocol_name, request_receiver, network);
+    let file_transfer_service = FileTransferService::<Runtime>::new(
+        protocol_name,
+        request_receiver,
+        network,
+        client,
+        trusted_msps,
+    );
 
     let file_transfer_service_handle = task_spawner.spawn_actor(file_transfer_service);
 

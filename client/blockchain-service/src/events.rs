@@ -386,6 +386,17 @@ pub struct DistributeFileToBsp<Runtime: StorageEnableRuntime> {
     pub bsp_id: BackupStorageProviderId<Runtime>,
 }
 
+/// Request for the MSP to check local file storage for a bucket.
+///
+/// This event is intended to be handled by MSP-specific tasks that validate or reconcile
+/// local file storage state for the given bucket. For now, it is only the event definition
+/// and wiring; emission and behaviour are implemented separately.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct CheckBucketFileStorage<Runtime: StorageEnableRuntime> {
+    pub bucket_id: BucketId<Runtime>,
+}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
