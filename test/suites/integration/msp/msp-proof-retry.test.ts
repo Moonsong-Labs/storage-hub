@@ -3,7 +3,13 @@ import type { ApiPromise } from "@polkadot/api";
 import type { EventRecord, SignedBlock } from "@polkadot/types/interfaces";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
+import {
+  describeMspNet,
+  type EnrichedBspApi,
+  extractProofFromForestProof,
+  shUser,
+  waitFor
+} from "../../../util";
 
 /**
  * Checks if an MSP accept extrinsic failed with ForestProofVerificationFailed.
@@ -206,12 +212,17 @@ await describeMspNet(
         fingerprint: file1Result.fingerprints[0]
       };
 
+      const decodedBucketInclusionProof = extractProofFromForestProof(
+        userApi,
+        bucketInclusionProof
+      );
+
       // Submit deleteFiles extrinsic to pool with HIGH TIP for priority
       // The tip ensures deleteFiles executes BEFORE MSP's response in the same block
       const deleteFilesTx = userApi.tx.fileSystem.deleteFiles(
         [deletionRequest],
         null, // null = bucket deletion (not BSP)
-        bucketInclusionProof.toString()
+        decodedBucketInclusionProof
       );
 
       // Sign and send with high tip to ensure priority over MSP's transaction

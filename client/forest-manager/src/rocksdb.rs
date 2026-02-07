@@ -710,7 +710,7 @@ mod tests {
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 included_keys.as_slice(),
-                &proof.proof
+                &proof.proof.encoded_nodes
             )
             .is_ok()
         );
@@ -727,7 +727,7 @@ mod tests {
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 included_keys.as_slice(),
-                &proof.proof
+                &proof.proof.encoded_nodes
             )
             .is_ok()
         );
@@ -742,13 +742,14 @@ mod tests {
                 sh_parachain_runtime::Runtime,
             >::generate_proof(&forest_storage, vec![*key])
                 .unwrap();
-            let proof = proof.proof;
             let mutations: Vec<(H256, TrieMutation)> =
                 vec![(*key, TrieRemoveMutation::default().into())];
 
             let apply_delta_result =
                 ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
-                    &root, &mutations, &proof,
+                    &root,
+                    &mutations,
+                    &proof.proof.encoded_nodes,
                 );
             assert!(apply_delta_result.is_ok());
             assert!(apply_delta_result

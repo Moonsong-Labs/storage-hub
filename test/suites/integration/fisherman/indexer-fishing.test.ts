@@ -4,6 +4,7 @@ import {
   bspKey,
   describeMspNet,
   type EnrichedBspApi,
+  extractProofFromForestProof,
   hexToBuffer,
   ShConsts,
   type SqlClient,
@@ -229,9 +230,14 @@ await describeMspNet(
         lambda: async () => (await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey)).isTrue
       });
 
-      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
-        fileKey
-      ]);
+      const inclusionForestProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
+        null,
+        [fileKey]
+      );
+      const inclusionForestProof = extractProofFromForestProof(
+        userApi,
+        inclusionForestProofEncoded
+      );
 
       const bspRequestStopStoringResult = await userApi.block.seal({
         calls: [
@@ -243,7 +249,7 @@ await describeMspNet(
             fingerprint,
             fileSize,
             false,
-            inclusionForestProof.toString()
+            inclusionForestProof
           )
         ],
         signer: bspKey
@@ -271,14 +277,17 @@ await describeMspNet(
       const cooldown = currentBlockNumber + minWaitForStopStoring;
       await userApi.block.skipTo(cooldown);
 
-      const newInclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
-        fileKey
-      ]);
+      const newInclusionForestProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
+        null,
+        [fileKey]
+      );
+      const newInclusionForestProof = extractProofFromForestProof(
+        userApi,
+        newInclusionForestProofEncoded
+      );
 
       const bspConfirmStopStoringResult = await userApi.block.seal({
-        calls: [
-          userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, newInclusionForestProof.toString())
-        ],
+        calls: [userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, newInclusionForestProof)],
         signer: bspKey
       });
 

@@ -3,6 +3,7 @@ import {
   bspThreeKey,
   describeBspNet,
   type EnrichedBspApi,
+  extractProofFromForestProof,
   type FileMetadata,
   ShConsts,
   waitFor
@@ -171,9 +172,11 @@ await describeBspNet(
       await userApi.wait.nodeCatchUpToChainTip(bspThreeApi);
 
       // Build transaction for BSP-Three to stop storing the only file it has.
-      const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
-        null,
-        [fileMetadata.fileKey]
+      const inclusionForestProofEncoded =
+        await bspThreeApi.rpc.storagehubclient.generateForestProof(null, [fileMetadata.fileKey]);
+      const inclusionForestProof = extractProofFromForestProof(
+        userApi,
+        inclusionForestProofEncoded
       );
       await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
       const blockResult = await userApi.block.seal({
@@ -186,7 +189,7 @@ await describeBspNet(
             fileMetadata.fingerprint,
             fileMetadata.fileSize,
             false,
-            inclusionForestProof.toString()
+            inclusionForestProof
           )
         ],
         signer: bspThreeKey
@@ -205,9 +208,11 @@ await describeBspNet(
 
     it("BSP can correctly delete a file from its forest and runtime correctly updates its root", async () => {
       // Generate the inclusion proof for the file key that BSP-Three requested to stop storing.
-      const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
-        null,
-        [fileMetadata.fileKey]
+      const inclusionForestProofEncoded =
+        await bspThreeApi.rpc.storagehubclient.generateForestProof(null, [fileMetadata.fileKey]);
+      const inclusionForestProof = extractProofFromForestProof(
+        userApi,
+        inclusionForestProofEncoded
       );
 
       // Wait enough blocks for the deletion to be allowed.
@@ -231,7 +236,7 @@ await describeBspNet(
         calls: [
           bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
             fileMetadata.fileKey,
-            inclusionForestProof.toString()
+            inclusionForestProof
           )
         ],
         signer: bspThreeKey

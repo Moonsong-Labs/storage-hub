@@ -2,14 +2,15 @@ import assert from "node:assert";
 import type { Option } from "@polkadot/types";
 import type { H256 } from "@polkadot/types/interfaces";
 import {
+  bspTwoKey,
   describeMspNet,
   type EnrichedBspApi,
+  extractProofFromForestProof,
   type FileMetadata,
-  shUser,
-  type SqlClient,
   hexToBuffer,
-  bspTwoKey,
-  ShConsts
+  ShConsts,
+  shUser,
+  type SqlClient
 } from "../../../util";
 
 /**
@@ -418,9 +419,11 @@ await describeMspNet(
 
       // Step 5: Generate forest proof from MSP for the bucket
       const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", firstFile.bucketId);
-      const forestProof = await mspApi.rpc.storagehubclient.generateForestProof(bucketIdOption, [
-        firstFile.fileKey
-      ]);
+      const forestProofEncoded = await mspApi.rpc.storagehubclient.generateForestProof(
+        bucketIdOption,
+        [firstFile.fileKey]
+      );
+      const forestProof = extractProofFromForestProof(userApi, forestProofEncoded);
 
       // Step 6: Call deleteFiles with bspId = null (bucket deletion)
       await userApi.block.seal({

@@ -11,7 +11,9 @@ mod genesis_config_presets;
 mod weights;
 
 extern crate alloc;
+extern crate ethereum;
 
+use alloc::{collections::BTreeMap, vec::Vec};
 use codec::Encode;
 use cumulus_primitives_core::BlockT;
 use fp_account::EthereumSignature;
@@ -61,10 +63,6 @@ use sp_runtime::{
     },
     transaction_validity::{TransactionSource, TransactionValidity, TransactionValidityError},
     ApplyExtrinsicResult, ExtrinsicInclusionMode, Perbill,
-};
-use sp_std::{
-    collections::btree_map::BTreeMap,
-    prelude::{Vec, *},
 };
 use sp_version::RuntimeVersion;
 use weights::ExtrinsicBaseWeight;
@@ -149,17 +147,25 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 pub type BlockId = generic::BlockId<Block>;
 
 /// The TransactionExtension to the basic transaction logic.
-pub type TxExtension = (
-    frame_system::CheckNonZeroSender<Runtime>,
-    frame_system::CheckSpecVersion<Runtime>,
-    frame_system::CheckTxVersion<Runtime>,
-    frame_system::CheckGenesis<Runtime>,
-    frame_system::CheckEra<Runtime>,
-    frame_system::CheckNonce<Runtime>,
-    frame_system::CheckWeight<Runtime>,
-    pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
-    frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
-);
+///
+/// `StorageWeightReclaim` wraps all inner extensions to accurately reclaim unused proof size
+/// weight, including weight consumed by the extensions themselves. This requires `ProofSizeExt`
+/// to be registered during both block building (`ProposerFactory::with_proof_recording`) and
+/// block import (`enable_import_proof_recording=true` on the Client).
+pub type TxExtension = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
+    Runtime,
+    (
+        frame_system::CheckNonZeroSender<Runtime>,
+        frame_system::CheckSpecVersion<Runtime>,
+        frame_system::CheckTxVersion<Runtime>,
+        frame_system::CheckGenesis<Runtime>,
+        frame_system::CheckEra<Runtime>,
+        frame_system::CheckNonce<Runtime>,
+        frame_system::CheckWeight<Runtime>,
+        pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+        frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
+    ),
+>;
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
@@ -359,18 +365,12 @@ mod runtime {
 #[cfg(feature = "runtime-benchmarks")]
 mod benches {
     frame_benchmarking::define_benchmarks!(
-        [frame_system, SystemBench::<Runtime>]
-        [pallet_balances, Balances]
-        [pallet_timestamp, Timestamp]
-        [pallet_sudo, Sudo]
-        [pallet_nfts, Nfts]
-        [pallet_parameters, Parameters]
+        [pallet_bucket_nfts, BucketNfts]
+        [pallet_file_system, FileSystem]
         [pallet_payment_streams, PaymentStreams]
         [pallet_proofs_dealer, ProofsDealer]
-        [pallet_storage_providers, Providers]
         [pallet_randomness, Randomness]
-        [pallet_file_system, FileSystem]
-        [pallet_bucket_nfts, BucketNfts]
+        [pallet_storage_providers, Providers]
     );
 }
 
@@ -454,7 +454,7 @@ impl_runtime_apis! {
             Runtime::metadata_at_version(version)
         }
 
-        fn metadata_versions() -> sp_std::vec::Vec<u32> {
+        fn metadata_versions() -> alloc::vec::Vec<u32> {
             Runtime::metadata_versions()
         }
     }
@@ -894,10 +894,13 @@ impl_runtime_apis! {
         fn compute_signed_extra_implicit(
             era: sp_runtime::generic::Era,
             enable_metadata: bool,
-        ) -> Result<sp_std::vec::Vec<u8>, sp_runtime::transaction_validity::TransactionValidityError> {
-            // Build the TxExtension tuple with minimal values; only `era` and `enable_metadata`
+        ) -> Result<alloc::vec::Vec<u8>, sp_runtime::transaction_validity::TransactionValidityError> {
+            // Build the TxExtension with minimal values; only `era` and `enable_metadata`
             // influence the implicit. Other extensions have `()` implicit.
-            let extra: crate::TxExtension = (
+            let extra: crate::TxExtension = cumulus_pallet_weight_reclaim::StorageWeightReclaim::<
+                Runtime,
+                _,
+            >::new((
                 frame_system::CheckNonZeroSender::<Runtime>::new(),
                 frame_system::CheckSpecVersion::<Runtime>::new(),
                 frame_system::CheckTxVersion::<Runtime>::new(),
@@ -907,7 +910,7 @@ impl_runtime_apis! {
                 frame_system::CheckWeight::<Runtime>::new(),
                 pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(<Balance as Default>::default()),
                 frame_metadata_hash_extension::CheckMetadataHash::<Runtime>::new(enable_metadata),
-            );
+            ));
             let implicit = <crate::TxExtension as sp_runtime::traits::TransactionExtension<crate::RuntimeCall>>::implicit(&extra)?;
             Ok(implicit.encode())
         }
@@ -952,6 +955,7 @@ impl_runtime_apis! {
             nonce: Option<sp_core::U256>,
             estimate: bool,
             access_list: Option<Vec<(H160, Vec<H256>)>>,
+            authorization_list: Option<Vec<ethereum::AuthorizationListItem>>,
         ) -> Result<pallet_evm::CallInfo, sp_runtime::DispatchError> {
             let config = if estimate {
                 let mut config = <Runtime as pallet_evm::Config>::config().clone();
@@ -1008,6 +1012,7 @@ impl_runtime_apis! {
                 max_priority_fee_per_gas,
                 nonce,
                 access_list.unwrap_or_default(),
+                authorization_list.unwrap_or_default(),
                 is_transactional,
                 validate,
                 weight_limit,
@@ -1026,6 +1031,7 @@ impl_runtime_apis! {
             nonce: Option<sp_core::U256>,
             estimate: bool,
             access_list: Option<Vec<(H160, Vec<H256>)>>,
+            authorization_list: Option<Vec<ethereum::AuthorizationListItem>>,
         ) -> Result<pallet_evm::CreateInfo, sp_runtime::DispatchError> {
             let config = if estimate {
                 let mut config = <Runtime as pallet_evm::Config>::config().clone();
@@ -1055,6 +1061,7 @@ impl_runtime_apis! {
                 max_priority_fee_per_gas,
                 nonce,
                 access_list.unwrap_or_default(),
+                authorization_list.unwrap_or_default(),
                 is_transactional,
                 validate,
                 weight_limit,

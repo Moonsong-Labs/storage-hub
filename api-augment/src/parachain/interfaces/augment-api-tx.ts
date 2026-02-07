@@ -39,7 +39,6 @@ import type {
   ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters,
   ShParachainRuntimeSessionKeys,
   SpRuntimeMultiSignature,
-  SpTrieStorageProofCompactProof,
   SpWeightsWeightV2Weight,
   StagingXcmExecutorAssetTransferTransferType,
   StagingXcmV5Location,
@@ -452,24 +451,16 @@ declare module "@polkadot/api-base/types/submittable" {
       bspConfirmStopStoring: AugmentedSubmittable<
         (
           fileKey: H256 | string | Uint8Array,
-          inclusionForestProof:
-            | SpTrieStorageProofCompactProof
-            | { encodedNodes?: any }
-            | string
-            | Uint8Array
+          inclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, SpTrieStorageProofCompactProof]
+        [H256, Vec<Bytes>]
       >;
       /**
        * Used by a BSP to confirm they are storing data of a storage request.
        **/
       bspConfirmStoring: AugmentedSubmittable<
         (
-          nonInclusionForestProof:
-            | SpTrieStorageProofCompactProof
-            | { encodedNodes?: any }
-            | string
-            | Uint8Array,
+          nonInclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           fileKeysAndProofs:
             | Vec<PalletFileSystemFileKeyWithProof>
             | (
@@ -479,7 +470,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 | Uint8Array
               )[]
         ) => SubmittableExtrinsic<ApiType>,
-        [SpTrieStorageProofCompactProof, Vec<PalletFileSystemFileKeyWithProof>]
+        [Vec<Bytes>, Vec<PalletFileSystemFileKeyWithProof>]
       >;
       /**
        * Executed by a BSP to request to stop storing a file.
@@ -533,13 +524,9 @@ declare module "@polkadot/api-base/types/submittable" {
           fingerprint: H256 | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
           canServe: bool | boolean | Uint8Array,
-          inclusionForestProof:
-            | SpTrieStorageProofCompactProof
-            | { encodedNodes?: any }
-            | string
-            | Uint8Array
+          inclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, Bytes, AccountId32, H256, u64, bool, SpTrieStorageProofCompactProof]
+        [H256, H256, Bytes, AccountId32, H256, u64, bool, Vec<Bytes>]
       >;
       /**
        * Used by a BSP to volunteer for storing a file.
@@ -613,9 +600,9 @@ declare module "@polkadot/api-base/types/submittable" {
                 | Uint8Array
               )[],
           bspId: Option<H256> | null | Uint8Array | H256 | string,
-          forestProof: SpTrieStorageProofCompactProof | { encodedNodes?: any } | string | Uint8Array
+          forestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, SpTrieStorageProofCompactProof]
+        [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, Vec<Bytes>]
       >;
       /**
        * Delete files from an incomplete (rejected, expired or revoked) storage request.
@@ -631,9 +618,9 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           fileKeys: Vec<H256> | (H256 | string | Uint8Array)[],
           bspId: Option<H256> | null | Uint8Array | H256 | string,
-          forestProof: SpTrieStorageProofCompactProof | { encodedNodes?: any } | string | Uint8Array
+          forestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [Vec<H256>, Option<H256>, SpTrieStorageProofCompactProof]
+        [Vec<H256>, Option<H256>, Vec<Bytes>]
       >;
       /**
        * Issue a new storage request for a file
@@ -791,13 +778,9 @@ declare module "@polkadot/api-base/types/submittable" {
           owner: AccountId32 | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
-          inclusionForestProof:
-            | SpTrieStorageProofCompactProof
-            | { encodedNodes?: any }
-            | string
-            | Uint8Array
+          inclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, Bytes, AccountId32, H256, u64, SpTrieStorageProofCompactProof]
+        [H256, H256, Bytes, AccountId32, H256, u64, Vec<Bytes>]
       >;
       updateBucketPrivacy: AugmentedSubmittable<
         (
@@ -2334,6 +2317,32 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     polkadotXcm: {
       /**
+       * Authorize another `aliaser` location to alias into the local `origin` making this call.
+       * The `aliaser` is only authorized until the provided `expiry` block number.
+       * The call can also be used for a previously authorized alias in order to update its
+       * `expiry` block number.
+       *
+       * Usually useful to allow your local account to be aliased into from a remote location
+       * also under your control (like your account on another chain).
+       *
+       * WARNING: make sure the caller `origin` (you) trusts the `aliaser` location to act in
+       * their/your name. Once authorized using this call, the `aliaser` can freely impersonate
+       * `origin` in XCM programs executed on the local chain.
+       **/
+      addAuthorizedAlias: AugmentedSubmittable<
+        (
+          aliaser:
+            | XcmVersionedLocation
+            | { V3: any }
+            | { V4: any }
+            | { V5: any }
+            | string
+            | Uint8Array,
+          expires: Option<u64> | null | Uint8Array | u64 | AnyNumber
+        ) => SubmittableExtrinsic<ApiType>,
+        [XcmVersionedLocation, Option<u64>]
+      >;
+      /**
        * Claims assets trapped on this pallet because of leftover assets during XCM execution.
        *
        * - `origin`: Anyone can call this extrinsic.
@@ -2574,6 +2583,27 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32, XcmV3WeightLimit]
+      >;
+      /**
+       * Remove all previously authorized `aliaser`s that can alias into the local `origin`
+       * making this call.
+       **/
+      removeAllAuthorizedAliases: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
+       * Remove a previously authorized `aliaser` from the list of locations that can alias into
+       * the local `origin` making this call.
+       **/
+      removeAuthorizedAlias: AugmentedSubmittable<
+        (
+          aliaser:
+            | XcmVersionedLocation
+            | { V3: any }
+            | { V4: any }
+            | { V5: any }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [XcmVersionedLocation]
       >;
       /**
        * Transfer some assets from the local chain to the destination chain through their local,

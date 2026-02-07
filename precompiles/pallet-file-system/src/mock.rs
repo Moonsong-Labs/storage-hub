@@ -16,8 +16,8 @@ use precompile_utils::precompile_set::*;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitmentVerifier, IdentityAdapter, MaybeDebug, ProofSubmittersInterface,
-    ReadUserSolvencyInterface, TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, CompactProofEncodedNodes, IdentityAdapter, MaybeDebug,
+    ProofSubmittersInterface, ReadUserSolvencyInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256, U256};
@@ -25,9 +25,9 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, DispatchError, SaturatedConversion,
 };
-use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_trie::{LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_weights::FixedFee;
+use std::collections::{BTreeMap, BTreeSet};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -197,6 +197,8 @@ impl pallet_evm::Config for Test {
     type Timestamp = Timestamp;
     type WeightInfo = pallet_evm::weights::SubstrateWeight<Test>;
     type AccountProvider = FrameSystemAccountProvider<Test>;
+    type CreateOriginFilter = ();
+    type CreateInnerOriginFilter = ();
 }
 
 parameter_types! {
@@ -228,6 +230,9 @@ impl pallet_nfts::Config for Test {
     type OffchainSignature = Signature;
     type OffchainPublic = AccountPublic;
     type WeightInfo = ();
+    type BlockNumberProvider = frame_system::Pallet<Self>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type Helper = ();
 }
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
@@ -410,6 +415,8 @@ impl pallet_storage_providers::Config for Test {
     type ZeroSizeBucketFixedRate = ConstU128<1>;
     type ProviderTopUpTtl = ProviderTopUpTtl;
     type MaxExpiredItemsInBlock = ConstU32<100>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelpers = ();
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet.
@@ -491,18 +498,17 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = CompactProof;
+    type Proof = CompactProofEncodedNodes;
     type Commitment = H256;
     type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: &CompactProof,
+        proof: &CompactProofEncodedNodes,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.encoded_nodes.len() > 0 {
+        if proof.len() > 0 {
             Ok(proof
-                .encoded_nodes
                 .iter()
                 .map(|node| H256::from_slice(&node[..]))
                 .collect())
@@ -517,7 +523,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProof;
+    type Proof = CompactProofEncodedNodes;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(
@@ -555,6 +561,8 @@ impl pallet_bucket_nfts::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type Buckets = Providers;
+    #[cfg(feature = "runtime-benchmarks")]
+    type Helper = ();
 }
 
 pub(crate) type ThresholdType = u32;
@@ -735,6 +743,7 @@ impl ExtBuilder {
 
         pallet_balances::GenesisConfig::<Test> {
             balances: self.balances,
+            dev_accounts: None,
         }
         .assimilate_storage(&mut t)
         .unwrap();

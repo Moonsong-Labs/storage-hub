@@ -19,7 +19,6 @@ codec = { workspace = true }
 scale-info = { workspace = true }
 sp-api = { workspace = true }
 sp-runtime = { workspace = true }
-sp-std = { workspace = true }
 
 [features]
 default = ["std"]

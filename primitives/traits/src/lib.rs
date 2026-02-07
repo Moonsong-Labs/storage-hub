@@ -1,6 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Decode, Encode, FullCodec, HasCompact};
+extern crate alloc;
+
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    vec::Vec,
+};
+use codec::{Decode, DecodeWithMemTracking, Encode, FullCodec, HasCompact};
 use frame_support::{
     dispatch::DispatchResult,
     pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member},
@@ -17,7 +23,13 @@ use sp_runtime::{
     },
     BoundedVec, DispatchError,
 };
-use sp_std::{collections::btree_map::BTreeMap, collections::btree_set::BTreeSet, vec::Vec};
+
+/// Type alias for the encoded nodes of a compact trie proof.
+///
+/// This represents the `encoded_nodes` field of `sp_trie::CompactProof` and is used
+/// as the proof type at extrinsic boundaries because it implements `DecodeWithMemTracking`
+/// (required by polkadot-sdk stable2503+), while `CompactProof` does not.
+pub type CompactProofEncodedNodes = Vec<Vec<u8>>;
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -926,13 +938,13 @@ pub trait CommitmentVerifier {
 }
 
 /// Enum representing the type of mutation (addition or removal of a key).
-#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, Clone, PartialEq, Debug)]
 pub enum TrieMutation {
     Add(TrieAddMutation),
     Remove(TrieRemoveMutation),
 }
 
-#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug, Default)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, Clone, PartialEq, Debug, Default)]
 pub struct TrieAddMutation {
     pub value: Vec<u8>,
 }
@@ -949,7 +961,7 @@ impl TrieAddMutation {
     }
 }
 
-#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug, Default)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, Clone, PartialEq, Debug, Default)]
 pub struct TrieRemoveMutation {
     pub maybe_value: Option<Vec<u8>>,
 }

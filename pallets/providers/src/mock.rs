@@ -12,9 +12,9 @@ use pallet_proofs_dealer::SlashableProviders;
 use pallet_randomness::GetBabeData;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    CommitRevealRandomnessInterface, CommitmentVerifier, FileMetadataInterface, MaybeDebug,
-    ProofSubmittersInterface, ReadChallengeableProvidersInterface, TrieMutation,
-    TrieProofDeltaApplier,
+    CommitRevealRandomnessInterface, CommitmentVerifier, CompactProofEncodedNodes,
+    FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
+    ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -22,7 +22,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_trie::{LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use std::collections::{BTreeMap, BTreeSet};
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -244,18 +244,17 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = CompactProof;
+    type Proof = CompactProofEncodedNodes;
     type Commitment = H256;
     type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: &CompactProof,
+        proof: &CompactProofEncodedNodes,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.encoded_nodes.len() > 0 {
+        if proof.len() > 0 {
             Ok(proof
-                .encoded_nodes
                 .iter()
                 .map(|node| H256::from_slice(&node[..]))
                 .collect())
@@ -270,7 +269,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProof;
+    type Proof = CompactProofEncodedNodes;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(
@@ -545,6 +544,7 @@ impl ExtBuilder {
                 accounts::GEORGE,
                 accounts::TREASURY,
             ],
+            dev_accounts: None,
         }
         .assimilate_storage(&mut t)
         .unwrap();

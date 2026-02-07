@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import * as util from "node:util";
 import type { ApiPromise } from "@polkadot/api";
 import type { KeyringPair } from "@polkadot/keyring/types";
+import type { Bytes, Vec } from "@polkadot/types";
 import Docker from "dockerode";
 import { assertDockerLog } from "../asserts.ts";
 import { DOCKER_IMAGE } from "../constants.ts";
@@ -12,11 +13,34 @@ import { cleanupEnvironment, printDockerStatus } from "../helpers.ts";
 import { sleep } from "../timer.ts";
 import { sealBlock } from "./block.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
+import { waitFor } from "./waits";
 import * as ShConsts from "./consts.ts";
 import { addBspContainer, showContainers } from "./docker";
 import type { EnrichedBspApi } from "./test-api.ts";
 
 const execFileAsync = util.promisify(child_process.execFile);
+
+/**
+ * Extracts the compact proof from a SCALE-encoded ForestProof.
+ *
+ * The RPC `generateForestProof` returns SCALE-encoded bytes containing:
+ * - CompactProof (Vec<Vec<u8>>) - the Merkle proof nodes
+ * - H256 (32 bytes) - the forest root hash
+ *
+ * This function decodes the full struct and extracts just the proof portion
+ * that extrinsics expect.
+ *
+ * @param api - The polkadot.js API instance
+ * @param encodedForestProof - The SCALE-encoded ForestProof from RPC
+ * @returns The extracted Vec<Vec<u8>> proof suitable for extrinsics
+ */
+export const extractProofFromForestProof = (
+  api: ApiPromise,
+  encodedForestProof: Bytes
+): Vec<Bytes> => {
+  const decoded = api.createType("(Vec<Bytes>, H256)", encodedForestProof);
+  return decoded[0] as Vec<Bytes>;
+};
 
 export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
   const maxRetries = 60;
@@ -260,6 +284,16 @@ export const addBsp = async (
     ),
     sudoSigner
   );
+
+  // Wait for the user node to establish a direct P2P connection to the new BSP.
+  // Without this, the BSP may only be connected to the bootnode and fail to
+  // receive file data from the user node needed to confirm storing.
+  await waitFor({
+    lambda: async () => {
+      const peers = (await api.rpc.system.peers()).map(({ peerId: id }) => id.toString());
+      return peers.includes(peerId);
+    }
+  });
 
   return { containerName, rpcPort, p2pPort, peerId };
 };

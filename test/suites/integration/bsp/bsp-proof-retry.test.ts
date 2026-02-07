@@ -3,7 +3,13 @@ import type { ApiPromise } from "@polkadot/api";
 import type { EventRecord, SignedBlock } from "@polkadot/types/interfaces";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
+import {
+  describeMspNet,
+  type EnrichedBspApi,
+  extractProofFromForestProof,
+  shUser,
+  waitFor
+} from "../../../util";
 
 /**
  * Checks if a BSP confirm extrinsic failed with ForestProofVerificationFailed.
@@ -120,9 +126,10 @@ await describeMspNet(
       const bucketId = file1Result.bucketIds[0];
 
       // Phase 2: Generate forest proof for File 1 deletion
-      const bspInclusionProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+      const bspInclusionProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         file1Key
       ]);
+      const bspInclusionProof = extractProofFromForestProof(userApi, bspInclusionProofEncoded);
 
       // Phase 3: Issue storage request for File 2
       const { file_metadata: file2Metadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
@@ -261,7 +268,7 @@ await describeMspNet(
       const deleteFilesTx = userApi.tx.fileSystem.deleteFiles(
         [deletionRequest],
         bspId, // BSP ID for BSP deletion (null would be bucket deletion)
-        bspInclusionProof.toString()
+        bspInclusionProof
       );
 
       // Sign and send with high tip to ensure priority over BSP's transaction

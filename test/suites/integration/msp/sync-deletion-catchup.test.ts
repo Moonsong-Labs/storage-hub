@@ -2,6 +2,7 @@ import assert, { strictEqual } from "node:assert";
 import {
   describeMspNet,
   type EnrichedBspApi,
+  extractProofFromForestProof,
   type FileMetadata,
   getContainerPeerId,
   type SqlClient,
@@ -701,6 +702,11 @@ await describeMspNet(
         fingerprint: file3.fingerprint
       };
 
+      const decodedBucketInclusionProof = extractProofFromForestProof(
+        userApi,
+        bucketInclusionProof
+      );
+
       // Seal deletion block (N) WITHOUT finalizing
       const { events: deletionEvents } = await userApi.block.seal({
         calls: [
@@ -712,11 +718,7 @@ await describeMspNet(
             file3.fileSize,
             file3.fingerprint
           ),
-          userApi.tx.fileSystem.deleteFiles(
-            [deletionRequest],
-            null,
-            bucketInclusionProof.toString()
-          )
+          userApi.tx.fileSystem.deleteFiles([deletionRequest], null, decodedBucketInclusionProof)
         ],
         signer: shUser,
         finaliseBlock: false
@@ -868,6 +870,8 @@ await describeMspNet(
         fingerprint: file3.fingerprint
       };
 
+      const decodedBspInclusionProof = extractProofFromForestProof(userApi, bspInclusionProof);
+
       // Seal deletion block (N) WITHOUT finalizing - delete from BSP only
       const { events: deletionEvents } = await userApi.block.seal({
         calls: [
@@ -882,7 +886,7 @@ await describeMspNet(
           userApi.tx.fileSystem.deleteFiles(
             [deletionRequest],
             userApi.shConsts.DUMMY_BSP_ID, // BSP ID - makes this a BSP deletion
-            bspInclusionProof.toString() // Forest inclusion proof
+            decodedBspInclusionProof // Forest inclusion proof
           )
         ],
         signer: shUser,

@@ -16,9 +16,9 @@ use xcm::latest::prelude::*;
 use xcm_builder::{
     AccountId32Aliases, AllowExplicitUnpaidExecutionFrom, AllowHrmpNotificationsFromRelayChain,
     AllowKnownQueryResponses, AllowSubscriptionsFrom, AllowTopLevelPaidExecutionFrom,
-    DenyReserveTransferToRelayChain, DenyThenTry, DescribeAllTerminal, DescribeFamily,
-    EnsureXcmOrigin, FixedWeightBounds, FrameTransactionalProcessor, FungibleAdapter,
-    HashedDescription, IsConcrete, NativeAsset, ParentAsSuperuser, ParentIsPreset,
+    DenyRecursively, DenyReserveTransferToRelayChain, DenyThenTry, DescribeAllTerminal,
+    DescribeFamily, EnsureXcmOrigin, FixedWeightBounds, FrameTransactionalProcessor,
+    FungibleAdapter, HashedDescription, IsConcrete, NativeAsset, ParentAsSuperuser, ParentIsPreset,
     RelayChainAsNative, SiblingParachainAsNative, SiblingParachainConvertsVia,
     SignedAccountId32AsNative, SignedToAccountId32, SovereignSignedViaLocation, TakeWeightCredit,
     TrailingSetTopicAsId, UsingComponents, WithComputedOrigin, WithUniqueTopic,
@@ -124,7 +124,7 @@ impl Contains<Location> for ParentOrParentsExecutivePlurality {
 
 pub type Barrier = TrailingSetTopicAsId<
     DenyThenTry<
-        DenyReserveTransferToRelayChain,
+        DenyRecursively<DenyReserveTransferToRelayChain>,
         (
             TakeWeightCredit,
             // Expected responses are OK.
@@ -184,6 +184,7 @@ impl xcm_executor::Config for XcmConfig {
     type SafeCallFilter = Everything;
     type Aliasers = Nothing;
     type TransactionalProcessor = FrameTransactionalProcessor;
+    type XcmEventEmitter = pallet_xcm::Pallet<Runtime>;
     // TODO: Implement these handlers if needed
     type HrmpNewChannelOpenRequestHandler = ();
     type HrmpChannelAcceptedHandler = ();
@@ -230,6 +231,7 @@ impl pallet_xcm::Config for Runtime {
     type AdminOrigin = EnsureRoot<AccountId>;
     type MaxRemoteLockConsumers = ConstU32<0>;
     type RemoteLockConsumerIdentifier = ();
+    type AuthorizedAliasConsideration = ();
 }
 
 impl cumulus_pallet_xcm::Config for Runtime {
