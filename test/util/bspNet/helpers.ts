@@ -295,8 +295,5 @@ export const addBsp = async (
     }
   });
 
-  // Seal a block to ensure the blockchain service is caught up.
-  await sealBlock(api);
-
   return { containerName, rpcPort, p2pPort, peerId };
 };
