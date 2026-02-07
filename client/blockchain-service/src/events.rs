@@ -14,8 +14,7 @@ use shc_common::{
 };
 
 use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, ForestWritePermitGuard,
-    RespondStorageRequest,
+    FileDeletionRequest as FileDeletionRequestType, ForestWritePermitGuard, RespondStorageRequest,
 };
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
@@ -89,7 +88,7 @@ pub struct AcceptedBspVolunteer<Runtime: StorageEnableRuntime> {
 #[derive(Debug, Clone, Encode, Decode)]
 pub enum ForestWriteLockTaskData<Runtime: StorageEnableRuntime> {
     SubmitProofRequest(ProcessSubmitProofRequestData<Runtime>),
-    ConfirmStoringRequest(ProcessConfirmStoringRequestData<Runtime>),
+    ConfirmStoringRequest,
     MspRespondStorageRequest(ProcessMspRespondStoringRequestData<Runtime>),
     StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData<Runtime>),
 }
@@ -99,14 +98,6 @@ impl<Runtime: StorageEnableRuntime> From<ProcessSubmitProofRequestData<Runtime>>
 {
     fn from(data: ProcessSubmitProofRequestData<Runtime>) -> Self {
         Self::SubmitProofRequest(data)
-    }
-}
-
-impl<Runtime: StorageEnableRuntime> From<ProcessConfirmStoringRequestData<Runtime>>
-    for ForestWriteLockTaskData<Runtime>
-{
-    fn from(data: ProcessConfirmStoringRequestData<Runtime>) -> Self {
-        Self::ConfirmStoringRequest(data)
     }
 }
 
@@ -152,16 +143,26 @@ pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntime> {
     pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct ProcessConfirmStoringRequestData<Runtime: StorageEnableRuntime> {
-    pub confirm_storing_requests: Vec<ConfirmStoringRequest<Runtime>>,
-}
-
+/// Event signalling the BSP to process pending confirm storing requests.
+///
+/// This event carries no request data. The task pulls requests via commands
+/// (`PopConfirmStoringRequests`, `FilterConfirmStoringRequests`).
+/// Its purpose is to carry the forest root write permit so the lock is held
+/// for the duration of the task handler.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct ProcessConfirmStoringRequest<Runtime: StorageEnableRuntime> {
-    pub data: ProcessConfirmStoringRequestData<Runtime>,
     pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
+    _phantom: core::marker::PhantomData<Runtime>,
+}
+
+impl<Runtime: StorageEnableRuntime> ProcessConfirmStoringRequest<Runtime> {
+    pub(crate) fn new(forest_root_write_permit: Arc<ForestWritePermitGuard>) -> Self {
+        Self {
+            forest_root_write_permit,
+            _phantom: core::marker::PhantomData,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]

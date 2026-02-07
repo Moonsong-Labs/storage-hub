@@ -194,22 +194,9 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueryPendingStorageRequests {
         maybe_file_keys: Option<Vec<FileKey>>,
     },
-    /// Query pending BSP confirm storage requests.
-    ///
-    /// Takes a list of confirm storing requests and returns only file keys where the BSP
-    /// has volunteered but not yet confirmed storing.
-    ///
-    /// Pre-filters requests with pending volunteer transactions (not yet on-chain) and
-    /// re-queues them for later processing.
-    ///
-    /// Internally calls the runtime API `query_pending_bsp_confirm_storage_requests` to filter out:
-    /// - File keys where the BSP has already confirmed storing
-    /// - File keys where the BSP is not a volunteer
-    /// - File keys where the storage request doesn't exist
-    #[command(success_type = Vec<FileKey>)]
-    QueryPendingBspConfirmStorageRequests {
-        confirm_storing_requests: Vec<ConfirmStoringRequest<Runtime>>,
-    },
+    /// Query the maximum amount of storage requests that can be confirmed by a BSP in one batch.
+    #[command(success_type = u32)]
+    QueryMaxBatchConfirmStorageRequests,
     /// Add a file key to pending volunteer tracking.
     ///
     /// Called before submitting a volunteer tx to track that the volunteer is pending.
@@ -239,6 +226,23 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// - After extrinsic submission failures (may be transient)
     #[command(mode = "FireAndForget")]
     RemoveFileKeyStatus { file_key: FileKey },
+    /// Pop up to N storage requests pending confirmation from the pending queue.
+    ///
+    /// Returns the items without filtering so the task is responsible for filtering stale requests.
+    /// Items are removed from the queue so the task is responsible for re-queuing them if needed.
+    #[command(success_type = Vec<ConfirmStoringRequest<Runtime>>)]
+    PopConfirmStoringRequests { count: u32 },
+    /// Filter confirm storing requests without re-queuing pending volunteer requests.
+    ///
+    /// Takes a list of confirm storing requests and returns two lists:
+    /// - First: Requests ready for confirmation (BSP has volunteered but not yet confirmed)
+    /// - Second: Requests with pending volunteer transactions (not yet on-chain)
+    ///
+    /// This command does NOT re-queue pending volunteer requests.
+    #[command(success_type = (Vec<ConfirmStoringRequest<Runtime>>, Vec<ConfirmStoringRequest<Runtime>>))]
+    FilterConfirmStoringRequests {
+        requests: Vec<ConfirmStoringRequest<Runtime>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.

@@ -1,7 +1,7 @@
 [package]
 name = "pallet-payment-streams"
 description = "FRAME pallet that allows for the creation and management of payment streams."
-version = "0.3.0"
+version = "0.4.0"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }

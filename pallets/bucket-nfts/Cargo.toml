@@ -1,7 +1,7 @@
 [package]
 name = "pallet-bucket-nfts"
 description = "Pallet for managing non-fungible tokens (NFTs) in a bucket."
-version = "0.3.0"
+version = "0.4.0"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
