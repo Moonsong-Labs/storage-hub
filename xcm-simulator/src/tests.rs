@@ -510,12 +510,10 @@ mod relay_token {
             let has_untrusted_reserve_error = events.iter().any(|e| {
                 matches!(
                     &e.event,
-                    storagehub::RuntimeEvent::MsgQueue(
-                        crate::mock_message_queue::Event::Fail {
-                            error: XcmError::UntrustedReserveLocation,
-                            ..
-                        }
-                    )
+                    storagehub::RuntimeEvent::MsgQueue(crate::mock_message_queue::Event::Fail {
+                        error: XcmError::UntrustedReserveLocation,
+                        ..
+                    })
                 )
             });
             assert!(

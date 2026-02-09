@@ -2,7 +2,10 @@
 
 extern crate alloc;
 
-use alloc::{collections::{BTreeMap, BTreeSet}, vec::Vec};
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    vec::Vec,
+};
 use frame_support::sp_runtime::DispatchError;
 use shp_traits::{
     CommitmentVerifier, CompactProofEncodedNodes, TrieMutation, TrieProofDeltaApplier,
