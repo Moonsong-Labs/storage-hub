@@ -33,6 +33,10 @@ await describeMspNet(
       sql = userApi.pendingDb.createClient();
     });
 
+    after(async () => {
+      await mspApi.disconnect();
+    });
+
     it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
