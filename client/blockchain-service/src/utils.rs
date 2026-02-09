@@ -1525,15 +1525,15 @@ where
         (Runtime::Hash, tokio::sync::mpsc::Receiver<String>),
         SubmitAndWatchError,
     > {
-        // Acquire read lock on rpc_handlers
-        // Considering the blockchain service is the only one acquiring this lock and
-        // it's sequential, no two read-locks can be acquired at the same time, but it's still
-        // a good practice to acquire it.
+        // RPC handlers are set during the startup phase (before the main event loop begins),
+        // so they should always be available by the time extrinsics are submitted. The None
+        // check is a defensive guard; see the `rpc_handlers` field doc for details.
         let rpc_handlers_guard = self.rpc_handlers.read().await;
         let rpc_handlers = rpc_handlers_guard.as_ref().ok_or_else(|| {
             error!(
                 target: LOG_TARGET,
-                "RPC handlers not yet available for transaction with nonce {}",
+                "RPC handlers not yet available for transaction with nonce {}. \
+                 This should not happen as they are set during startup before block processing begins.",
                 nonce
             );
             SubmitAndWatchError::RpcTransport {
