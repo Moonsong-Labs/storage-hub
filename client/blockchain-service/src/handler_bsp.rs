@@ -229,7 +229,21 @@ where
                     };
 
                     // Calculate confirm_after_tick: current tick + min_wait + 1 (to be safe)
-                    let current_tick = self.current_block.number;
+                    let current_tick = match self
+                        .client
+                        .runtime_api()
+                        .get_current_tick(self.current_block.hash)
+                    {
+                        Ok(current_tick) => current_tick,
+                        Err(e) => {
+                            error!(
+                                target: LOG_TARGET,
+                                "CRITICAL ❗❗ Runtime API error while getting current tick: {:?}",
+                                e
+                            );
+                            return;
+                        }
+                    };
                     let confirm_after_tick = current_tick + min_wait + 1u32.into();
 
                     info!(
@@ -546,7 +560,7 @@ where
             }
         }
 
-        // If there's no stop storing for insolvent user requestes pending, we check for pending request stop storing requests.
+        // If we have no pending stop storing for insolvent user requests, check for pending BspRequestStopStoring requests.
         if next_event_data.is_none() {
             if let Some(request) = state_store_context
                 .pending_request_bsp_stop_storing_deque::<Runtime>()
@@ -557,11 +571,25 @@ where
             }
         }
 
-        // If there's no request stop storing requests pending, we check for pending confirm stop storing requests.
+        // If we have no pending BspRequestStopStoring requests, check for pending BspConfirmStopStoring requests.
         // Items in this queue are ordered chronologically by confirm_after_tick, so if the first
         // item's tick hasn't been reached, none of the others have either.
         if next_event_data.is_none() {
-            let current_tick = self.current_block.number;
+            let current_tick = match self
+                .client
+                .runtime_api()
+                .get_current_tick(self.current_block.hash)
+            {
+                Ok(current_tick) => current_tick,
+                Err(e) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "CRITICAL ❗❗ Runtime API error while getting current tick: {:?}",
+                        e
+                    );
+                    return;
+                }
+            };
             // Peek first to check if the tick has been reached without modifying the queue
             if let Some(peeked) = state_store_context
                 .pending_confirm_bsp_stop_storing_deque::<Runtime>()

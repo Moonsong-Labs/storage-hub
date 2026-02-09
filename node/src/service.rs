@@ -434,10 +434,11 @@ where
 {
     let rocks_db_path = rocksdb_root_path.into();
 
-    // If blockchain service doesn't exist yet , create it
-    // Note: Providers already have it created in init_sh_builder, but fisherman nodes don't
-    // and the StorageHubHandler requires it.
-    // TODO: Check if we can flexibilize the StorageHubHandler to better support fisherman nodes.
+    // If the blockchain service doesn't exist yet, create it with default config.
+    // Providers already have it created in init_sh_builder (with custom config like peer_id,
+    // capacity management, etc.), but fisherman nodes don't need that custom config since they
+    // don't manage storage capacity or distribute files. Fisherman still requires the blockchain
+    // service for its core operations: querying runtime state and submitting deletion extrinsics.
     if sh_builder.blockchain.is_none() {
         sh_builder
             .with_blockchain(client, keystore, rocks_db_path.clone(), maintenance_mode)

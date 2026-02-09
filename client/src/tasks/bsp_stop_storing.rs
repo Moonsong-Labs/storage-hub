@@ -76,89 +76,6 @@ where
             storage_hub_handler,
         }
     }
-
-    /// Check if an error message indicates a proof-related error that can be retried.
-    fn is_proof_error(error: &anyhow::Error) -> bool {
-        let error_str = format!("{:?}", error);
-        error_str.contains("ForestProofVerificationFailed")
-            || error_str.contains("FailedToApplyDelta")
-    }
-
-    /// Requeue a request stop storing request for retry.
-    async fn requeue_bsp_request_stop_storing(
-        &self,
-        mut request: RequestBspStopStoringRequest<Runtime>,
-    ) {
-        request.increment_try_count();
-        if request.try_count > MAX_PROOF_RETRIES {
-            error!(
-                target: LOG_TARGET,
-                "BSP request stop storing for file [{:?}] exceeded max retries ({}), dropping request",
-                request.file_key,
-                MAX_PROOF_RETRIES
-            );
-            return;
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "Requeuing BSP request stop storing for file [{:?}], attempt {}",
-            request.file_key,
-            request.try_count
-        );
-
-        if let Err(e) = self
-            .storage_hub_handler
-            .blockchain
-            .queue_bsp_request_stop_storing(request.clone())
-            .await
-        {
-            error!(
-                target: LOG_TARGET,
-                "Failed to requeue BSP request stop storing for file [{:?}]: {:?}",
-                request.file_key,
-                e
-            );
-        }
-    }
-
-    /// Requeue a confirm stop storing request for retry.
-    async fn requeue_bsp_confirm_stop_storing(
-        &self,
-        mut request: ConfirmBspStopStoringRequest<Runtime>,
-    ) {
-        request.increment_try_count();
-        if request.try_count > MAX_PROOF_RETRIES {
-            error!(
-                target: LOG_TARGET,
-                "BSP confirm stop storing for file [{:?}] exceeded max retries ({}), dropping request",
-                request.file_key,
-                MAX_PROOF_RETRIES
-            );
-            return;
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "Requeuing BSP confirm stop storing for file [{:?}], attempt {}",
-            request.file_key,
-            request.try_count
-        );
-
-        if let Err(e) = self
-            .storage_hub_handler
-            .blockchain
-            .queue_bsp_confirm_stop_storing(request.clone())
-            .await
-        {
-            error!(
-                target: LOG_TARGET,
-                "Failed to requeue BSP confirm stop storing for file [{:?}]: {:?}",
-                request.file_key,
-                e
-            );
-        }
-    }
 }
 
 /// Handles the [`ProcessBspRequestStopStoring`] event.
@@ -467,6 +384,97 @@ where
                     e
                 ))
             }
+        }
+    }
+}
+
+/// Helper functions for the BSP stop storing task.
+impl<NT, Runtime> BspStopStoringTask<NT, Runtime>
+where
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
+{
+    /// Check if an error message indicates a proof-related error that can be retried.
+    fn is_proof_error(error: &anyhow::Error) -> bool {
+        let error_str = format!("{:?}", error);
+        error_str.contains("ForestProofVerificationFailed")
+            || error_str.contains("FailedToApplyDelta")
+    }
+
+    /// Requeue a request stop storing request for retry.
+    async fn requeue_bsp_request_stop_storing(
+        &self,
+        mut request: RequestBspStopStoringRequest<Runtime>,
+    ) {
+        request.increment_try_count();
+        if request.try_count > MAX_PROOF_RETRIES {
+            error!(
+                target: LOG_TARGET,
+                "BSP request stop storing for file [{:?}] exceeded max retries ({}), dropping request",
+                request.file_key,
+                MAX_PROOF_RETRIES
+            );
+            return;
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Requeuing BSP request stop storing for file [{:?}], attempt {}",
+            request.file_key,
+            request.try_count
+        );
+
+        if let Err(e) = self
+            .storage_hub_handler
+            .blockchain
+            .queue_bsp_request_stop_storing(request.clone())
+            .await
+        {
+            error!(
+                target: LOG_TARGET,
+                "Failed to requeue BSP request stop storing for file [{:?}]: {:?}",
+                request.file_key,
+                e
+            );
+        }
+    }
+
+    /// Requeue a confirm stop storing request for retry.
+    async fn requeue_bsp_confirm_stop_storing(
+        &self,
+        mut request: ConfirmBspStopStoringRequest<Runtime>,
+    ) {
+        request.increment_try_count();
+        if request.try_count > MAX_PROOF_RETRIES {
+            error!(
+                target: LOG_TARGET,
+                "BSP confirm stop storing for file [{:?}] exceeded max retries ({}), dropping request",
+                request.file_key,
+                MAX_PROOF_RETRIES
+            );
+            return;
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Requeuing BSP confirm stop storing for file [{:?}], attempt {}",
+            request.file_key,
+            request.try_count
+        );
+
+        if let Err(e) = self
+            .storage_hub_handler
+            .blockchain
+            .queue_bsp_confirm_stop_storing(request.clone())
+            .await
+        {
+            error!(
+                target: LOG_TARGET,
+                "Failed to requeue BSP confirm stop storing for file [{:?}]: {:?}",
+                request.file_key,
+                e
+            );
         }
     }
 }

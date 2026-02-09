@@ -217,12 +217,12 @@ where
     ///
     /// This should be called after the RPC server has been initialized.
     /// If the BlockchainService has been created via [`with_blockchain`](StorageHubBuilder::with_blockchain),
-    /// this will set the RPC handlers. Otherwise, it's a no-op (e.g., for fisherman nodes).
+    /// this will set the RPC handlers. Otherwise, it's a no-op.
     pub async fn set_blockchain_rpc_handlers(&mut self, rpc_handlers: Arc<RpcHandlers>) {
         if let Some(blockchain) = &self.blockchain {
             blockchain.set_rpc_handlers(rpc_handlers).await;
         }
-        // If blockchain service doesn't exist (e.g., fisherman), just skip
+        // If the blockchain service doesn't exist, do nothing.
     }
 
     /// Spawn the trusted file transfer server if configured

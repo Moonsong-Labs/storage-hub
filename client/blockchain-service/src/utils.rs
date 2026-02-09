@@ -1526,6 +1526,9 @@ where
         SubmitAndWatchError,
     > {
         // Acquire read lock on rpc_handlers
+        // Considering the blockchain service is the only one acquiring this lock and
+        // it's sequential, no two read-locks can be acquired at the same time, but it's still
+        // a good practice to acquire it.
         let rpc_handlers_guard = self.rpc_handlers.read().await;
         let rpc_handlers = rpc_handlers_guard.as_ref().ok_or_else(|| {
             error!(
