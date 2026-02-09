@@ -14,9 +14,8 @@ use shc_common::{
 };
 
 use crate::types::{
-    ConfirmBspStopStoringRequest, ConfirmStoringRequest,
-    FileDeletionRequest as FileDeletionRequestType, ForestWritePermitGuard,
-    RequestBspStopStoringRequest, RespondStorageRequest,
+    ConfirmBspStopStoringRequest, FileDeletionRequest as FileDeletionRequestType,
+    ForestWritePermitGuard, RequestBspStopStoringRequest, RespondStorageRequest,
 };
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
@@ -223,7 +222,7 @@ pub struct ProcessBspRequestStopStoringData<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessBspRequestStopStoring<Runtime: StorageEnableRuntime> {
     pub data: ProcessBspRequestStopStoringData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
 /// Data for processing a BSP confirm stop storing.
@@ -241,42 +240,7 @@ pub struct ProcessBspConfirmStopStoringData<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessBspConfirmStopStoring<Runtime: StorageEnableRuntime> {
     pub data: ProcessBspConfirmStopStoringData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
-}
-
-/// Data for processing a BSP request stop storing.
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct ProcessBspRequestStopStoringData<Runtime: StorageEnableRuntime> {
-    pub request: RequestBspStopStoringRequest<Runtime>,
-}
-
-/// Event to process a BSP request stop storing.
-///
-/// This event is emitted when a BSP is ready to submit the `bsp_request_stop_storing` extrinsic.
-/// The handler should generate the forest inclusion proof and submit the extrinsic.
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service")]
-pub struct ProcessBspRequestStopStoring<Runtime: StorageEnableRuntime> {
-    pub data: ProcessBspRequestStopStoringData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
-}
-
-/// Data for processing a BSP confirm stop storing.
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct ProcessBspConfirmStopStoringData<Runtime: StorageEnableRuntime> {
-    pub request: ConfirmBspStopStoringRequest<Runtime>,
-}
-
-/// Event to process a BSP confirm stop storing.
-///
-/// This event is emitted when a BSP is ready to submit the `bsp_confirm_stop_storing` extrinsic
-/// after the minimum wait period has passed.
-/// The handler should generate the forest inclusion proof and submit the extrinsic.
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service")]
-pub struct ProcessBspConfirmStopStoring<Runtime: StorageEnableRuntime> {
-    pub data: ProcessBspConfirmStopStoringData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
 /// Slashable Provider event.

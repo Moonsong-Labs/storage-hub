@@ -546,23 +546,6 @@ where
             }
         }
 
-        // If we have no pending storage requests to respond to, check for pending StopStoringForInsolventUser requests.
-        if next_event_data.is_none() {
-            // Pop the next StopStoringForInsolventUser request from the queue.
-            if let Some(BspForestWriteQueuePop::StopStoringForInsolventUser(request)) =
-                Self::bsp_forest_write_work(
-                    &mut self.maybe_managed_provider,
-                    &state_store_context,
-                    Some(BspForestWriteQueue::StopStoringForInsolventUser),
-                )
-                .popped
-            {
-                next_event_data = Some(
-                    ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
-                );
-            }
-        }
-
         // If there's no stop storing for insolvent user requestes pending, we check for pending request stop storing requests.
         if next_event_data.is_none() {
             if let Some(request) = state_store_context
@@ -947,13 +930,13 @@ where
             ForestWriteLockTaskData::BspRequestStopStoring(data) => {
                 self.emit(ProcessBspRequestStopStoring {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_permit,
                 });
             }
             ForestWriteLockTaskData::BspConfirmStopStoring(data) => {
                 self.emit(ProcessBspConfirmStopStoring {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_permit,
                 });
             }
             ForestWriteLockTaskData::MspRespondStorageRequest(_) => {

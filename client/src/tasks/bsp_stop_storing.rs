@@ -3,12 +3,11 @@ use std::time::Duration;
 use anyhow::anyhow;
 use codec::Decode;
 use sc_tracing::tracing::*;
-use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
+use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface,
     events::{ProcessBspConfirmStopStoring, ProcessBspRequestStopStoring},
     types::{ConfirmBspStopStoringRequest, RequestBspStopStoringRequest, SendExtrinsicOptions},
-    BlockchainService,
 };
 use shc_common::{
     consts::CURRENT_FOREST_KEY, traits::StorageEnableRuntime, types::StorageProviderId,
@@ -16,7 +15,6 @@ use shc_common::{
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
-use tokio::sync::oneshot;
 
 use crate::{
     handler::StorageHubHandler,
@@ -27,56 +25,6 @@ const LOG_TARGET: &str = "bsp-stop-storing-task";
 
 /// Maximum number of retries for proof-related errors before giving up.
 const MAX_PROOF_RETRIES: u32 = 3;
-
-/// RAII guard for the forest root write lock.
-///
-/// This guard provides an automatic release via Drop of the forest root write lock.
-struct ForestLockGuard<FSH, Runtime>
-where
-    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
-    Runtime: StorageEnableRuntime,
-{
-    tx: Option<oneshot::Sender<()>>,
-    blockchain: ActorHandle<BlockchainService<FSH, Runtime>>,
-}
-
-impl<FSH, Runtime> ForestLockGuard<FSH, Runtime>
-where
-    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
-    Runtime: StorageEnableRuntime,
-{
-    fn new(
-        tx: oneshot::Sender<()>,
-        blockchain: ActorHandle<BlockchainService<FSH, Runtime>>,
-    ) -> Self {
-        Self {
-            tx: Some(tx),
-            blockchain,
-        }
-    }
-}
-
-impl<FSH, Runtime> Drop for ForestLockGuard<FSH, Runtime>
-where
-    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
-    Runtime: StorageEnableRuntime,
-{
-    fn drop(&mut self) {
-        if let Some(tx) = self.tx.take() {
-            let blockchain = self.blockchain.clone();
-            // Spawn a task to release the lock asynchronously since Drop can't be async
-            tokio::spawn(async move {
-                if let Err(e) = blockchain.release_forest_root_write_lock(tx).await {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to release forest root write lock: {:?}",
-                        e
-                    );
-                }
-            });
-        }
-    }
-}
 
 /// BSP Stop Storing Task: Handles the two-phase process of a BSP voluntarily stopping
 /// storage of a file.
@@ -235,25 +183,11 @@ where
         &mut self,
         event: ProcessBspRequestStopStoring<Runtime>,
     ) -> anyhow::Result<String> {
-        // Acquire the forest root write lock.
-        let forest_root_write_tx =
-            event
-                .forest_root_write_tx
-                .lock()
-                .await
-                .take()
-                .ok_or_else(|| {
-                    error!(
-                        target: LOG_TARGET,
-                        "CRITICAL: Forest root write tx already taken for BSP request stop storing"
-                    );
-                    anyhow!("Forest root write tx already taken")
-                })?;
-
-        let _lock_guard = ForestLockGuard::new(
-            forest_root_write_tx,
-            self.storage_hub_handler.blockchain.clone(),
-        );
+        // Hold the forest root write permit for the duration of this handler.
+        // When this guard is dropped (on return, error, or panic), the semaphore
+        // permit is released and the blockchain service is notified to process
+        // the next pending forest-write request.
+        let _lock_guard = event.forest_root_write_permit;
 
         let request = event.data.request;
         let file_key: H256 = request.file_key.into();
@@ -401,25 +335,11 @@ where
         &mut self,
         event: ProcessBspConfirmStopStoring<Runtime>,
     ) -> anyhow::Result<String> {
-        // Acquire the forest root write lock.
-        let forest_root_write_tx =
-            event
-                .forest_root_write_tx
-                .lock()
-                .await
-                .take()
-                .ok_or_else(|| {
-                    error!(
-                        target: LOG_TARGET,
-                        "CRITICAL: Forest root write tx already taken for BSP confirm stop storing"
-                    );
-                    anyhow!("Forest root write tx already taken")
-                })?;
-
-        let _lock_guard = ForestLockGuard::new(
-            forest_root_write_tx,
-            self.storage_hub_handler.blockchain.clone(),
-        );
+        // Hold the forest root write permit for the duration of this handler.
+        // When this guard is dropped (on return, error, or panic), the semaphore
+        // permit is released and the blockchain service is notified to process
+        // the next pending forest-write request.
+        let _lock_guard = event.forest_root_write_permit;
 
         let request = event.data.request;
         let file_key: H256 = request.file_key.into();
