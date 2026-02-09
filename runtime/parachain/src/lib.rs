@@ -63,9 +63,6 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 pub type BlockId = generic::BlockId<Block>;
 
 /// The SignedExtension to the basic transaction logic.
-///
-/// Note: `StorageWeightReclaim` must wrap all other extensions to accurately measure
-/// PoV size before and after execution.
 pub type SignedExtra = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
     Runtime,
     (

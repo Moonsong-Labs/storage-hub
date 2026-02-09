@@ -11,7 +11,6 @@ mod genesis_config_presets;
 mod weights;
 
 extern crate alloc;
-extern crate ethereum;
 
 use alloc::{collections::BTreeMap, vec::Vec};
 use codec::Encode;
@@ -147,11 +146,6 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 pub type BlockId = generic::BlockId<Block>;
 
 /// The TransactionExtension to the basic transaction logic.
-///
-/// `StorageWeightReclaim` wraps all inner extensions to accurately reclaim unused proof size
-/// weight, including weight consumed by the extensions themselves. This requires `ProofSizeExt`
-/// to be registered during both block building (`ProposerFactory::with_proof_recording`) and
-/// block import (`enable_import_proof_recording=true` on the Client).
 pub type TxExtension = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
     Runtime,
     (

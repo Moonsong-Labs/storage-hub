@@ -399,13 +399,11 @@ export class NetworkLauncher {
 
     // Wait for BSP to be fully initialized (including P2P networking) before starting other nodes.
     // This ensures the bootnode is ready to accept connections from MSPs and user nodes.
-    verbose && console.log("Waiting for BSP to be ready...");
     await waitForLog({
       containerName: ShConsts.NODE_INFOS.bsp.containerName,
       searchString: "💤 Idle",
       timeout: 30000
     });
-    verbose && console.log("BSP is ready");
 
     const bspIp = await getContainerIp(
       this.config.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName

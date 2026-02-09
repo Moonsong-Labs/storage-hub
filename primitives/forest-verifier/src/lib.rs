@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::{collections::{BTreeMap, BTreeSet}, vec::Vec};
 use frame_support::sp_runtime::DispatchError;
 use shp_traits::{
     CommitmentVerifier, CompactProofEncodedNodes, TrieMutation, TrieProofDeltaApplier,
@@ -48,7 +48,7 @@ where
         let mut memdb = MemoryDB::<T::Hash>::new(&[]);
         let root = sp_trie::decode_compact::<sp_trie::LayoutV1<T::Hash>, _, _>(
             &mut memdb,
-            proof.iter().map(|n| n.as_slice()),
+            proof.iter().map(Vec::as_slice),
             Some(root.into()),
         )
         .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")?;
@@ -250,11 +250,23 @@ where
         let mut decode_db = MemoryDB::<T::Hash>::new(&[]);
         let mut root = sp_trie::decode_compact::<sp_trie::LayoutV1<T::Hash>, _, _>(
             &mut decode_db,
-            proof.iter().map(|n| n.as_slice()),
+            proof.iter().map(Vec::as_slice),
             Some(root.into()),
         )
         .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")?;
 
+        // Replicate what `CompactProof::to_storage_proof` does internally:
+        // Drain the MemoryDB populated by `decode_compact`. Each entry is
+        // `(key, (node_data: Vec<u8>, ref_count: i32))`. Only keep nodes with
+        // a positive ref_count (i.e. actually present, not tombstones), and
+        // extract the raw `node_data` to build a `StorageProof`.
+        //
+        // Then convert that `StorageProof` back into a fresh MemoryDB. This is
+        // needed because `decode_compact` stores nodes with trie-aware prefix keys,
+        // but `TrieDBMutBuilder::from_existing` expects nodes stored flatly by hash
+        // (with `EMPTY_PREFIX`). `StorageProof::to_memory_db` re-inserts the nodes
+        // in that flat format. Without this roundtrip, trie mutation fails with
+        // `IncompleteDatabase`.
         let storage_proof = StorageProof::new(decode_db.drain().into_iter().filter_map(|kv| {
             if (kv.1).1 > 0 {
                 Some((kv.1).0)

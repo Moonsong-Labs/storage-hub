@@ -433,6 +433,97 @@ mod relay_token {
             assert!(storagehub::Balances::balance(&BOB) > INITIAL_BALANCE);
         });
     }
+
+    #[test]
+    fn direct_reserve_transfer_from_non_system_parachain_to_storage_hub_is_rejected() {
+        // Scenario:
+        // ALICE on a non-system parachain attempts to transfer DOT to BOB on StorageHub
+        // using transfer_assets_using_type_and_then with TransferType::LocalReserve,
+        // treating the parachain as if it were a reserve for DOT.
+        //
+        // This tests StorageHub's XCM executor-level security: IsReserve = (), meaning
+        // StorageHub does not recognize ANY chain as a reserve for ANY asset. Only teleports
+        // from the relay chain or system chains are accepted (IsTeleporter = ConcreteAssetFromSystem).
+        //
+        // transfer_assets_using_type_and_then constructs the appropriate XCM (DepositReserveAsset)
+        // and executes it locally. The transfer succeeds on the parachain side -- DOT is deposited
+        // into StorageHub's sovereign account locally and a ReserveAssetDeposited message is sent.
+        // However, when StorageHub's XcmExecutor processes the incoming ReserveAssetDeposited
+        // instruction, it checks IsReserve for the sender -- finds no match -- and rejects the
+        // message with UntrustedReserveLocation.
+        //
+        // Result: DOT leaves ALICE on the parachain but never arrives at BOB on StorageHub.
+
+        use xcm_executor::traits::TransferType;
+
+        MockNet::reset();
+
+        // Verify initial balances
+        MockParachain::execute_with(|| {
+            assert_eq!(parachain::Balances::balance(&ALICE), INITIAL_BALANCE);
+        });
+
+        StorageHub::execute_with(|| {
+            assert_eq!(storagehub::Balances::balance(&BOB), INITIAL_BALANCE);
+        });
+
+        // ALICE attempts a reserve transfer to StorageHub using transfer_assets_using_type_and_then.
+        // By specifying TransferType::LocalReserve, the parachain treats itself as the reserve
+        // and sends a ReserveAssetDeposited message to StorageHub via XCMP.
+        MockParachain::execute_with(|| {
+            let dest: Location = (Parent, Parachain(SH_PARA_ID)).into();
+            let assets: Assets = (Parent, 50u128 * CENTS).into();
+            let custom_xcm_on_dest: Xcm<()> = vec![DepositAsset {
+                assets: Wild(AllCounted(1)),
+                beneficiary: AccountId32 {
+                    network: Some(NetworkId::Polkadot),
+                    id: BOB.clone().into(),
+                }
+                .into(),
+            }]
+            .into();
+
+            assert_ok!(parachain::PolkadotXcm::transfer_assets_using_type_and_then(
+                parachain::RuntimeOrigin::signed(ALICE),
+                Box::new(VersionedLocation::V5(dest)),
+                Box::new(VersionedAssets::V5(assets)),
+                Box::new(TransferType::LocalReserve),
+                Box::new(VersionedAssetId::V5(AssetId(Location::parent()))),
+                Box::new(TransferType::LocalReserve),
+                Box::new(VersionedXcm::V5(custom_xcm_on_dest)),
+                WeightLimit::Unlimited,
+            ));
+
+            // ALICE's balance decreases: funds were withdrawn and deposited into
+            // StorageHub's sovereign account on the parachain.
+            assert!(parachain::Balances::balance(&ALICE) < INITIAL_BALANCE);
+        });
+
+        // BOB should NOT receive any tokens on StorageHub.
+        // The ReserveAssetDeposited message was rejected by StorageHub's XcmExecutor
+        // because IsReserve = () -- no chain is recognized as a reserve.
+        StorageHub::execute_with(|| {
+            assert_eq!(storagehub::Balances::balance(&BOB), INITIAL_BALANCE);
+
+            // Verify the XCM message was rejected with UntrustedReserveLocation
+            let events = storagehub::System::events();
+            let has_untrusted_reserve_error = events.iter().any(|e| {
+                matches!(
+                    &e.event,
+                    storagehub::RuntimeEvent::MsgQueue(
+                        crate::mock_message_queue::Event::Fail {
+                            error: XcmError::UntrustedReserveLocation,
+                            ..
+                        }
+                    )
+                )
+            });
+            assert!(
+                has_untrusted_reserve_error,
+                "Expected StorageHub to reject the reserve transfer with UntrustedReserveLocation"
+            );
+        });
+    }
 }
 
 mod root {

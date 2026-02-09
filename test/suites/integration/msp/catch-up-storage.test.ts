@@ -1,7 +1,14 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { describeMspNet, type EnrichedBspApi, shUser, sleep, waitForTxInPool } from "../../../util";
+import {
+  describeMspNet,
+  type EnrichedBspApi,
+  shUser,
+  sleep,
+  waitFor,
+  waitForTxInPool
+} from "../../../util";
 
 await describeMspNet(
   "MSP catching up with chain and volunteering for storage request",
@@ -84,7 +91,9 @@ await describeMspNet(
       await mspApi.disconnect();
 
       // Restarting the MSP container. This will start the Substrate node from scratch.
-      await userApi.docker.restartContainer({ containerName: "storage-hub-sh-msp-1" });
+      await userApi.docker.restartContainer({
+        containerName: "storage-hub-sh-msp-1"
+      });
 
       // TODO: Wait for the container logs of starting up
       await userApi.docker.waitForLog({
@@ -117,6 +126,11 @@ await describeMspNet(
         shouldSeal: true,
         expectedEvent: "MspAcceptedStorageRequest",
         timeout: 30000
+      });
+
+      await waitFor({
+        lambda: async () =>
+          (await newMspApi.rpc.storagehubclient.isFileInFileStorage(event.data.fileKey)).isFileFound
       });
 
       // IMPORTANT!! Without this the test suite never finish

@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use alloc::collections::BTreeSet;
+use alloc::{collections::BTreeSet, vec::Vec};
 use frame_support::sp_runtime::DispatchError;
 use shp_file_metadata::ChunkId;
 use shp_traits::CommitmentVerifier;
@@ -86,7 +86,7 @@ where
         let mut memdb = sp_trie::MemoryDB::<T::Hash>::new(&[]);
         let root = sp_trie::decode_compact::<sp_trie::LayoutV1<T::Hash>, _, _>(
             &mut memdb,
-            proof.proof.iter().map(|n| n.as_slice()),
+            proof.proof.iter().map(Vec::as_slice),
             Some(&expected_root),
         )
         .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")?;
