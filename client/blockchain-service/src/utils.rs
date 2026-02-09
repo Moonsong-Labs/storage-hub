@@ -1933,10 +1933,8 @@ where
         event: StorageEnableEvents<Runtime>,
     ) {
         // Process the events that are common to all MultiInstancesNodeRole roles.
-        match event {
-            _ => {
-                trace!(target: LOG_TARGET, "No common block import events to process regarding of the role of the node");
-            }
+        {
+            trace!(target: LOG_TARGET, "No common block import events to process regarding of the role of the node");
         }
 
         // Process the events that are specific to the MultiInstancesNodeRole role of the node.

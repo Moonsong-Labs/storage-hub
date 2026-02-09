@@ -1344,7 +1344,7 @@ pub mod benchmark_helpers {
             use sp_core::ecdsa;
             let public_key: <Signature as Verify>::Signer =
                 ecdsa::Public::from_raw([0u8; 33]).into();
-            let account: AccountId = public_key.clone().into_account();
+            let account: AccountId = public_key.into_account();
             (public_key, account)
         }
 

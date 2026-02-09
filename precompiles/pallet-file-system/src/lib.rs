@@ -221,7 +221,7 @@ where
         let bucket_id_h256: H256 = H256::from_slice(bucket_id.as_ref());
 
         let call = FileSystemCall::<Runtime>::create_bucket {
-            msp_id: msp_id.clone().into(),
+            msp_id: msp_id.into(),
             name,
             private,
             value_prop_id,
@@ -256,8 +256,8 @@ where
 		let new_value_prop_id = new_value_prop_id.into();
 
         let call = FileSystemCall::<Runtime>::request_move_bucket {
-            bucket_id: bucket_id.clone().into(),
-            new_msp_id: new_msp_id.clone().into(),
+            bucket_id: bucket_id.into(),
+            new_msp_id: new_msp_id.into(),
             new_value_prop_id,
         };
 
@@ -267,8 +267,8 @@ where
         let log = log_bucket_move_requested(
             handle.context().address,
             handle.context().caller,
-            bucket_id.into(),
-            new_msp_id.into(),
+            bucket_id,
+            new_msp_id,
         );
         handle.record_log_costs(&[&log])?;
         log.record(handle)?;
@@ -288,7 +288,7 @@ where
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
-        let call = FileSystemCall::<Runtime>::update_bucket_privacy { bucket_id: bucket_id.clone().into(), private };
+        let call = FileSystemCall::<Runtime>::update_bucket_privacy { bucket_id: bucket_id.into(), private };
 
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
@@ -316,13 +316,13 @@ where
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
         let call =
-            FileSystemCall::<Runtime>::create_and_associate_collection_with_bucket { bucket_id: bucket_id.clone().into() };
+            FileSystemCall::<Runtime>::create_and_associate_collection_with_bucket { bucket_id: bucket_id.into() };
 
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
         // Get the collection_id that was just created and associated with the bucket
-        let collection_id = <Runtime as pallet_file_system::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id.clone().into())
+        let collection_id = <Runtime as pallet_file_system::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id.into())
             .map_err(|_| RevertReason::custom("Failed to get collection ID"))?
             .ok_or(RevertReason::custom("Collection ID not found"))?; // Should exist after successful dispatch
 
@@ -345,7 +345,7 @@ where
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
-        let call = FileSystemCall::<Runtime>::delete_bucket { bucket_id: bucket_id.clone().into() };
+        let call = FileSystemCall::<Runtime>::delete_bucket { bucket_id: bucket_id.into() };
 
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
@@ -364,6 +364,7 @@ where
     #[precompile::public(
         "issueStorageRequest(bytes32,bytes,bytes32,uint64,bytes32,bytes[],uint8,uint32)"
     )]
+    #[allow(clippy::too_many_arguments)]
     fn issue_storage_request(
         handle: &mut impl PrecompileHandle,
         bucket_id: H256,
@@ -379,7 +380,7 @@ where
         handle.record_cost(RuntimeHelper::<Runtime>::db_write_gas_cost())?;
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-        let bucket_id_runtime = bucket_id.clone().into();
+        let bucket_id_runtime = bucket_id.into();
         let location: FileLocation<Runtime> =
             BoundedVec::try_from(location.as_bytes().to_vec()).map_err(|_| RevertReason::custom("Location path too long"))?;
         let fingerprint = fingerprint.into();
@@ -408,7 +409,7 @@ where
 
 		// Calculate the file_key (same logic as pallet)
         let file_key = pallet_file_system::Pallet::<Runtime>::compute_file_key(
-            origin.clone(),
+            origin,
             bucket_id_runtime,
             location.clone(),
             size,
@@ -448,7 +449,7 @@ where
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
-        let call = FileSystemCall::<Runtime>::revoke_storage_request { file_key: file_key.clone().into() };
+        let call = FileSystemCall::<Runtime>::revoke_storage_request { file_key: file_key.into() };
 
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
@@ -547,7 +548,7 @@ where
 
         let user_account = Runtime::AddressMapping::into_account_id(user_address.0);
 
-        let pending_requests = pallet_file_system::PendingFileDeletionRequests::<Runtime>::get(&user_account);
+        let pending_requests = pallet_file_system::PendingFileDeletionRequests::<Runtime>::get(user_account);
         let count = pending_requests.len() as u32;
 
         Ok(count)

@@ -288,6 +288,7 @@ impl_runtime_apis! {
             use frame_benchmarking::{BenchmarkError, BenchmarkBatch};
 
             use frame_system_benchmarking::Pallet as SystemBench;
+            #[allow(non_local_definitions)]
             impl frame_system_benchmarking::Config for Runtime {
                 fn setup_set_code_requirements(code: &alloc::vec::Vec<u8>) -> Result<(), BenchmarkError> {
                     ParachainSystem::initialize_for_set_code_benchmark(code.len() as u32);
@@ -300,6 +301,7 @@ impl_runtime_apis! {
             }
 
             use cumulus_pallet_session_benchmarking::Pallet as SessionBench;
+            #[allow(non_local_definitions)]
             impl cumulus_pallet_session_benchmarking::Config for Runtime {}
 
             use frame_support::traits::WhitelistedStorageKeys;

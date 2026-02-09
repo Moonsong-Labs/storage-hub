@@ -164,10 +164,8 @@ where
         };
 
         // Process the events that are common to all roles.
-        match event {
-            _ => {
-                trace!(target: LOG_TARGET, "No common MSP block import events to process while in LEADER, STANDALONE or FOLLOWER role");
-            }
+        {
+            trace!(target: LOG_TARGET, "No common MSP block import events to process while in LEADER, STANDALONE or FOLLOWER role");
         }
 
         // Process the events that are common to all roles.
@@ -260,7 +258,7 @@ where
         Block: BlockT<Hash = Runtime::Hash>,
     {
         let managed_msp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id,
             _ => {
                 error!(target: LOG_TARGET, "`msp_end_block_processing` called but node is not managing an MSP");
                 return;
@@ -268,7 +266,7 @@ where
         };
 
         // Monitor for new pending storage requests
-        self.handle_pending_storage_requests(block_hash, managed_msp_id.clone());
+        self.handle_pending_storage_requests(block_hash, managed_msp_id);
 
         // Distribute files to BSPs
         self.spawn_distribute_file_to_bsps_tasks(block_hash, managed_msp_id);
@@ -281,7 +279,7 @@ where
         event: StorageEnableEvents<Runtime>,
     ) {
         let managed_msp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id,
             _ => {
                 error!(target: LOG_TARGET, "`msp_process_finality_events` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
@@ -876,7 +874,7 @@ where
 
         // Exit early if the MSP node peer ID is not set, meaning it is not meant to be a distributor.
         // Clone to avoid holding an immutable borrow of `self` across the loop below where we need `&mut self`.
-        let managed_msp_peer_id = match self.config.peer_id.clone() {
+        let managed_msp_peer_id = match self.config.peer_id {
             Some(peer_id) => peer_id,
             None => {
                 debug!(target: LOG_TARGET, "MSP node peer ID is not set, meaning it is not meant to be a distributor. Skipping distribution of files.");
@@ -983,7 +981,7 @@ where
             }
         };
 
-        let file_key = file_key.clone().into();
+        let file_key = (*file_key).into();
 
         // Get the BSPs who volunteered to store the file.
         let bsps_volunteered: Vec<BackupStorageProviderId<Runtime>> = match self
@@ -1009,7 +1007,7 @@ where
             // If there is no entry for the file key, create a new one.
             let file_distribution_info = managed_msp
                 .files_to_distribute
-                .entry(file_key.clone().into())
+                .entry(file_key.into())
                 .or_insert(FileDistributionInfo::new());
 
             // Filter out BSPs that are already distributing the file or have already confirmed to store it.
@@ -1198,8 +1196,8 @@ where
 
             // Collect the set of pending file keys for cleanup check
             let pending_file_keys: HashSet<FileKey> = pending_storage_requests
-                .iter()
-                .map(|(file_key, _)| (*file_key).into())
+                .keys()
+                .map(|file_key| (*file_key).into())
                 .collect();
 
             // Clean up stale entries: remove file keys that are no longer in pending requests.

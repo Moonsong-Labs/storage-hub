@@ -797,7 +797,7 @@ impl MspService {
 
         // Initialize the index of the initial chunk to process in this batch.
         let mut batch_start_chunk_index = 0;
-        let total_batches = (total_chunks + CHUNKS_PER_BATCH - 1) / CHUNKS_PER_BATCH;
+        let total_batches = total_chunks.div_ceil(CHUNKS_PER_BATCH);
         let mut batch_number = 1;
 
         // Start processing batches, until all chunks have been processed.

@@ -233,6 +233,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     }
 
     /// Query incomplete storage request metadata using runtime API
+    #[allow(clippy::type_complexity)]
     fn query_incomplete_storage_request(
         &self,
         file_key: H256,
@@ -336,12 +337,8 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
             // Process ProofsDealer events for file key changes
             for event_record in events.iter() {
-                let event: Result<StorageEnableEvents<Runtime>, _> =
-                    event_record.event.clone().try_into();
-                let event = match event {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
+                let event: StorageEnableEvents<Runtime> =
+                    event_record.event.clone().into();
 
                 match (event, &target) {
                     // Process BSP mutations from MutationsAppliedForProvider events
@@ -357,7 +354,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     ) if &provider_id == target_bsp_id => {
                         self.process_bsp_mutations(
                             &mutations,
-                            &target_bsp_id,
+                            target_bsp_id,
                             &mut file_key_states,
                         );
                     }
@@ -374,7 +371,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     ) => {
                         self.process_msp_bucket_mutations(
                             &mutations,
-                            &target_bucket_id,
+                            target_bucket_id,
                             event_info,
                             &mut file_key_states,
                         );
@@ -562,7 +559,7 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                     }
 
                     // Send the result back through the callback
-                    if let Err(_) = callback.send(result) {
+                    if callback.send(result).is_err() {
                         warn!(
                             target: LOG_TARGET,
                             "Failed to send GetFileKeyChangesSinceBlock response - receiver dropped"
@@ -584,7 +581,7 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                     }
 
                     // Send the result back through the callback
-                    if let Err(_) = callback.send(result) {
+                    if callback.send(result).is_err() {
                         warn!(
                             target: LOG_TARGET,
                             "Failed to send QueryIncompleteStorageRequest response - receiver dropped"

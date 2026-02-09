@@ -218,6 +218,7 @@ pub trait IndexerOpsMut: IndexerOps {
     /// * `location` - File location/path
     /// * `fingerprint` - File fingerprint
     /// * `size` - File size in bytes
+    #[allow(clippy::too_many_arguments)]
     async fn create_file(
         &self,
         account: &[u8],

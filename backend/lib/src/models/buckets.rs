@@ -129,7 +129,7 @@ impl FileTree {
                 // This is a direct file under the path
                 children_map
                     .entry(first_segment.to_string())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(FileTreeEntryKind::File(FileTreeFile {
                         size_bytes: file.size as u64,
                         file_key: hex::encode(&file.file_key),
@@ -141,7 +141,7 @@ impl FileTree {
                 // We only want to create the folder entry once, not recurse into it
                 let entries = children_map
                     .entry(first_segment.to_string())
-                    .or_insert_with(Vec::new);
+                    .or_default();
 
                 // Only add folder entry if we don't already have one
                 if !entries

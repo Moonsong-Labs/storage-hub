@@ -878,7 +878,7 @@ where
     )> {
         let (managed_bsp_id, pending_volunteer_file_keys) = match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => (
-                bsp_handler.bsp_id.clone(),
+                bsp_handler.bsp_id,
                 &bsp_handler.pending_volunteer_file_keys,
             ),
             _ => {
