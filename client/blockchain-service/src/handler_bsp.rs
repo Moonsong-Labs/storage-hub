@@ -246,7 +246,7 @@ where
                     };
                     let confirm_after_tick = current_tick + min_wait + 1u32.into();
 
-                    info!(
+                    debug!(
                         target: LOG_TARGET,
                         "BspRequestedToStopStoring detected for file [{:?}]. \
                          Queueing confirm stop storing for tick {:?} (current: {:?}, min_wait: {:?})",
