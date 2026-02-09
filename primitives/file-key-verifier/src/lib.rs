@@ -6,7 +6,7 @@ use alloc::collections::BTreeSet;
 use frame_support::sp_runtime::DispatchError;
 use shp_file_metadata::ChunkId;
 use shp_traits::CommitmentVerifier;
-use sp_trie::{CompactProof, Trie, TrieDBBuilder, TrieLayout};
+use sp_trie::{Trie, TrieDBBuilder, TrieLayout};
 use types::FileKeyProof;
 
 #[cfg(test)]
@@ -82,17 +82,14 @@ where
             .try_into()
             .map_err(|_| "Failed to convert fingerprint to a hasher output.")?;
 
-        // Convert Vec<Vec<u8>> to CompactProof
-        let compact_proof = CompactProof {
-            encoded_nodes: proof.proof.clone(),
-        };
-
-        // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
-        let (memdb, root) = compact_proof
-            .to_memory_db(Some(&expected_root))
-            .map_err(|_| {
-                "Failed to convert proof to memory DB, root doesn't match with expected."
-            })?;
+        // Decode compact proof directly into memory DB without cloning.
+        let mut memdb = sp_trie::MemoryDB::<T::Hash>::new(&[]);
+        let root = sp_trie::decode_compact::<sp_trie::LayoutV1<T::Hash>, _, _>(
+            &mut memdb,
+            proof.proof.iter().map(|n| n.as_slice()),
+            Some(&expected_root),
+        )
+        .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")?;
 
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
 

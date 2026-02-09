@@ -8,8 +8,7 @@ use shp_traits::{
     CommitmentVerifier, CompactProofEncodedNodes, TrieMutation, TrieProofDeltaApplier,
     TrieRemoveMutation,
 };
-use sp_trie::CompactProof;
-use sp_trie::{MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
+use sp_trie::{MemoryDB, StorageProof, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
 
 #[cfg(test)]
@@ -45,15 +44,14 @@ where
             return Err("No challenges provided.".into());
         }
 
-        // Convert Vec<Vec<u8>> to CompactProof
-        let compact_proof = CompactProof {
-            encoded_nodes: proof.clone(),
-        };
-
-        // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
-        let (memdb, root) = compact_proof.to_memory_db(Some(root.into())).map_err(|_| {
-            "Failed to convert proof to memory DB, root doesn't match with expected."
-        })?;
+        // Decode compact proof directly into memory DB without cloning.
+        let mut memdb = MemoryDB::<T::Hash>::new(&[]);
+        let root = sp_trie::decode_compact::<sp_trie::LayoutV1<T::Hash>, _, _>(
+            &mut memdb,
+            proof.iter().map(|n| n.as_slice()),
+            Some(root.into()),
+        )
+        .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")?;
 
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
 
@@ -245,19 +243,25 @@ where
             return Err("Root is empty.".into());
         }
 
-        // Convert Vec<Vec<u8>> to CompactProof
-        let compact_proof = CompactProof {
-            encoded_nodes: proof.clone(),
-        };
+        // Decode compact proof directly without cloning, then convert through StorageProof.
+        // TODO: Understand why the decoded MemoryDB cannot be used directly to modify a partial trie.
+        // (it fails with error IncompleteDatabase) Converting through StorageProof re-inserts
+        // nodes with EMPTY_PREFIX which is required for trie mutation operations.
+        let mut decode_db = MemoryDB::<T::Hash>::new(&[]);
+        let mut root = sp_trie::decode_compact::<sp_trie::LayoutV1<T::Hash>, _, _>(
+            &mut decode_db,
+            proof.iter().map(|n| n.as_slice()),
+            Some(root.into()),
+        )
+        .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")?;
 
-        // TODO: Understand why `CompactProof` cannot be used directly to construct memdb and modify a partial trie. (it fails with error IncompleteDatabase)
-        // Convert compact proof to `sp_trie::StorageProof` in order to access the trie nodes.
-        let (storage_proof, mut root) = compact_proof
-            .to_storage_proof::<T::Hash>(Some(root.into()))
-            .map_err(|_| {
-                "Failed to convert proof to memory DB, root doesn't match with expected."
-            })?;
-
+        let storage_proof = StorageProof::new(decode_db.drain().into_iter().filter_map(|kv| {
+            if (kv.1).1 > 0 {
+                Some((kv.1).0)
+            } else {
+                None
+            }
+        }));
         let mut memdb = storage_proof.to_memory_db();
 
         let mut trie = TrieDBMutBuilder::<T>::from_existing(&mut memdb, &mut root).build();
