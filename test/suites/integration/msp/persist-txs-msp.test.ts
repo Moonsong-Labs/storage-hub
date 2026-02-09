@@ -3,7 +3,6 @@ import {
   describeMspNet,
   type EnrichedBspApi,
   getContainerPeerId,
-  restartContainer,
   type SqlClient,
   shUser,
   waitFor
@@ -32,10 +31,6 @@ await describeMspNet(
       mspApi = maybeMspApi;
 
       sql = userApi.pendingDb.createClient();
-    });
-
-    after(async () => {
-      mspApi.disconnect();
     });
 
     it("Network launches and can be queried", async () => {
@@ -484,7 +479,9 @@ await describeMspNet(
 
       // Restart MSP 1 container.
       await mspApi.disconnect();
-      await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.msp1.containerName });
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
 
       // Wait for MSP RPC to be back up.
       await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
@@ -658,7 +655,9 @@ await describeMspNet(
 
       // Restart MSP 1 container (will unpause due to restart).
       await mspApi.disconnect();
-      await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.msp1.containerName });
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
 
       // Wait for MSP RPC to be back up and service to be idle again.
       await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);

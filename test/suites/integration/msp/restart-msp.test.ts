@@ -4,7 +4,6 @@ import {
   type EnrichedBspApi,
   type FileMetadata,
   getContainerPeerId,
-  restartContainer,
   waitFor
 } from "../../../util";
 
@@ -92,7 +91,9 @@ await describeMspNet(
 
       // Restart MSP container (preserves writable layer including RocksDB path)
       await mspApi.disconnect();
-      await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.msp1.containerName });
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
 
       // Wait for MSP RPC to respond
       await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
@@ -138,7 +139,9 @@ await describeMspNet(
 
       // Restart BSP container
       await bspApi.disconnect();
-      await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.bsp.containerName });
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
+      });
 
       // Wait for BSP RPC to respond
       await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`, true);

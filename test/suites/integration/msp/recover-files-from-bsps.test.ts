@@ -4,7 +4,6 @@ import {
   type EnrichedBspApi,
   type FileMetadata,
   getContainerPeerId,
-  restartContainer,
   waitFor
 } from "../../../util";
 
@@ -105,7 +104,9 @@ await describeMspNet(
     it("Restart MSP and check that forest roots are validated and all files are present in the forest", async () => {
       // Restart MSP container (preserves writable layer including RocksDB path).
       await mspApi.disconnect();
-      await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.msp1.containerName });
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
 
       // Wait for MSP RPC to respond.
       await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
@@ -156,7 +157,9 @@ await describeMspNet(
     it("Restart MSP and verify files are recovered", async () => {
       // Restart MSP to trigger file-storage recovery logic.
       await mspApi.disconnect();
-      await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.msp1.containerName });
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
 
       // Wait for MSP RPC to respond.
       await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
