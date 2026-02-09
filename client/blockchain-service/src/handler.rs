@@ -78,7 +78,14 @@ where
     pub(crate) client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     /// The keystore. Used to sign extrinsics.
     pub(crate) keystore: KeystorePtr,
-    /// The RPC handlers. Used to send extrinsics.
+    /// The RPC handlers. Used to submit and watch extrinsics via the local RPC server.
+    ///
+    /// Wrapped in `RwLock<Option<...>>` because the RPC server is initialized after the
+    /// blockchain service is spawned. The handlers start as `None` and are set via the
+    /// `SetRpcHandlers` command during the startup phase of `run()`, before any block
+    /// processing begins. The `RwLock` is used because the write (from `SetRpcHandlers`)
+    /// and reads (from extrinsic submission) access a shared `Arc`; in practice they are
+    /// sequential within the single-threaded actor loop.
     pub(crate) rpc_handlers: Arc<RwLock<Option<Arc<RpcHandlers>>>>,
     /// The Forest Storage handler.
     ///
@@ -189,12 +196,6 @@ where
     /// Used for recording command lifecycle metrics (pending count, processing duration)
     /// and block processing metrics (block import/finality durations).
     pub(crate) metrics: MetricsLink,
-    /// Whether there are pending transactions that need to be resubscribed when RPC handlers become available.
-    ///
-    /// This flag is set during startup for Leader nodes that have pending transactions in the DB.
-    /// The resubscription is deferred until `SetRpcHandlers` is called, since submitting extrinsics
-    /// requires RPC handlers to be available.
-    pub(crate) pending_startup_resubscription: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -322,17 +323,38 @@ where
 
         // Initialise pending transactions DB store if configured
         self.actor.init_pending_tx_store().await;
-        // Role-specific initialisation based on the result of init_pending_tx_store.
+
+        // Wait for RPC handlers before proceeding with any block processing or transaction
+        // resubscription. The RPC server is initialized after the blockchain service is spawned,
+        // so the SetRpcHandlers command arrives through the command channel shortly after startup.
+        // We drain commands here to avoid processing blocks without the ability to submit extrinsics.
+        info!(target: LOG_TARGET, "⏳ Waiting for RPC handlers to be available...");
+        while let Some(command) = self.receiver.next().await {
+            if let BlockchainServiceCommand::SetRpcHandlers { rpc_handlers } = command {
+                info!(
+                    target: LOG_TARGET,
+                    "✅ RPC handlers set for BlockchainService"
+                );
+                let mut rpc_handlers_guard = self.actor.rpc_handlers.write().await;
+                *rpc_handlers_guard = Some(rpc_handlers);
+                break;
+            }
+            // Handle any other commands that arrive before SetRpcHandlers.
+            self.actor.handle_message(command).await;
+        }
+
+        // Role-specific initialisation. Now that RPC handlers are available, Leader nodes can
+        // immediately resubscribe pending transactions without deferring.
         match self.actor.role {
             MultiInstancesNodeRole::Leader => {
                 info!(
                     target: LOG_TARGET,
-                    "🧑‍✈️ Node role is LEADER; pending transactions will be re-subscribed when RPC handlers are set"
+                    "🧑‍✈️ Node role is LEADER; re-subscribing pending transactions from DB"
                 );
-                // Mark that we need to resubscribe pending transactions once RPC handlers are available.
-                // We cannot do it here because submitting extrinsics requires RPC handlers, which are
-                // set later via the SetRpcHandlers command after the RPC server is initialized.
-                self.actor.pending_startup_resubscription = true;
+                // Re-subscribe watchers for eligible pending transactions persisted in DB.
+                self.actor
+                    .resubscribe_pending_transactions_on_startup()
+                    .await;
             }
             MultiInstancesNodeRole::Follower => {
                 info!(
@@ -1644,26 +1666,14 @@ where
                     }
                 }
                 BlockchainServiceCommand::SetRpcHandlers { rpc_handlers } => {
+                    // This is normally handled during the pre-loop startup phase in `run()`.
+                    // If it arrives here, just set the handlers.
                     info!(
                         target: LOG_TARGET,
                         "Setting RPC handlers for BlockchainService"
                     );
-                    {
-                        let mut rpc_handlers_guard = self.rpc_handlers.write().await;
-                        *rpc_handlers_guard = Some(rpc_handlers);
-                    }
-
-                    // Now that RPC handlers are available, perform any deferred startup tasks
-                    // that require them. This handles the race condition where the blockchain
-                    // service starts before the RPC server is ready.
-                    if self.pending_startup_resubscription {
-                        info!(
-                            target: LOG_TARGET,
-                            "🔁 RPC handlers now available; re-subscribing pending transactions from DB"
-                        );
-                        self.resubscribe_pending_transactions_on_startup().await;
-                        self.pending_startup_resubscription = false;
-                    }
+                    let mut rpc_handlers_guard = self.rpc_handlers.write().await;
+                    *rpc_handlers_guard = Some(rpc_handlers);
                 }
                 BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
@@ -1881,7 +1891,6 @@ where
             leadership_conn: None,
             pending_finality_notifications: VecDeque::new(),
             metrics,
-            pending_startup_resubscription: false,
         }
     }
 
