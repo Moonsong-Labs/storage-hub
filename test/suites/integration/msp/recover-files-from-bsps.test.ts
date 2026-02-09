@@ -9,7 +9,7 @@ import {
 
 await describeMspNet(
   "MSP recovers files missing in its file storage from BSPs that have them",
-  { initialised: "multi", networkConfig: [{ noisy: false, rocksdb: true }], only: true },
+  { initialised: "multi", networkConfig: [{ noisy: false, rocksdb: true }] },
   ({
     before,
     after,
