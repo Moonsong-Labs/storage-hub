@@ -1044,7 +1044,7 @@ impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
 ///
 /// Used as a parameter to `bsp_forest_write_work` to indicate which pending
 /// request queue should be checked or have its front element removed.
-pub(crate) enum BspForestWriteQueue {
+pub(crate) enum BspForestWriteQueue<Runtime: StorageEnableRuntime> {
     /// Pop from the in-memory submit proof requests (BTreeSet, pops lowest tick first).
     SubmitProof,
     /// Check the persistent confirm storing request deque for pending work.
@@ -1052,6 +1052,12 @@ pub(crate) enum BspForestWriteQueue {
     ConfirmStoring,
     /// Pop from the persistent stop storing for insolvent user request deque.
     StopStoringForInsolventUser,
+    /// Peek-then-pop from the persistent confirm BSP stop storing deque.
+    /// Only pops if the front item's `confirm_after_tick` has been reached.
+    /// The contained value is the current tick used for the comparison.
+    ConfirmBspStopStoring(BlockNumber<Runtime>),
+    /// Pop from the persistent request BSP stop storing deque.
+    RequestBspStopStoring,
 }
 
 /// The result of checking or popping from a BSP forest-write request queue.
@@ -1065,6 +1071,10 @@ pub(crate) enum BspForestWriteQueuePop<Runtime: StorageEnableRuntime> {
     ConfirmStoring,
     /// A stop storing for insolvent user request was popped from the persistent deque.
     StopStoringForInsolventUser(StopStoringForInsolventUserRequest<Runtime>),
+    /// A confirm BSP stop storing request was popped from the persistent deque.
+    ConfirmBspStopStoring(ConfirmBspStopStoringRequest<Runtime>),
+    /// A request BSP stop storing request was popped from the persistent deque.
+    RequestBspStopStoring(RequestBspStopStoringRequest<Runtime>),
 }
 
 /// Result of checking for pending BSP forest-write work.

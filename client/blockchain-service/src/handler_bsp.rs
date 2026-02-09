@@ -560,20 +560,7 @@ where
             }
         }
 
-        // If we have no pending stop storing for insolvent user requests, check for pending BspRequestStopStoring requests.
-        if next_event_data.is_none() {
-            if let Some(request) = state_store_context
-                .pending_request_bsp_stop_storing_deque::<Runtime>()
-                .pop_front()
-            {
-                trace!(target: LOG_TARGET, "Processing BSP request stop storing for file [{:?}]", request.file_key);
-                next_event_data = Some(ProcessBspRequestStopStoringData { request }.into());
-            }
-        }
-
-        // If we have no pending BspRequestStopStoring requests, check for pending BspConfirmStopStoring requests.
-        // Items in this queue are ordered chronologically by confirm_after_tick, so if the first
-        // item's tick hasn't been reached, none of the others have either.
+        // If we have no pending StopStoringForInsolventUser requests, check for pending BspConfirmStopStoring requests.
         if next_event_data.is_none() {
             let current_tick = match self
                 .client
@@ -590,27 +577,37 @@ where
                     return;
                 }
             };
-            // Peek first to check if the tick has been reached without modifying the queue
-            if let Some(peeked) = state_store_context
-                .pending_confirm_bsp_stop_storing_deque::<Runtime>()
-                .peek_front()
+            if let Some(BspForestWriteQueuePop::ConfirmBspStopStoring(request)) =
+                Self::bsp_forest_write_work(
+                    &mut self.maybe_managed_provider,
+                    &state_store_context,
+                    Some(BspForestWriteQueue::ConfirmBspStopStoring(current_tick)),
+                )
+                .popped
             {
-                if peeked.confirm_after_tick <= current_tick {
-                    // Tick reached, pop and process this request
-                    let request = state_store_context
-                        .pending_confirm_bsp_stop_storing_deque::<Runtime>()
-                        .pop_front()
-                        .expect("Just peeked, should exist");
-                    trace!(
-                        target: LOG_TARGET,
-                        "Processing BSP confirm stop storing for file [{:?}], confirm_after_tick: {:?}, current_tick: {:?}",
-                        request.file_key,
-                        request.confirm_after_tick,
-                        current_tick
-                    );
-                    next_event_data = Some(ProcessBspConfirmStopStoringData { request }.into());
-                }
-                // If tick not reached, do nothing since no other items can be ready either
+                trace!(
+                    target: LOG_TARGET,
+                    "Processing BSP confirm stop storing for file [{:?}], confirm_after_tick: {:?}, current_tick: {:?}",
+                    request.file_key,
+                    request.confirm_after_tick,
+                    current_tick
+                );
+                next_event_data = Some(ProcessBspConfirmStopStoringData { request }.into());
+            }
+        }
+
+        // If we have no pending BspConfirmStopStoring requests, check for pending BspRequestStopStoring requests.
+        if next_event_data.is_none() {
+            if let Some(BspForestWriteQueuePop::RequestBspStopStoring(request)) =
+                Self::bsp_forest_write_work(
+                    &mut self.maybe_managed_provider,
+                    &state_store_context,
+                    Some(BspForestWriteQueue::RequestBspStopStoring),
+                )
+                .popped
+            {
+                trace!(target: LOG_TARGET, "Processing BSP request stop storing for file [{:?}]", request.file_key);
+                next_event_data = Some(ProcessBspRequestStopStoringData { request }.into());
             }
         }
 
@@ -633,11 +630,12 @@ where
     ///
     /// If `pop` is `Some`, pops from that queue and returns whether it succeeded.
     /// If `pop` is `None`, checks all queues for pending work without modifying state.
+    ///
     /// Caller must commit the state context after all operations.
     fn bsp_forest_write_work<'a>(
         maybe_managed_provider: &mut Option<ManagedProvider<Runtime>>,
         state: &'a BlockchainServiceStateStoreRwContext<'a>,
-        pop: Option<BspForestWriteQueue>,
+        pop: Option<BspForestWriteQueue<Runtime>>,
     ) -> BspForestWriteWork<Runtime> {
         // Only check the relevant queue based on which pop is requested.
         let (has_pending_work, popped) = match pop {
@@ -672,6 +670,31 @@ where
                     .map(BspForestWriteQueuePop::StopStoringForInsolventUser);
                 (popped.is_some(), popped)
             }
+            Some(BspForestWriteQueue::ConfirmBspStopStoring(current_tick)) => {
+                // Peek first to check if the front item's tick has been reached.
+                // Items are ordered chronologically, so if the first isn't ready, none are.
+                let popped = state
+                    .pending_confirm_bsp_stop_storing_deque::<Runtime>()
+                    .peek_front()
+                    .and_then(|peeked| {
+                        if peeked.confirm_after_tick <= current_tick {
+                            state
+                                .pending_confirm_bsp_stop_storing_deque::<Runtime>()
+                                .pop_front()
+                                .map(BspForestWriteQueuePop::ConfirmBspStopStoring)
+                        } else {
+                            None
+                        }
+                    });
+                (popped.is_some(), popped)
+            }
+            Some(BspForestWriteQueue::RequestBspStopStoring) => {
+                let popped = state
+                    .pending_request_bsp_stop_storing_deque::<Runtime>()
+                    .pop_front()
+                    .map(BspForestWriteQueuePop::RequestBspStopStoring);
+                (popped.is_some(), popped)
+            }
             None => {
                 // Check all queues when no pop is requested.
                 let has_pending_submit_proof = match maybe_managed_provider {
@@ -688,8 +711,20 @@ where
                     .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
                     .size()
                     > 0;
+                let has_pending_confirm_stop = state
+                    .pending_confirm_bsp_stop_storing_deque::<Runtime>()
+                    .size()
+                    > 0;
+                let has_pending_request_stop = state
+                    .pending_request_bsp_stop_storing_deque::<Runtime>()
+                    .size()
+                    > 0;
                 (
-                    has_pending_submit_proof || has_pending_confirm || has_pending_stop,
+                    has_pending_submit_proof
+                        || has_pending_confirm
+                        || has_pending_stop
+                        || has_pending_confirm_stop
+                        || has_pending_request_stop,
                     None,
                 )
             }
