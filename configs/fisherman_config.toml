@@ -6,7 +6,19 @@ fisherman_database_url = "postgresql://postgres:postgres@localhost:5432/fisherma
 
 # Duration between batch deletion processing cycles (in seconds).
 # This corresponds to the `--fisherman-batch-interval-seconds` CLI flag.
-batch_interval_seconds = 60
+batch_interval_seconds = 30
+
+# Cooldown between batch deletion attempts (in seconds).
+# This corresponds to the `--fisherman-batch-cooldown-seconds` CLI flag.
+# Set to `0` to disable cooldown.
+batch_cooldown_seconds = 1
+
+# Number of consecutive no-work batches required before switching to the slower idle polling interval.
+# This corresponds to the `--fisherman-consecutive-no-work-batches-threshold` CLI flag.
+# The minimum value is 2 because there are two kinds of work: User and Incomplete.
+# If we set the value to 1, a non-work batch in one kind of work will trigger the idle poll interval
+# on the other kind of work.
+consecutive_no_work_batches_threshold = 4
 
 # Maximum number of files to process per batch deletion cycle.
 # This corresponds to the `--fisherman-batch-deletion-limit` CLI flag.

@@ -132,6 +132,11 @@ const FILE_SYSTEM_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Vec<H256>"
+  },
+  get_max_batch_confirm_storage_requests: {
+    description: "Get the maximum batch size for confirm storage requests.",
+    params: [],
+    type: "u32"
   }
 };
 

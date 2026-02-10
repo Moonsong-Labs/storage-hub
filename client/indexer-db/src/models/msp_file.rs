@@ -2,6 +2,7 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use crate::{
+    models::Msp,
     schema::{bucket, file, msp, msp_file},
     types::OnchainMspId,
     DbConnection,
@@ -212,5 +213,21 @@ impl MspFile {
             .optional()?;
 
         Ok(msp_id)
+    }
+
+    pub async fn get_all_files_for_msp<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_msp_id: &OnchainMspId,
+    ) -> Result<u64, diesel::result::Error> {
+        let db_msp_id = Msp::get_by_onchain_msp_id(conn, *onchain_msp_id).await?.id;
+
+        let file_count: i64 = file::table
+            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
+            .filter(msp_file::msp_id.eq(db_msp_id))
+            .select(diesel::dsl::count_distinct(file::file_key))
+            .get_result(conn)
+            .await?;
+
+        Ok(file_count as u64)
     }
 }

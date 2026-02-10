@@ -1,14 +1,14 @@
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
-use std::sync::Arc;
-use tokio::sync::{oneshot::error::TryRecvError, Mutex};
+use std::{collections::HashSet, sync::Arc};
 
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_core::U256;
+use sp_core::{H256, U256};
 use sp_runtime::traits::{Block as BlockT, Zero};
 
+use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
 };
@@ -30,12 +30,16 @@ use crate::{
         FinalisedBspConfirmStoppedStoring, FinalisedTrieRemoveMutationsAppliedForBsp,
         ForestWriteLockTaskData, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
         MoveBucketRequested, MultipleNewChallengeSeeds, NewStorageRequest,
-        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
+        ProcessConfirmStoringRequest, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
+        ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    types::{ManagedProvider, MultiInstancesNodeRole},
+    state::BlockchainServiceStateStoreRwContext,
+    types::{
+        BspForestWriteQueue, BspForestWriteQueuePop, BspForestWriteWork, ConfirmStoringRequest,
+        ForestWritePermitGuard, ManagedProvider, MultiInstancesNodeRole,
+    },
     BlockchainService,
 };
 
@@ -353,62 +357,75 @@ where
 
         // Verify we have a BSP handler.
         let managed_bsp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id,
+            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                // Return early if the semaphore has no available permits.
+                if bsp_handler.forest_root_write_semaphore.available_permits() == 0 {
+                    trace!(target: LOG_TARGET, "Forest root write semaphore already acquired. Skipping assignment.");
+                    return;
+                }
+                bsp_handler.bsp_id
+            }
             _ => {
                 error!(target: LOG_TARGET, "`bsp_check_pending_forest_root_writes` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
             }
         };
 
-        // This is done in a closure to avoid borrowing `self` immutably and then mutably.
-        // Inside of this closure, we borrow `self` mutably when taking ownership of the lock.
+        // If there is no pending work, do NOT acquire the semaphore permit and return early.
+        //
+        // This avoids a subtle event-loop spin: acquiring + immediately dropping the permit
+        // would notify `permit_release_receiver`, which would call back into this method
+        // even though there is no work to do.
         {
-            let forest_root_write_lock = match &mut self.maybe_managed_provider {
-                Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
+            // Use a temporary state context just for checking pending work (no mutations).
+            let temp_state = self.persistent_state.open_rw_context_with_overlay();
+            if !Self::bsp_forest_write_work(&mut self.maybe_managed_provider, &temp_state, None)
+                .has_pending_work
+            {
+                trace!(target: LOG_TARGET, "No pending BSP forest-write work; skipping semaphore acquisition");
+                return;
+            }
+        }
+
+        // Try to acquire a permit from the semaphore.
+        // If the permit is unavailable, another task is still processing and we return early.
+        let permit = {
+            let semaphore = match &self.maybe_managed_provider {
+                Some(ManagedProvider::Bsp(bsp_handler)) => {
+                    bsp_handler.forest_root_write_semaphore.clone()
+                }
                 _ => unreachable!("We just checked this is a BSP"),
             };
-            if let Some(rx) = forest_root_write_lock.as_mut() {
-                // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
-                match rx.try_recv() {
-                    // If the channel is empty, means we still need to wait for the current task to finish.
-                    Err(TryRecvError::Empty) => {
-                        trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
-                        return;
-                    }
-                    Ok(_) => {
-                        trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
-                    }
-                    Err(TryRecvError::Closed) => {
-                        error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
-                    }
+            match semaphore.try_acquire_owned() {
+                Ok(permit) => {
+                    trace!(target: LOG_TARGET, "Forest root write semaphore permit acquired");
+                    permit
                 }
-            } else {
-                info!(target: LOG_TARGET, "Forest root write lock not assigned to any task");
+                Err(_) => {
+                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
+                    return;
+                }
             }
-
-            // Clear the lock, given that at this point we know that the lock is released.
-            *forest_root_write_lock = None;
-        }
+        };
 
         // At this point we know that the lock is released and we can start processing new requests.
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let mut next_event_data = None;
 
-        // Process proof requests one at a time, releasing the mutable borrow between iterations.
-        // This is because when matching on `maybe_managed_provider`, we need to borrow it mutably
-        // to remove the request from the pending list. This mutable borrow is released after used
-        // and before needing to borrow immutably again when calling `self.get_next_challenge_tick_for_provider`.
+        // Process SubmitProof requests one at a time. Pop from the queue, then validate.
+        // If validation fails, continue to pop the next request.
         'submit_proof_requests_loop: loop {
-            // Get the next request if any. Mutable borrow of `maybe_managed_provider` is released after use.
-            let request = match &mut self.maybe_managed_provider {
-                Some(ManagedProvider::Bsp(bsp_handler)) => {
-                    bsp_handler.pending_submit_proof_requests.pop_first()
-                }
-                _ => unreachable!("We just checked this is a BSP"),
-            };
+            // Pop the next SubmitProof request from the queue.
+            let popped = Self::bsp_forest_write_work(
+                &mut self.maybe_managed_provider,
+                &state_store_context,
+                Some(BspForestWriteQueue::SubmitProof),
+            )
+            .popped;
 
-            // If there is no request, break the loop.
-            let Some(request) = request else { break };
+            let Some(BspForestWriteQueuePop::SubmitProof(request)) = popped else {
+                break;
+            };
 
             // Check if the proof is still the next one to be submitted.
             let next_challenge_tick = match self
@@ -444,40 +461,30 @@ where
             break 'submit_proof_requests_loop;
         }
 
-        // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
+        // If we have no pending SubmitProof requests, check for pending ConfirmStoring requests.
         if next_event_data.is_none() {
-            let max_batch_confirm = self.config.bsp_confirm_file_batch_size;
-
-            // Batch multiple confirm file storing taking the configured maximum.
-            let mut confirm_storing_requests = Vec::new();
-            for _ in 0..max_batch_confirm {
-                if let Some(request) = state_store_context
-                    .pending_confirm_storing_request_deque::<Runtime>()
-                    .pop_front()
-                {
-                    trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
-                    confirm_storing_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 confirm storing request, send the process event.
-            if confirm_storing_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessConfirmStoringRequestData {
-                        confirm_storing_requests,
-                    }
-                    .into(),
-                );
+            if let Some(BspForestWriteQueuePop::ConfirmStoring) = Self::bsp_forest_write_work(
+                &mut self.maybe_managed_provider,
+                &state_store_context,
+                Some(BspForestWriteQueue::ConfirmStoring),
+            )
+            .popped
+            {
+                trace!(target: LOG_TARGET, "Triggering ProcessConfirmStoringRequest");
+                next_event_data = Some(ForestWriteLockTaskData::ConfirmStoringRequest);
             }
         }
 
-        // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
+        // If we have no pending storage requests to respond to, check for pending StopStoringForInsolventUser requests.
         if next_event_data.is_none() {
-            if let Some(request) = state_store_context
-                .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
-                .pop_front()
+            // Pop the next StopStoringForInsolventUser request from the queue.
+            if let Some(BspForestWriteQueuePop::StopStoringForInsolventUser(request)) =
+                Self::bsp_forest_write_work(
+                    &mut self.maybe_managed_provider,
+                    &state_store_context,
+                    Some(BspForestWriteQueue::StopStoringForInsolventUser),
+                )
+                .popped
             {
                 next_event_data = Some(
                     ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
@@ -490,7 +497,85 @@ where
 
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
-            self.bsp_emit_forest_write_event(event_data);
+            // Only wrap the semaphore permit in the notifying guard when we actually emit an event.
+            // This ensures the drop notification corresponds to a task completion, not an idle scan.
+            let forest_root_write_permit = Arc::new(ForestWritePermitGuard::new(
+                permit,
+                self.permit_release_sender.clone(),
+            ));
+            self.bsp_emit_forest_write_event(event_data, forest_root_write_permit);
+        }
+    }
+
+    /// Checks for pending BSP forest-write work and optionally pops from a queue.
+    ///
+    /// If `pop` is `Some`, pops from that queue and returns whether it succeeded.
+    /// If `pop` is `None`, checks all queues for pending work without modifying state.
+    /// Caller must commit the state context after all operations.
+    fn bsp_forest_write_work<'a>(
+        maybe_managed_provider: &mut Option<ManagedProvider<Runtime>>,
+        state: &'a BlockchainServiceStateStoreRwContext<'a>,
+        pop: Option<BspForestWriteQueue>,
+    ) -> BspForestWriteWork<Runtime> {
+        // Only check the relevant queue based on which pop is requested.
+        let (has_pending_work, popped) = match pop {
+            Some(BspForestWriteQueue::SubmitProof) => {
+                let bsp_handler = match maybe_managed_provider {
+                    Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler,
+                    _ => unreachable!("bsp_forest_write_work should only be called for BSP"),
+                };
+                let popped = bsp_handler
+                    .pending_submit_proof_requests
+                    .pop_first()
+                    .map(BspForestWriteQueuePop::SubmitProof);
+                (popped.is_some(), popped)
+            }
+            Some(BspForestWriteQueue::ConfirmStoring) => {
+                // Check only (no pop). The task pulls requests via commands.
+                let has_pending = state
+                    .pending_confirm_storing_request_deque::<Runtime>()
+                    .size()
+                    > 0;
+                let signal = if has_pending {
+                    Some(BspForestWriteQueuePop::ConfirmStoring)
+                } else {
+                    None
+                };
+                (has_pending, signal)
+            }
+            Some(BspForestWriteQueue::StopStoringForInsolventUser) => {
+                let popped = state
+                    .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                    .pop_front()
+                    .map(BspForestWriteQueuePop::StopStoringForInsolventUser);
+                (popped.is_some(), popped)
+            }
+            None => {
+                // Check all queues when no pop is requested.
+                let has_pending_submit_proof = match maybe_managed_provider {
+                    Some(ManagedProvider::Bsp(bsp_handler)) => {
+                        !bsp_handler.pending_submit_proof_requests.is_empty()
+                    }
+                    _ => unreachable!("bsp_forest_write_work should only be called for BSP"),
+                };
+                let has_pending_confirm = state
+                    .pending_confirm_storing_request_deque::<Runtime>()
+                    .size()
+                    > 0;
+                let has_pending_stop = state
+                    .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                    .size()
+                    > 0;
+                (
+                    has_pending_submit_proof || has_pending_confirm || has_pending_stop,
+                    None,
+                )
+            }
+        };
+
+        BspForestWriteWork {
+            has_pending_work,
+            popped,
         }
     }
 
@@ -727,47 +812,127 @@ where
         }
     }
 
-    fn bsp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
-        // Get the BSP's Forest root write lock.
-        let forest_root_write_lock = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
-            _ => {
-                error!(target: LOG_TARGET, "`bsp_emit_forest_write_event` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
-            }
-        };
-
-        // Create a new channel to assign ownership of the BSP's Forest root write lock.
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        *forest_root_write_lock = Some(rx);
-
-        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
-        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
-        // event. Clone is required because there is no constraint on the number of listeners that can
-        // subscribe to the event (and each is guaranteed to receive all emitted events).
-        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+    fn bsp_emit_forest_write_event(
+        &self,
+        data: impl Into<ForestWriteLockTaskData<Runtime>>,
+        forest_root_write_permit: Arc<ForestWritePermitGuard>,
+    ) {
         match data.into() {
             ForestWriteLockTaskData::SubmitProofRequest(data) => {
                 self.emit(ProcessSubmitProofRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_permit,
                 });
             }
-            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
-                self.emit(ProcessConfirmStoringRequest {
-                    data,
-                    forest_root_write_tx,
-                });
+            ForestWriteLockTaskData::ConfirmStoringRequest => {
+                self.emit(ProcessConfirmStoringRequest::new(forest_root_write_permit));
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 self.emit(ProcessStopStoringForInsolventUserRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_permit,
                 });
             }
             ForestWriteLockTaskData::MspRespondStorageRequest(_) => {
                 unreachable!("BSPs do not respond to storage requests as MSPs do.")
             }
         }
+    }
+
+    /// Pop up to `count` confirm storing requests from the persistent deque.
+    ///
+    /// Returns the items without filtering; the caller is responsible for
+    /// filtering stale requests and re-queuing if needed.
+    pub(crate) fn pop_confirm_storing_requests(
+        &self,
+        count: u32,
+    ) -> Vec<ConfirmStoringRequest<Runtime>> {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let mut deque = state_store_context.pending_confirm_storing_request_deque::<Runtime>();
+        let mut popped = Vec::new();
+        for _ in 0..count {
+            if let Some(request) = deque.pop_front() {
+                popped.push(request);
+            } else {
+                break;
+            }
+        }
+        state_store_context.commit();
+        popped
+    }
+
+    /// Filter confirm storing requests by checking on-chain state and pending
+    /// volunteer transactions.
+    ///
+    /// Returns `(ready, pending_volunteer)` where:
+    /// - `ready`: requests whose BSP has volunteered and are still pending confirmation on-chain.
+    /// - `pending_volunteer`: requests whose volunteer transaction has not yet landed on-chain.
+    ///
+    /// This does **not** re-queue pending volunteer requests.
+    pub(crate) fn filter_confirm_storing_requests(
+        &self,
+        requests: Vec<ConfirmStoringRequest<Runtime>>,
+    ) -> anyhow::Result<(
+        Vec<ConfirmStoringRequest<Runtime>>,
+        Vec<ConfirmStoringRequest<Runtime>>,
+    )> {
+        let (managed_bsp_id, pending_volunteer_file_keys) = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => (
+                bsp_handler.bsp_id.clone(),
+                &bsp_handler.pending_volunteer_file_keys,
+            ),
+            _ => {
+                anyhow::bail!(
+                    "`filter_confirm_storing_requests` should only be called if the node is managing a BSP. Found [{:?}] instead.",
+                    self.maybe_managed_provider,
+                );
+            }
+        };
+
+        // Separate requests with pending volunteer transactions from those ready to query.
+        let (pending_volunteer, requests_to_query): (Vec<_>, Vec<_>) =
+            requests.into_iter().partition(|request| {
+                let file_key: FileKey = request.file_key.as_ref().into();
+                pending_volunteer_file_keys.contains(&file_key)
+            });
+
+        let current_block_hash = self.client.info().best_hash;
+
+        let file_keys: Vec<H256> = requests_to_query
+            .iter()
+            .map(|r| H256::from_slice(r.file_key.as_ref()))
+            .collect();
+
+        // Query the runtime API to filter file keys to only those pending confirmation.
+        let pending_file_keys = self
+            .client
+            .runtime_api()
+            .query_pending_bsp_confirm_storage_requests(
+                current_block_hash,
+                managed_bsp_id,
+                file_keys,
+            )
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to query pending BSP confirm storage requests: {:?}",
+                    e
+                )
+            })?;
+
+        let pending_file_keys_set: HashSet<FileKey> = pending_file_keys
+            .into_iter()
+            .map(|k| k.as_ref().into())
+            .collect();
+
+        // Filter to only those that are still pending confirmation.
+        let pending_confirmation: Vec<_> = requests_to_query
+            .into_iter()
+            .filter(|request| {
+                let file_key: FileKey = request.file_key.as_ref().into();
+                pending_file_keys_set.contains(&file_key)
+            })
+            .collect();
+
+        Ok((pending_confirmation, pending_volunteer))
     }
 }
