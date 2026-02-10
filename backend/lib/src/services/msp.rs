@@ -9,7 +9,7 @@ use bigdecimal::{BigDecimal, RoundingMode};
 use std::collections::HashSet;
 use tokio::sync::RwLock;
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use codec::{Decode, Encode};
 use futures::stream;
 use serde::{Deserialize, Serialize};
@@ -605,8 +605,8 @@ impl MspService {
         let file_key_without_prefix = file_key.trim_start_matches("0x");
         if file_key_without_prefix != expected_file_key {
             return Err(Error::BadRequest(format!(
-                "File key in URL does not match file metadata: {expected_file_key} != {file_key_without_prefix}"
-            )));
+            "File key in URL does not match file metadata: {expected_file_key} != {file_key_without_prefix}"
+          )));
         }
 
         // Get the bucket ID from the metadata and verify that the user is its owner.
@@ -622,7 +622,16 @@ impl MspService {
         let mut trie = InMemoryFileDataTrie::<StorageProofsMerkleTrieLayout>::new();
 
         // Prepare the overflow buffer that will hold any data that doesn't exactly fit in a chunk.
-        let mut overflow_buffer = Vec::new();
+        //
+        // Use `BytesMut` so we can consume a prefix in O(1) via `split_to`,
+        // instead of repeatedly `drain(..k)`ing a `Vec` (which shifts remaining bytes and can
+        // become quadratic over large uploads).
+        let mut overflow_buffer = BytesMut::new();
+
+        // Accumulate chunks into batches before inserting into the trie, to reduce per-chunk overhead
+        // (allocator pressure + trie-mutator rebuild costs).
+        let chunks_per_batch = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / FILE_CHUNK_SIZE as usize;
+        let mut pending_chunks: Vec<Vec<u8>> = Vec::with_capacity(chunks_per_batch);
 
         // Initialize the chunk index.
         let mut chunk_index = 0;
@@ -636,38 +645,52 @@ impl MspService {
 
             // While the overflow buffer is larger than FILE_CHUNK_SIZE, process a chunk.
             while overflow_buffer.len() >= FILE_CHUNK_SIZE as usize {
-                let chunk = overflow_buffer[..FILE_CHUNK_SIZE as usize].to_vec();
-
-                // Insert the chunk into the trie.
-                trie.write_chunk(&ChunkId::new(chunk_index), &chunk)
-                    .map_err(|e| {
-                        Error::BadRequest(format!(
-                            "Failed to write chunk {} to trie: {}",
-                            chunk_index, e
-                        ))
-                    })?;
+                // Consume the next FILE_CHUNK_SIZE bytes without shifting the remaining buffer.
+                let chunk = overflow_buffer
+                    .split_to(FILE_CHUNK_SIZE as usize)
+                    .freeze()
+                    .to_vec();
+                pending_chunks.push(chunk);
 
                 // Increment the chunk index.
                 chunk_index += 1;
 
-                // Remove the chunk from the overflow buffer.
-                overflow_buffer.drain(..FILE_CHUNK_SIZE as usize);
+                if pending_chunks.len() == chunks_per_batch {
+                    let start_index = chunk_index - pending_chunks.len() as u64;
+                    let batch = std::mem::take(&mut pending_chunks);
+
+                    trie.write_chunks_batched(start_index, batch).map_err(|e| {
+                        Error::BadRequest(format!(
+                            "Failed to write chunk batch (start={}, count={}) to trie: {}",
+                            start_index, chunks_per_batch, e
+                        ))
+                    })?;
+                }
             }
         }
 
         // Check the overflow buffer to see if the file didn't fit exactly in an integer number of chunks.
         if !overflow_buffer.is_empty() {
-            // Insert the chunk into the trie.
-            trie.write_chunk(&ChunkId::new(chunk_index), &overflow_buffer)
-                .map_err(|e| {
-                    Error::BadRequest(format!(
-                        "Failed to write final chunk {} to trie: {}",
-                        chunk_index, e
-                    ))
-                })?;
+            let overflow_bytes = overflow_buffer.freeze().to_vec();
+            pending_chunks.push(overflow_bytes);
 
             // Increment the chunk index to get the total amount of chunks.
             chunk_index += 1;
+        }
+
+        // Flush any remaining pending chunks into the trie.
+        if !pending_chunks.is_empty() {
+            let start_index = chunk_index - pending_chunks.len() as u64;
+            let batch = std::mem::take(&mut pending_chunks);
+
+            trie.write_chunks_batched(start_index, batch).map_err(|e| {
+                Error::BadRequest(format!(
+                    "Failed to write final chunk batch (start={}, count={}) to trie: {}",
+                    start_index,
+                    chunk_index - start_index,
+                    e
+                ))
+            })?;
         }
 
         // Validate that the file fingerprint matches the trie root.
