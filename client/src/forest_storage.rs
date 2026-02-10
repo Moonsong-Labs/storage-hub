@@ -131,6 +131,10 @@ where
 
     async fn remove_forest_storage(&mut self, _key: &Self::Key) {}
 
+    async fn is_forest_storage_present(&self, _key: &Self::Key) -> bool {
+        true
+    }
+
     async fn snapshot(
         &self,
         _key: &Self::Key,
@@ -180,6 +184,10 @@ where
     }
 
     async fn remove_forest_storage(&mut self, _key: &Self::Key) {}
+
+    async fn is_forest_storage_present(&self, _key: &Self::Key) -> bool {
+        true
+    }
 
     async fn snapshot(
         &self,
@@ -494,6 +502,10 @@ where
         self.open_forests.write().await.pop(key);
     }
 
+    async fn is_forest_storage_present(&self, key: &Self::Key) -> bool {
+        self.known_forests.read().await.contains(key)
+    }
+
     async fn snapshot(
         &self,
         src_key: &Self::Key,
@@ -611,11 +623,54 @@ where
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
-        // Remove the forest from the known set
-        self.known_forests.write().await.remove(key);
-        // Remove the forest from the LRU cache (this closes the RocksDB instance)
+        // Hold known_forests write lock across the entire operation to prevent
+        // a concurrent create() from recreating the forest at the same path
+        // before the disk deletion completes.
+        let mut known_lock = self.known_forests.write().await;
+
+        if !known_lock.remove(key) {
+            return;
+        }
+
+        // Remove from LRU cache (drops the RocksDB handle if this is the last reference)
         self.open_forests.write().await.pop(key);
-        // TODO: Delete the forest from disk.
+
+        // Delete the forest directory from disk
+        if let Some(storage_path) = &self.storage_path {
+            let mut db_path = PathBuf::new();
+            db_path.push(storage_path);
+            db_path.push(FOREST_STORAGE_PATH);
+            db_path.push(key.to_string());
+
+            if let Err(e) = std::fs::remove_dir_all(&db_path) {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to delete forest [{}] from disk at {}: {}",
+                    key,
+                    db_path.display(),
+                    e
+                );
+            } else {
+                debug!(
+                    target: LOG_TARGET,
+                    "Deleted forest [{}] from disk at {}",
+                    key,
+                    db_path.display()
+                );
+            }
+        }
+    }
+
+    async fn is_forest_storage_present(&self, key: &Self::Key) -> bool {
+        if let Some(storage_path) = &self.storage_path {
+            let mut db_path = PathBuf::new();
+            db_path.push(storage_path);
+            db_path.push(FOREST_STORAGE_PATH);
+            db_path.push(key.to_string());
+            db_path.is_dir()
+        } else {
+            false
+        }
     }
 
     // TODO: This implementation is very expensive. It copies the entire forest from disk to disk,
