@@ -1074,11 +1074,12 @@ export class BspNetTestApi implements AsyncDisposable {
      */
     const remappedFishermanNs = {
       /**
-       * Waits for fisherman to process batch deletions by sealing blocks until
-       * the fisherman submits extrinsics for the specified deletion type.
+       * Waits for fisherman to submit batch deletion extrinsic(s) to the tx pool
+       * for the specified deletion type.
        *
-       * This handles the alternating User/Incomplete deletion cycle timing issue
-       * where fisherman might be on the wrong cycle when deletions are created.
+       * This polls the tx pool for the expected deletion extrinsic(s). The
+       * fisherman batch deletion scheduling is timer-driven + event-driven
+       * (permit-drop notifications), not block-import driven.
        *
        * If `expectExt` is provided, this function will verify that the expected
        * number of extrinsics (BSP + bucket) are present in the transaction pool before returning,
@@ -1096,6 +1097,9 @@ export class BspNetTestApi implements AsyncDisposable {
         deletionType: "User" | "Incomplete";
         expectExt?: number;
         sealBlock?: boolean;
+        timeoutMs?: number;
+        pollMs?: number;
+        exactLength?: boolean;
       }) =>
         BspNetFisherman.waitForFishermanBatchDeletions({
           blockProducerApi: this._api as EnrichedBspApi,

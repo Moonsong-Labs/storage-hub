@@ -1,7 +1,6 @@
 use anyhow::Result;
 use log::{debug, error, info, trace, warn};
 use std::{collections::HashSet, str, sync::Arc};
-use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
 use sc_network_types::PeerId;
@@ -34,7 +33,11 @@ use crate::{
         StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
-    types::{FileDistributionInfo, FileKeyStatus, ManagedProvider, MultiInstancesNodeRole},
+    state::BlockchainServiceStateStoreRwContext,
+    types::{
+        FileDistributionInfo, FileKeyStatus, ForestWritePermitGuard, ManagedProvider,
+        MspForestWriteQueue, MspForestWriteQueuePop, MspForestWriteWork, MultiInstancesNodeRole,
+    },
     BlockchainService,
 };
 
@@ -465,83 +468,85 @@ where
         }
 
         match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(_)) => {}
+            Some(ManagedProvider::Msp(msp_handler)) => {
+                // Return early if the semaphore has no available permits.
+                if msp_handler.forest_root_write_semaphore.available_permits() == 0 {
+                    trace!(target: LOG_TARGET, "Forest root write semaphore has no available permits. Skipping assignment.");
+                    return;
+                }
+            }
             _ => {
                 error!(target: LOG_TARGET, "`msp_check_pending_forest_root_writes` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
             }
         };
 
-        // This is done in a closure to avoid borrowing `self` immutably and then mutably.
-        // Inside of this closure, we borrow `self` mutably when taking ownership of the lock.
+        // If there is no pending work, do NOT acquire the semaphore permit and return early.
+        //
+        // This avoids a subtle event-loop spin: acquiring + immediately dropping the permit
+        // would notify `permit_release_receiver`, which would call back into this method
+        // even though there is no work to do.
         {
-            let forest_root_write_lock = match &mut self.maybe_managed_provider {
-                Some(ManagedProvider::Msp(msp_handler)) => &mut msp_handler.forest_root_write_lock,
-                _ => unreachable!("We just checked this is a MSP"),
-            };
-
-            if let Some(mut rx) = forest_root_write_lock.take() {
-                // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
-                match rx.try_recv() {
-                    // If the channel is empty, means we still need to wait for the current task to finish.
-                    Err(TryRecvError::Empty) => {
-                        // If we have a task writing to the runtime, we don't want to start another one.
-                        *forest_root_write_lock = Some(rx);
-                        trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish (lock held)");
-                        return;
-                    }
-                    Ok(_) => {
-                        trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
-                    }
-                    Err(TryRecvError::Closed) => {
-                        error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
-                    }
-                }
-            } else {
-                trace!(target: LOG_TARGET, "No forest root write lock held, proceeding to check pending requests");
+            // Use a temporary state context just for checking pending work (no mutations).
+            let temp_state = self.persistent_state.open_rw_context_with_overlay();
+            if !Self::msp_forest_write_work(&mut self.maybe_managed_provider, &temp_state, None)
+                .has_pending_work
+            {
+                trace!(target: LOG_TARGET, "No pending MSP forest-write work; skipping semaphore acquisition");
+                return;
             }
         }
 
-        // At this point we know that the lock is released and we can start processing new requests.
-        let mut next_event_data: Option<ForestWriteLockTaskData<Runtime>> = None;
-
-        let msp_handler = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
-            _ => {
-                // If there's no MSP being managed, there's no point in checking for pending requests.
-                error!(target: LOG_TARGET, "`msp_assign_forest_root_write_lock` called but node is not managing an MSP");
-                return;
+        // Try to acquire a permit from the semaphore.
+        // If the permit is unavailable, another task is still processing and we return early.
+        let permit = {
+            let semaphore = match &self.maybe_managed_provider {
+                Some(ManagedProvider::Msp(msp_handler)) => {
+                    msp_handler.forest_root_write_semaphore.clone()
+                }
+                _ => unreachable!("We just checked this is a MSP"),
+            };
+            match semaphore.try_acquire_owned() {
+                Ok(permit) => {
+                    trace!(target: LOG_TARGET, "Forest root write semaphore permit acquired");
+                    permit
+                }
+                Err(_) => {
+                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
+                    return;
+                }
             }
         };
 
-        // Check for pending respond storing requests from in-memory queue.
-        {
-            trace!(
-                target: LOG_TARGET,
-                "Checking pending respond storage requests. Queue size: {}, pending_file_keys: {:?}",
-                msp_handler.pending_respond_storage_requests.len(),
-                msp_handler.pending_respond_storage_request_file_keys
-            );
+        // At this point we know that the lock is released and we can start processing new requests.
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let mut next_event_data: Option<ForestWriteLockTaskData<Runtime>> = None;
 
+        // Check for pending RespondStorage requests.
+        {
             let max_batch_respond = self.config.msp_respond_storage_batch_size;
 
-            // Batch multiple respond storing requests up to the runtime configured maximum.
+            // Batch multiple RespondStorage requests up to the configured maximum.
             let mut respond_storage_requests = Vec::new();
             for _ in 0..max_batch_respond {
-                if let Some(request) = msp_handler.pending_respond_storage_requests.pop_front() {
-                    trace!(
-                        target: LOG_TARGET,
-                        "Popped respond storage request for file key [{:x}] from queue",
-                        request.file_key
-                    );
-                    // Remove from dedup tracking set so the file key can be re-queued if needed.
-                    msp_handler
-                        .pending_respond_storage_request_file_keys
-                        .remove(&request.file_key);
-                    respond_storage_requests.push(request);
-                } else {
-                    break;
-                }
+                // Pop the next RespondStorage request from the queue.
+                match Self::msp_forest_write_work(
+                    &mut self.maybe_managed_provider,
+                    &state_store_context,
+                    Some(MspForestWriteQueue::RespondStorage),
+                )
+                .popped
+                {
+                    Some(MspForestWriteQueuePop::RespondStorage(request)) => {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Popped respond storage request for file key [{:x}] from queue",
+                            request.file_key
+                        );
+                        respond_storage_requests.push(request);
+                    }
+                    _ => break,
+                };
             }
 
             // If we have at least 1 respond storing request, send the process event.
@@ -562,26 +567,97 @@ where
             }
         }
 
-        // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
+        // If we have no pending storage requests to respond to, check for pending StopStoringForInsolventUser requests.
         if next_event_data.is_none() {
-            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-            if let Some(request) = state_store_context
-                .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
-                .pop_front()
+            // Pop the next StopStoringForInsolventUser request from the queue.
+            if let Some(MspForestWriteQueuePop::StopStoringForInsolventUser(request)) =
+                Self::msp_forest_write_work(
+                    &mut self.maybe_managed_provider,
+                    &state_store_context,
+                    Some(MspForestWriteQueue::StopStoringForInsolventUser),
+                )
+                .popped
             {
                 next_event_data = Some(
                     ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
                 );
             }
-            state_store_context.commit();
         }
+
+        // Commit the state store context.
+        state_store_context.commit();
 
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
             trace!(target: LOG_TARGET, "Emitting forest write event");
-            self.msp_emit_forest_write_event(event_data);
+            // Only wrap the semaphore permit in the notifying guard when we actually emit an event.
+            // This ensures the drop notification corresponds to a task completion, not an idle scan.
+            let forest_root_write_permit = Arc::new(ForestWritePermitGuard::new(
+                permit,
+                self.permit_release_sender.clone(),
+            ));
+            self.msp_emit_forest_write_event(event_data, forest_root_write_permit);
         } else {
             trace!(target: LOG_TARGET, "No event data to emit");
+        }
+    }
+
+    /// Checks for pending MSP forest-write work and optionally pops from a queue.
+    ///
+    /// If `pop` is `Some`, pops from that queue and returns whether it succeeded.
+    /// If `pop` is `None`, checks all queues for pending work without modifying state.
+    /// Caller must commit the state context after all operations.
+    fn msp_forest_write_work<'a>(
+        maybe_managed_provider: &mut Option<ManagedProvider<Runtime>>,
+        state: &'a BlockchainServiceStateStoreRwContext<'a>,
+        pop: Option<MspForestWriteQueue>,
+    ) -> MspForestWriteWork<Runtime> {
+        // Only check the relevant queue based on which pop is requested.
+        let (has_pending_work, popped) = match pop {
+            Some(MspForestWriteQueue::RespondStorage) => {
+                let msp_handler = match maybe_managed_provider {
+                    Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+                    _ => unreachable!("msp_forest_write_work should only be called for MSP"),
+                };
+                let popped = if let Some(request) =
+                    msp_handler.pending_respond_storage_requests.pop_front()
+                {
+                    // Remove from dedup tracking set so the file key can be re-queued if needed.
+                    msp_handler
+                        .pending_respond_storage_request_file_keys
+                        .remove(&request.file_key);
+                    Some(MspForestWriteQueuePop::RespondStorage(request))
+                } else {
+                    None
+                };
+                (popped.is_some(), popped)
+            }
+            Some(MspForestWriteQueue::StopStoringForInsolventUser) => {
+                let popped = state
+                    .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                    .pop_front()
+                    .map(MspForestWriteQueuePop::StopStoringForInsolventUser);
+                (popped.is_some(), popped)
+            }
+            None => {
+                // Check all queues when no pop is requested.
+                let has_pending_respond = match maybe_managed_provider {
+                    Some(ManagedProvider::Msp(msp_handler)) => {
+                        !msp_handler.pending_respond_storage_requests.is_empty()
+                    }
+                    _ => unreachable!("msp_forest_write_work should only be called for MSP"),
+                };
+                let has_pending_stop = state
+                    .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
+                    .size()
+                    > 0;
+                (has_pending_respond || has_pending_stop, None)
+            }
+        };
+
+        MspForestWriteWork {
+            has_pending_work,
+            popped,
         }
     }
 
@@ -678,39 +754,25 @@ where
         Ok(())
     }
 
-    fn msp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
-        // Get the MSP's Forest root write lock.
-        let forest_root_write_lock = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => &mut msp_handler.forest_root_write_lock,
-            _ => {
-                error!(target: LOG_TARGET, "`msp_emit_forest_write_event` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
-            }
-        };
-
-        // Create a new channel to assign ownership of the MSP's Forest root write lock.
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        *forest_root_write_lock = Some(rx);
-
-        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
-        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
-        // event. Clone is required because there is no constraint on the number of listeners that can
-        // subscribe to the event (and each is guaranteed to receive all emitted events).
-        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+    fn msp_emit_forest_write_event(
+        &self,
+        data: impl Into<ForestWriteLockTaskData<Runtime>>,
+        forest_root_write_permit: Arc<ForestWritePermitGuard>,
+    ) {
         match data.into() {
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
                 self.emit(ProcessMspRespondStoringRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_permit,
                 });
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 self.emit(ProcessStopStoringForInsolventUserRequest {
                     data,
-                    forest_root_write_tx,
+                    forest_root_write_permit,
                 });
             }
-            ForestWriteLockTaskData::ConfirmStoringRequest(_) => {
+            ForestWriteLockTaskData::ConfirmStoringRequest => {
                 unreachable!("MSPs do not confirm storing requests the way BSPs do.")
             }
             ForestWriteLockTaskData::SubmitProofRequest(_) => {

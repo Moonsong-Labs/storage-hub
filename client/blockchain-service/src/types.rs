@@ -4,8 +4,10 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     future::Future,
     pin::Pin,
+    sync::Arc,
     time::Duration,
 };
+use tokio::sync::{mpsc::UnboundedSender, OwnedSemaphorePermit};
 
 use codec::{Decode, Encode};
 use frame_system::DispatchEventInfo;
@@ -30,6 +32,42 @@ use crate::{
     commands::BlockchainServiceCommandInterfaceExt, handler::LOG_TARGET,
     transaction_manager::wait_for_transaction_status,
 };
+
+/// RAII wrapper for forest root write permits that notifies the blockchain service
+/// when the permit is dropped via the `release_notifier` channel to the blockchain service event loop, allowing immediate processing of pending requests.
+///
+/// When tasks acquire a forest write lock, they receive an `Arc<ForestWritePermitGuard>`.
+/// When the guard is dropped, the `Drop` implementation sends a notification
+/// through the channel, which triggers the blockchain service to check for and
+/// process any pending forest write requests.
+#[derive(Debug)]
+pub struct ForestWritePermitGuard {
+    _permit: OwnedSemaphorePermit,
+    release_notifier: UnboundedSender<()>,
+}
+
+impl ForestWritePermitGuard {
+    /// Creates a new `ForestWritePermitGuard` wrapping the given permit.
+    ///
+    /// When this guard is dropped, a notification will be sent
+    /// through `release_notifier` to the blockchain service event loop to trigger processing of pending requests.
+    pub fn new(permit: OwnedSemaphorePermit, release_notifier: UnboundedSender<()>) -> Self {
+        Self {
+            _permit: permit,
+            release_notifier,
+        }
+    }
+}
+
+impl Drop for ForestWritePermitGuard {
+    fn drop(&mut self) {
+        // Send notification to the blockchain service event loop to process pending requests.
+        // Ignore errors as the receiver may be dropped during shutdown.
+        if let Err(e) = self.release_notifier.send(()) {
+            warn!(target: LOG_TARGET, "Failed to send release notification: {}", e);
+        }
+    }
+}
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -782,12 +820,11 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
     /// various edge cases when restarting the node.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest<Runtime>>,
-    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    /// Semaphore to prevent multiple tasks from writing to the runtime Forest root at the same time.
     ///
-    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
-    /// would be to send a [`MutexGuard`].
-    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// A permit is acquired before emitting forest-write events and automatically released when
+    /// the task handler completes (permit dropped).
+    pub(crate) forest_root_write_semaphore: Arc<tokio::sync::Semaphore>,
     /// A set of Forest Storage snapshots, ordered by block number and block hash.
     ///
     /// A BSP can have multiple Forest Storage snapshots.
@@ -797,7 +834,7 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// Tracks file keys with pending volunteer transactions.
     /// When a volunteer tx is submitted, the file key is added.
     /// When the volunteer is verified on-chain, the file key is removed.
-    /// This is used in the `QueryPendingBspConfirmStorageRequests` command to prevent a race condition
+    /// This is used in the `FilterConfirmStoringRequests` command to prevent a race condition
     /// where a BSP could attempt to send a storage confirmation, before it saw the volunteer transaction
     /// succeed on-chain.
     pub(crate) pending_volunteer_file_keys: HashSet<FileKey>,
@@ -808,7 +845,7 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
         Self {
             bsp_id,
             pending_submit_proof_requests: BTreeSet::new(),
-            forest_root_write_lock: None,
+            forest_root_write_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             forest_root_snapshots: BTreeSet::new(),
             pending_volunteer_file_keys: HashSet::new(),
         }
@@ -888,14 +925,13 @@ impl From<FileKeyStatusUpdate> for FileKeyStatus {
 pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// The MSP ID.
     pub(crate) msp_id: MainStorageProviderId<Runtime>,
-    /// TODO: CHANGE THIS INTO MULTIPLE LOCKS, ONE FOR EACH BUCKET.
+    /// TODO: CHANGE THIS INTO MULTIPLE SEMAPHORES, ONE FOR EACH BUCKET.
     ///
-    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    /// Semaphore to prevent multiple tasks from writing to the runtime Forest root at the same time.
     ///
-    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
-    /// would be to send a [`MutexGuard`].
-    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// A permit is acquired before emitting forest-write events and automatically released when
+    /// the task handler completes (permit dropped).
+    pub(crate) forest_root_write_semaphore: Arc<tokio::sync::Semaphore>,
     /// A map of [`BucketId`] to the Forest Storage snapshots.
     ///
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
@@ -926,7 +962,7 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
     pub fn new(msp_id: MainStorageProviderId<Runtime>) -> Self {
         Self {
             msp_id,
-            forest_root_write_lock: None,
+            forest_root_write_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             forest_root_snapshots: BTreeMap::new(),
             files_to_distribute: HashMap::new(),
             file_key_statuses: HashMap::new(),
@@ -952,6 +988,83 @@ impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
             StorageProviderId::MainStorageProvider(msp_id) => Self::Msp(MspHandler::new(msp_id)),
         }
     }
+}
+
+/// Specifies which BSP forest-write request queue to check or pop from.
+///
+/// Used as a parameter to `bsp_forest_write_work` to indicate which pending
+/// request queue should be checked or have its front element removed.
+pub(crate) enum BspForestWriteQueue {
+    /// Pop from the in-memory submit proof requests (BTreeSet, pops lowest tick first).
+    SubmitProof,
+    /// Check the persistent confirm storing request deque for pending work.
+    /// Does not pop; the task pulls requests via commands.
+    ConfirmStoring,
+    /// Pop from the persistent stop storing for insolvent user request deque.
+    StopStoringForInsolventUser,
+}
+
+/// The result of checking or popping from a BSP forest-write request queue.
+///
+/// Wraps the popped request (or a signal) with a discriminant indicating which queue it came from.
+pub(crate) enum BspForestWriteQueuePop<Runtime: StorageEnableRuntime> {
+    /// A submit proof request was popped from the in-memory BTreeSet.
+    SubmitProof(SubmitProofRequest<Runtime>),
+    /// Signals that the confirm storing request deque is non-empty.
+    /// No data is popped; the task pulls requests via commands.
+    ConfirmStoring,
+    /// A stop storing for insolvent user request was popped from the persistent deque.
+    StopStoringForInsolventUser(StopStoringForInsolventUserRequest<Runtime>),
+}
+
+/// Result of checking for pending BSP forest-write work.
+///
+/// Returned by `bsp_forest_write_work` to provide both a work-availability flag
+/// and optionally a popped request in a single call.
+pub(crate) struct BspForestWriteWork<Runtime: StorageEnableRuntime> {
+    /// Whether there is any pending work across all BSP forest-write queues.
+    pub(crate) has_pending_work: bool,
+    /// The request popped from the specified queue, if `pop` was `Some`.
+    ///
+    /// This will be `None` if no `pop` parameter was provided or if the
+    /// requested queue was empty.
+    pub(crate) popped: Option<BspForestWriteQueuePop<Runtime>>,
+}
+
+/// Specifies which MSP forest-write request queue to pop from.
+///
+/// Used as a parameter to `msp_forest_write_work` to indicate which pending
+/// request queue should have its front element removed.
+pub(crate) enum MspForestWriteQueue {
+    /// Pop from the in-memory respond storage requests (VecDeque).
+    /// Also removes the file key from `pending_respond_storage_request_file_keys`.
+    RespondStorage,
+    /// Pop from the persistent stop storing for insolvent user request deque.
+    StopStoringForInsolventUser,
+}
+
+/// The result of popping from an MSP forest-write request queue.
+///
+/// Wraps the popped request with a discriminant indicating which queue it came from.
+pub(crate) enum MspForestWriteQueuePop<Runtime: StorageEnableRuntime> {
+    /// A respond storage request was popped from the in-memory VecDeque.
+    RespondStorage(RespondStorageRequest<Runtime>),
+    /// A stop storing for insolvent user request was popped from the persistent deque.
+    StopStoringForInsolventUser(StopStoringForInsolventUserRequest<Runtime>),
+}
+
+/// Result of checking for pending MSP forest-write work.
+///
+/// Returned by `msp_forest_write_work` to provide both a work-availability flag
+/// and optionally a popped request in a single call.
+pub(crate) struct MspForestWriteWork<Runtime: StorageEnableRuntime> {
+    /// Whether there is any pending work across all MSP forest-write queues.
+    pub(crate) has_pending_work: bool,
+    /// The request popped from the specified queue, if `pop` was `Some`.
+    ///
+    /// This will be `None` if no `pop` parameter was provided or if the
+    /// requested queue was empty.
+    pub(crate) popped: Option<MspForestWriteQueuePop<Runtime>>,
 }
 
 /// Role of this node in a group of multiple instances of nodes running the same MSP/BSP.
