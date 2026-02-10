@@ -201,6 +201,16 @@ impl MspService {
                 ))
             })?;
 
+        let files_amount = self
+            .postgres
+            .get_number_of_files_stored_by_msp(&self.msp_id)
+            .await
+            .map_err(|e| {
+                Error::BadRequest(format!(
+                    "Failed to retrieve number of files stored by MSP: {e}"
+                ))
+            })?;
+
         debug!(?info, %active_users, "msp stats");
 
         let stats = StatsResponse {
@@ -213,6 +223,7 @@ impl MspService {
             last_capacity_change: BigDecimal::from(info.last_capacity_change).to_string(),
             value_props_amount: BigDecimal::from(info.amount_of_value_props).to_string(),
             buckets_amount: BigDecimal::from(info.amount_of_buckets).to_string(),
+            files_amount: BigDecimal::from(files_amount).to_string(),
         };
 
         // Update cache with the new value

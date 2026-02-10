@@ -559,11 +559,19 @@ pub mod pallet {
     pub type UserOperationPauseFlagsStorage<T: Config> =
         StorageValue<_, UserOperationPauseFlags, ValueQuery>;
 
+    /// # Event Encoding/Decoding Stability
+    ///
+    /// All event variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         // Bucket lifecycle events
         /// Notifies that a new bucket has been created.
+        #[codec(index = 0)]
         NewBucket {
             who: T::AccountId,
             msp_id: ProviderIdFor<T>,
@@ -575,12 +583,14 @@ pub mod pallet {
             value_prop_id: ValuePropId<T>,
         },
         /// Notifies that an empty bucket has been deleted.
+        #[codec(index = 1)]
         BucketDeleted {
             who: T::AccountId,
             bucket_id: BucketIdFor<T>,
             maybe_collection_id: Option<CollectionIdFor<T>>,
         },
         /// Notifies that a bucket's privacy has been updated.
+        #[codec(index = 2)]
         BucketPrivacyUpdated {
             who: T::AccountId,
             bucket_id: BucketIdFor<T>,
@@ -588,6 +598,7 @@ pub mod pallet {
             private: bool,
         },
         /// Notifies that a new collection has been created and associated with a bucket.
+        #[codec(index = 3)]
         NewCollectionAndAssociation {
             who: T::AccountId,
             bucket_id: BucketIdFor<T>,
@@ -596,6 +607,7 @@ pub mod pallet {
 
         // Move bucket events
         /// Notifies that a bucket is being moved to a new MSP.
+        #[codec(index = 4)]
         MoveBucketRequested {
             who: T::AccountId,
             bucket_id: BucketIdFor<T>,
@@ -603,8 +615,10 @@ pub mod pallet {
             new_value_prop_id: ValuePropId<T>,
         },
         /// Notifies that a move bucket request has expired.
+        #[codec(index = 5)]
         MoveBucketRequestExpired { bucket_id: BucketIdFor<T> },
         /// Notifies that a bucket has been moved to a new MSP under a new value proposition.
+        #[codec(index = 6)]
         MoveBucketAccepted {
             bucket_id: BucketIdFor<T>,
             old_msp_id: Option<ProviderIdFor<T>>,
@@ -612,6 +626,7 @@ pub mod pallet {
             value_prop_id: ValuePropId<T>,
         },
         /// Notifies that a bucket move request has been rejected by the MSP.
+        #[codec(index = 7)]
         MoveBucketRejected {
             bucket_id: BucketIdFor<T>,
             old_msp_id: Option<ProviderIdFor<T>>,
@@ -620,6 +635,7 @@ pub mod pallet {
 
         // Storage request lifecycle events
         /// Notifies that a new file has been requested to be stored.
+        #[codec(index = 8)]
         NewStorageRequest {
             who: T::AccountId,
             file_key: MerkleHash<T>,
@@ -639,6 +655,7 @@ pub mod pallet {
         /// # Note
         /// This event is not emitted when the storage request is immediately fulfilled upon
         /// MSP acceptance. In such cases, a [`StorageRequestFulfilled`] event is emitted instead.
+        #[codec(index = 9)]
         MspAcceptedStorageRequest {
             file_key: MerkleHash<T>,
             file_metadata: FileMetadata,
@@ -646,20 +663,24 @@ pub mod pallet {
         /// Notifies that a storage request for a file key has been fulfilled.
         /// This means that the storage request has been accepted by the MSP and the BSP target
         /// has been reached.
+        #[codec(index = 10)]
         StorageRequestFulfilled { file_key: MerkleHash<T> },
         /// Notifies the expiration of a storage request. This means that the storage request has
         /// been accepted by the MSP but the BSP target has not been reached (possibly 0 BSPs).
         /// Note: This is a valid storage outcome, the user being responsible to track the number
         /// of BSPs and choose to either delete the file and re-issue a storage request or continue.
+        #[codec(index = 11)]
         StorageRequestExpired { file_key: MerkleHash<T> },
         /// Notifies that a storage request has been revoked by the user who initiated it.
         /// Note: the storage request will be marked as "incomplete", and it is expected that fisherman
         /// nodes will pick it up and delete the file from the confirmed BSPs as well as the Bucket.
+        #[codec(index = 12)]
         StorageRequestRevoked { file_key: MerkleHash<T> },
         /// Notifies that a storage request has either been directly rejected by the MSP or
         /// the MSP did not respond to the storage request in time.
         /// Note: the storage request will be marked as "incomplete", and it is expected that fisherman
         /// nodes will pick it up and delete the file from the confirmed BSPs as well as the Bucket.
+        #[codec(index = 13)]
         StorageRequestRejected {
             file_key: MerkleHash<T>,
             msp_id: ProviderIdFor<T>,
@@ -670,6 +691,7 @@ pub mod pallet {
         ///
         /// This is important for fisherman nodes to listen and react to, to delete
         /// the file key from the BSPs and/or Bucket storing that file from their forest.
+        #[codec(index = 14)]
         IncompleteStorageRequest { file_key: MerkleHash<T> },
         /// Notifies that an incomplete storage request has been fully cleaned up.
         ///
@@ -678,10 +700,12 @@ pub mod pallet {
         ///    (e.g., MSP confirmed with inclusion proof and no BSPs confirmed).
         /// 2. When the file has been removed from all providers and the incomplete storage
         ///    request entry is removed from storage.
+        #[codec(index = 15)]
         IncompleteStorageRequestCleanedUp { file_key: MerkleHash<T> },
 
         // BSP volunteer and confirmation events
         /// Notifies that a BSP has been accepted to store a given file.
+        #[codec(index = 16)]
         AcceptedBspVolunteer {
             bsp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -692,6 +716,7 @@ pub mod pallet {
             size: StorageDataUnit<T>,
         },
         /// Notifies that a BSP confirmed storing a file(s).
+        #[codec(index = 17)]
         BspConfirmedStoring {
             who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
@@ -702,12 +727,14 @@ pub mod pallet {
         },
         /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
         /// key(s) to the BSP's Merkle Patricia Forest.
+        #[codec(index = 18)]
         BspChallengeCycleInitialised {
             who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
         },
 
         // Stop storing events
+        #[codec(index = 19)]
         BspRequestedToStopStoring {
             bsp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
@@ -715,12 +742,14 @@ pub mod pallet {
             location: FileLocation<T>,
         },
         /// Notifies that a BSP has stopped storing a file.
+        #[codec(index = 20)]
         BspConfirmStoppedStoring {
             bsp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
         /// Notifies that a MSP has stopped storing a bucket.
+        #[codec(index = 21)]
         MspStoppedStoringBucket {
             msp_id: ProviderIdFor<T>,
             owner: T::AccountId,
@@ -729,6 +758,7 @@ pub mod pallet {
 
         // Insolvent user events
         /// Notifies that a SP has stopped storing a file because its owner has become insolvent.
+        #[codec(index = 22)]
         SpStopStoringInsolventUser {
             sp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
@@ -737,6 +767,7 @@ pub mod pallet {
             new_root: MerkleHash<T>,
         },
         /// Notifies that a MSP has stopped storing a bucket because its owner has become insolvent.
+        #[codec(index = 23)]
         MspStopStoringBucketInsolventUser {
             msp_id: ProviderIdFor<T>,
             owner: T::AccountId,
@@ -746,11 +777,13 @@ pub mod pallet {
         // File deletion events
         /// Notifies that a file deletion has been requested.
         /// Contains a signed intention that allows any actor to execute the actual deletion.
+        #[codec(index = 24)]
         FileDeletionRequested {
             signed_delete_intention: FileOperationIntention<T>,
             signature: T::OffchainSignature,
         },
         /// Notifies that file deletions have been completed successfully for a Bucket.
+        #[codec(index = 25)]
         BucketFileDeletionsCompleted {
             user: T::AccountId,
             file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>,
@@ -760,6 +793,7 @@ pub mod pallet {
             new_root: MerkleHash<T>,
         },
         /// Notifies that file deletions have been completed successfully for a BSP.
+        #[codec(index = 26)]
         BspFileDeletionsCompleted {
             users: BoundedVec<T::AccountId, T::MaxFileDeletionsPerExtrinsic>,
             file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>,
@@ -770,11 +804,13 @@ pub mod pallet {
 
         // System and error events
         /// Event to notify of incoherencies in used capacity.
+        #[codec(index = 27)]
         UsedCapacityShouldBeZero {
             actual_used_capacity: StorageDataUnit<T>,
         },
         /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
         /// the return of that storage request's deposit to the user failed.
+        #[codec(index = 28)]
         FailedToReleaseStorageRequestCreationDeposit {
             file_key: MerkleHash<T>,
             owner: T::AccountId,
@@ -782,191 +818,268 @@ pub mod pallet {
             error: DispatchError,
         },
         /// Notifies that the user operation pause flags have been updated.
+        #[codec(index = 29)]
         UserOperationPauseFlagsUpdated {
             old: UserOperationPauseFlags,
             new: UserOperationPauseFlags,
         },
     }
 
-    // Errors inform users that something went wrong.
+    /// # Error Encoding/Decoding Stability
+    ///
+    /// All error variants use explicit `#[codec(index = N)]` to ensure stable SCALE encoding/decoding
+    /// across runtime upgrades.
+    ///
+    /// These indices must NEVER be changed or reused. Any breaking changes to errors must be
+    /// introduced as new variants (append-only) to ensure backward and forward compatibility.
     #[pallet::error]
     pub enum Error<T> {
         // Provider identity errors
         /// Account is not a BSP.
+        #[codec(index = 0)]
         NotABsp,
         /// Account is not a MSP.
+        #[codec(index = 1)]
         NotAMsp,
         /// Account is not a SP.
+        #[codec(index = 2)]
         NotASp,
 
         // Storage request errors
         /// Storage request already registered for the given file.
+        #[codec(index = 3)]
         StorageRequestAlreadyRegistered,
         /// Storage request not registered for the given file.
+        #[codec(index = 4)]
         StorageRequestNotFound,
         /// Operation not allowed while the storage request exists.
+        #[codec(index = 5)]
         StorageRequestExists,
         /// Not authorized to delete the storage request.
+        #[codec(index = 6)]
         StorageRequestNotAuthorized,
         /// Number of BSPs required for storage request has been reached.
+        #[codec(index = 7)]
         StorageRequestBspsRequiredFulfilled,
         /// Too many storage request responses.
+        #[codec(index = 8)]
         TooManyStorageRequestResponses,
         /// Incomplete storage request not found.
+        #[codec(index = 9)]
         IncompleteStorageRequestNotFound,
 
         // Replication target errors
         /// Replication target cannot be zero.
+        #[codec(index = 10)]
         ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
+        #[codec(index = 11)]
         ReplicationTargetExceedsMaximum,
 
         // BSP operation errors
         /// BSP has not volunteered to store the given file.
+        #[codec(index = 12)]
         BspNotVolunteered,
         /// BSP has not confirmed storing the given file.
+        #[codec(index = 13)]
         BspNotConfirmed,
         /// BSP has already confirmed storing the given file.
+        #[codec(index = 14)]
         BspAlreadyConfirmed,
         /// BSP already volunteered to store the given file.
+        #[codec(index = 15)]
         BspAlreadyVolunteered,
         /// BSP cannot volunteer at this current tick.
+        #[codec(index = 16)]
         BspNotEligibleToVolunteer,
         /// SP does not have enough storage capacity to store the file.
+        #[codec(index = 17)]
         InsufficientAvailableCapacity,
         /// No file keys to confirm storing
+        #[codec(index = 18)]
         NoFileKeysToConfirm,
 
         // MSP operation errors
         /// Unauthorized operation, signer is not an MSP of the bucket id.
+        #[codec(index = 19)]
         MspNotStoringBucket,
         /// The MSP is trying to confirm to store a file from a storage request is not the one selected to store it.
+        #[codec(index = 20)]
         NotSelectedMsp,
         /// The MSP is trying to confirm to store a file from a storage request that it has already confirmed to store.
+        #[codec(index = 21)]
         MspAlreadyConfirmed,
         /// The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
+        #[codec(index = 22)]
         RequestWithoutMsp,
         /// The MSP is already storing the bucket.
+        #[codec(index = 23)]
         MspAlreadyStoringBucket,
 
         // Bucket errors
         /// Bucket does not exist
+        #[codec(index = 24)]
         BucketNotFound,
         /// Bucket is not empty.
+        #[codec(index = 25)]
         BucketNotEmpty,
         /// Operation failed because the account is not the owner of the bucket.
+        #[codec(index = 26)]
         NotBucketOwner,
         /// Action not allowed while the bucket is being moved.
+        #[codec(index = 27)]
         BucketIsBeingMoved,
         /// Bucket id and file key pair is invalid.
+        #[codec(index = 28)]
         InvalidBucketIdFileKeyPair,
         /// The selected value proposition is not available in the MSP.
+        #[codec(index = 29)]
         ValuePropositionNotAvailable,
         /// Collection ID was not found.
+        #[codec(index = 30)]
         CollectionNotFound,
 
         // Move bucket errors
         /// Move bucket request not found in storage.
+        #[codec(index = 31)]
         MoveBucketRequestNotFound,
 
         // File metadata and validation errors
         /// Metadata does not correspond to expected file key.
+        #[codec(index = 32)]
         InvalidFileKeyMetadata,
         /// File size cannot be zero.
+        #[codec(index = 33)]
         FileSizeCannotBeZero,
         /// Provider is not storing the file.
+        #[codec(index = 34)]
         ProviderNotStoringFile,
         /// File has an active storage request and as such is not eligible for deletion.
         /// The user should use the `revoke_storage_request` extrinsic to revoke it first.
+        #[codec(index = 35)]
         FileHasActiveStorageRequest,
         /// File has an `IncompleteStorageRequest` associated with it and as such is not eligible for a new storage request
+        #[codec(index = 36)]
         FileHasIncompleteStorageRequest,
 
         // File deletion errors
         /// Batch file deletion must contain files from a single bucket only.
+        #[codec(index = 37)]
         BatchFileDeletionMustContainSingleBucket,
         /// Duplicate file key detected within the same batch deletion request.
+        #[codec(index = 38)]
         DuplicateFileKeyInBatchFileDeletion,
         /// Requires at least 1 file key to be deleted.
+        #[codec(index = 39)]
         NoFileKeysToDelete,
         /// Failed to push file key to bounded vector during bucket file deletion
+        #[codec(index = 40)]
         FailedToPushFileKeyToBucketDeletionVector,
         /// Failed to push user to bounded vector during BSP file deletion
+        #[codec(index = 41)]
         FailedToPushUserToBspDeletionVector,
         /// Failed to push file key to bounded vector during BSP file deletion
+        #[codec(index = 42)]
         FailedToPushFileKeyToBspDeletionVector,
 
         // Stop storing request errors
         /// Pending stop storing request not found.
+        #[codec(index = 43)]
         PendingStopStoringRequestNotFound,
         /// Minimum amount of blocks between the request opening and being able to confirm it not reached.
+        #[codec(index = 44)]
         MinWaitForStopStoringNotReached,
         /// Pending stop storing request already exists.
+        #[codec(index = 45)]
         PendingStopStoringRequestAlreadyExists,
 
         // Proof verification errors
         /// Failed to verify proof: required to provide a proof of non-inclusion.
+        #[codec(index = 46)]
         ExpectedNonInclusionProof,
         /// Failed to verify proof: required to provide a proof of inclusion.
+        #[codec(index = 47)]
         ExpectedInclusionProof,
 
         // Payment stream errors
         /// Failed to fetch the rate for the payment stream.
+        #[codec(index = 48)]
         FixedRatePaymentStreamNotFound,
         /// Failed to fetch the dynamic-rate payment stream.
+        #[codec(index = 49)]
         DynamicRatePaymentStreamNotFound,
 
         // Solvency errors
         /// Certain operations (such as issuing new storage requests) are not allowed when interacting with insolvent users.
+        #[codec(index = 50)]
         OperationNotAllowedWithInsolventUser,
         /// A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
+        #[codec(index = 51)]
         UserNotInsolvent,
         /// Operations not allowed for insolvent provider
+        #[codec(index = 52)]
         OperationNotAllowedForInsolventProvider,
 
         // Signature and authorization errors
         /// Invalid signature provided for file operation
+        #[codec(index = 53)]
         InvalidSignature,
         /// Invalid provider ID provided.
+        #[codec(index = 54)]
         InvalidProviderID,
         /// Invalid signed operation provided.
+        #[codec(index = 55)]
         InvalidSignedOperation,
 
         // Reputation errors
         /// No global reputation weight set.
+        #[codec(index = 56)]
         NoGlobalReputationWeightSet,
         /// No BSP reputation weight set.
+        #[codec(index = 57)]
         NoBspReputationWeightSet,
 
         // Deposit errors
         /// Cannot hold the required deposit from the user
+        #[codec(index = 58)]
         CannotHoldDeposit,
 
         // Threshold and arithmetic errors
         /// Error created in 2024. If you see this, you are well beyond the singularity and should
         /// probably stop using this pallet.
+        #[codec(index = 59)]
         MaxTickNumberReached,
         /// Arithmetic error in threshold calculation.
+        #[codec(index = 60)]
         ThresholdArithmeticError,
         /// Root was not updated after applying delta
+        #[codec(index = 61)]
         RootNotUpdated,
 
         // Internal and query failure errors
         /// Failed to get value when just checked it existed.
+        #[codec(index = 62)]
         ImpossibleFailedToGetValue,
         /// Failed to query earliest volunteer tick
+        #[codec(index = 63)]
         FailedToQueryEarliestFileVolunteerTick,
         /// Failed to get owner account of ID of provider
+        #[codec(index = 64)]
         FailedToGetOwnerAccount,
         /// Failed to get the payment account of the provider.
+        #[codec(index = 65)]
         FailedToGetPaymentAccount,
         /// Failed to compute file key
+        #[codec(index = 66)]
         FailedToComputeFileKey,
         /// Failed to create file metadata
+        #[codec(index = 67)]
         FailedToCreateFileMetadata,
         /// The bounded vector that holds file metadata to process it is full but there's still more to process.
+        #[codec(index = 68)]
         FileMetadataProcessingQueueFull,
         /// Operation is currently paused.
+        #[codec(index = 69)]
         UserOperationPaused,
     }
 

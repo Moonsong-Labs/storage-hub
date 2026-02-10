@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use codec::{Decode, Encode};
 use sc_network::Multiaddr;
-use tokio::sync::{oneshot, Mutex};
 
 use shc_actors_derive::{ActorEvent, ActorEventBus};
 use shc_common::{
@@ -15,7 +14,7 @@ use shc_common::{
 };
 
 use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest,
+    FileDeletionRequest as FileDeletionRequestType, ForestWritePermitGuard, RespondStorageRequest,
 };
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
@@ -89,7 +88,7 @@ pub struct AcceptedBspVolunteer<Runtime: StorageEnableRuntime> {
 #[derive(Debug, Clone, Encode, Decode)]
 pub enum ForestWriteLockTaskData<Runtime: StorageEnableRuntime> {
     SubmitProofRequest(ProcessSubmitProofRequestData<Runtime>),
-    ConfirmStoringRequest(ProcessConfirmStoringRequestData<Runtime>),
+    ConfirmStoringRequest,
     MspRespondStorageRequest(ProcessMspRespondStoringRequestData<Runtime>),
     StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData<Runtime>),
 }
@@ -99,14 +98,6 @@ impl<Runtime: StorageEnableRuntime> From<ProcessSubmitProofRequestData<Runtime>>
 {
     fn from(data: ProcessSubmitProofRequestData<Runtime>) -> Self {
         Self::SubmitProofRequest(data)
-    }
-}
-
-impl<Runtime: StorageEnableRuntime> From<ProcessConfirmStoringRequestData<Runtime>>
-    for ForestWriteLockTaskData<Runtime>
-{
-    fn from(data: ProcessConfirmStoringRequestData<Runtime>) -> Self {
-        Self::ConfirmStoringRequest(data)
     }
 }
 
@@ -149,19 +140,29 @@ pub struct ProcessSubmitProofRequestData<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessSubmitProofRequestData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct ProcessConfirmStoringRequestData<Runtime: StorageEnableRuntime> {
-    pub confirm_storing_requests: Vec<ConfirmStoringRequest<Runtime>>,
-}
-
+/// Event signalling the BSP to process pending confirm storing requests.
+///
+/// This event carries no request data. The task pulls requests via commands
+/// (`PopConfirmStoringRequests`, `FilterConfirmStoringRequests`).
+/// Its purpose is to carry the forest root write permit so the lock is held
+/// for the duration of the task handler.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct ProcessConfirmStoringRequest<Runtime: StorageEnableRuntime> {
-    pub data: ProcessConfirmStoringRequestData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
+    _phantom: core::marker::PhantomData<Runtime>,
+}
+
+impl<Runtime: StorageEnableRuntime> ProcessConfirmStoringRequest<Runtime> {
+    pub(crate) fn new(forest_root_write_permit: Arc<ForestWritePermitGuard>) -> Self {
+        Self {
+            forest_root_write_permit,
+            _phantom: core::marker::PhantomData,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -173,7 +174,7 @@ pub struct ProcessMspRespondStoringRequestData<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessMspRespondStoringRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessMspRespondStoringRequestData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -185,7 +186,7 @@ pub struct ProcessStopStoringForInsolventUserRequestData<Runtime: StorageEnableR
 #[actor(actor = "blockchain_service")]
 pub struct ProcessStopStoringForInsolventUserRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessStopStoringForInsolventUserRequestData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
 /// Slashable Provider event.

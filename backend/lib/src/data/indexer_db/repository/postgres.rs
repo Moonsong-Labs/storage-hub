@@ -20,7 +20,7 @@ use diesel_async::RunQueryDsl;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
-    models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp},
+    models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp, MspFile},
     schema::{bsp, bucket, file},
     OnchainMspId,
 };
@@ -178,6 +178,18 @@ impl IndexerOps for Repository {
                 })
             })
             .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn get_number_of_files_stored_by_msp(
+        &self,
+        onchain_msp_id: &OnchainMspId,
+    ) -> RepositoryResult<u64> {
+        let mut conn = self.pool.get().await?;
+
+        // Get the number of files stored by the given MSP
+        let file_count = MspFile::get_all_files_for_msp(&mut conn, onchain_msp_id).await?;
+
+        Ok(file_count)
     }
 }
 
