@@ -170,6 +170,16 @@ pub struct ProviderConfigurations {
     #[arg(long, default_value = "60")]
     pub extrinsic_retry_timeout: Option<u64>,
 
+    /// Mortality period for extrinsics in number of blocks.
+    ///
+    /// Determines how long a submitted transaction remains valid before expiring.
+    /// Must be a power of 2 between 4 and `BlockHashCount` (4096). Non-power-of-2 values
+    /// will be rounded up to the next valid power of 2. Lower values mean transactions
+    /// expire faster, which helps recover from stuck nonces after block reorgs, but also
+    /// reduces the window for a transaction to be included on-chain.
+    #[arg(long, value_name = "BLOCKS", default_value = "256", value_parser = clap::value_parser!(u32).range(4..))]
+    pub extrinsic_mortality: Option<u32>,
+
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
     #[arg(long, default_value = "4")]
     pub check_for_pending_proofs_period: Option<u32>,
@@ -520,6 +530,11 @@ impl ProviderConfigurations {
         let mut bs_changed = false;
         if let Some(extrinsic_retry_timeout) = self.extrinsic_retry_timeout {
             bs_options.extrinsic_retry_timeout = Some(extrinsic_retry_timeout);
+            bs_changed = true;
+        }
+
+        if let Some(extrinsic_mortality) = self.extrinsic_mortality {
+            bs_options.extrinsic_mortality = Some(extrinsic_mortality);
             bs_changed = true;
         }
 

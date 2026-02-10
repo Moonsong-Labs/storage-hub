@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
@@ -198,6 +199,17 @@ where
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: u64,
 
+    /// Mortality period for extrinsics in number of blocks.
+    ///
+    /// Determines how long a submitted transaction remains valid before expiring.
+    /// Lower values mean faster recovery from stuck nonces after block reorgs (since the
+    /// stale retracted transaction cleanup uses this as its threshold), but also reduce
+    /// the window for a transaction to be included.
+    ///
+    /// This value is sanitized at runtime: it will be rounded to the nearest valid power
+    /// of two and clamped to `[4, BlockHashCount]` to ensure it produces a valid mortal era.
+    pub extrinsic_mortality: u32,
+
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch
     /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
     pub check_for_pending_proofs_period: BlockNumber<Runtime>,
@@ -227,6 +239,7 @@ where
     fn default() -> Self {
         Self {
             extrinsic_retry_timeout: 30,
+            extrinsic_mortality: 256,
             check_for_pending_proofs_period: 4u32.into(),
             peer_id: None,
             enable_msp_distribute_files: false,
@@ -1691,6 +1704,45 @@ where
         maintenance_mode: bool,
         metrics: MetricsLink,
     ) -> Self {
+        // Sanitize the extrinsic mortality period to ensure it produces a valid mortal era.
+        let config = {
+            let mut config = config;
+            let original = config.extrinsic_mortality;
+            let max_period = BlockHashCount::get();
+
+            // Apply the same rounding as `Era::mortal()`: next power of two, clamp to [4, 65536]
+            let mut period = original
+                .checked_next_power_of_two()
+                .unwrap_or(1 << 16)
+                .clamp(4, 1 << 16);
+
+            // Ensure we don't exceed `BlockHashCount` (birth block hash must still be in storage)
+            if period > max_period {
+                period = (period >> 1).max(4);
+            }
+
+            if period != original {
+                warn!(
+                    target: LOG_TARGET,
+                    "Configured extrinsic mortality {} is not a valid mortal era period. \
+                    Sanitized to {} blocks (must be a power of 2 in [4, {}]).",
+                    original,
+                    period,
+                    max_period
+                );
+            } else {
+                info!(
+                    target: LOG_TARGET,
+                    "Extrinsic mortality period set to {} blocks (~{} minutes at 6s block time).",
+                    period,
+                    (period * 6) / 60
+                );
+            }
+
+            config.extrinsic_mortality = period;
+            config
+        };
+
         let genesis_hash = client.info().genesis_hash;
         Self {
             config,

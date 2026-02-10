@@ -9,7 +9,6 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
 };
-use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
 use sc_transaction_pool_api::TransactionStatus;
@@ -738,10 +737,7 @@ where
         let function = function.into();
         let current_block: u64 = client.info().best_number.saturated_into();
         let current_block_hash = client.info().best_hash;
-        let period = BlockHashCount::get()
-            .checked_next_power_of_two()
-            .map(|c| c / 2)
-            .unwrap_or(2) as u64;
+        let period = self.config.extrinsic_mortality as u64;
 
         let era = generic::Era::mortal(period, current_block.saturating_sub(1));
         let minimal_extra = MinimalExtension::new(era, nonce, tip);
