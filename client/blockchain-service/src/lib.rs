@@ -19,7 +19,7 @@ use sp_keystore::KeystorePtr;
 
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::types::StorageHubClient;
+use shc_common::types::{NodeRole, StorageHubClient};
 use shc_telemetry::MetricsLink;
 
 pub use self::{
@@ -38,7 +38,7 @@ pub async fn spawn_blockchain_service<FSH, Runtime>(
     notify_period: Option<u32>,
     capacity_config: Option<CapacityConfig<Runtime>>,
     maintenance_mode: bool,
-    node_role: shc_common::types::NodeRole,
+    node_role: NodeRole,
     metrics: MetricsLink,
 ) -> ActorHandle<BlockchainService<FSH, Runtime>>
 where
