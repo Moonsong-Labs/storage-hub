@@ -656,19 +656,21 @@ where
             // For file deletions, we will remove the file from the File Storage only after finality is reached.
             // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
             let bucket_forest_key = bucket_id.as_ref().to_vec();
-            self.apply_forest_mutations_and_verify_root(
-                bucket_forest_key,
-                &mutations,
-                revert,
-                old_root,
-                new_root,
-            )
-            .await
-            .map_err(|e| {
-                let err_msg = format!("CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
-                error!(target: LOG_TARGET, "{}", err_msg);
-                anyhow::anyhow!(err_msg)
-            })?;
+            // TODO: Handle this error properly. Currently we log and continue so that a single
+            // corrupted bucket root doesn't block the entire MSP from processing other buckets.
+            if let Err(e) = self
+                .apply_forest_mutations_and_verify_root(
+                    bucket_forest_key,
+                    &mutations,
+                    revert,
+                    old_root,
+                    new_root,
+                )
+                .await
+            {
+                error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
+                return Ok(());
+            }
 
             info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
         }
