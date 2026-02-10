@@ -139,9 +139,7 @@ impl FileTree {
             } else {
                 // This is a folder (has more segments after the first)
                 // We only want to create the folder entry once, not recurse into it
-                let entries = children_map
-                    .entry(first_segment.to_string())
-                    .or_default();
+                let entries = children_map.entry(first_segment.to_string()).or_default();
 
                 // Only add folder entry if we don't already have one
                 if !entries

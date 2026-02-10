@@ -337,8 +337,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
             // Process ProofsDealer events for file key changes
             for event_record in events.iter() {
-                let event: StorageEnableEvents<Runtime> =
-                    event_record.event.clone().into();
+                let event: StorageEnableEvents<Runtime> = event_record.event.clone().into();
 
                 match (event, &target) {
                     // Process BSP mutations from MutationsAppliedForProvider events
@@ -352,11 +351,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         ),
                         FileDeletionTarget::BspId(target_bsp_id),
                     ) if &provider_id == target_bsp_id => {
-                        self.process_bsp_mutations(
-                            &mutations,
-                            target_bsp_id,
-                            &mut file_key_states,
-                        );
+                        self.process_bsp_mutations(&mutations, target_bsp_id, &mut file_key_states);
                     }
                     // Process MSP/bucket mutations from MutationsApplied events
                     (

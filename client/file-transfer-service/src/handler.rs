@@ -257,8 +257,7 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                     };
 
                     // Tries to find the sender half of the response channel
-                    let maybe_pending_response =
-                        self.upload_pending_responses.remove(&request_id);
+                    let maybe_pending_response = self.upload_pending_responses.remove(&request_id);
 
                     // Tries to send back the upload response and then gets the request callback result.
                     let request_callback_result = match maybe_pending_response {

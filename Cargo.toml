@@ -123,7 +123,7 @@ tracing-bunyan-formatter = "0.3"
 tracing-subscriber = { version = "=0.3.19", features = [
 	"env-filter",
 ] } # Dependency pinned because 0.3.20 messes up text formatting in substrate logs
-trie-db = { version = "0.30", default-features = false }
+trie-db = { version = "0.30.0", default-features = false }
 trybuild = "1.0"
 proc-macro2 = "1.0.79"
 quote = "1.0.35"

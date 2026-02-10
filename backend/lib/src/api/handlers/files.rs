@@ -84,11 +84,7 @@ pub async fn internal_upload_by_key(
             }
             Err(e) => {
                 tracing::error!("Stream error: {:?}", e);
-                let _ = tx
-                    .send(Err(std::io::Error::other(
-                        e.to_string(),
-                    )))
-                    .await;
+                let _ = tx.send(Err(std::io::Error::other(e.to_string()))).await;
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Stream error".to_string(),
