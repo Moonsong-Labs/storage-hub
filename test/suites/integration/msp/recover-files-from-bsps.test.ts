@@ -9,7 +9,11 @@ import {
 
 await describeMspNet(
   "MSP recovers files missing in its file storage from BSPs that have them",
-  { initialised: "multi", networkConfig: [{ noisy: false, rocksdb: true }] },
+  {
+    initialised: "multi",
+    indexer: true,
+    networkConfig: [{ noisy: false, rocksdb: true }]
+  },
   ({
     before,
     after,
@@ -62,6 +66,36 @@ await describeMspNet(
       await mspApi?.disconnect();
     });
 
+    it("Restart BSP 1 so that it registers MSP 1 as a trusted MSP", async () => {
+      await bspApi.disconnect();
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
+      });
+
+      // Wait for BSP RPC to respond.
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`, true);
+
+      // Ensure BSP registers MSP 1 as a trusted MSP.
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName,
+        searchString: "Configured 1 trusted MSP(s) with 1 resolved peer ID(s)",
+        timeout: 10_000,
+        tail: 5_000
+      });
+
+      // Ensure BSP is idle again.
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName,
+        searchString: "💤 Idle",
+        timeout: 10_000,
+        tail: 5_000
+      });
+
+      // Reconnect BSP API.
+      bspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`);
+      await userApi.wait.nodeCatchUpToChainTip(bspApi);
+    });
+
     it("Create multiple storage requests accepted by MSP and confirmed by BSPs", async () => {
       const result = await userApi.file.batchStorageRequests({
         files: [
@@ -102,8 +136,14 @@ await describeMspNet(
     });
 
     it("Restart MSP and check that forest roots are validated and all files are present in the forest", async () => {
-      // Restart MSP container (preserves writable layer including RocksDB path).
+      // Stop MSP container (preserves writable layer including RocksDB path).
       await mspApi.disconnect();
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
+
+      // Advance blocks to ensure MSP triggers initial sync when it restarts
+      await userApi.block.skip(20);
+
+      // Restart MSP container
       await userApi.docker.restartContainer({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
       });
@@ -125,11 +165,14 @@ await describeMspNet(
       // Ensure MSP catches up.
       await userApi.wait.nodeCatchUpToChainTip(mspApi);
 
+      // Build another block to trigger block import notification, after coming out of sync mode.
+      await userApi.block.seal();
+
       // Ensure the new bucket-check task reports the expected success message.
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
         searchString: "OK: all 3 forest files are present and complete in file storage",
-        timeout: 60_000,
+        timeout: 10_000,
         tail: 2_000
       });
 
@@ -157,6 +200,12 @@ await describeMspNet(
     it("Restart MSP and verify files are recovered", async () => {
       // Restart MSP to trigger file-storage recovery logic.
       await mspApi.disconnect();
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
+
+      // Advance blocks to ensure MSP triggers initial sync when it restarts
+      await userApi.block.skip(20);
+
+      // Restart MSP container
       await userApi.docker.restartContainer({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
       });
@@ -168,13 +217,16 @@ await describeMspNet(
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
         searchString: "💤 Idle",
-        timeout: 20_000,
+        timeout: 10_000,
         tail: 200
       });
 
       // Reconnect MSP API.
       mspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
       await userApi.wait.nodeCatchUpToChainTip(mspApi);
+
+      // Build another block to trigger block import notification, after coming out of sync mode.
+      await userApi.block.seal();
 
       // MSP should recover all three files.
       for (const f of files) {
@@ -185,7 +237,7 @@ await describeMspNet(
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
         searchString: "recovery finished: recovered=3, failed=0, panicked=0, total=3",
-        timeout: 120_000,
+        timeout: 10_000,
         tail: 5_000
       });
 
@@ -194,13 +246,13 @@ await describeMspNet(
       await userApi.docker.waitForLog({
         containerName: "sh-bsp-two",
         searchString: "Received unexpected download request",
-        timeout: 120_000,
+        timeout: 10_000,
         tail: 5_000
       });
       await userApi.docker.waitForLog({
         containerName: "sh-bsp-three",
         searchString: "Received unexpected download request",
-        timeout: 120_000,
+        timeout: 10_000,
         tail: 5_000
       });
     });
