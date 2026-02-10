@@ -1398,7 +1398,7 @@ where
         confirming_file_keys: &Vec<ConfirmStoringRequest<Runtime>>,
     ) {
         for request in confirming_file_keys.iter() {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "Re-queuing file key [{:x}] for retry (transient error)",
                 request.file_key
