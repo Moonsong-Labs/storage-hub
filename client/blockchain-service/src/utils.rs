@@ -1106,13 +1106,22 @@ where
     /// Cleanup manager gaps with nonce < on-chain nonce; then handle old gaps.
     ///
     /// This method performs the following steps:
-    /// 1. Cleans up the transaction manager's stale nonce gaps (i.e. nonce gaps whose nonce is less than the on-chain nonce).
-    /// 2. Detects and handles old nonce gaps that haven't been filled in the transaction manager.
+    /// 1. Cleans up stale pending transactions whose mortal era has expired.
+    /// 2. Cleans up the transaction manager's stale nonce gaps (i.e. nonce gaps whose nonce is less than the on-chain nonce).
+    /// 3. Detects and handles old nonce gaps that haven't been filled in the transaction manager.
     pub(crate) async fn cleanup_tx_manager_and_handle_nonce_gaps(
         &mut self,
         block_number: BlockNumber<Runtime>,
         block_hash: Runtime::Hash,
     ) {
+        // First, cleanup stale pending transactions whose mortal era has expired.
+        // This catches transactions stuck in any non-terminal state that have been submitted
+        // for longer than the mortality period and are still pending, as these transactions
+        // can no longer be included in a block.
+        let mortality_period = self.config.extrinsic_mortality;
+        self.transaction_manager
+            .cleanup_stale_pending_transactions(block_number, mortality_period);
+
         let on_chain_nonce = match self.account_nonce(&block_hash) {
             Ok(nonce) => nonce,
             Err(e) => {
