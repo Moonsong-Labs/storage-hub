@@ -38,6 +38,7 @@ pub async fn spawn_blockchain_service<FSH, Runtime>(
     notify_period: Option<u32>,
     capacity_config: Option<CapacityConfig<Runtime>>,
     maintenance_mode: bool,
+    node_role: shc_common::types::NodeRole,
     metrics: MetricsLink,
 ) -> ActorHandle<BlockchainService<FSH, Runtime>>
 where
@@ -58,6 +59,7 @@ where
         notify_period,
         capacity_config.map(CapacityRequestQueue::new),
         maintenance_mode,
+        node_role,
         metrics,
     );
 

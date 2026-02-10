@@ -518,6 +518,10 @@ where
     /// different Provider IDs, this function will panic. In other words, this node doesn't support
     /// managing multiple Providers at once.
     pub(crate) fn sync_provider_id(&mut self, block_hash: &Runtime::Hash) {
+        if !self.node_role.is_provider() {
+            return;
+        }
+
         let provider_id = match get_provider_id_from_keystore::<Runtime>(
             &self.client,
             &self.keystore,
