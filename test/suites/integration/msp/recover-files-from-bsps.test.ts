@@ -13,8 +13,7 @@ await describeMspNet(
     initialised: "multi",
     indexer: true,
     logLevel: "file-transfer-service=debug", // This test requires debug logging for file-transfer-service to see the unexpected download requests.
-    networkConfig: [{ noisy: false, rocksdb: true }],
-    only: true
+    networkConfig: [{ noisy: false, rocksdb: true }]
   },
   ({
     before,
@@ -406,8 +405,7 @@ await describeMspNet(
   {
     initialised: "multi",
     logLevel: "file-transfer-service=debug",
-    networkConfig: [{ noisy: false, rocksdb: true }],
-    only: true
+    networkConfig: [{ noisy: false, rocksdb: true }]
   },
   ({
     before,
