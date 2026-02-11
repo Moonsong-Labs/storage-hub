@@ -273,12 +273,23 @@ mod runtime {
 #[cfg(feature = "runtime-benchmarks")]
 mod benches {
     frame_benchmarking::define_benchmarks!(
-        [pallet_bucket_nfts, BucketNfts]
-        [pallet_file_system, FileSystem]
+        [frame_system, SystemBench::<Runtime>]
+        [pallet_balances, Balances]
+        [pallet_session, SessionBench::<Runtime>]
+        [pallet_timestamp, Timestamp]
+        [pallet_message_queue, MessageQueue]
+        [pallet_sudo, Sudo]
+        [pallet_collator_selection, CollatorSelection]
+        [cumulus_pallet_parachain_system, ParachainSystem]
+        [cumulus_pallet_xcmp_queue, XcmpQueue]
+        [nfts, Nfts]
+        [pallet_parameters, Parameters]
         [pallet_payment_streams, PaymentStreams]
         [pallet_proofs_dealer, ProofsDealer]
-        [pallet_randomness, Randomness]
         [pallet_storage_providers, Providers]
+        [pallet_randomness, Randomness]
+        [pallet_file_system, FileSystem]
+        [pallet_bucket_nfts, BucketNfts]
     );
 }
 

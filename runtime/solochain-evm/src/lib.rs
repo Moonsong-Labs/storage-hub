@@ -359,12 +359,18 @@ mod runtime {
 #[cfg(feature = "runtime-benchmarks")]
 mod benches {
     frame_benchmarking::define_benchmarks!(
-        [pallet_bucket_nfts, BucketNfts]
-        [pallet_file_system, FileSystem]
+        [frame_system, SystemBench::<Runtime>]
+        [pallet_balances, Balances]
+        [pallet_timestamp, Timestamp]
+        [pallet_sudo, Sudo]
+        [pallet_nfts, Nfts]
+        [pallet_parameters, Parameters]
         [pallet_payment_streams, PaymentStreams]
         [pallet_proofs_dealer, ProofsDealer]
-        [pallet_randomness, Randomness]
         [pallet_storage_providers, Providers]
+        [pallet_randomness, Randomness]
+        [pallet_file_system, FileSystem]
+        [pallet_bucket_nfts, BucketNfts]
     );
 }
 
@@ -660,8 +666,9 @@ impl_runtime_apis! {
             Vec<frame_benchmarking::BenchmarkList>,
             Vec<frame_support::traits::StorageInfo>,
         ) {
-            use frame_benchmarking::BenchmarkList;
+            use frame_benchmarking::{Benchmarking, BenchmarkList};
             use frame_support::traits::StorageInfoTrait;
+            use frame_system_benchmarking::Pallet as SystemBench;
 
 
             let mut list = Vec::<BenchmarkList>::new();
@@ -674,8 +681,9 @@ impl_runtime_apis! {
         fn dispatch_benchmark(
             config: frame_benchmarking::BenchmarkConfig
         ) -> Result<Vec<frame_benchmarking::BenchmarkBatch>, alloc::string::String> {
-            use frame_benchmarking::BenchmarkBatch;
+            use frame_benchmarking::{Benchmarking, BenchmarkBatch};
             use sp_storage::TrackedStorageKey;
+            use frame_system_benchmarking::Pallet as SystemBench;
 
 
             use frame_support::traits::WhitelistedStorageKeys;

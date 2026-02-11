@@ -969,7 +969,7 @@ mod verify_proof_tests {
 
         // Generate empty proof
         let empty_proof = CompactProof {
-            encoded_nodes: vec![],
+            encoded_nodes: vec![], // Empty proof
         };
 
         // Generate empty root
@@ -1052,15 +1052,13 @@ mod verify_proof_tests {
         }
 
         // Generate proof
-        let mut compact_proof = recorder
+        let mut proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
             .expect("Failed to create compact proof from recorder");
 
         // Modify the proof to make it invalid
-        compact_proof.encoded_nodes[0] = vec![0; 32];
-
-        let proof = compact_proof;
+        proof.encoded_nodes[0] = vec![0; 32];
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1096,7 +1094,7 @@ mod verify_proof_tests {
 
         // Generate proof
         let proof = CompactProof {
-            encoded_nodes: vec![],
+            encoded_nodes: vec![], // Empty proof
         };
 
         assert_eq!(

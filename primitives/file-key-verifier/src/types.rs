@@ -17,6 +17,27 @@ pub struct FileKeyProof<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE
     pub proof: CompactProof,
 }
 
+/// Implement the `From<CompactProof>` trait for the `FileKeyProof` struct.
+impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64> From<CompactProof>
+    for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
+{
+    fn from(proof: CompactProof) -> Self {
+        Self {
+            file_metadata: Default::default(),
+            proof,
+        }
+    }
+}
+
+/// Implement the `Into<CompactProof>` trait for the `FileKeyProof` struct.
+impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64> Into<CompactProof>
+    for FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
+{
+    fn into(self) -> CompactProof {
+        self.proof
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProvenFileKeyError {
     /// The file metadata can not be created.
@@ -48,14 +69,14 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         location: Vec<u8>,
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
-        proof: impl Into<CompactProof>,
+        proof: CompactProof,
     ) -> Result<Self, ProvenFileKeyError> {
         let file_metadata = FileMetadata::new(owner, bucket_id, location, size, fingerprint)
             .map_err(|_| ProvenFileKeyError::FailedToCreateFileMetadata)?;
 
         Ok(Self {
             file_metadata,
-            proof: proof.into(),
+            proof,
         })
     }
 

@@ -2,15 +2,10 @@
 
 extern crate alloc;
 
-use alloc::{
-    collections::{BTreeMap, BTreeSet},
-    vec::Vec,
-};
+use alloc::collections::{BTreeMap, BTreeSet};
 use frame_support::sp_runtime::DispatchError;
 use shp_traits::{CommitmentVerifier, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation};
-use sp_trie::{
-    CompactProof, MemoryDB, StorageProof, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut,
-};
+use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
 
 #[cfg(test)]

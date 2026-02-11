@@ -1487,7 +1487,7 @@ mod users {
                 FileKeyWithProof<storagehub::Runtime>,
                 MaxBatchConfirmStorageRequests,
             > = BoundedVec::new();
-            let simulated_proof = CompactProof {
+            let simulated_proof: CompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
             };
             vec_of_key_proofs.force_push(FileKeyWithProof {
@@ -1813,7 +1813,7 @@ mod users {
                 FileKeyWithProof<storagehub::Runtime>,
                 MaxBatchConfirmStorageRequests,
             > = BoundedVec::new();
-            let simulated_proof = CompactProof {
+            let simulated_proof: CompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
             };
             vec_of_key_proofs.force_push(FileKeyWithProof {
