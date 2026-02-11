@@ -1716,9 +1716,10 @@ where
                 .unwrap_or(1 << 16)
                 .clamp(4, 1 << 16);
 
-            // Ensure we don't exceed `BlockHashCount` (birth block hash must still be in storage)
-            if period > max_period {
-                period = (period >> 1).max(4);
+            // Ensure we don't exceed `BlockHashCount` (birth block hash must still be in storage).
+            // Keep halving until we fit, maintaining a valid power of two.
+            while period > max_period && period > 4 {
+                period >>= 1;
             }
 
             if period != original {
