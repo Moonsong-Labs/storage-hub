@@ -12,7 +12,8 @@ await describeMspNet(
   {
     initialised: "multi",
     indexer: true,
-    networkConfig: [{ noisy: false, rocksdb: true }]
+    networkConfig: [{ noisy: false, rocksdb: true }],
+    logLevel: "file-transfer-service=debug" // This test requires debug logging for file-transfer-service to see the unexpected download requests.
   },
   ({
     before,
@@ -32,6 +33,7 @@ await describeMspNet(
 
     const bucketName = "recover-files-from-bsps-bucket";
     const files: FileMetadata[] = [];
+    let newFile: FileMetadata | undefined;
 
     before(async () => {
       userApi = await createUserApi();
@@ -258,16 +260,142 @@ await describeMspNet(
     });
 
     it("Pause BSP one and create storage request with replication target 2", async () => {
-      // TODO: Pause BSP one and create a storage request with replication target 2, wait for MSP to accept and BSPs to confirm.
+      // Pause BSP one so it cannot volunteer/store the new file.
+      await bspApi.disconnect();
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
+
+      const result = await userApi.file.batchStorageRequests({
+        files: [
+          {
+            source: "res/adolphus.jpg",
+            destination: "test/recover-files-from-bsps-new-rt2.jpg",
+            bucketIdOrName: bucketName,
+            replicationTarget: 2
+          }
+        ],
+        mspId: userApi.shConsts.DUMMY_MSP_ID,
+        // Only BSP two and BSP three are expected to store/confirm.
+        bspApis: [bspTwoApi, bspThreeApi],
+        mspApi
+      });
+
+      newFile = {
+        fileKey: result.fileKeys[0],
+        bucketId: result.bucketIds[0],
+        location: result.locations[0],
+        owner: userApi.accounts.shUser.address,
+        fingerprint: result.fingerprints[0],
+        fileSize: result.fileSizes[0]
+      };
+
+      // Extra safety: ensure the two expected BSPs and MSP stored the file locally.
+      await bspTwoApi.wait.fileStorageComplete(newFile.fileKey);
+      await bspThreeApi.wait.fileStorageComplete(newFile.fileKey);
+      await mspApi.wait.fileStorageComplete(newFile.fileKey);
+    });
+
+    it("Restart BSP one and verify file is still present in the forest", async () => {
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
+      });
+
+      // Wait for BSP RPC to respond.
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`, true);
+
+      // Ensure BSP is idle again.
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName,
+        searchString: "💤 Idle",
+        timeout: 10_000,
+        tail: 5_000
+      });
+
+      // Reconnect BSP API.
+      bspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`);
+      await userApi.wait.nodeCatchUpToChainTip(bspApi);
     });
 
     it("Delete new file from MSP file storage", async () => {
-      // TODO: Delete a new file from MSP file storage.
+      assert(newFile, "New file metadata not set");
+
+      await mspApi.rpc.storagehubclient.removeFilesFromFileStorage([newFile.fileKey]);
+      await mspApi.wait.fileDeletionFromFileStorage(newFile.fileKey);
     });
 
     it("Restart MSP and verify new file cannot be recovered from unfriendly BSPs", async () => {
-      // TODO: Restart MSP and check logs for the recovery process.
-      // TODO: Check that MSP does not recover the file from BSP two and BSP three.
+      assert(newFile, "New file metadata not set");
+
+      // Restart MSP to trigger file-storage recovery logic.
+      await mspApi.disconnect();
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
+
+      // Advance blocks to ensure MSP triggers initial sync when it restarts.
+      await userApi.block.skip(20);
+
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
+
+      // Wait for MSP RPC to respond.
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
+
+      // Wait for MSP to be idle again.
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        searchString: "💤 Idle",
+        timeout: 20_000,
+        tail: 5_000
+      });
+
+      // Reconnect MSP API.
+      mspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
+      await userApi.wait.nodeCatchUpToChainTip(mspApi);
+
+      // Build another block to trigger block import notification, after coming out of sync mode.
+      await userApi.block.seal();
+
+      // The MSP should attempt recovery but fail, since BSP two/three are not trusted by them.
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        searchString: "recovery finished: recovered=0, failed=1, panicked=0, total=1",
+        timeout: 20_000,
+        tail: 20_000
+      });
+
+      // Ensure MSP still doesn't have the file after recovery completes.
+      const afterRecovery = await mspApi.rpc.storagehubclient.isFileInFileStorage(newFile.fileKey);
+      assert(!afterRecovery.isFileFound, "MSP unexpectedly recovered the new file");
+
+      // Give it a few more blocks and ensure it is still missing (guards against delayed recovery).
+      await userApi.block.skip(5);
+      const stillMissing = await mspApi.rpc.storagehubclient.isFileInFileStorage(newFile.fileKey);
+      assert(!stillMissing.isFileFound, "MSP unexpectedly recovered the new file later");
+
+      // Check BSP two and BSP three rejected the MSP download requests for this specific file.
+      await userApi.docker.waitForLog({
+        containerName: "sh-bsp-two",
+        searchString: "Received unexpected download request from",
+        timeout: 20_000,
+        tail: 50_000
+      });
+      await userApi.docker.waitForLog({
+        containerName: "sh-bsp-two",
+        searchString: `for file key [${newFile.fileKey}]`,
+        timeout: 20_000,
+        tail: 50_000
+      });
+      await userApi.docker.waitForLog({
+        containerName: "sh-bsp-three",
+        searchString: "Received unexpected download request from",
+        timeout: 20_000,
+        tail: 50_000
+      });
+      await userApi.docker.waitForLog({
+        containerName: "sh-bsp-three",
+        searchString: `for file key [${newFile.fileKey}]`,
+        timeout: 20_000,
+        tail: 50_000
+      });
     });
   }
 );
