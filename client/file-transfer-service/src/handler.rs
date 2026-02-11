@@ -847,10 +847,10 @@ impl<Runtime: StorageEnableRuntime> FileTransferService<Runtime> {
                 };
 
                 if !self.is_allowed(peer, file_key, bucket_id) {
-                    warn!(
+                    debug!(
                         target: LOG_TARGET,
-                        "Received unexpected download request from {} for file key {:?} (bucket [{:?}])",
-                        peer, file_key, bucket_id
+                        "Received unexpected download request from {} for file key [{:x}] (bucket [0x{:x}])",
+                        peer, file_key, bucket_id.map(|id| id.into()).unwrap_or(BucketId::<Runtime>::default())
                     );
 
                     self.handle_bad_request(pending_response);
