@@ -2,14 +2,14 @@ import assert from "node:assert";
 import type { Option } from "@polkadot/types";
 import type { H256 } from "@polkadot/types/interfaces";
 import {
-  bspTwoKey,
   describeMspNet,
   type EnrichedBspApi,
   type FileMetadata,
-  hexToBuffer,
-  ShConsts,
   shUser,
-  type SqlClient
+  type SqlClient,
+  hexToBuffer,
+  bspTwoKey,
+  ShConsts
 } from "../../../util";
 
 /**

@@ -26,8 +26,8 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     traits::StorageEnableRuntime,
     types::{
-        BlockHash, ChunkId, FileKey, FileKeyProof, FileMetadata, ForestProof, HashT, KeyProof,
-        KeyProofs, OpaqueBlock, ProofsDealerProviderId, Proven, RandomnessOutput, StorageHubClient,
+        BlockHash, ChunkId, FileKey, FileKeyProof, FileMetadata, HashT, KeyProof, KeyProofs,
+        OpaqueBlock, ProofsDealerProviderId, Proven, RandomnessOutput, StorageHubClient,
         StorageProof, StorageProofsMerkleTrieLayout, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
@@ -1036,11 +1036,7 @@ where
         };
 
         // Generate the Forest proof in a closure to drop the read lock on the Forest Storage.
-        let ForestProof {
-            proven,
-            proof: compact_proof,
-            root: _,
-        } = {
+        let proven_file_keys = {
             // The Forest Key is an empty vector since this is a BSP, therefore it doesn't
             // have multiple Forest keys.
             let fs = self
@@ -1065,7 +1061,7 @@ where
 
         // Get the keys that were proven.
         let mut proven_keys = Vec::new();
-        for key in proven {
+        for key in proven_file_keys.proven {
             match key {
                 Proven::ExactKey(leaf) => proven_keys.push(leaf.key),
                 Proven::NeighbourKeys((left, right)) => match (left, right) {
@@ -1130,7 +1126,7 @@ where
 
         // Construct full proof.
         let proof = StorageProof::<Runtime> {
-            forest_proof: compact_proof,
+            forest_proof: proven_file_keys.proof.into(),
             key_proofs,
         };
         let encoded = proof.encode();

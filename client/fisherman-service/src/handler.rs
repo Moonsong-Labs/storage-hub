@@ -233,7 +233,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     }
 
     /// Query incomplete storage request metadata using runtime API
-    #[allow(clippy::type_complexity)]
     fn query_incomplete_storage_request(
         &self,
         file_key: H256,

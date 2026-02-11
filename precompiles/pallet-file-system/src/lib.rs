@@ -364,7 +364,6 @@ where
     #[precompile::public(
         "issueStorageRequest(bytes32,bytes,bytes32,uint64,bytes32,bytes[],uint8,uint32)"
     )]
-    #[allow(clippy::too_many_arguments)]
     fn issue_storage_request(
         handle: &mut impl PrecompileHandle,
         bucket_id: H256,
