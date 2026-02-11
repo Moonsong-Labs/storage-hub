@@ -403,7 +403,7 @@ await describeMspNet(
 await describeMspNet(
   "MSP skips recovery gracefully when indexer is disabled",
   {
-    initialised: "multi",
+    initialised: false,
     logLevel: "file-transfer-service=debug",
     networkConfig: [{ noisy: false, rocksdb: true }]
   },
@@ -420,8 +420,6 @@ await describeMspNet(
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
-    let bspTwoApi: EnrichedBspApi;
-    let bspThreeApi: EnrichedBspApi;
     let recoverableFile: FileMetadata | undefined;
 
     const bucketName = "recover-files-indexer-disabled-bucket";
@@ -443,17 +441,10 @@ await describeMspNet(
         "bspThreeRpcPort" in launchResponse,
         "BSP three RPC port not available in launch response"
       );
-
-      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse.bspTwoRpcPort}`);
-      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse.bspThreeRpcPort}`);
-      await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
-      await userApi.wait.nodeCatchUpToChainTip(bspThreeApi);
     });
 
     after(async () => {
       await bspApi?.disconnect();
-      await bspTwoApi?.disconnect();
-      await bspThreeApi?.disconnect();
       await mspApi?.disconnect();
     });
 
@@ -464,11 +455,11 @@ await describeMspNet(
             source: "res/smile.jpg",
             destination: "test/recover-files-indexer-disabled.jpg",
             bucketIdOrName: bucketName,
-            replicationTarget: 3
+            replicationTarget: 1
           }
         ],
         mspId: userApi.shConsts.DUMMY_MSP_ID,
-        bspApis: [bspApi, bspTwoApi, bspThreeApi],
+        bspApis: [bspApi],
         mspApi
       });
 
