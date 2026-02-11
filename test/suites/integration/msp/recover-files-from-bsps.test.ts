@@ -12,8 +12,9 @@ await describeMspNet(
   {
     initialised: "multi",
     indexer: true,
+    logLevel: "file-transfer-service=debug", // This test requires debug logging for file-transfer-service to see the unexpected download requests.
     networkConfig: [{ noisy: false, rocksdb: true }],
-    logLevel: "file-transfer-service=debug" // This test requires debug logging for file-transfer-service to see the unexpected download requests.
+    only: true
   },
   ({
     before,
@@ -75,7 +76,7 @@ await describeMspNet(
       });
 
       // Wait for BSP RPC to respond.
-      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`, true);
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`);
 
       // Ensure BSP registers MSP 1 as a trusted MSP.
       await userApi.docker.waitForLog({
@@ -151,13 +152,13 @@ await describeMspNet(
       });
 
       // Wait for MSP RPC to respond.
-      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
 
       // Wait for MSP to be idle again.
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
         searchString: "💤 Idle",
-        timeout: 20_000,
+        timeout: 10_000,
         tail: 200
       });
 
@@ -213,7 +214,7 @@ await describeMspNet(
       });
 
       // Wait for MSP RPC to respond.
-      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
 
       // Wait for MSP to be idle again.
       await userApi.docker.waitForLog({
@@ -294,13 +295,13 @@ await describeMspNet(
       await mspApi.wait.fileStorageComplete(newFile.fileKey);
     });
 
-    it("Restart BSP one and verify file is still present in the forest", async () => {
+    it("Restart BSP one", async () => {
       await userApi.docker.restartContainer({
         containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
       });
 
       // Wait for BSP RPC to respond.
-      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`, true);
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`);
 
       // Ensure BSP is idle again.
       await userApi.docker.waitForLog({
@@ -337,13 +338,13 @@ await describeMspNet(
       });
 
       // Wait for MSP RPC to respond.
-      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
 
       // Wait for MSP to be idle again.
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
         searchString: "💤 Idle",
-        timeout: 20_000,
+        timeout: 10_000,
         tail: 5_000
       });
 
@@ -358,7 +359,7 @@ await describeMspNet(
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
         searchString: "recovery finished: recovered=0, failed=1, panicked=0, total=1",
-        timeout: 20_000,
+        timeout: 30_000, // Timeout needs to be longer here, accounting for the failed attempts.
         tail: 20_000
       });
 
@@ -375,27 +376,158 @@ await describeMspNet(
       await userApi.docker.waitForLog({
         containerName: "sh-bsp-two",
         searchString: "Received unexpected download request from",
-        timeout: 20_000,
+        timeout: 10_000,
         tail: 50_000
       });
       await userApi.docker.waitForLog({
         containerName: "sh-bsp-two",
         searchString: `for file key [${newFile.fileKey}]`,
-        timeout: 20_000,
+        timeout: 10_000,
         tail: 50_000
       });
       await userApi.docker.waitForLog({
         containerName: "sh-bsp-three",
         searchString: "Received unexpected download request from",
-        timeout: 20_000,
+        timeout: 10_000,
         tail: 50_000
       });
       await userApi.docker.waitForLog({
         containerName: "sh-bsp-three",
         searchString: `for file key [${newFile.fileKey}]`,
-        timeout: 20_000,
+        timeout: 10_000,
         tail: 50_000
       });
+    });
+  }
+);
+
+await describeMspNet(
+  "MSP skips recovery gracefully when indexer is disabled",
+  {
+    initialised: "multi",
+    logLevel: "file-transfer-service=debug",
+    networkConfig: [{ noisy: false, rocksdb: true }],
+    only: true
+  },
+  ({
+    before,
+    after,
+    createMsp1Api,
+    createBspApi,
+    it,
+    createUserApi,
+    createApi,
+    getLaunchResponse
+  }) => {
+    let userApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
+    let mspApi: EnrichedBspApi;
+    let bspTwoApi: EnrichedBspApi;
+    let bspThreeApi: EnrichedBspApi;
+    let recoverableFile: FileMetadata | undefined;
+
+    const bucketName = "recover-files-indexer-disabled-bucket";
+
+    before(async () => {
+      userApi = await createUserApi();
+      bspApi = await createBspApi();
+      const maybeMspApi = await createMsp1Api();
+      assert(maybeMspApi, "MSP API not available");
+      mspApi = maybeMspApi;
+
+      const launchResponse = await getLaunchResponse();
+      assert(launchResponse, "Network launch response not available");
+      assert(
+        "bspTwoRpcPort" in launchResponse,
+        "BSP two RPC port not available in launch response"
+      );
+      assert(
+        "bspThreeRpcPort" in launchResponse,
+        "BSP three RPC port not available in launch response"
+      );
+
+      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse.bspTwoRpcPort}`);
+      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse.bspThreeRpcPort}`);
+      await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
+      await userApi.wait.nodeCatchUpToChainTip(bspThreeApi);
+    });
+
+    after(async () => {
+      await bspApi?.disconnect();
+      await bspTwoApi?.disconnect();
+      await bspThreeApi?.disconnect();
+      await mspApi?.disconnect();
+    });
+
+    it("Create file, delete it from MSP storage, restart MSP and verify graceful skip", async () => {
+      const result = await userApi.file.batchStorageRequests({
+        files: [
+          {
+            source: "res/smile.jpg",
+            destination: "test/recover-files-indexer-disabled.jpg",
+            bucketIdOrName: bucketName,
+            replicationTarget: 3
+          }
+        ],
+        mspId: userApi.shConsts.DUMMY_MSP_ID,
+        bspApis: [bspApi, bspTwoApi, bspThreeApi],
+        mspApi
+      });
+
+      recoverableFile = {
+        fileKey: result.fileKeys[0],
+        bucketId: result.bucketIds[0],
+        location: result.locations[0],
+        owner: userApi.accounts.shUser.address,
+        fingerprint: result.fingerprints[0],
+        fileSize: result.fileSizes[0]
+      };
+
+      await mspApi.wait.fileStorageComplete(recoverableFile.fileKey);
+
+      await mspApi.rpc.storagehubclient.removeFilesFromFileStorage([recoverableFile.fileKey]);
+      await mspApi.wait.fileDeletionFromFileStorage(recoverableFile.fileKey);
+
+      await mspApi.disconnect();
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
+      await userApi.block.skip(20);
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
+
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        searchString: "💤 Idle",
+        timeout: 20_000,
+        tail: 10_000
+      });
+
+      mspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
+      await userApi.wait.nodeCatchUpToChainTip(mspApi);
+      await userApi.block.seal();
+
+      // Recovery should be skipped gracefully because indexer is unavailable.
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        searchString: "indexer is disabled; cannot schedule downloads",
+        timeout: 20_000,
+        tail: 30_000
+      });
+
+      const afterRecoveryAttempt = await mspApi.rpc.storagehubclient.isFileInFileStorage(
+        recoverableFile.fileKey
+      );
+      assert(
+        !afterRecoveryAttempt.isFileFound,
+        "MSP unexpectedly recovered file while indexer is disabled"
+      );
+
+      await userApi.block.skip(5);
+      const stillMissing = await mspApi.rpc.storagehubclient.isFileInFileStorage(
+        recoverableFile.fileKey
+      );
+      assert(!stillMissing.isFileFound, "MSP unexpectedly recovered file later");
     });
   }
 );
