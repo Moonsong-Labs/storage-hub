@@ -605,8 +605,8 @@ impl MspService {
         let file_key_without_prefix = file_key.trim_start_matches("0x");
         if file_key_without_prefix != expected_file_key {
             return Err(Error::BadRequest(format!(
-            "File key in URL does not match file metadata: {expected_file_key} != {file_key_without_prefix}"
-          )));
+                "File key in URL does not match file metadata: {expected_file_key} != {file_key_without_prefix}"
+            )));
         }
 
         // Get the bucket ID from the metadata and verify that the user is its owner.
@@ -630,7 +630,16 @@ impl MspService {
 
         // Accumulate chunks into batches before inserting into the trie, to reduce per-chunk overhead
         // (allocator pressure + trie-mutator rebuild costs).
-        let chunks_per_batch = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / FILE_CHUNK_SIZE as usize;
+        let chunks_per_batch =
+            (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / FILE_CHUNK_SIZE as usize).max(1);
+        if BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE < FILE_CHUNK_SIZE as usize {
+            warn!(
+                target: "msp_service::process_and_upload_file",
+                batch_max_bytes = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+                chunk_size_bytes = FILE_CHUNK_SIZE,
+                "BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE is smaller than FILE_CHUNK_SIZE; falling back to 1 chunk per batch"
+            );
+        }
         let mut pending_chunks: Vec<Vec<u8>> = Vec::with_capacity(chunks_per_batch);
 
         // Initialize the chunk index.
@@ -648,7 +657,7 @@ impl MspService {
                 // Consume the next FILE_CHUNK_SIZE bytes without shifting the remaining buffer.
                 let chunk = overflow_buffer
                     .split_to(FILE_CHUNK_SIZE as usize)
-                    .freeze()
+                    .as_ref()
                     .to_vec();
                 pending_chunks.push(chunk);
 
@@ -671,7 +680,7 @@ impl MspService {
 
         // Check the overflow buffer to see if the file didn't fit exactly in an integer number of chunks.
         if !overflow_buffer.is_empty() {
-            let overflow_bytes = overflow_buffer.freeze().to_vec();
+            let overflow_bytes = overflow_buffer.as_ref().to_vec();
             pending_chunks.push(overflow_bytes);
 
             // Increment the chunk index to get the total amount of chunks.
@@ -816,18 +825,26 @@ impl MspService {
         total_chunks: u64,
     ) -> Result<(), Error> {
         // Get how many chunks fit in a batch of BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, rounding down.
-        const CHUNKS_PER_BATCH: u64 = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64 / FILE_CHUNK_SIZE;
+        let chunks_per_batch = (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64 / FILE_CHUNK_SIZE).max(1);
+        if BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE < FILE_CHUNK_SIZE as usize {
+            warn!(
+                target: "msp_service::legacy_upload_file_in_batches",
+                batch_max_bytes = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+                chunk_size_bytes = FILE_CHUNK_SIZE,
+                "BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE is smaller than FILE_CHUNK_SIZE; falling back to 1 chunk per batch"
+            );
+        }
 
         // Initialize the index of the initial chunk to process in this batch.
         let mut batch_start_chunk_index = 0;
-        let total_batches = (total_chunks + CHUNKS_PER_BATCH - 1) / CHUNKS_PER_BATCH;
+        let total_batches = (total_chunks + chunks_per_batch - 1) / chunks_per_batch;
         let mut batch_number = 1;
 
         // Start processing batches, until all chunks have been processed.
         while batch_start_chunk_index < total_chunks {
             // Get the chunks to send in this batch, capping at the total amount of chunks of the file.
             let chunks = (batch_start_chunk_index
-                ..(batch_start_chunk_index + CHUNKS_PER_BATCH).min(total_chunks))
+                ..(batch_start_chunk_index + chunks_per_batch).min(total_chunks))
                 .map(ChunkId::new)
                 .collect::<HashSet<_>>();
             let chunks_in_batch = chunks.len() as u64;
