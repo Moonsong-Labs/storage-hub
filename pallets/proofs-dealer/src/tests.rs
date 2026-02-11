@@ -2542,7 +2542,9 @@ fn submit_proof_no_record_of_last_proof_fail() {
         key_proofs.insert(
             BlakeTwo256::hash(b"key"),
             KeyProof::<Test> {
-                proof: vec![vec![0]],
+                proof: CompactProof {
+                    encoded_nodes: vec![vec![0]],
+                },
                 challenge_count: Default::default(),
             },
         );
@@ -2613,7 +2615,9 @@ fn submit_proof_challenges_block_not_reached_fail() {
         key_proofs.insert(
             BlakeTwo256::hash(b"key"),
             KeyProof::<Test> {
-                proof: vec![vec![0]],
+                proof: CompactProof {
+                    encoded_nodes: vec![vec![0]],
+                },
                 challenge_count: Default::default(),
             },
         );
@@ -2701,7 +2705,9 @@ fn submit_proof_challenges_block_too_old_fail() {
         key_proofs.insert(
             BlakeTwo256::hash(b"key"),
             KeyProof::<Test> {
-                proof: vec![vec![0]],
+                proof: CompactProof {
+                    encoded_nodes: vec![vec![0]],
+                },
                 challenge_count: Default::default(),
             },
         );
@@ -2791,7 +2797,9 @@ fn submit_proof_seed_not_found_fail() {
         key_proofs.insert(
             BlakeTwo256::hash(b"key"),
             KeyProof::<Test> {
-                proof: vec![vec![0]],
+                proof: CompactProof {
+                    encoded_nodes: vec![vec![0]],
+                },
                 challenge_count: Default::default(),
             },
         );
@@ -2894,7 +2902,9 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         key_proofs.insert(
             BlakeTwo256::hash(b"key"),
             KeyProof::<Test> {
-                proof: vec![vec![0]],
+                proof: CompactProof {
+                    encoded_nodes: vec![vec![0]],
+                },
                 challenge_count: Default::default(),
             },
         );
@@ -3007,14 +3017,18 @@ fn submit_proof_forest_proof_verification_fail() {
         key_proofs.insert(
             BlakeTwo256::hash(b"key"),
             KeyProof::<Test> {
-                proof: vec![vec![0]],
+                proof: CompactProof {
+                    encoded_nodes: vec![vec![0]],
+                },
                 challenge_count: Default::default(),
             },
         );
 
         // Create an empty forest proof to fail verification.
         let proof = Proof::<Test> {
-            forest_proof: vec![],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![],
+            },
             key_proofs,
         };
 
@@ -3114,7 +3128,9 @@ fn submit_proof_number_of_key_proofs_lower_than_keys_verified_in_forest_fail() {
         key_proofs.insert(
             BlakeTwo256::hash(b"key"),
             KeyProof::<Test> {
-                proof: vec![],
+                proof: CompactProof {
+                    encoded_nodes: vec![],
+                },
                 challenge_count: Default::default(),
             },
         );
@@ -3228,7 +3244,9 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
             key_proofs.insert(
                 BlakeTwo256::hash(key.as_bytes()),
                 KeyProof::<Test> {
-                    proof: vec![],
+                    proof: CompactProof {
+                        encoded_nodes: vec![],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -3586,7 +3604,9 @@ fn submit_proof_key_proof_verification_fail() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![],
+                    proof: CompactProof {
+                        encoded_nodes: vec![],
+                    },
                     challenge_count: Default::default(),
                 },
             );
