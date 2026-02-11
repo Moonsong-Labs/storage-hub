@@ -962,11 +962,7 @@ export class NetworkLauncher {
         bspId: ShConsts.BSP_THREE_ID,
         bspStartingWeight: this.config.capacity,
         extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-        additionalArgs: [
-          "--keystore-path=/keystore/bsp-three",
-          ...runtimeTypeArgs,
-          ...logLevelArgs
-        ]
+        additionalArgs: ["--keystore-path=/keystore/bsp-three", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
 
