@@ -14,8 +14,8 @@ use frame_support::{
 use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot, EnsureSigned};
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
-    StorageHubTickGetter, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, StorageHubTickGetter, TrieMutation,
+    TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};

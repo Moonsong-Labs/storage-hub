@@ -12,9 +12,9 @@ use pallet_proofs_dealer::SlashableProviders;
 use pallet_randomness::GetBabeData;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    CommitRevealRandomnessInterface, CommitmentVerifier,
-    FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
-    ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
+    CommitRevealRandomnessInterface, CommitmentVerifier, FileMetadataInterface, MaybeDebug,
+    ProofSubmittersInterface, ReadChallengeableProvidersInterface, TrieMutation,
+    TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};

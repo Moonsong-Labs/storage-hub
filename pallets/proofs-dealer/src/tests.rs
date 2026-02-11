@@ -20,11 +20,11 @@ use pallet_storage_providers::HoldReason;
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
-use sp_trie::CompactProof;
 use sp_runtime::{
     traits::{BlakeTwo256, Zero},
     BoundedVec, DispatchError,
 };
+use sp_trie::CompactProof;
 
 use crate::{
     mock::*,
