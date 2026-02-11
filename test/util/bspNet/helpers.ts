@@ -24,22 +24,22 @@ const execFileAsync = util.promisify(child_process.execFile);
  * Extracts the compact proof from a SCALE-encoded ForestProof.
  *
  * The RPC `generateForestProof` returns SCALE-encoded bytes containing:
- * - CompactProof (Vec<Vec<u8>>) - the Merkle proof nodes
+ * - CompactProof (encoded_nodes: Vec<Vec<u8>>) - the Merkle proof nodes
  * - H256 (32 bytes) - the forest root hash
  *
- * This function decodes the full struct and extracts just the proof portion
- * that extrinsics expect.
+ * This function decodes the full struct and returns the proof in the shape
+ * extrinsics expect (CompactProof / SpTrieStorageProofCompactProof).
  *
  * @param api - The polkadot.js API instance
  * @param encodedForestProof - The SCALE-encoded ForestProof from RPC
- * @returns The extracted Vec<Vec<u8>> proof suitable for extrinsics
+ * @returns The proof as { encodedNodes } suitable for extrinsics
  */
 export const extractProofFromForestProof = (
   api: ApiPromise,
   encodedForestProof: Bytes
-): Vec<Bytes> => {
+): { encodedNodes: Vec<Bytes> } => {
   const decoded = api.createType("(Vec<Bytes>, H256)", encodedForestProof);
-  return decoded[0] as Vec<Bytes>;
+  return { encodedNodes: decoded[0] as Vec<Bytes> };
 };
 
 export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {

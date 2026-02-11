@@ -262,7 +262,7 @@ where
 
         // Construct full proof.
         let proof = StorageProof {
-            forest_proof: proven_file_keys.proof.encoded_nodes,
+            forest_proof: proven_file_keys.proof,
             key_proofs,
         };
 

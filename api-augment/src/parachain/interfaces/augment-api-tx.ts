@@ -39,6 +39,7 @@ import type {
   ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters,
   ShParachainRuntimeSessionKeys,
   SpRuntimeMultiSignature,
+  SpTrieStorageProofCompactProof,
   SpWeightsWeightV2Weight,
   StagingXcmExecutorAssetTransferTransferType,
   StagingXcmV5Location,
@@ -451,16 +452,24 @@ declare module "@polkadot/api-base/types/submittable" {
       bspConfirmStopStoring: AugmentedSubmittable<
         (
           fileKey: H256 | string | Uint8Array,
-          inclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
+          inclusionForestProof:
+            | SpTrieStorageProofCompactProof
+            | { encodedNodes?: any }
+            | string
+            | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Vec<Bytes>]
+        [H256, SpTrieStorageProofCompactProof]
       >;
       /**
        * Used by a BSP to confirm they are storing data of a storage request.
        **/
       bspConfirmStoring: AugmentedSubmittable<
         (
-          nonInclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[],
+          nonInclusionForestProof:
+            | SpTrieStorageProofCompactProof
+            | { encodedNodes?: any }
+            | string
+            | Uint8Array,
           fileKeysAndProofs:
             | Vec<PalletFileSystemFileKeyWithProof>
             | (
@@ -470,7 +479,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 | Uint8Array
               )[]
         ) => SubmittableExtrinsic<ApiType>,
-        [Vec<Bytes>, Vec<PalletFileSystemFileKeyWithProof>]
+        [SpTrieStorageProofCompactProof, Vec<PalletFileSystemFileKeyWithProof>]
       >;
       /**
        * Executed by a BSP to request to stop storing a file.
@@ -524,9 +533,13 @@ declare module "@polkadot/api-base/types/submittable" {
           fingerprint: H256 | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
           canServe: bool | boolean | Uint8Array,
-          inclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
+          inclusionForestProof:
+            | SpTrieStorageProofCompactProof
+            | { encodedNodes?: any }
+            | string
+            | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, Bytes, AccountId32, H256, u64, bool, Vec<Bytes>]
+        [H256, H256, Bytes, AccountId32, H256, u64, bool, SpTrieStorageProofCompactProof]
       >;
       /**
        * Used by a BSP to volunteer for storing a file.
@@ -600,9 +613,9 @@ declare module "@polkadot/api-base/types/submittable" {
                 | Uint8Array
               )[],
           bspId: Option<H256> | null | Uint8Array | H256 | string,
-          forestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
+          forestProof: SpTrieStorageProofCompactProof | { encodedNodes?: any } | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, Vec<Bytes>]
+        [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, SpTrieStorageProofCompactProof]
       >;
       /**
        * Delete files from an incomplete (rejected, expired or revoked) storage request.
@@ -618,9 +631,9 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           fileKeys: Vec<H256> | (H256 | string | Uint8Array)[],
           bspId: Option<H256> | null | Uint8Array | H256 | string,
-          forestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
+          forestProof: SpTrieStorageProofCompactProof | { encodedNodes?: any } | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [Vec<H256>, Option<H256>, Vec<Bytes>]
+        [Vec<H256>, Option<H256>, SpTrieStorageProofCompactProof]
       >;
       /**
        * Issue a new storage request for a file
@@ -778,9 +791,13 @@ declare module "@polkadot/api-base/types/submittable" {
           owner: AccountId32 | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
-          inclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]
+          inclusionForestProof:
+            | SpTrieStorageProofCompactProof
+            | { encodedNodes?: any }
+            | string
+            | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, Bytes, AccountId32, H256, u64, Vec<Bytes>]
+        [H256, H256, Bytes, AccountId32, H256, u64, SpTrieStorageProofCompactProof]
       >;
       updateBucketPrivacy: AugmentedSubmittable<
         (

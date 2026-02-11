@@ -1040,7 +1040,7 @@ where
 
                 Some(StorageRequestMspAcceptedFileKeys {
                     file_keys_and_proofs: accept.clone(),
-                    forest_proof: forest_proof.proof.encoded_nodes,
+                    forest_proof: forest_proof.proof,
                 })
             } else {
                 None

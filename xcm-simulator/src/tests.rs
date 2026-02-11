@@ -1489,8 +1489,7 @@ mod users {
             > = BoundedVec::new();
             let simulated_proof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
-            }
-            .encoded_nodes;
+            };
             vec_of_key_proofs.force_push(FileKeyWithProof {
                 file_key: file_key.clone(),
                 proof: simulated_proof.clone(),
@@ -1816,8 +1815,7 @@ mod users {
             > = BoundedVec::new();
             let simulated_proof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
-            }
-            .encoded_nodes;
+            };
             vec_of_key_proofs.force_push(FileKeyWithProof {
                 file_key: file_key.clone(),
                 proof: simulated_proof.clone(),

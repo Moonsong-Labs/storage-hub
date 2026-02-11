@@ -40,8 +40,7 @@ use runtime_params::RuntimeParameters;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitmentVerifier, CompactProofEncodedNodes, IdentityAdapter, MaybeDebug, TrieMutation,
-    TrieProofDeltaApplier,
+    CommitmentVerifier, IdentityAdapter, MaybeDebug, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
@@ -53,7 +52,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
 };
-use sp_trie::{LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 use xcm_simulator::XcmExecutor;
@@ -817,17 +816,18 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = CompactProofEncodedNodes;
+    type Proof = CompactProof;
     type Commitment = H256;
     type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: &CompactProofEncodedNodes,
+        proof: &CompactProof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.len() > 0 {
+        if proof.encoded_nodes.len() > 0 {
             Ok(proof
+                .encoded_nodes
                 .iter()
                 .map(|node| H256::from_slice(&node[..]))
                 .collect())
@@ -842,7 +842,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProofEncodedNodes;
+    type Proof = CompactProof;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(

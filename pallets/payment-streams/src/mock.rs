@@ -12,8 +12,8 @@ use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot, EnsureSigned};
 use pallet_nfts::PalletFeatures;
 use shp_constants::GIGAUNIT;
 use shp_traits::{
-    CommitRevealRandomnessInterface, CommitmentVerifier, CompactProofEncodedNodes, MaybeDebug,
-    ProofSubmittersInterface, ReadProvidersInterface, TrieMutation, TrieProofDeltaApplier,
+    CommitRevealRandomnessInterface, CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
+    ReadProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
@@ -23,7 +23,7 @@ use sp_runtime::{
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
-use sp_trie::{LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_weights::Weight;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -344,17 +344,18 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifie
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
-    type Proof = CompactProofEncodedNodes;
+    type Proof = CompactProof;
     type Commitment = H256;
     type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
-        proof: &CompactProofEncodedNodes,
+        proof: &CompactProof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.len() > 0 {
+        if proof.encoded_nodes.len() > 0 {
             Ok(proof
+                .encoded_nodes
                 .iter()
                 .map(|node| H256::from_slice(&node[..]))
                 .collect())
@@ -369,7 +370,7 @@ impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProofEncodedNodes;
+    type Proof = CompactProof;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(

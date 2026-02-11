@@ -243,6 +243,7 @@ import type {
   SpRuntimeTokenError,
   SpRuntimeTransactionalError,
   SpTrieStorageProof,
+  SpTrieStorageProofCompactProof,
   SpVersionRuntimeVersion,
   SpWeightsRuntimeDbWeight,
   SpWeightsWeightV2Weight,
@@ -558,6 +559,7 @@ declare module "@polkadot/types/types/registry" {
     SpRuntimeTokenError: SpRuntimeTokenError;
     SpRuntimeTransactionalError: SpRuntimeTransactionalError;
     SpTrieStorageProof: SpTrieStorageProof;
+    SpTrieStorageProofCompactProof: SpTrieStorageProofCompactProof;
     SpVersionRuntimeVersion: SpVersionRuntimeVersion;
     SpWeightsRuntimeDbWeight: SpWeightsRuntimeDbWeight;
     SpWeightsWeightV2Weight: SpWeightsWeightV2Weight;

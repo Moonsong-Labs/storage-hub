@@ -41,6 +41,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, Get},
     BoundedVec, MultiSignature,
 };
+use sp_trie::CompactProof;
 
 /// Helper function to create FileMetadata for tests
 fn create_test_file_metadata(
@@ -385,7 +386,9 @@ mod user_operation_pause_flags_tests {
                 create_file_deletion_signature(&Keyring::Alice, file_key);
 
             // Create dummy forest proof
-            let forest_proof = vec![file_key.as_ref().to_vec()];
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
             assert_noop!(
                 FileSystem::delete_files(
@@ -728,9 +731,13 @@ mod delete_bucket_tests {
                                     BlakeTwo256::hash(&b"test".to_vec())
                                 )
                                 .unwrap(),
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -812,9 +819,13 @@ mod delete_bucket_tests {
                                         BlakeTwo256::hash(&b"test".to_vec())
                                     )
                                     .unwrap(),
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -985,9 +996,13 @@ mod delete_bucket_tests {
 									BlakeTwo256::hash(&b"test".to_vec())
 								)
 								.unwrap(),
-								proof: vec![H256::default().as_ref().to_vec()],
+								proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
 							}],
-							forest_proof: vec![H256::default().as_ref().to_vec()],
+							forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
 						}),
 						reject: vec![],
 					}],
@@ -1314,9 +1329,13 @@ mod request_move_bucket {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -1339,7 +1358,9 @@ mod request_move_bucket {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -3477,9 +3498,13 @@ mod msp_respond_storage_request {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -3528,9 +3553,16 @@ mod msp_respond_storage_request {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec(), file_key.as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![
+                                    H256::default().as_ref().to_vec(),
+                                    file_key.as_ref().to_vec(),
+                                ],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -3624,14 +3656,20 @@ mod msp_respond_storage_request {
                             file_keys_and_proofs: bounded_vec![
                                 FileKeyWithProof {
                                     file_key: first_file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 },
                                 FileKeyWithProof {
                                     file_key: second_file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }
                             ],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                         }),
                         reject: vec![],
                     }],
@@ -3753,9 +3791,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: first_file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         },
@@ -3764,9 +3806,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: second_file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }
@@ -3896,9 +3942,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: first_file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         },
@@ -3907,9 +3957,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: second_file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }
@@ -4032,7 +4086,9 @@ mod msp_respond_storage_request {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -4045,9 +4101,13 @@ mod msp_respond_storage_request {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -4102,9 +4162,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -4169,9 +4233,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -4239,9 +4307,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -4310,9 +4382,11 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
-                                    proof: vec![],
+                                    proof: CompactProof { encoded_nodes: vec![] },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -4387,9 +4461,11 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
-                                    proof: vec![],
+                                    proof: CompactProof { encoded_nodes: vec![] },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -4455,9 +4531,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -4520,9 +4600,13 @@ mod msp_respond_storage_request {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -4537,9 +4621,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -4613,9 +4701,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -4688,9 +4780,13 @@ mod msp_respond_storage_request {
                             accept: Some(StorageRequestMspAcceptedFileKeys {
                                 file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
-                                    proof: vec![H256::default().as_ref().to_vec()],
+                                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                                 }],
-                                forest_proof: vec![H256::default().as_ref().to_vec()],
+                                forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }),
                             reject: vec![],
                         }],
@@ -5507,7 +5603,9 @@ mod bsp_confirm {
                         vec![H256::default().as_ref().to_vec()],
                         BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            proof: vec![H256::default().as_ref().to_vec()],
+                            proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                         }])
                         .unwrap(),
                     ),
@@ -5541,7 +5639,9 @@ mod bsp_confirm {
                         vec![H256::default().as_ref().to_vec()],
                         BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            proof: vec![H256::default().as_ref().to_vec()],
+                            proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                         }])
                         .unwrap(),
                     ),
@@ -5607,7 +5707,9 @@ mod bsp_confirm {
                         vec![H256::default().as_ref().to_vec()],
                         BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            proof: vec![H256::default().as_ref().to_vec()],
+                            proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                         }])
                         .unwrap(),
                     ),
@@ -5678,9 +5780,13 @@ mod bsp_confirm {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -5717,7 +5823,9 @@ mod bsp_confirm {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -5732,7 +5840,9 @@ mod bsp_confirm {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -5743,7 +5853,9 @@ mod bsp_confirm {
                         vec![H256::default().as_ref().to_vec()],
                         BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            proof: vec![H256::default().as_ref().to_vec()],
+                            proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                         }])
                         .unwrap(),
                     ),
@@ -5837,7 +5949,9 @@ mod bsp_confirm {
                     .into_iter()
                     .map(|file_key| FileKeyWithProof {
                         file_key,
-                        proof: vec![file_key.as_ref().to_vec()],
+                        proof: CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
                     })
                     .collect::<Vec<_>>()
                     .try_into()
@@ -5940,7 +6054,9 @@ mod bsp_confirm {
                         vec![H256::default().as_ref().to_vec()],
                         BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            proof: vec![H256::default().as_ref().to_vec()],
+                            proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                         }])
                         .unwrap(),
                     ),
@@ -6032,7 +6148,9 @@ mod bsp_confirm {
                         vec![H256::default().as_ref().to_vec()],
                         BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            proof: vec![H256::default().as_ref().to_vec()],
+                            proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                         }])
                         .unwrap(),
                     ),
@@ -6137,7 +6255,9 @@ mod bsp_confirm {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -6344,7 +6464,9 @@ mod bsp_confirm {
                     .iter()
                     .map(|&file_key| FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     })
                     .collect();
 
@@ -6496,7 +6618,9 @@ mod bsp_confirm {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -6640,7 +6764,9 @@ mod bsp_confirm {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -6808,7 +6934,9 @@ mod bsp_confirm {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -7042,7 +7170,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -7188,7 +7318,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -7337,7 +7469,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -7574,7 +7708,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -7778,7 +7914,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -7971,7 +8109,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -8225,7 +8365,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -8464,7 +8606,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key: first_file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -8475,7 +8619,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key: second_file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -8753,7 +8899,9 @@ mod bsp_stop_storing {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap()
                 ));
@@ -9604,7 +9752,9 @@ mod stop_storing_for_insolvent_user {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -9835,7 +9985,9 @@ mod stop_storing_for_insolvent_user {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -9848,9 +10000,13 @@ mod stop_storing_for_insolvent_user {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -10033,7 +10189,9 @@ mod stop_storing_for_insolvent_user {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -10314,7 +10472,9 @@ mod stop_storing_for_insolvent_user {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -10575,7 +10735,9 @@ mod stop_storing_for_insolvent_user {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -10799,7 +10961,9 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -10812,9 +10976,13 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -10994,7 +11162,9 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -11007,9 +11177,13 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -11260,7 +11434,9 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -11273,9 +11449,13 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -11419,7 +11599,9 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![H256::default().as_ref().to_vec()],
                     BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        proof: vec![H256::default().as_ref().to_vec()],
+                        proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                     }])
                     .unwrap(),
                 ));
@@ -11432,9 +11614,13 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -11642,7 +11828,9 @@ mod msp_stop_storing_bucket {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -11660,9 +11848,13 @@ mod msp_stop_storing_bucket {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -12315,7 +12507,9 @@ mod delete_file_tests {
                 let old_bucket_root = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
 
                 // Create forest proof
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Precalculate expected new root
                 let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
@@ -12418,7 +12612,9 @@ mod delete_file_tests {
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Get current BSP root before deletion
                 let old_bsp_root = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
@@ -12535,7 +12731,9 @@ mod delete_file_tests {
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Get current BSP root before deletion
                 let old_bsp_root = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
@@ -12632,7 +12830,9 @@ mod delete_file_tests {
                 let old_bucket_root = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
 
                 // Create forest proof
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Precalculate expected new root
                 let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
@@ -12701,7 +12901,9 @@ mod delete_file_tests {
                     create_file_deletion_signature(&Keyring::Bob, file_key);
 
                 // Create forest proof
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 assert_noop!(
                     FileSystem::delete_files(
@@ -12784,7 +12986,9 @@ mod delete_file_tests {
                 let _guard = set_eve_insolvent(true);
 
                 // Create forest proof
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 assert_noop!(
                     FileSystem::delete_files(
@@ -12824,7 +13028,9 @@ mod delete_file_tests {
                     create_file_deletion_signature(&Keyring::Bob, file_key);
 
                 // Create forest proof
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Instead of returning `NotBucketOwner` error after checking is_bucket_owner(&file_owner, &bucket_id)?
                 // In the extrinsic, we defer the check to the `compute_file_key` function, which returns `InvalidFileKeyMetadata` error
@@ -12872,7 +13078,9 @@ mod delete_file_tests {
                 let invalid_provider_id = H256::from_low_u64_be(99999);
 
                 // Create forest proof
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 assert_noop!(
                     FileSystem::delete_files(
@@ -12910,7 +13118,9 @@ mod delete_file_tests {
                     create_file_deletion_signature(&Keyring::Alice, wrong_file_key);
 
                 // Create forest proof
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 assert_noop!(
                     FileSystem::delete_files(
@@ -12961,7 +13171,9 @@ mod delete_file_tests {
                     create_file_deletion_signature(&Keyring::Alice, file_key);
 
                 // Create valid forest proof for the file stored by MSP
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // This should succeed with InvalidProviderID error
                 assert_ok!(FileSystem::delete_files(
@@ -13026,7 +13238,9 @@ mod delete_file_tests {
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Delete file from bucket
                 assert_ok!(FileSystem::delete_files(
@@ -13123,7 +13337,9 @@ mod delete_file_tests {
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Delete file from BSP
                 assert_ok!(FileSystem::delete_files(
@@ -13191,7 +13407,9 @@ mod delete_file_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof_confirm = vec![H256::default().as_ref().to_vec()];
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -13215,7 +13433,9 @@ mod delete_file_tests {
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Delete file from bucket (this simulates user deleting from MSP bucket while storage request is still open)
                 assert_ok!(FileSystem::delete_files(
@@ -13288,7 +13508,9 @@ mod delete_file_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof_confirm = vec![H256::default().as_ref().to_vec()];
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -13305,9 +13527,13 @@ mod delete_file_tests {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -13334,7 +13560,9 @@ mod delete_file_tests {
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Delete file from BSP (this simulates BSP deleting the file while storage request is still open)
                 assert_ok!(FileSystem::delete_files(
@@ -13407,7 +13635,9 @@ mod delete_file_tests {
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Delete file from bucket
                 assert_ok!(FileSystem::delete_files(
@@ -13486,7 +13716,9 @@ mod delete_file_tests {
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Delete file from BSP
                 assert_ok!(FileSystem::delete_files(
@@ -13571,7 +13803,9 @@ mod delete_file_tests {
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Delete file from BSP1 only
                 assert_ok!(FileSystem::delete_files(
@@ -13663,7 +13897,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -13732,7 +13968,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Create forest proof showing BSP stores the file
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Call delete_files_for_incomplete_storage_request
                 assert_ok!(FileSystem::delete_files_for_incomplete_storage_request(
@@ -13849,7 +14087,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key1));
                 let file_key1_with_proof = FileKeyWithProof {
                     file_key: file_key1,
-                    proof: vec![file_key1.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key1.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof1 = vec![H256::default().as_ref().to_vec()];
 
@@ -13863,7 +14103,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key2));
                 let file_key2_with_proof = FileKeyWithProof {
                     file_key: file_key2,
-                    proof: vec![file_key2.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key2.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof2 = vec![H256::default().as_ref().to_vec()];
 
@@ -14072,7 +14314,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 // Both BSPs confirm storing the file
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -14283,7 +14527,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -14379,9 +14625,13 @@ mod delete_files_for_incomplete_storage_request_tests {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -14473,7 +14723,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -14491,9 +14743,13 @@ mod delete_files_for_incomplete_storage_request_tests {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -14612,7 +14868,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -14630,9 +14888,13 @@ mod delete_files_for_incomplete_storage_request_tests {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -14747,7 +15009,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -15100,9 +15364,13 @@ mod delete_files_for_incomplete_storage_request_tests {
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
-                                proof: vec![H256::default().as_ref().to_vec()],
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                             }],
-                            forest_proof: vec![H256::default().as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -15178,7 +15446,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -15288,7 +15558,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -15458,7 +15730,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 // MSP accepts storage request WITH INCLUSION PROOF (file already exists)
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![H256::default().as_ref().to_vec()],
+                    proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
                 };
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
@@ -15466,7 +15740,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: vec![file_key_with_proof],
-                            forest_proof: vec![file_key.as_ref().to_vec()],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![file_key.as_ref().to_vec()],
+                            },
                         }),
                         reject: vec![],
                     }],
@@ -15602,7 +15878,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                     "Correct BSP should have volunteered"
                 );
 
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Try to delete from active (non-rejected) storage request
                 assert_noop!(
@@ -15654,7 +15932,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp1_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -15744,7 +16024,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -15825,7 +16107,9 @@ mod delete_files_for_incomplete_storage_request_tests {
 
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -15928,7 +16212,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: vec![file_key.as_ref().to_vec()],
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
                 let forest_proof = vec![H256::default().as_ref().to_vec()];
 
@@ -17381,7 +17667,9 @@ mod batch_delete_file_tests {
                 ];
 
                 // Create forest proof
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Attempt to delete with duplicate file keys - should fail
                 assert_noop!(
@@ -17462,7 +17750,9 @@ mod batch_delete_file_tests {
                 ];
 
                 // Create forest proof
-                let forest_proof = vec![file_key.as_ref().to_vec()];
+                let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
 
                 // Attempt to delete with duplicate file keys - should fail
                 assert_noop!(

@@ -710,7 +710,7 @@ mod tests {
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 included_keys.as_slice(),
-                &proof.proof.encoded_nodes
+                &proof.proof
             )
             .is_ok()
         );
@@ -727,7 +727,7 @@ mod tests {
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 included_keys.as_slice(),
-                &proof.proof.encoded_nodes
+                &proof.proof
             )
             .is_ok()
         );
@@ -749,7 +749,7 @@ mod tests {
                 ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                     &root,
                     &mutations,
-                    &proof.proof.encoded_nodes,
+                    &proof.proof,
                 );
             assert!(apply_delta_result.is_ok());
             assert!(apply_delta_result

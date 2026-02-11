@@ -340,7 +340,7 @@ where
                     owner,
                     fingerprint,
                     size: size.saturated_into(),
-                    inclusion_forest_proof: inclusion_forest_proof.encoded_nodes,
+                    inclusion_forest_proof,
                 }
                 .into();
 

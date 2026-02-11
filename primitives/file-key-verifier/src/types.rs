@@ -7,15 +7,14 @@ use scale_info::TypeInfo;
 use shp_file_metadata::{
     Chunk, ChunkId, ChunkIdError, ChunkWithId, FileMetadata, Fingerprint, Leaf,
 };
-use shp_traits::CompactProofEncodedNodes;
-use sp_trie::{TrieDBBuilder, TrieLayout};
+use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
 
 #[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode, DecodeWithMemTracking)]
 pub struct FileKeyProof<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
     pub file_metadata: FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>,
-    pub proof: CompactProofEncodedNodes,
+    pub proof: CompactProof,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,7 +48,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         location: Vec<u8>,
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
-        proof: impl Into<CompactProofEncodedNodes>,
+        proof: impl Into<CompactProof>,
     ) -> Result<Self, ProvenFileKeyError> {
         let file_metadata = FileMetadata::new(owner, bucket_id, location, size, fingerprint)
             .map_err(|_| ProvenFileKeyError::FailedToCreateFileMetadata)?;
@@ -73,14 +72,11 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
             .try_into()
             .map_err(|_| ProvenFileKeyError::FingerprintAndTrieHashMismatch)?;
 
-        // Decode compact proof directly into memory DB without cloning.
-        let mut memdb = sp_trie::MemoryDB::<<T as TrieLayout>::Hash>::new(&[]);
-        let root = sp_trie::decode_compact::<sp_trie::LayoutV1<<T as TrieLayout>::Hash>, _, _>(
-            &mut memdb,
-            self.proof.iter().map(|n| n.as_slice()),
-            Some(&expected_root),
-        )
-        .map_err(|_| ProvenFileKeyError::TrieAndExpectedRootMismatch)?;
+        // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
+        let (memdb, root) = self
+            .proof
+            .to_memory_db::<<T as TrieLayout>::Hash>(Some(&expected_root))
+            .map_err(|_| ProvenFileKeyError::TrieAndExpectedRootMismatch)?;
 
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
         let mut trie_iter = trie

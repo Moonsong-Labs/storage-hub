@@ -82,14 +82,13 @@ where
             .try_into()
             .map_err(|_| "Failed to convert fingerprint to a hasher output.")?;
 
-        // Decode compact proof directly into memory DB without cloning.
-        let mut memdb = sp_trie::MemoryDB::<T::Hash>::new(&[]);
-        let root = sp_trie::decode_compact::<sp_trie::LayoutV1<T::Hash>, _, _>(
-            &mut memdb,
-            proof.proof.iter().map(Vec::as_slice),
-            Some(&expected_root),
-        )
-        .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")?;
+        // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
+        let (memdb, root) = proof
+            .proof
+            .to_memory_db(Some(&expected_root))
+            .map_err(|_| {
+                "Failed to convert proof to memory DB, root doesn't match with expected."
+            })?;
 
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
 

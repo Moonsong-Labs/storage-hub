@@ -24,13 +24,6 @@ use sp_runtime::{
     BoundedVec, DispatchError,
 };
 
-/// Type alias for the encoded nodes of a compact trie proof.
-///
-/// This represents the `encoded_nodes` field of `sp_trie::CompactProof` and is used
-/// as the proof type at extrinsic boundaries because it implements `DecodeWithMemTracking`
-/// (required by polkadot-sdk stable2503+), while `CompactProof` does not.
-pub type CompactProofEncodedNodes = Vec<Vec<u8>>;
-
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
 #[cfg(feature = "std")]

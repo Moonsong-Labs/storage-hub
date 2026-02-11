@@ -3,7 +3,7 @@ import type { ApiTypes, AugmentedSubmittable, SubmittableExtrinsic, SubmittableE
 import type { Bytes, Compact, Option, U256, Vec, bool, u128, u32, u64 } from '@polkadot/types-codec';
 import type { AnyNumber, IMethod, ITuple } from '@polkadot/types-codec/types';
 import type { AccountId20, Call, H160, H256 } from '@polkadot/types/interfaces/runtime';
-import type { EthereumTransactionEip7702AuthorizationListItem, EthereumTransactionTransactionV3, FpAccountEthereumSignature, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileDeletionRequest, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters, ShSolochainEvmRuntimeSessionKeys, SpConsensusBabeDigestsNextConfigDescriptor, SpConsensusGrandpaEquivocationProof, SpConsensusSlotsEquivocationProof, SpSessionMembershipProof, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
+import type { EthereumTransactionEip7702AuthorizationListItem, EthereumTransactionTransactionV3, FpAccountEthereumSignature, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileDeletionRequest, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters, ShSolochainEvmRuntimeSessionKeys, SpConsensusBabeDigestsNextConfigDescriptor, SpConsensusGrandpaEquivocationProof, SpConsensusSlotsEquivocationProof, SpSessionMembershipProof, SpTrieStorageProofCompactProof, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
 export type __AugmentedSubmittable = AugmentedSubmittable<() => unknown>;
 export type __SubmittableExtrinsic<ApiType extends ApiTypes> = SubmittableExtrinsic<ApiType>;
 export type __SubmittableExtrinsicFunction<ApiType extends ApiTypes> = SubmittableExtrinsicFunction<ApiType>;
@@ -249,14 +249,18 @@ declare module '@polkadot/api-base/types/submittable' {
              * - [`OperationNotAllowedWithInsolventUser`]: The file owner is insolvent (the BSP should use
              * [`stop_storing_for_insolvent_user`] instead)
              **/
-            bspConfirmStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, inclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H256, Vec<Bytes>]>;
+            bspConfirmStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+                encodedNodes?: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, SpTrieStorageProofCompactProof]>;
             /**
              * Used by a BSP to confirm they are storing data of a storage request.
              **/
-            bspConfirmStoring: AugmentedSubmittable<(nonInclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[], fileKeysAndProofs: Vec<PalletFileSystemFileKeyWithProof> | (PalletFileSystemFileKeyWithProof | {
+            bspConfirmStoring: AugmentedSubmittable<(nonInclusionForestProof: SpTrieStorageProofCompactProof | {
+                encodedNodes?: any;
+            } | string | Uint8Array, fileKeysAndProofs: Vec<PalletFileSystemFileKeyWithProof> | (PalletFileSystemFileKeyWithProof | {
                 fileKey?: any;
                 proof?: any;
-            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<Bytes>, Vec<PalletFileSystemFileKeyWithProof>]>;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [SpTrieStorageProofCompactProof, Vec<PalletFileSystemFileKeyWithProof>]>;
             /**
              * Executed by a BSP to request to stop storing a file.
              *
@@ -300,7 +304,9 @@ declare module '@polkadot/api-base/types/submittable' {
              * This extrinsic will fail with [`FileHasIncompleteStorageRequest`] if an `IncompleteStorageRequest`
              * exists for the file key. The BSP must wait until fisherman nodes clean up the incomplete request.
              **/
-            bspRequestStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId20 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array, inclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId20, H256, u64, bool, Vec<Bytes>]>;
+            bspRequestStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId20 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+                encodedNodes?: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId20, H256, u64, bool, SpTrieStorageProofCompactProof]>;
             /**
              * Used by a BSP to volunteer for storing a file.
              *
@@ -345,7 +351,9 @@ declare module '@polkadot/api-base/types/submittable' {
                 location?: any;
                 size_?: any;
                 fingerprint?: any;
-            } | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, Vec<Bytes>]>;
+            } | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
+                encodedNodes?: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, SpTrieStorageProofCompactProof]>;
             /**
              * Delete files from an incomplete (rejected, expired or revoked) storage request.
              *
@@ -356,7 +364,9 @@ declare module '@polkadot/api-base/types/submittable' {
              *
              * Multiple files can be deleted in a single call using one forest proof bounded by [`MaxFileDeletionsPerExtrinsic`](Config::MaxFileDeletionsPerExtrinsic).
              **/
-            deleteFilesForIncompleteStorageRequest: AugmentedSubmittable<(fileKeys: Vec<H256> | (H256 | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<H256>, Option<H256>, Vec<Bytes>]>;
+            deleteFilesForIncompleteStorageRequest: AugmentedSubmittable<(fileKeys: Vec<H256> | (H256 | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
+                encodedNodes?: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<H256>, Option<H256>, SpTrieStorageProofCompactProof]>;
             /**
              * Issue a new storage request for a file
              **/
@@ -442,7 +452,9 @@ declare module '@polkadot/api-base/types/submittable' {
              * The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
              * wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
              **/
-            stopStoringForInsolventUser: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId20 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, inclusionForestProof: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId20, H256, u64, Vec<Bytes>]>;
+            stopStoringForInsolventUser: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId20 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+                encodedNodes?: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId20, H256, u64, SpTrieStorageProofCompactProof]>;
             updateBucketPrivacy: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, private: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, bool]>;
             /**
              * Generic tx

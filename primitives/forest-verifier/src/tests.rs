@@ -7,8 +7,8 @@ use shp_traits::{
 use sp_core::H256;
 use sp_runtime::traits::BlakeTwo256;
 use sp_trie::{
-    recorder::Recorder, LayoutV1, MemoryDB, Trie, TrieDBBuilder, TrieDBMutBuilder, TrieLayout,
-    TrieMut,
+    recorder::Recorder, CompactProof, LayoutV1, MemoryDB, Trie, TrieDBBuilder, TrieDBMutBuilder,
+    TrieLayout, TrieMut,
 };
 use std::collections::BTreeSet;
 use trie_db::{Hasher, TrieIterator};
@@ -260,8 +260,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -318,8 +317,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -376,8 +374,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -437,8 +434,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -484,8 +480,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -542,8 +537,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -600,8 +594,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -665,8 +658,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -733,8 +725,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -791,8 +782,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -847,8 +837,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -900,8 +889,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -956,8 +944,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         // Verify proof
         let proof_keys =
@@ -981,7 +968,9 @@ mod verify_proof_tests {
         let challenge_key = leaf_keys.first().unwrap();
 
         // Generate empty proof
-        let empty_proof: Vec<Vec<u8>> = vec![];
+        let empty_proof = CompactProof {
+            encoded_nodes: vec![],
+        };
 
         // Generate empty root
         let empty_root = Default::default();
@@ -1024,8 +1013,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         let invalid_root = Default::default();
 
@@ -1072,7 +1060,7 @@ mod verify_proof_tests {
         // Modify the proof to make it invalid
         compact_proof.encoded_nodes[0] = vec![0; 32];
 
-        let proof = compact_proof.encoded_nodes;
+        let proof = compact_proof;
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1107,7 +1095,9 @@ mod verify_proof_tests {
         }
 
         // Generate proof
-        let proof: Vec<Vec<u8>> = vec![];
+        let proof = CompactProof {
+            encoded_nodes: vec![],
+        };
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1143,8 +1133,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1182,8 +1171,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1224,8 +1212,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1274,8 +1261,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1317,8 +1303,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1360,8 +1345,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1411,8 +1395,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1443,8 +1426,7 @@ mod verify_proof_tests {
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create empty compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create empty compact proof from recorder");
 
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
@@ -1479,13 +1461,12 @@ mod mutate_root_tests {
         recorder: &mut Recorder<BlakeTwo256>,
         root: &H256,
         challenge_keys: &[H256],
-    ) -> Vec<Vec<u8>> {
+    ) -> CompactProof {
         let proof = recorder
             .clone()
             .drain_storage_proof()
             .to_compact_proof::<BlakeTwo256>(*root)
-            .expect("Failed to create compact proof from recorder")
-            .encoded_nodes;
+            .expect("Failed to create compact proof from recorder");
 
         ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
             root,

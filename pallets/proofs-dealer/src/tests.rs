@@ -20,6 +20,7 @@ use pallet_storage_providers::HoldReason;
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
+use sp_trie::CompactProof;
 use sp_runtime::{
     traits::{BlakeTwo256, Zero},
     BoundedVec, DispatchError,
@@ -996,7 +997,9 @@ fn submit_proof_success() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -1004,7 +1007,9 @@ fn submit_proof_success() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -1144,7 +1149,9 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -1152,7 +1159,9 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -1275,7 +1284,9 @@ fn submit_proof_submitted_by_not_a_provider_success() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -1283,7 +1294,9 @@ fn submit_proof_submitted_by_not_a_provider_success() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -1425,7 +1438,9 @@ fn submit_proof_with_checkpoint_challenges_success() {
             key_proofs.insert(
                 *challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -1433,7 +1448,9 @@ fn submit_proof_with_checkpoint_challenges_success() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -1586,7 +1603,9 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             key_proofs.insert(
                 *challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -1601,7 +1620,9 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -1690,7 +1711,9 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             key_proofs.insert(
                 *challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -1698,7 +1721,9 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -1813,7 +1838,9 @@ fn submit_proof_after_stake_increase_success() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -1821,7 +1848,9 @@ fn submit_proof_after_stake_increase_success() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -1897,7 +1926,9 @@ fn submit_proof_after_stake_increase_success() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -1905,7 +1936,9 @@ fn submit_proof_after_stake_increase_success() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -2052,7 +2085,9 @@ fn submit_proof_after_stake_decrease_success() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -2060,7 +2095,9 @@ fn submit_proof_after_stake_decrease_success() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -2137,7 +2174,9 @@ fn submit_proof_after_stake_decrease_success() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -2145,7 +2184,9 @@ fn submit_proof_after_stake_decrease_success() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -2334,7 +2375,9 @@ fn submit_proof_with_checkpoint_challenges_mutations_fails_if_decoded_metadata_i
             key_proofs.insert(
                 *challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -2342,7 +2385,9 @@ fn submit_proof_with_checkpoint_challenges_mutations_fails_if_decoded_metadata_i
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -2370,7 +2415,9 @@ fn submit_proof_caller_not_a_provider_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs: Default::default(),
         };
 
@@ -2398,7 +2445,9 @@ fn submit_proof_provider_passed_not_registered_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs: Default::default(),
         };
 
@@ -2429,7 +2478,9 @@ fn submit_proof_empty_key_proofs_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs: Default::default(),
         };
 
@@ -2498,7 +2549,9 @@ fn submit_proof_no_record_of_last_proof_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -2567,7 +2620,9 @@ fn submit_proof_challenges_block_not_reached_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -2653,7 +2708,9 @@ fn submit_proof_challenges_block_too_old_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -2741,7 +2798,9 @@ fn submit_proof_seed_not_found_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -2842,7 +2901,9 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -3060,7 +3121,9 @@ fn submit_proof_number_of_key_proofs_lower_than_keys_verified_in_forest_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -3173,7 +3236,9 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -3368,7 +3433,9 @@ fn submit_proof_out_checkpoint_challenges_fail() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -3379,7 +3446,9 @@ fn submit_proof_out_checkpoint_challenges_fail() {
             key_proofs.insert(
                 BlakeTwo256::hash(key.as_bytes()),
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -3387,7 +3456,9 @@ fn submit_proof_out_checkpoint_challenges_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -3523,7 +3594,9 @@ fn submit_proof_key_proof_verification_fail() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 
@@ -4295,7 +4368,9 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             key_proofs.insert(
                 challenge,
                 KeyProof::<Test> {
-                    proof: vec![vec![0]],
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
                     challenge_count: Default::default(),
                 },
             );
@@ -4303,7 +4378,9 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
 
         // Mock a proof.
         let proof = Proof::<Test> {
-            forest_proof: vec![vec![0]],
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
             key_proofs,
         };
 

@@ -8,10 +8,9 @@ use alloc::{
 };
 use frame_support::sp_runtime::DispatchError;
 use shp_traits::{
-    CommitmentVerifier, CompactProofEncodedNodes, TrieMutation, TrieProofDeltaApplier,
-    TrieRemoveMutation,
+    CommitmentVerifier, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
-use sp_trie::{MemoryDB, StorageProof, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
+use sp_trie::{CompactProof, MemoryDB, StorageProof, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
 
 #[cfg(test)]
@@ -29,7 +28,7 @@ impl<T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for ForestVerifier
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProofEncodedNodes;
+    type Proof = CompactProof;
     type Commitment = <T::Hash as sp_core::Hasher>::Out;
     type Challenge = <T::Hash as sp_core::Hasher>::Out;
 
@@ -47,14 +46,10 @@ where
             return Err("No challenges provided.".into());
         }
 
-        // Decode compact proof directly into memory DB without cloning.
-        let mut memdb = MemoryDB::<T::Hash>::new(&[]);
-        let root = sp_trie::decode_compact::<sp_trie::LayoutV1<T::Hash>, _, _>(
-            &mut memdb,
-            proof.iter().map(Vec::as_slice),
-            Some(root.into()),
-        )
-        .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")?;
+        // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
+        let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
+            "Failed to convert proof to memory DB, root doesn't match with expected."
+        })?;
 
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
 
@@ -221,7 +216,7 @@ impl<T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = CompactProofEncodedNodes;
+    type Proof = CompactProof;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(
@@ -246,37 +241,14 @@ where
             return Err("Root is empty.".into());
         }
 
-        // Decode compact proof directly without cloning, then convert through StorageProof.
-        // TODO: Understand why the decoded MemoryDB cannot be used directly to modify a partial trie.
-        // (it fails with error IncompleteDatabase) Converting through StorageProof re-inserts
-        // nodes with EMPTY_PREFIX which is required for trie mutation operations.
-        let mut decode_db = MemoryDB::<T::Hash>::new(&[]);
-        let mut root = sp_trie::decode_compact::<sp_trie::LayoutV1<T::Hash>, _, _>(
-            &mut decode_db,
-            proof.iter().map(Vec::as_slice),
-            Some(root.into()),
-        )
-        .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")?;
+        // TODO: Understand why `CompactProof` cannot be used directly to construct memdb and modify a partial trie. (it fails with error IncompleteDatabase)
+        // Convert compact proof to `sp_trie::StorageProof` in order to access the trie nodes.
+        let (storage_proof, mut root) = proof
+            .to_storage_proof::<T::Hash>(Some(root.into()))
+            .map_err(|_| {
+                "Failed to convert proof to memory DB, root doesn't match with expected."
+            })?;
 
-        // Replicate what `CompactProof::to_storage_proof` does internally:
-        // Drain the MemoryDB populated by `decode_compact`. Each entry is
-        // `(key, (node_data: Vec<u8>, ref_count: i32))`. Only keep nodes with
-        // a positive ref_count (i.e. actually present, not tombstones), and
-        // extract the raw `node_data` to build a `StorageProof`.
-        //
-        // Then convert that `StorageProof` back into a fresh MemoryDB. This is
-        // needed because `decode_compact` stores nodes with trie-aware prefix keys,
-        // but `TrieDBMutBuilder::from_existing` expects nodes stored flatly by hash
-        // (with `EMPTY_PREFIX`). `StorageProof::to_memory_db` re-inserts the nodes
-        // in that flat format. Without this roundtrip, trie mutation fails with
-        // `IncompleteDatabase`.
-        let storage_proof = StorageProof::new(decode_db.drain().into_iter().filter_map(|kv| {
-            if (kv.1).1 > 0 {
-                Some((kv.1).0)
-            } else {
-                None
-            }
-        }));
         let mut memdb = storage_proof.to_memory_db();
 
         let mut trie = TrieDBMutBuilder::<T>::from_existing(&mut memdb, &mut root).build();

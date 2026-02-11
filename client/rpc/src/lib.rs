@@ -1036,7 +1036,6 @@ where
         };
 
         // Generate the Forest proof in a closure to drop the read lock on the Forest Storage.
-        // Destructure to avoid cloning `compact_proof.encoded_nodes` later.
         let ForestProof {
             proven,
             proof: compact_proof,
@@ -1131,7 +1130,7 @@ where
 
         // Construct full proof.
         let proof = StorageProof::<Runtime> {
-            forest_proof: compact_proof.encoded_nodes,
+            forest_proof: compact_proof,
             key_proofs,
         };
         let encoded = proof.encode();

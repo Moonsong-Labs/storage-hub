@@ -259,7 +259,7 @@ impl FileProof {
             file_metadata.location().clone(),
             file_metadata.file_size(),
             *file_metadata.fingerprint(),
-            self.proof.encoded_nodes.clone(),
+            self.proof.clone(),
         )
         .map_err(|_| FileProofError::InvalidFileMetadata)
     }
