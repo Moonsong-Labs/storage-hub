@@ -1731,14 +1731,14 @@ where
                     period,
                     max_period
                 );
-            } else {
-                info!(
+            }
+
+            info!(
                     target: LOG_TARGET,
                     "Extrinsic mortality period set to {} blocks (~{} minutes at 6s block time).",
                     period,
                     (period * 6) / 60
-                );
-            }
+            );
 
             config.extrinsic_mortality = period;
             config
