@@ -85,7 +85,6 @@ pub struct ProviderOptions {
     /// Port for trusted file transfer HTTP server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trusted_file_transfer_server_port: Option<u16>,
-
     /// List of trusted MSP on-chain IDs allowed to request downloads from this BSP.
     ///
     /// Only applicable when running as a BSP provider.
