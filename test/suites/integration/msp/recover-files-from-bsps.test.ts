@@ -407,16 +407,7 @@ await describeMspNet(
     logLevel: "file-transfer-service=debug",
     networkConfig: [{ noisy: false, rocksdb: true }]
   },
-  ({
-    before,
-    after,
-    createMsp1Api,
-    createBspApi,
-    it,
-    createUserApi,
-    createApi,
-    getLaunchResponse
-  }) => {
+  ({ before, after, createMsp1Api, createBspApi, it, createUserApi, createApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -430,17 +421,6 @@ await describeMspNet(
       const maybeMspApi = await createMsp1Api();
       assert(maybeMspApi, "MSP API not available");
       mspApi = maybeMspApi;
-
-      const launchResponse = await getLaunchResponse();
-      assert(launchResponse, "Network launch response not available");
-      assert(
-        "bspTwoRpcPort" in launchResponse,
-        "BSP two RPC port not available in launch response"
-      );
-      assert(
-        "bspThreeRpcPort" in launchResponse,
-        "BSP three RPC port not available in launch response"
-      );
     });
 
     after(async () => {
