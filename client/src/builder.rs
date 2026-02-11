@@ -1003,6 +1003,9 @@ pub struct FishermanOptions {
     /// Ordering strategy for pending deletions.
     #[serde(default)]
     pub ordering: FileOrdering,
+    /// Configuration options for blockchain service.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blockchain_service: Option<BlockchainServiceOptions>,
 }
 
 /// Default value for batch deletion limit.
