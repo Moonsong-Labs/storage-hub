@@ -2,7 +2,6 @@ import assert, { strictEqual } from "node:assert";
 import {
   describeMspNet,
   type EnrichedBspApi,
-  extractProofFromForestProof,
   type FileMetadata,
   getContainerPeerId,
   type SqlClient,
@@ -215,7 +214,9 @@ await describeMspNet(
       );
       const intentionPayload = intentionCodec.toU8a();
       const rawSignature = shUser.sign(intentionPayload);
-      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+      const userSignature = userApi.createType("MultiSignature", {
+        Sr25519: rawSignature
+      });
 
       await userApi.block.seal({
         calls: [
@@ -422,7 +423,9 @@ await describeMspNet(
       );
       const intentionPayload = intentionCodec.toU8a();
       const rawSignature = shUser.sign(intentionPayload);
-      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+      const userSignature = userApi.createType("MultiSignature", {
+        Sr25519: rawSignature
+      });
 
       await userApi.block.seal({
         calls: [
@@ -690,7 +693,9 @@ await describeMspNet(
       );
       const intentionPayload = intentionCodec.toU8a();
       const rawSignature = shUser.sign(intentionPayload);
-      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+      const userSignature = userApi.createType("MultiSignature", {
+        Sr25519: rawSignature
+      });
 
       const deletionRequest = {
         fileOwner: shUser.address,
@@ -701,11 +706,6 @@ await describeMspNet(
         size: file3.fileSize,
         fingerprint: file3.fingerprint
       };
-
-      const decodedBucketInclusionProof = extractProofFromForestProof(
-        userApi,
-        bucketInclusionProof
-      );
 
       // Seal deletion block (N) WITHOUT finalizing
       const { events: deletionEvents } = await userApi.block.seal({
@@ -718,7 +718,11 @@ await describeMspNet(
             file3.fileSize,
             file3.fingerprint
           ),
-          userApi.tx.fileSystem.deleteFiles([deletionRequest], null, decodedBucketInclusionProof)
+          userApi.tx.fileSystem.deleteFiles(
+            [deletionRequest],
+            null,
+            bucketInclusionProof.toString()
+          )
         ],
         signer: shUser,
         finaliseBlock: false
@@ -758,12 +762,18 @@ await describeMspNet(
 
       // Drop deletion txs if they went back to pool
       try {
-        await userApi.node.dropTxn({ module: "fileSystem", method: "requestDeleteFile" });
+        await userApi.node.dropTxn({
+          module: "fileSystem",
+          method: "requestDeleteFile"
+        });
       } catch {
         // Transaction not in pool
       }
       try {
-        await userApi.node.dropTxn({ module: "fileSystem", method: "deleteFiles" });
+        await userApi.node.dropTxn({
+          module: "fileSystem",
+          method: "deleteFiles"
+        });
       } catch {
         // Transaction not in pool
       }
@@ -858,7 +868,9 @@ await describeMspNet(
       );
       const intentionPayload = intentionCodec.toU8a();
       const rawSignature = shUser.sign(intentionPayload);
-      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+      const userSignature = userApi.createType("MultiSignature", {
+        Sr25519: rawSignature
+      });
 
       const deletionRequest = {
         fileOwner: shUser.address,
@@ -869,8 +881,6 @@ await describeMspNet(
         size: file3.fileSize,
         fingerprint: file3.fingerprint
       };
-
-      const decodedBspInclusionProof = extractProofFromForestProof(userApi, bspInclusionProof);
 
       // Seal deletion block (N) WITHOUT finalizing - delete from BSP only
       const { events: deletionEvents } = await userApi.block.seal({
@@ -886,7 +896,7 @@ await describeMspNet(
           userApi.tx.fileSystem.deleteFiles(
             [deletionRequest],
             userApi.shConsts.DUMMY_BSP_ID, // BSP ID - makes this a BSP deletion
-            decodedBspInclusionProof // Forest inclusion proof
+            bspInclusionProof.toString() // Forest inclusion proof
           )
         ],
         signer: shUser,
@@ -923,12 +933,18 @@ await describeMspNet(
 
       // Drop deletion txs if they went back to pool
       try {
-        await userApi.node.dropTxn({ module: "fileSystem", method: "requestDeleteFile" });
+        await userApi.node.dropTxn({
+          module: "fileSystem",
+          method: "requestDeleteFile"
+        });
       } catch {
         // Transaction not in pool
       }
       try {
-        await userApi.node.dropTxn({ module: "fileSystem", method: "deleteFiles" });
+        await userApi.node.dropTxn({
+          module: "fileSystem",
+          method: "deleteFiles"
+        });
       } catch {
         // Transaction not in pool
       }

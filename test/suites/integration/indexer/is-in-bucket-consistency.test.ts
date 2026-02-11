@@ -5,7 +5,6 @@ import {
   bspTwoKey,
   describeMspNet,
   type EnrichedBspApi,
-  extractProofFromForestProof,
   type FileMetadata,
   hexToBuffer,
   ShConsts,
@@ -419,11 +418,9 @@ await describeMspNet(
 
       // Step 5: Generate forest proof from MSP for the bucket
       const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", firstFile.bucketId);
-      const forestProofEncoded = await mspApi.rpc.storagehubclient.generateForestProof(
-        bucketIdOption,
-        [firstFile.fileKey]
-      );
-      const forestProof = extractProofFromForestProof(userApi, forestProofEncoded);
+      const forestProof = await mspApi.rpc.storagehubclient.generateForestProof(bucketIdOption, [
+        firstFile.fileKey
+      ]);
 
       // Step 6: Call deleteFiles with bspId = null (bucket deletion)
       await userApi.block.seal({

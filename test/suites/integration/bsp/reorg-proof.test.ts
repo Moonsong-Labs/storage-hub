@@ -3,7 +3,6 @@ import {
   bspKey,
   describeBspNet,
   type EnrichedBspApi,
-  extractProofFromForestProof,
   type FileMetadata,
   ShConsts,
   shUser,
@@ -319,14 +318,9 @@ await describeBspNet(
 
     it("BSP requests stop storing file", async () => {
       // Build transaction for BSP-Three to stop storing the only file it has.
-      const inclusionForestProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
-        null,
-        [firstFileMetadata.fileKey]
-      );
-      const inclusionForestProof = extractProofFromForestProof(
-        userApi,
-        inclusionForestProofEncoded
-      );
+      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+        firstFileMetadata.fileKey
+      ]);
       await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
       const blockResult = await userApi.block.seal({
         calls: [
@@ -338,7 +332,7 @@ await describeBspNet(
             firstFileMetadata.fingerprint,
             firstFileMetadata.fileSize,
             false,
-            inclusionForestProof
+            inclusionForestProof.toString()
           )
         ],
         signer: bspKey
@@ -439,14 +433,10 @@ await describeBspNet(
       // Create and save a valid inclusion Forest proof for confirming the file deletion, at this point,
       // with this root, with the latest file confirmation included in the forest, so that we can use it
       // in the fork that will be reorged in, also after the file storage confirmation.
-      const inclusionForestProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
-        null,
-        [firstFileMetadata.fileKey]
-      );
-      const inclusionForestProofAfterConfirmingStoring = extractProofFromForestProof(
-        userApi,
-        inclusionForestProofEncoded
-      );
+      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+        firstFileMetadata.fileKey
+      ]);
+      const inclusionForestProofAfterConfirmingStoring = inclusionForestProof.toString();
 
       // Save the BSP Forest root before doing the reorg.
       const onChainBspInfoBeforeResult = await userApi.call.storageProvidersApi.getBspInfo(

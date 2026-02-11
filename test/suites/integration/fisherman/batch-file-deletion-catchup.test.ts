@@ -2,7 +2,6 @@ import assert from "node:assert";
 import {
   describeMspNet,
   type EnrichedBspApi,
-  extractProofFromForestProof,
   type SqlClient,
   shUser,
   waitFor
@@ -372,11 +371,10 @@ await describeMspNet(
 
       // Delete from BSP (all 3 files in one call)
       const bspFileKeys = unfinalizedDeletionIndices.map((idx) => unfinalizedFileKeys[idx]);
-      const bspInclusionProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
+      const bspInclusionProof = await bspApi.rpc.storagehubclient.generateForestProof(
         null,
         bspFileKeys
       );
-      const bspInclusionProof = extractProofFromForestProof(userApi, bspInclusionProofEncoded);
       deletionCalls.push(
         userApi.tx.fileSystem.deleteFiles(bspFileDeletionRequests, bspId, bspInclusionProof)
       );
@@ -408,13 +406,9 @@ await describeMspNet(
       }
 
       for (const [bucketId, { fileKeys: bucketFileKeys, deletionRequests }] of bucketDeletions) {
-        const bucketInclusionProofEncoded = await msp1Api.rpc.storagehubclient.generateForestProof(
+        const bucketInclusionProof = await msp1Api.rpc.storagehubclient.generateForestProof(
           bucketId,
           bucketFileKeys
-        );
-        const bucketInclusionProof = extractProofFromForestProof(
-          userApi,
-          bucketInclusionProofEncoded
         );
         deletionCalls.push(
           userApi.tx.fileSystem.deleteFiles(deletionRequests, null, bucketInclusionProof)
@@ -866,11 +860,10 @@ await describeMspNet(
 
       // Delete from BSP (all 3 files in one call)
       const bspFileKeys = unfinalizedRevocationIndices.map((idx) => unfinalizedFileKeys[idx]);
-      const bspInclusionProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
+      const bspInclusionProof = await bspApi.rpc.storagehubclient.generateForestProof(
         null,
         bspFileKeys
       );
-      const bspInclusionProof = extractProofFromForestProof(userApi, bspInclusionProofEncoded);
       deletionCalls.push(
         userApi.tx.fileSystem.deleteFilesForIncompleteStorageRequest(
           bspFileKeys,
@@ -892,13 +885,9 @@ await describeMspNet(
       }
 
       for (const [bucketId, { fileKeys: bucketFileKeys }] of bucketDeletions) {
-        const bucketInclusionProofEncoded = await msp1Api.rpc.storagehubclient.generateForestProof(
+        const bucketInclusionProof = await msp1Api.rpc.storagehubclient.generateForestProof(
           bucketId,
           bucketFileKeys
-        );
-        const bucketInclusionProof = extractProofFromForestProof(
-          userApi,
-          bucketInclusionProofEncoded
         );
         deletionCalls.push(
           userApi.tx.fileSystem.deleteFilesForIncompleteStorageRequest(

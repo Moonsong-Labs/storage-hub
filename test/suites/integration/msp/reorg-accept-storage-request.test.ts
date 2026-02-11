@@ -1,14 +1,7 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import {
-  describeMspNet,
-  type EnrichedBspApi,
-  extractProofFromForestProof,
-  shUser,
-  waitFor,
-  waitForLog
-} from "../../../util";
+import { describeMspNet, type EnrichedBspApi, shUser, waitFor, waitForLog } from "../../../util";
 
 /**
  * MSP Storage Request Accept Reorg Integration Test
@@ -220,14 +213,10 @@ await describeMspNet(
         fingerprint: file1Result.fingerprints[0]
       };
 
-      const decodedBucketInclusionProof = extractProofFromForestProof(
-        userApi,
-        bucketInclusionProof
-      );
       const deleteFilesTx = userApi.tx.fileSystem.deleteFiles(
         [deletionRequest],
         null,
-        decodedBucketInclusionProof
+        bucketInclusionProof.toString()
       );
       await deleteFilesTx.signAndSend(shUser, {
         nonce: currentNonce + 1,

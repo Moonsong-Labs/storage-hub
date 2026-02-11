@@ -1,14 +1,7 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import {
-  bspKey,
-  describeBspNet,
-  type EnrichedBspApi,
-  extractProofFromForestProof,
-  shUser,
-  waitFor
-} from "../../../util";
+import { bspKey, describeBspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
 
 await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -121,14 +114,9 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
 
     const stopStoringTxs = [];
     for (let i = 0; i < fileKeys.length; i++) {
-      const inclusionForestProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
-        null,
-        [fileKeys[i]]
-      );
-      const inclusionForestProof = extractProofFromForestProof(
-        userApi,
-        inclusionForestProofEncoded
-      );
+      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+        fileKeys[i]
+      ]);
       stopStoringTxs.push(
         userApi.tx.fileSystem.bspRequestStopStoring(
           fileKeys[i],
@@ -138,7 +126,7 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
           files[i].fingerprint,
           files[i].file_size,
           false,
-          inclusionForestProof
+          inclusionForestProof.toString()
         )
       );
     }
@@ -166,16 +154,13 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
     await userApi.block.skipTo(cooldown);
 
     for (let i = 0; i < fileKeys.length; i++) {
-      const inclusionForestProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
-        null,
-        [fileKeys[i]]
-      );
-      const inclusionForestProof = extractProofFromForestProof(
-        userApi,
-        inclusionForestProofEncoded
-      );
+      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+        fileKeys[i]
+      ]);
       await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof)],
+        calls: [
+          userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof.toString())
+        ],
         signer: bspKey
       });
 
@@ -283,14 +268,9 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
 
       const stopStoringTxs = [];
       for (let i = 0; i < fileKeys.length; i++) {
-        const inclusionForestProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
-          null,
-          [fileKeys[i]]
-        );
-        const inclusionForestProof = extractProofFromForestProof(
-          userApi,
-          inclusionForestProofEncoded
-        );
+        const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+          fileKeys[i]
+        ]);
         stopStoringTxs.push(
           userApi.tx.fileSystem.bspRequestStopStoring(
             fileKeys[i],
@@ -300,7 +280,7 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
             files[i].fingerprint,
             files[i].file_size,
             false,
-            inclusionForestProof
+            inclusionForestProof.toString()
           )
         );
       }
@@ -330,16 +310,11 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
       // Batching the delete confirmation should fail because of the wrong inclusionForestProof for extrinsic 2 and 3
       const confirmStopStoringTxs = [];
       for (let i = 0; i < fileKeys.length; i++) {
-        const inclusionForestProofEncoded = await bspApi.rpc.storagehubclient.generateForestProof(
-          null,
-          [fileKeys[i]]
-        );
-        const inclusionForestProof = extractProofFromForestProof(
-          userApi,
-          inclusionForestProofEncoded
-        );
+        const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+          fileKeys[i]
+        ]);
         confirmStopStoringTxs.push(
-          userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof)
+          userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof.toString())
         );
 
         // Check for the confirm stopped storing event.
