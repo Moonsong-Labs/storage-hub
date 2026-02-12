@@ -36,6 +36,8 @@ pub struct Config {
     pub msp: MspConfig,
     pub database: DatabaseConfig,
     pub file_transfer: FileTransferConfig,
+    #[serde(default)]
+    pub node_health: NodeHealthConfig,
 }
 
 /// Log format configuration
@@ -205,6 +207,38 @@ pub struct MspConfig {
     pub use_legacy_upload_method: bool,
 }
 
+/// Node health monitoring configuration
+///
+/// Configures thresholds for the `/node-health` endpoint, which checks
+/// whether the MSP node is operating correctly.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeHealthConfig {
+    /// How many seconds the indexer's `updated_at` can lag behind `now`
+    /// before it is considered stuck (default: 120s)
+    pub indexer_stale_threshold_secs: u64,
+    /// Maximum acceptable block lag between the indexer and the finalized chain head (default: 10)
+    pub indexer_lag_blocks_threshold: u64,
+    /// Time window in seconds for counting recent storage requests (default: 600 = 10 min)
+    pub request_window_secs: u64,
+    /// Minimum number of total requests in the window before the acceptance ratio matters (default: 10)
+    pub request_min_threshold: u64,
+    /// How many seconds the on-chain nonce can remain unchanged (with pending extrinsics)
+    /// before it is considered stuck (default: 600 = 10 min)
+    pub nonce_stuck_threshold_secs: u64,
+}
+
+impl Default for NodeHealthConfig {
+    fn default() -> Self {
+        Self {
+            indexer_stale_threshold_secs: 120,
+            indexer_lag_blocks_threshold: 10,
+            request_window_secs: 600,
+            request_min_threshold: 10,
+            nonce_stuck_threshold_secs: 600,
+        }
+    }
+}
+
 /// Database configuration for PostgreSQL connection
 ///
 /// Manages the connection parameters for the PostgreSQL database
@@ -265,6 +299,7 @@ impl Default for Config {
                 max_upload_sessions: MAX_UPLOAD_SESSIONS,
                 max_download_sessions: MAX_DOWNLOAD_SESSIONS,
             },
+            node_health: NodeHealthConfig::default(),
         }
     }
 }

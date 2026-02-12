@@ -26,9 +26,10 @@
 
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
+use chrono::NaiveDateTime;
 
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp},
+    models::{Bsp, Bucket, File, Msp, ServiceState},
     OnchainBspId, OnchainMspId,
 };
 use shp_types::Hash;
@@ -143,6 +144,43 @@ pub trait IndexerOps: Send + Sync {
         &self,
         onchain_msp_id: &OnchainMspId,
     ) -> RepositoryResult<u64>;
+
+    /// Get the indexer service state (last indexed block, updated_at, etc.)
+    async fn get_service_state(&self) -> RepositoryResult<ServiceState>;
+
+    /// Count ALL files in buckets belonging to this MSP created within the given window,
+    /// regardless of their step (Requested, Stored, Expired, etc.).
+    ///
+    /// # Arguments
+    /// * `msp_db_id` - The MSP's database ID
+    /// * `window_secs` - Time window in seconds from now
+    async fn count_recent_requests_for_msp(
+        &self,
+        msp_db_id: i64,
+        window_secs: u64,
+    ) -> RepositoryResult<i64>;
+
+    /// Count files in buckets belonging to this MSP created within the given window
+    /// that have an `msp_file` association (i.e., accepted by this MSP).
+    ///
+    /// # Arguments
+    /// * `msp_db_id` - The MSP's database ID
+    /// * `window_secs` - Time window in seconds from now
+    async fn count_recent_accepted_requests_for_msp(
+        &self,
+        msp_db_id: i64,
+        window_secs: u64,
+    ) -> RepositoryResult<i64>;
+
+    /// Get the most recent `created_at` timestamp for files that have an `msp_file`
+    /// association with this MSP (informational only).
+    ///
+    /// # Arguments
+    /// * `msp_db_id` - The MSP's database ID
+    async fn get_last_accepted_request_time_for_msp(
+        &self,
+        msp_db_id: i64,
+    ) -> RepositoryResult<Option<NaiveDateTime>>;
 }
 
 /// Mutable operations for test environments.

@@ -15,13 +15,14 @@
 use async_trait::async_trait;
 #[cfg(test)]
 use bigdecimal::BigDecimal;
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
-    models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp, MspFile},
-    schema::{bsp, bucket, file},
+    models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp, MspFile, ServiceState},
+    schema::{bsp, bucket, file, msp_file},
     OnchainMspId,
 };
 use shp_types::Hash;
@@ -190,6 +191,72 @@ impl IndexerOps for Repository {
         let file_count = MspFile::get_all_files_for_msp(&mut conn, onchain_msp_id).await?;
 
         Ok(file_count)
+    }
+
+    async fn get_service_state(&self) -> RepositoryResult<ServiceState> {
+        let mut conn = self.pool.get().await?;
+        ServiceState::get(&mut conn).await.map_err(Into::into)
+    }
+
+    async fn count_recent_requests_for_msp(
+        &self,
+        msp_db_id: i64,
+        window_secs: u64,
+    ) -> RepositoryResult<i64> {
+        let mut conn = self.pool.get().await?;
+        let cutoff =
+            chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
+
+        // Count ALL files in buckets belonging to this MSP, created within window
+        let count: i64 = file::table
+            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .filter(bucket::msp_id.eq(msp_db_id))
+            .filter(file::created_at.ge(cutoff))
+            .count()
+            .get_result(&mut *conn)
+            .await?;
+
+        Ok(count)
+    }
+
+    async fn count_recent_accepted_requests_for_msp(
+        &self,
+        msp_db_id: i64,
+        window_secs: u64,
+    ) -> RepositoryResult<i64> {
+        let mut conn = self.pool.get().await?;
+        let cutoff =
+            chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
+
+        // Count files in MSP's buckets, created within window, that have an msp_file association
+        let count: i64 = file::table
+            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
+            .filter(bucket::msp_id.eq(msp_db_id))
+            .filter(msp_file::msp_id.eq(msp_db_id))
+            .filter(file::created_at.ge(cutoff))
+            .count()
+            .get_result(&mut *conn)
+            .await?;
+
+        Ok(count)
+    }
+
+    async fn get_last_accepted_request_time_for_msp(
+        &self,
+        msp_db_id: i64,
+    ) -> RepositoryResult<Option<NaiveDateTime>> {
+        let mut conn = self.pool.get().await?;
+
+        // MAX(file.created_at) for files with msp_file association for this MSP
+        let result: Option<NaiveDateTime> = file::table
+            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
+            .filter(msp_file::msp_id.eq(msp_db_id))
+            .select(diesel::dsl::max(file::created_at))
+            .first(&mut *conn)
+            .await?;
+
+        Ok(result)
     }
 }
 

@@ -16,8 +16,9 @@ use bigdecimal::BigDecimal;
 use chrono::Utc;
 use tokio::sync::RwLock;
 
+use chrono::NaiveDateTime;
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp},
+    models::{Bsp, Bucket, File, Msp, ServiceState},
     OnchainBspId, OnchainMspId,
 };
 use shp_types::Hash;
@@ -365,6 +366,40 @@ impl IndexerOps for MockRepository {
             .filter(|(account, _)| account == user_account)
             .map(|(_, data)| data.clone())
             .collect())
+    }
+
+    // ============ Node Health Operations ============
+    async fn get_service_state(&self) -> RepositoryResult<ServiceState> {
+        let now = Utc::now().naive_utc();
+        Ok(ServiceState {
+            id: 1,
+            last_indexed_finalized_block: 100,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    async fn count_recent_requests_for_msp(
+        &self,
+        _msp_db_id: i64,
+        _window_secs: u64,
+    ) -> RepositoryResult<i64> {
+        Ok(0)
+    }
+
+    async fn count_recent_accepted_requests_for_msp(
+        &self,
+        _msp_db_id: i64,
+        _window_secs: u64,
+    ) -> RepositoryResult<i64> {
+        Ok(0)
+    }
+
+    async fn get_last_accepted_request_time_for_msp(
+        &self,
+        _msp_db_id: i64,
+    ) -> RepositoryResult<Option<NaiveDateTime>> {
+        Ok(None)
     }
 }
 

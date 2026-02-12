@@ -39,6 +39,7 @@ pub fn routes(services: Services) -> Router {
         .route("/stats", get(handlers::stats))
         .route("/value-props", get(handlers::value_props))
         .route("/health", get(handlers::msp_health))
+        .route("/node-health", get(handlers::node_health))
         // Bucket routes
         .route("/buckets", get(handlers::buckets::list_buckets))
         .route("/buckets/{bucket_id}", get(handlers::buckets::get_bucket))
@@ -79,5 +80,21 @@ mod tests {
 
         let json: serde_json::Value = response.json();
         assert_eq!(json["status"], HealthService::HEALTHY);
+    }
+
+    #[tokio::test]
+    async fn test_node_health_route() {
+        let app = crate::api::mock_app().await;
+        let server = TestServer::new(app).unwrap();
+
+        let response = server.get("/node-health").await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+
+        let json: serde_json::Value = response.json();
+        assert_eq!(json["status"], "healthy");
+        assert!(json["checkedAt"].is_string());
+        assert!(json["signals"]["indexer"].is_object());
+        assert!(json["signals"]["requestAcceptance"].is_object());
+        assert!(json["signals"]["txNonce"].is_object());
     }
 }

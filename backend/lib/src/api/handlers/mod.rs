@@ -37,6 +37,11 @@ pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoRes
     Ok(services.health.check_health().await)
 }
 
+pub async fn node_health(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
+    debug!("GET node health check");
+    Ok(services.node_health.check_node_health().await)
+}
+
 // ==================== Payment Handler ====================
 
 pub async fn payment_streams(
