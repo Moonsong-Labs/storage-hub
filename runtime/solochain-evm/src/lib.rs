@@ -166,7 +166,10 @@ pub type UncheckedExtrinsic =
     fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
 /// Migrations to run on runtime upgrade.
-pub type Migrations = (pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,);
+pub type Migrations = (
+    pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,
+    pallet_file_system::migrations::v2::MigrateV1ToV2<Runtime>,
+);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<

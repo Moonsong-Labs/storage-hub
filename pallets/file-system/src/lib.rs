@@ -411,7 +411,7 @@ pub mod pallet {
     }
 
     /// The current storage version.
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -420,23 +420,6 @@ pub mod pallet {
     #[pallet::storage]
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, MerkleHash<T>, StorageRequestMetadata<T>>;
-
-    /// A double map from file key to the BSP IDs of the BSPs that volunteered to store the file to whether that BSP has confirmed storing it.
-    ///
-    /// Any BSP under a file key prefix is considered to be a volunteer and can be removed at any time.
-    /// Once a BSP submits a valid proof via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
-    ///
-    /// When a storage request is expired or removed, the corresponding file key prefix in this map is removed.
-    #[pallet::storage]
-    pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        MerkleHash<T>,
-        Blake2_128Concat,
-        ProviderIdFor<T>,
-        StorageRequestBspsMetadata<T>,
-        OptionQuery,
-    >;
 
     /// Bookkeeping of the buckets containing open storage requests.
     #[pallet::storage]

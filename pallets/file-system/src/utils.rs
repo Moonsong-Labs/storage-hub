@@ -9,6 +9,7 @@ use frame_support::{
         tokens::{Fortitude, Precision, Preservation, Restriction},
         Get,
     },
+    BoundedBTreeMap,
 };
 use num_bigint::BigUint;
 use sp_runtime::{
@@ -49,13 +50,13 @@ use crate::{
         ForestProof, IncompleteStorageRequestMetadata, MerkleHash, MoveBucketRequestMetadata,
         MspStorageRequestStatus, MultiAddresses, PeerIds, PendingStopStoringRequest, ProviderIdFor,
         RejectedStorageRequest, ReplicationTarget, ReplicationTargetType, StorageDataUnit,
-        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
+        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
         StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber,
         UserOperationPauseFlags, ValuePropId,
     },
     weights::WeightInfo,
     BucketsWithStorageRequests, Error, Event, HoldReason, IncompleteStorageRequests, Pallet,
-    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestBsps,
+    PendingMoveBucketRequests, PendingStopStoringRequests,
     StorageRequestExpirations, StorageRequests, UserOperationPauseFlagsStorage,
 };
 
@@ -382,14 +383,10 @@ where
         file_key: MerkleHash<T>,
     ) -> Result<Vec<ProviderIdFor<T>>, QueryBspsVolunteeredForFileError> {
         // Check that the storage request exists.
-        if !<StorageRequests<T>>::contains_key(&file_key) {
-            return Err(QueryBspsVolunteeredForFileError::StorageRequestNotFound);
-        }
+        let storage_request_metadata =
+            <StorageRequests<T>>::get(&file_key).ok_or(QueryBspsVolunteeredForFileError::StorageRequestNotFound)?;
 
-        let bsps_volunteered =
-            <StorageRequestBsps<T>>::iter_prefix(&file_key).map(|(bsp_id, _)| bsp_id);
-
-        Ok(bsps_volunteered.collect())
+        Ok(storage_request_metadata.bsps.keys().cloned().collect())
     }
 
     pub fn decode_generic_apply_delta_event_info(
@@ -1130,6 +1127,7 @@ where
             bsps_required: replication_target,
             bsps_confirmed: zero,
             bsps_volunteered: zero,
+            bsps: BoundedBTreeMap::new(),
             expires_at: expiration_tick,
             deposit_paid: deposit,
         };
@@ -1204,7 +1202,7 @@ where
                 if !storage_request_metadata.bsps_confirmed.is_zero() {
                     // We create the incomplete storage request metadata and insert it into the incomplete storage requests
                     let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
-                        (&storage_request_metadata, &file_key).into();
+                        (&storage_request_metadata).into();
 
                     Self::add_incomplete_storage_request(
                         file_key,
@@ -1883,7 +1881,7 @@ where
 
         // Check if the BSP is already volunteered for this storage request.
         ensure!(
-            !<StorageRequestBsps<T>>::contains_key(&file_key, &bsp_id),
+            !storage_request_metadata.bsps.contains_key(&bsp_id),
             Error::<T>::BspAlreadyVolunteered
         );
 
@@ -1904,15 +1902,11 @@ where
             Error::<T>::BspNotEligibleToVolunteer
         );
 
-        // Add BSP to storage request metadata.
-        <StorageRequestBsps<T>>::insert(
-            &file_key,
-            &bsp_id,
-            StorageRequestBspsMetadata::<T> {
-                confirmed: false,
-                _phantom: Default::default(),
-            },
-        );
+        // Add BSP to storage request metadata inline map (false = not confirmed).
+        storage_request_metadata
+            .bsps
+            .try_insert(bsp_id, false)
+            .map_err(|_| Error::<T>::ReplicationTargetExceedsMaximum)?;
 
         // Increment the number of BSPs volunteered.
         match storage_request_metadata
@@ -2071,18 +2065,18 @@ where
 
             // Check that the BSP has volunteered for the storage request.
             ensure!(
-                <StorageRequestBsps<T>>::contains_key(&file_key, &bsp_id),
+                storage_request_metadata.bsps.contains_key(&bsp_id),
                 Error::<T>::BspNotVolunteered
             );
 
-            let requests = expect_or_err!(
-                <StorageRequestBsps<T>>::get(&file_key, &bsp_id),
+            let confirmed_value = expect_or_err!(
+                storage_request_metadata.bsps.get(&bsp_id),
                 "BSP should exist since we checked it above",
                 Error::<T>::ImpossibleFailedToGetValue
             );
 
             // Check that the storage provider has not already confirmed storing the file.
-            ensure!(!requests.confirmed, Error::<T>::BspAlreadyConfirmed);
+            ensure!(!*confirmed_value, Error::<T>::BspAlreadyConfirmed);
 
             let available_capacity =
                 <T::Providers as ReadStorageProvidersInterface>::available_capacity(&bsp_id);
@@ -2200,15 +2194,12 @@ where
                 // Notify that the storage request has been fulfilled.
                 Self::deposit_event(Event::StorageRequestFulfilled { file_key });
             } else {
-                // Update storage request metadata.
-                <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
-
-                // Update bsp for storage request.
-                <StorageRequestBsps<T>>::mutate(&file_key, &bsp_id, |bsp| {
-                    if let Some(bsp) = bsp {
-                        bsp.confirmed = true;
-                    }
-                });
+                // Update BSP to confirmed in inline map and write back.
+                let mut updated = storage_request_metadata.clone();
+                if let Some(confirmed) = updated.bsps.get_mut(&bsp_id) {
+                    *confirmed = true;
+                }
+                <StorageRequests<T>>::set(&file_key, Some(updated));
             }
         }
 
@@ -2329,7 +2320,7 @@ where
         {
             // We create the incomplete storage request metadata and insert it into the incomplete storage requests
             let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
-                (&storage_request_metadata, &file_key).into();
+                (&storage_request_metadata).into();
             Self::add_incomplete_storage_request(file_key, incomplete_storage_request_metadata);
         }
 
@@ -2375,11 +2366,7 @@ where
         // Remove the storage request from the active storage requests for the bucket
         <BucketsWithStorageRequests<T>>::remove(&storage_request_metadata.bucket_id, file_key);
 
-        // Remove BSPs that volunteered for the storage request.
-        // We consume the iterator so the drain actually happens.
-        let _ = <StorageRequestBsps<T>>::drain_prefix(file_key).count();
-
-        // Remove storage request.
+        // Remove storage request (inline bsps map is removed with it).
         <StorageRequests<T>>::remove(file_key);
     }
 
@@ -2529,17 +2516,10 @@ where
 
         match <StorageRequests<T>>::get(&file_key) {
             Some(mut storage_request_metadata) => {
-                match <StorageRequestBsps<T>>::get(&file_key, &bsp_id) {
+                match storage_request_metadata.bsps.get(&bsp_id) {
                     // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
-                    // We need to decrement the number of BSPs confirmed and volunteered, remove the BSP as a data server and from the storage request.
-                    Some(bsp) => {
-                        expect_or_err!(
-                            bsp.confirmed,
-                            "BSP should have confirmed storing the file since we verify the proof and their root matches the one in storage",
-                            Error::<T>::BspNotConfirmed,
-                            bool
-                        );
-
+                    // We need to decrement the number of BSPs confirmed and volunteered, remove the BSP from the inline map.
+                    Some(confirmed) if *confirmed => {
                         storage_request_metadata.bsps_confirmed = storage_request_metadata
                             .bsps_confirmed
                             .saturating_sub(ReplicationTargetType::<T>::one());
@@ -2548,7 +2528,11 @@ where
                             .bsps_volunteered
                             .saturating_sub(ReplicationTargetType::<T>::one());
 
-                        <StorageRequestBsps<T>>::remove(&file_key, &bsp_id);
+                        storage_request_metadata.bsps.remove(&bsp_id);
+                    }
+                    // BSP volunteered but has not confirmed yet - invalid state for stop storing.
+                    Some(_) => {
+                        return Err(Error::<T>::BspNotConfirmed.into());
                     }
                     // We hit scenario 2. There is an open storage request but the BSP is not a volunteer.
                     // We need to increment the number of BSPs required.
@@ -2578,15 +2562,11 @@ where
                 )?;
 
                 if can_serve {
-                    // Add the BSP as a data server for the file.
-                    <StorageRequestBsps<T>>::insert(
-                        &file_key,
-                        &bsp_id,
-                        StorageRequestBspsMetadata::<T> {
-                            confirmed: true,
-                            _phantom: Default::default(),
-                        },
-                    );
+                    // Add the BSP as a data server for the new storage request (confirmed = true).
+                    if let Some(mut new_metadata) = <StorageRequests<T>>::get(&file_key) {
+                        let _ = new_metadata.bsps.try_insert(bsp_id, true);
+                        <StorageRequests<T>>::set(&file_key, Some(new_metadata));
+                    }
                 }
             }
         };
@@ -3014,9 +2994,9 @@ where
     /// Filter the given file keys to return only those that the BSP still needs to confirm storing after
     /// volunteering for them.
     ///
-    /// This function queries `StorageRequestBsps` for each provided file key and BSP ID,
+    /// This function reads `StorageRequests` for each file key and checks the inline `bsps` map,
     /// filtering out file keys where:
-    /// - The BSP has already confirmed storing (confirmed = true)
+    /// - The BSP has already confirmed storing (value = true)
     /// - The BSP is not a volunteer for the storage request (no entry exists)
     /// - The storage request doesn't exist
     ///
@@ -3028,11 +3008,9 @@ where
         file_keys
             .into_iter()
             .filter(|file_key| {
-                // Check if BSP has volunteered but not yet confirmed for this file key
-                match StorageRequestBsps::<T>::get(file_key, &bsp_id) {
-                    Some(metadata) => !metadata.confirmed,
-                    None => false,
-                }
+                StorageRequests::<T>::get(file_key).map_or(false, |metadata| {
+                    metadata.bsps.get(&bsp_id).map_or(false, |confirmed| !*confirmed)
+                })
             })
             .collect()
     }
@@ -3102,7 +3080,7 @@ where
                 // This would result in the file being stored by the BSP, but not by the MSP.
                 Self::add_incomplete_storage_request(
                     *file_key,
-                    IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
+                    IncompleteStorageRequestMetadata::from(&storage_request),
                 );
                 Self::cleanup_storage_request(&file_key, &storage_request);
             }
@@ -3248,7 +3226,7 @@ where
                 // This would result in the file being stored by the BSP, but not by the MSP.
                 Self::add_incomplete_storage_request(
                     *file_key,
-                    IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
+                    IncompleteStorageRequestMetadata::from(&storage_request),
                 );
                 Self::cleanup_storage_request(&file_key, &storage_request);
             }
@@ -3447,7 +3425,7 @@ mod hooks {
         utils::BucketIdFor,
         weights::WeightInfo,
         Event, MoveBucketRequestExpirations, NextStartingTickToCleanUp, Pallet,
-        PendingMoveBucketRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        PendingMoveBucketRequests, StorageRequestExpirations, StorageRequests,
     };
     use sp_runtime::{
         traits::{Get, One, Zero},
@@ -3615,12 +3593,14 @@ mod hooks {
             file_key: MerkleHash<T>,
             meter: &mut WeightMeter,
         ) {
-            // Get storage request as mutable and count BSPs that volunteered for it.
-            // We do not remove the storage request nor BSPs as the runtime needs this information
+            // Get storage request and count BSPs that volunteered for it from the inline map.
+            // We do not remove the storage request as the runtime needs this information
             // to be able to know if a fisherman node can delete the respective file.
             let storage_request_metadata = StorageRequests::<T>::get(&file_key);
-            let amount_of_volunteered_bsps = StorageRequestBsps::<T>::iter_prefix(&file_key)
-                .fold(0u32, |acc, _| acc.saturating_add(One::one()));
+            let amount_of_volunteered_bsps = storage_request_metadata
+                .as_ref()
+                .map(|m| m.bsps.len() as u32)
+                .unwrap_or(0);
 
             match storage_request_metadata {
                 Some(storage_request_metadata) => match &storage_request_metadata.msp_status {
@@ -3650,7 +3630,7 @@ mod hooks {
                             // There are BSPs that have confirmed storing the file, so we need to create an incomplete storage request metadata
                             // This will allow the fisherman node to delete the file from the confirmed BSPs.
                             let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
-                                (&storage_request_metadata, &file_key).into();
+                                (&storage_request_metadata).into();
 
                             Self::add_incomplete_storage_request(
                                 file_key,

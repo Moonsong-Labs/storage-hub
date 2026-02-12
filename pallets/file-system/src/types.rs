@@ -3,7 +3,7 @@ use core::cmp::max;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
     traits::{fungible::Inspect, nonfungibles_v2::Inspect as NonFungiblesInspect, Get},
-    BoundedVec,
+    BoundedBTreeMap, BoundedVec,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
@@ -14,7 +14,7 @@ use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
     Config, Error, MoveBucketRequestExpirations, NextAvailableMoveBucketRequestExpirationTick,
-    NextAvailableStorageRequestExpirationTick, StorageRequestBsps, StorageRequestExpirations,
+    NextAvailableStorageRequestExpirationTick, StorageRequestExpirations,
 };
 
 /// Ephemeral metadata of a storage request.
@@ -80,6 +80,9 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// There can be more than `bsps_required` volunteers, but it is essentially a race for BSPs to confirm that they are storing the data.
     pub bsps_volunteered: ReplicationTargetType<T>,
+
+    /// Inline map of BSP ID to confirmation state (false = volunteered, true = confirmed storing).
+    pub bsps: BoundedBTreeMap<ProviderIdFor<T>, bool, MaxReplicationTarget<T>>,
 
     /// Deposit paid by the user to open this storage request.
     ///
@@ -332,17 +335,6 @@ impl<T: Config> Debug for StorageRequestMspBucketResponse<T> {
 /// - Optional accepted file keys and proof for the whole list
 /// - List of rejected file keys and rejection reasons
 pub type StorageRequestMspResponse<T> = Vec<StorageRequestMspBucketResponse<T>>;
-
-/// Ephemeral BSP storage request tracking metadata.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
-#[scale_info(skip_type_params(T))]
-pub struct StorageRequestBspsMetadata<T: Config> {
-    /// Confirmed that the data is being stored.
-    ///
-    /// This is normally when the BSP submits a proof of storage to the `pallet-proofs-dealer-trie`.
-    pub confirmed: bool,
-    pub _phantom: core::marker::PhantomData<T>,
-}
 
 /// Bucket privacy settings.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -666,17 +658,15 @@ impl<T: Config> IncompleteStorageRequestMetadata<T> {
     }
 }
 
-impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
-    for IncompleteStorageRequestMetadata<T>
-{
-    fn from((storage_request, file_key): (&StorageRequestMetadata<T>, &MerkleHash<T>)) -> Self {
-        // Collect all confirmed BSPs
-        let mut confirmed_bsps = sp_std::vec::Vec::new();
-        for (bsp_id, metadata) in StorageRequestBsps::<T>::iter_prefix(file_key) {
-            if metadata.confirmed {
-                confirmed_bsps.push(bsp_id);
-            }
-        }
+impl<T: Config> From<&StorageRequestMetadata<T>> for IncompleteStorageRequestMetadata<T> {
+    fn from(storage_request: &StorageRequestMetadata<T>) -> Self {
+        // Collect all confirmed BSPs from the inline bsps map
+        let confirmed_bsps: sp_std::vec::Vec<_> = storage_request
+            .bsps
+            .iter()
+            .filter(|(_, confirmed)| **confirmed)
+            .map(|(bsp_id, _)| *bsp_id)
+            .collect();
 
         // Check if the MSP has accepted the storage request with a non-inclusion forest proof, as
         // this means the file is new and we should mark it for bucket removal.
