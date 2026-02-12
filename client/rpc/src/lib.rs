@@ -261,9 +261,6 @@ pub trait StorageHubClientApi {
 
     /// Check if a forest storage is present for the given forest key.
     ///
-    /// For RocksDB-backed storage, this checks if the directory exists on disk.
-    /// For in-memory storage, this checks if the forest is registered.
-    ///
     /// In the case of a BSP node, the forest key is empty since it only maintains a single forest.
     /// In the case of an MSP node, the forest key is a bucket id.
     #[method(name = "isForestStoragePresent")]
