@@ -172,6 +172,40 @@ export class FilesModule extends ModuleBase {
     }
   }
 
+  /**
+   * Generate an absolute download URL
+   *
+   * @param bucketId - Bucket id (required to fetch metadata).
+   * @param fileKey - File key to download.
+   * @param signal - Optional AbortSignal for request cancellation.
+   */
+  async getDownloadUrl(bucketId: string, fileKey: string, signal?: AbortSignal): Promise<string> {
+    let info: StorageFileInfo;
+    try {
+      info = await this.getFileInfo(bucketId, fileKey, signal);
+    } catch (error) {
+      if (this.isHttpError(error) && error.status === 404) {
+        throw new Error(`File not found: ${fileKey}`);
+      }
+      throw error;
+    }
+
+    if (!info.isPublic) {
+      throw new Error(
+        `File is private: ${fileKey}. Direct download URL for private files is not supported yet.`
+      );
+    }
+
+    if (info.status !== "ready") {
+      throw new Error(`File is not Ready (status=${info.status}): ${fileKey}`);
+    }
+
+    // Construct the URL
+    const baseUrl = this.ctx.config.baseUrl.replace(/\/$/, "");
+    const downloadPath = `/download/${encodeURIComponent(fileKey)}`;
+    return new URL(baseUrl + downloadPath).toString();
+  }
+
   // Helpers
   private isHttpError(error: unknown): error is { status: number } {
     return (
