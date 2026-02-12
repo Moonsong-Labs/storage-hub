@@ -6,7 +6,6 @@ use axum::{
 };
 use serde::Serialize;
 
-/// Overall status for a node health signal
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SignalStatus {
@@ -28,7 +27,6 @@ impl SignalStatus {
     }
 }
 
-/// Top-level response for `GET /node-health`
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeHealthResponse {
@@ -47,7 +45,6 @@ impl IntoResponse for NodeHealthResponse {
     }
 }
 
-/// Container for all signal results
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeHealthSignals {
@@ -56,12 +53,11 @@ pub struct NodeHealthSignals {
     pub tx_nonce: TxNonceSignal,
 }
 
-/// Signal: Indexer health
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexerSignal {
     pub status: SignalStatus,
-    pub last_indexed_block: i64,
+    pub last_indexed_block: u64,
     pub finalized_block: u64,
     pub lag_blocks: u64,
     pub last_updated_secs_ago: u64,
@@ -69,7 +65,19 @@ pub struct IndexerSignal {
     pub message: Option<String>,
 }
 
-/// Signal: Storage request acceptance
+impl IndexerSignal {
+    pub fn unknown(msg: impl Into<String>) -> Self {
+        Self {
+            status: SignalStatus::Unknown,
+            last_indexed_block: 0,
+            finalized_block: 0,
+            lag_blocks: 0,
+            last_updated_secs_ago: 0,
+            message: Some(msg.into()),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestAcceptanceSignal {
@@ -84,7 +92,19 @@ pub struct RequestAcceptanceSignal {
     pub message: Option<String>,
 }
 
-/// Signal: Transaction nonce liveness
+impl RequestAcceptanceSignal {
+    pub fn unknown(msg: impl Into<String>) -> Self {
+        Self {
+            status: SignalStatus::Unknown,
+            recent_requests_total: 0,
+            recent_requests_accepted: 0,
+            acceptance_ratio: None,
+            last_accepted_secs_ago: None,
+            message: Some(msg.into()),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TxNonceSignal {
@@ -94,4 +114,16 @@ pub struct TxNonceSignal {
     pub nonce_unchanged_for_secs: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+}
+
+impl TxNonceSignal {
+    pub fn unknown(msg: impl Into<String>) -> Self {
+        Self {
+            status: SignalStatus::Unknown,
+            current_nonce: 0,
+            pending_extrinsics: 0,
+            nonce_unchanged_for_secs: 0,
+            message: Some(msg.into()),
+        }
+    }
 }

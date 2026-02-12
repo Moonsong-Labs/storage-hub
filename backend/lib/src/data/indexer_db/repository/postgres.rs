@@ -207,7 +207,6 @@ impl IndexerOps for Repository {
         let cutoff =
             chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
 
-        // Count ALL files in buckets belonging to this MSP, created within window
         let count: i64 = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
             .filter(bucket::msp_id.eq(msp_db_id))
@@ -228,7 +227,6 @@ impl IndexerOps for Repository {
         let cutoff =
             chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
 
-        // Count files in MSP's buckets, created within window, that have an msp_file association
         let count: i64 = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
             .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
@@ -248,7 +246,6 @@ impl IndexerOps for Repository {
     ) -> RepositoryResult<Option<NaiveDateTime>> {
         let mut conn = self.pool.get().await?;
 
-        // MAX(file.created_at) for files with msp_file association for this MSP
         let result: Option<NaiveDateTime> = file::table
             .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
             .filter(msp_file::msp_id.eq(msp_db_id))

@@ -334,26 +334,13 @@ impl RpcConnection for MockConnection {
                 serde_json::json!([])
             }
             methods::FINALIZED_HEAD => {
-                // Return a mock finalized block hash
                 serde_json::json!("0x0000000000000000000000000000000000000000000000000000000000000064")
             }
             methods::GET_HEADER => {
-                // Return a mock header with block number 100 (0x64)
-                serde_json::json!({
-                    "number": "0x64",
-                    "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    "stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    "extrinsicsRoot": "0x0000000000000000000000000000000000000000000000000000000000000000"
-                })
+                serde_json::json!({"number": "0x64"})
             }
-            methods::ACCOUNT_NEXT_INDEX => {
-                // Return a mock nonce value
-                serde_json::json!(42u64)
-            }
-            methods::PENDING_EXTRINSICS => {
-                // Return an empty pending extrinsics array
-                serde_json::json!(Vec::<String>::new())
-            }
+            methods::ACCOUNT_NEXT_INDEX => serde_json::json!(42u64),
+            methods::PENDING_EXTRINSICS => serde_json::json!([]),
             methods::API_CALL => self.mock_runtime_apis(params).await,
             methods::STATE_QUERY => self.mock_state_queries(params).await,
             method => {

@@ -214,16 +214,16 @@ pub struct MspConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeHealthConfig {
     /// How many seconds the indexer's `updated_at` can lag behind `now`
-    /// before it is considered stuck (default: 120s)
+    /// before it is considered stuck.
     pub indexer_stale_threshold_secs: u64,
-    /// Maximum acceptable block lag between the indexer and the finalized chain head (default: 10)
+    /// Maximum acceptable block lag between the indexer and the finalized chain head.
     pub indexer_lag_blocks_threshold: u64,
-    /// Time window in seconds for counting recent storage requests (default: 600 = 10 min)
+    /// Time window in seconds for counting recent storage requests.
     pub request_window_secs: u64,
-    /// Minimum number of total requests in the window before the acceptance ratio matters (default: 10)
+    /// Minimum number of total requests in the window before the acceptance ratio matters.
     pub request_min_threshold: u64,
     /// How many seconds the on-chain nonce can remain unchanged (with pending extrinsics)
-    /// before it is considered stuck (default: 600 = 10 min)
+    /// before it is considered stuck.
     pub nonce_stuck_threshold_secs: u64,
 }
 

@@ -261,46 +261,31 @@ impl StorageHubRpcClient {
 
     // ============ Node Health RPC Calls ============
 
-    /// Get the current finalized block number.
-    ///
-    /// Calls `chain_getFinalizedHead` to get the hash, then `chain_getHeader` to get the number.
+    /// Get the current finalized block number via `chain_getFinalizedHead` + `chain_getHeader`.
     pub async fn get_finalized_block_number(&self) -> RpcResult<u64> {
-        debug!(target: "rpc::client::get_finalized_block_number", "RPC call: chain_getFinalizedHead + chain_getHeader");
+        debug!(target: "rpc::client", "get_finalized_block_number");
 
-        // Get the finalized head hash
+        #[derive(serde::Deserialize)]
+        struct BlockHeader {
+            number: String,
+        }
+
         let hash: String = self.call_no_params(methods::FINALIZED_HEAD).await?;
-
-        // Get the header for that hash
-        let header: serde_json::Value = self
+        let header: BlockHeader = self
             .call(methods::GET_HEADER, jsonrpsee::rpc_params![hash])
             .await?;
 
-        // Extract block number from header (hex-encoded string)
-        let number_hex = header["number"]
-            .as_str()
-            .ok_or_else(|| {
-                RpcConnectionError::Serialization(
-                    "Missing 'number' field in block header".to_string(),
-                )
-            })?;
-
-        let number = u64::from_str_radix(number_hex.trim_start_matches("0x"), 16).map_err(
-            |e| {
-                RpcConnectionError::Serialization(format!(
-                    "Failed to parse block number '{}': {}",
-                    number_hex, e
-                ))
-            },
-        )?;
-
-        Ok(number)
+        u64::from_str_radix(header.number.trim_start_matches("0x"), 16).map_err(|e| {
+            RpcConnectionError::Serialization(format!(
+                "Failed to parse block number '{}': {}",
+                header.number, e
+            ))
+        })
     }
 
-    /// Get the next nonce for an account (i.e., the nonce the chain expects for the next tx).
-    ///
-    /// Calls `system_accountNextIndex`.
+    /// Get the next expected nonce for an account.
     pub async fn get_account_nonce(&self, account: &str) -> RpcResult<u64> {
-        debug!(target: "rpc::client::get_account_nonce", account = %account, "RPC call: system_accountNextIndex");
+        debug!(target: "rpc::client", account = %account, "get_account_nonce");
 
         self.call(
             methods::ACCOUNT_NEXT_INDEX,
@@ -310,14 +295,11 @@ impl StorageHubRpcClient {
     }
 
     /// Get the number of pending extrinsics in the node's transaction pool.
-    ///
-    /// Calls `author_pendingExtrinsics` and returns the count.
     pub async fn get_pending_extrinsics_count(&self) -> RpcResult<usize> {
-        debug!(target: "rpc::client::get_pending_extrinsics_count", "RPC call: author_pendingExtrinsics");
+        debug!(target: "rpc::client", "get_pending_extrinsics_count");
 
         let extrinsics: Vec<String> =
             self.call_no_params(methods::PENDING_EXTRINSICS).await?;
-
         Ok(extrinsics.len())
     }
 }
