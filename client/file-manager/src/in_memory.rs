@@ -27,6 +27,59 @@ impl<T: TrieLayout + 'static> InMemoryFileDataTrie<T> {
 
         Self { root, memdb }
     }
+
+    /// Fast-path for inserting sequential chunks.
+    ///
+    /// This is intended for ingestion pipelines (e.g. backend uploads) where chunks are produced
+    /// sequentially and we want to avoid:
+    /// - cloning chunk data (`data.clone()`) per insert
+    /// - rebuilding a trie mutator for each chunk
+    ///
+    /// `start_chunk_index` is the index of `chunks[0]`, and the rest are assumed to follow
+    /// sequentially.
+    pub fn write_chunks_batched(
+        &mut self,
+        start_chunk_index: u64,
+        chunks: Vec<Chunk>,
+    ) -> Result<(), FileStorageWriteError> {
+        if chunks.is_empty() {
+            return Ok(());
+        }
+
+        let mut trie = if self.memdb.keys().is_empty() {
+            // If the database is empty, create a new trie.
+            TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build()
+        } else {
+            // If the database is not empty, build the trie from an existing root and memdb.
+            TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build()
+        };
+
+        for (offset, data) in chunks.into_iter().enumerate() {
+            let chunk_index = start_chunk_index
+                .checked_add(offset as u64)
+                .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
+            let chunk_id = ChunkId::new(chunk_index);
+
+            // Insert the encoded chunk with its ID into the file trie.
+            // We intentionally do NOT call `trie.contains(key)` here.
+            //
+            // This method is a fast-path for ingestion pipelines that *generate* chunk indices
+            // sequentially (e.g. chunk_index = 0..N). In that setup, duplicates should be
+            // impossible.
+            //
+            // Taking ownership of `data` also avoids the clone step per chunk.
+            let decoded_chunk = ChunkWithId { chunk_id, data };
+            let encoded_chunk = decoded_chunk.encode();
+
+            trie.insert(&chunk_id.as_trie_key(), &encoded_chunk)
+                .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
+        }
+
+        // dropping the trie automatically commits changes to the underlying db
+        drop(trie);
+
+        Ok(())
+    }
 }
 
 impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
