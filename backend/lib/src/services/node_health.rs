@@ -223,12 +223,11 @@ impl NodeHealthService {
             None
         };
 
-        let status =
-            if total >= self.config.request_min_threshold as i64 && accepted == 0 {
-                SignalStatus::Unhealthy
-            } else {
-                SignalStatus::Healthy
-            };
+        let status = if total >= self.config.request_min_threshold as i64 && accepted == 0 {
+            SignalStatus::Unhealthy
+        } else {
+            SignalStatus::Healthy
+        };
 
         let message = match status {
             SignalStatus::Unhealthy => Some(format!(
@@ -293,7 +292,9 @@ impl NodeHealthService {
         let message = if is_stuck {
             Some(format!(
                 "Nonce stuck at {} for {}s with {} pending extrinsics (threshold: {}s)",
-                current_nonce, nonce_unchanged_for_secs, pending,
+                current_nonce,
+                nonce_unchanged_for_secs,
+                pending,
                 self.config.nonce_stuck_threshold_secs
             ))
         } else {

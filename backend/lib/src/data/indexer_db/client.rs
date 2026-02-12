@@ -12,9 +12,9 @@ use tokio::sync::RwLock;
 #[cfg(test)]
 use bigdecimal::BigDecimal;
 
+use chrono::NaiveDateTime;
 #[cfg(test)]
 use shc_indexer_db::OnchainBspId;
-use chrono::NaiveDateTime;
 use shc_indexer_db::{
     models::{Bsp, Bucket, File, Msp, ServiceState},
     OnchainMspId,

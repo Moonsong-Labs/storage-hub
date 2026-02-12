@@ -204,8 +204,7 @@ impl IndexerOps for Repository {
         window_secs: u64,
     ) -> RepositoryResult<i64> {
         let mut conn = self.pool.get().await?;
-        let cutoff =
-            chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
+        let cutoff = chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
 
         let count: i64 = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
@@ -224,8 +223,7 @@ impl IndexerOps for Repository {
         window_secs: u64,
     ) -> RepositoryResult<i64> {
         let mut conn = self.pool.get().await?;
-        let cutoff =
-            chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
+        let cutoff = chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
 
         let count: i64 = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
