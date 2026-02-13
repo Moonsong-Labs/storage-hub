@@ -19,8 +19,8 @@ import type {
 export class FilesModule extends ModuleBase {
   /** Get metadata for a file in a bucket by fileKey */
   async getFileInfo(
-    bucketId: string,
-    fileKey: string,
+    bucketId: `0x${string}`,
+    fileKey: `0x${string}`,
     signal?: AbortSignal
   ): Promise<StorageFileInfo> {
     const headers = await this.withAuth();
@@ -179,30 +179,37 @@ export class FilesModule extends ModuleBase {
    * @param fileKey - File key to download.
    * @param signal - Optional AbortSignal for request cancellation.
    */
-  async getDownloadUrl(bucketId: string, fileKey: string, signal?: AbortSignal): Promise<string> {
+  async getDownloadUrl(
+    bucketId: `0x${string}`,
+    fileKey: `0x${string}`,
+    signal?: AbortSignal
+  ): Promise<string> {
+    const bucketIdHex = ensure0xPrefix(bucketId);
+    const fileKeyHex = ensure0xPrefix(fileKey);
+
     let info: StorageFileInfo;
     try {
-      info = await this.getFileInfo(bucketId, fileKey, signal);
+      info = await this.getFileInfo(bucketIdHex, fileKeyHex, signal);
     } catch (error) {
       if (this.isHttpError(error) && error.status === 404) {
-        throw new Error(`File not found: ${fileKey}`);
+        throw new Error(`File not found: ${fileKeyHex}`);
       }
       throw error;
     }
 
     if (!info.isPublic) {
       throw new Error(
-        `File is private: ${fileKey}. Direct download URL for private files is not supported yet.`
+        `File is private: ${fileKeyHex}. Direct download URL for private files is not supported yet.`
       );
     }
 
     if (info.status !== "ready") {
-      throw new Error(`File is not Ready (status=${info.status}): ${fileKey}`);
+      throw new Error(`File is not Ready (status=${info.status}): ${fileKeyHex}`);
     }
 
     // Construct the URL
     const baseUrl = this.ctx.config.baseUrl.replace(/\/$/, "");
-    const downloadPath = `/download/${encodeURIComponent(fileKey)}`;
+    const downloadPath = `/download/${encodeURIComponent(fileKeyHex)}`;
     return new URL(baseUrl + downloadPath).toString();
   }
 
