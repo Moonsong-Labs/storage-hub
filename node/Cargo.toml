@@ -1,6 +1,6 @@
 [package]
 name = "storage-hub-node"
-version = "0.4.0"
+version = "0.4.1"
 description = "A Cumulus-based StorageHub node."
 homepage = { workspace = true }
 license = { workspace = true }
