@@ -205,6 +205,7 @@ where
                 self.notify_period,
                 capacity_config,
                 maintenance_mode,
+                R::role(),
                 self.metrics.clone(),
             )
             .await;
@@ -424,6 +425,10 @@ where
 
         if let Some(extrinsic_retry_timeout) = config.extrinsic_retry_timeout {
             blockchain_service_config.extrinsic_retry_timeout = extrinsic_retry_timeout;
+        }
+
+        if let Some(extrinsic_mortality) = config.extrinsic_mortality {
+            blockchain_service_config.extrinsic_mortality = extrinsic_mortality;
         }
 
         if let Some(check_for_pending_proofs_period) = config.check_for_pending_proofs_period {
@@ -921,6 +926,9 @@ impl Into<BspSubmitProofConfig> for BspSubmitProofOptions {
 pub struct BlockchainServiceOptions {
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: Option<u64>,
+    /// Mortality period for extrinsics in number of blocks.
+    /// Will be sanitized to a valid mortal era period.
+    pub extrinsic_mortality: Option<u32>,
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
     pub check_for_pending_proofs_period: Option<u32>,
     /// The peer ID of this node.
@@ -948,6 +956,9 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
 
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
+            extrinsic_mortality: self
+                .extrinsic_mortality
+                .unwrap_or(default_config.extrinsic_mortality),
             check_for_pending_proofs_period: self
                 .check_for_pending_proofs_period
                 .unwrap_or_default()
@@ -1008,6 +1019,9 @@ pub struct FishermanOptions {
     /// Ordering strategy for pending deletions.
     #[serde(default)]
     pub ordering: FileOrdering,
+    /// Configuration options for blockchain service.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blockchain_service: Option<BlockchainServiceOptions>,
 }
 
 /// Default value for batch deletion limit.
