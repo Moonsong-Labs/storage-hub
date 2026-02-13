@@ -41,6 +41,21 @@ use sp_runtime::{generic, KeyTypeId};
 use sp_trie::CompactProof;
 use trie_db::TrieLayout;
 
+/// The role of this node in the StorageHub network.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeRole {
+    Bsp,
+    Msp,
+    Fisherman,
+    User,
+}
+
+impl NodeRole {
+    pub fn is_provider(&self) -> bool {
+        matches!(self, NodeRole::Bsp | NodeRole::Msp)
+    }
+}
+
 /// Size of each batch in bytes (2 MiB)
 /// This is the maximum size of a batch of chunks that can be uploaded in a single call
 /// (request-response round-trip).
