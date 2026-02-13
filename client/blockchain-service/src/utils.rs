@@ -9,7 +9,6 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
 };
-use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
 use sc_transaction_pool_api::TransactionStatus;
@@ -742,10 +741,7 @@ where
         let function = function.into();
         let current_block: u64 = client.info().best_number.saturated_into();
         let current_block_hash = client.info().best_hash;
-        let period = BlockHashCount::get()
-            .checked_next_power_of_two()
-            .map(|c| c / 2)
-            .unwrap_or(2) as u64;
+        let period = self.config.extrinsic_mortality as u64;
 
         let era = generic::Era::mortal(period, current_block.saturating_sub(1));
         let minimal_extra = MinimalExtension::new(era, nonce, tip);
@@ -1114,13 +1110,44 @@ where
     /// Cleanup manager gaps with nonce < on-chain nonce; then handle old gaps.
     ///
     /// This method performs the following steps:
-    /// 1. Cleans up the transaction manager's stale nonce gaps (i.e. nonce gaps whose nonce is less than the on-chain nonce).
-    /// 2. Detects and handles old nonce gaps that haven't been filled in the transaction manager.
+    /// 1. Cleans up stale pending transactions whose mortal era has expired.
+    /// 2. Cleans up the transaction manager's stale nonce gaps (i.e. nonce gaps whose nonce is less than the on-chain nonce).
+    /// 3. Detects and handles old nonce gaps that haven't been filled in the transaction manager.
     pub(crate) async fn cleanup_tx_manager_and_handle_nonce_gaps(
         &mut self,
         block_number: BlockNumber<Runtime>,
         block_hash: Runtime::Hash,
     ) {
+        // First, cleanup stale pending transactions whose mortal era has expired.
+        // This catches transactions stuck in any non-terminal state that have been submitted
+        // for longer than the mortality period and are still pending, as these transactions
+        // can no longer be included in a block.
+        let mortality_period = self.config.extrinsic_mortality;
+        let stale = self
+            .transaction_manager
+            .cleanup_stale_pending_transactions(block_number, mortality_period);
+
+        // Also remove stale transactions from the persistent TX DB so they
+        // are not resubscribed on restart.
+        // This is safe because Standalone don't have a pending tx store and Followers don't
+        // have any in memory transactions in the tx manager, so this only gets executed for the Leader.
+        if !stale.is_empty() {
+            if let Some(store) = &self.pending_tx_store {
+                let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+                let account_id: AccountId<Runtime> = caller_pub_key.into();
+                let account_bytes: Vec<u8> = account_id.as_ref().to_vec();
+                for (nonce, _status) in &stale {
+                    if let Err(e) = store.remove(&account_bytes, *nonce as i64).await {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to remove stale nonce {} from pending tx DB: {:?}",
+                            nonce, e
+                        );
+                    }
+                }
+            }
+        }
+
         let on_chain_nonce = match self.account_nonce(&block_hash) {
             Ok(nonce) => nonce,
             Err(e) => {
