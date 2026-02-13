@@ -175,8 +175,8 @@ export interface ListBucketsByPage {
   page: number;
   /** Limit used for the request */
   limit: number;
-  /** Best-effort: true when `buckets.length === limit` */
-  hasMore: boolean;
+  /** Total amount of buckets for the current authenticated user */
+  totalBuckets: bigint;
 }
 
 // MSP info

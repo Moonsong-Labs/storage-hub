@@ -13,9 +13,14 @@ import { ensure0xPrefix, parseDate } from "@storagehub-sdk/core";
 const BACKEND_MAX_BUCKETS_PER_PAGE = 500;
 
 type BucketWire = Omit<Bucket, "bucketId" | "root" | "valuePropId"> & {
-  bucketId: string;
-  root: string;
-  valuePropId: string;
+  bucketId: `0x${string}`;
+  root: `0x${string}`;
+  valuePropId: `0x${string}`;
+};
+
+type ListBucketsByPageWire = {
+  buckets: BucketWire[];
+  totalBuckets: string;
 };
 
 // Wire types received from backend JSON responses
@@ -92,14 +97,19 @@ export class BucketsModule extends ModuleBase {
     const cappedLimit = Math.min(Math.max(1, limit), BACKEND_MAX_BUCKETS_PER_PAGE);
     const safePage = Math.max(0, Math.floor(page));
 
-    const wire = await this.ctx.http.get<BucketWire[]>("/buckets", {
+    const wire = await this.ctx.http.get<ListBucketsByPageWire>("/buckets", {
       ...(headers ? { headers } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
       query: { page: safePage, limit: cappedLimit }
     });
 
-    const buckets = wire.map(fixBucket);
-    return { buckets, page: safePage, limit: cappedLimit, hasMore: buckets.length === cappedLimit };
+    const buckets = wire.buckets.map(fixBucket);
+    return {
+      buckets,
+      page: safePage,
+      limit: cappedLimit,
+      totalBuckets: BigInt(wire.totalBuckets)
+    };
   }
 
   /** Get a specific bucket's metadata by its bucket ID */
