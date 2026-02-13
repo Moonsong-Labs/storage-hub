@@ -243,6 +243,75 @@ where
         self.status_subscribers.remove(&nonce);
     }
 
+    /// Clean up stale pending transactions whose mortal era has expired.
+    ///
+    /// Transactions are constructed with a mortal era that determines how long they are valid.
+    /// Once the mortality period has passed since submission, the transaction can no longer be
+    /// included in a block. However, in some edge cases, the transaction pool may not notify us
+    /// (e.g., RPC subscription loss, silent pool drop during reorg re-import), leaving the
+    /// transaction stuck in `pending` indefinitely and blocking nonce gap detection.
+    ///
+    /// This method detects pending transactions that have been submitted for longer than
+    /// `mortality_period` blocks and removes them from tracking while preserving gap detection,
+    /// so the nonce gap can be filled by the gap-filling mechanism.
+    ///
+    /// Transactions in `InBlock` or `Finalized` status are excluded because their nonce is
+    /// already consumed in a valid block. Removing them would cause the gap detector to
+    /// incorrectly try to fill an already-consumed nonce.
+    ///
+    /// Other terminal states (`Invalid`, `Dropped`, `Usurped`, `FinalityTimeout`) are NOT
+    /// excluded: in normal operation the transaction watcher removes them from `pending`
+    /// immediately, so they should never be here. But since this method exists precisely to
+    /// cover edge cases where the watcher didn't fire (RPC loss, silent pool drop), if one of
+    /// these somehow lingers it is better to clean it up than to leave it occupying a nonce
+    /// slot and blocking gap detection.
+    ///
+    /// The `mortality_period` should match the mortal era used when constructing the extrinsics.
+    /// It is computed by the caller from the configurable `extrinsic_mortality` parameter.
+    ///
+    /// Returns the nonces of stale transactions that were cleaned up.
+    pub fn cleanup_stale_pending_transactions(
+        &mut self,
+        current_block: BlockNumber,
+        mortality_period: u32,
+    ) -> Vec<(u32, TransactionStatus<Hash, Hash>)> {
+        // Collect the stale nonces and their statuses.
+        let stale: Vec<(u32, TransactionStatus<Hash, Hash>)> = self
+            .pending
+            .iter()
+            .filter(|(_, tx)| {
+                // Exclude transactions whose nonce is already consumed in a valid block.
+                // Cleaning them up would cause false gap detection.
+                !matches!(
+                    tx.latest_status,
+                    TransactionStatus::InBlock(_) | TransactionStatus::Finalized(_)
+                )
+            })
+            .filter(|(_, tx)| {
+                // Only clean up transactions that have exceeded their mortality period.
+                let age = current_block.saturating_sub(tx.submitted_at);
+                let age_u32: u32 = age.unique_saturated_into();
+                age_u32 >= mortality_period
+            })
+            .map(|(&nonce, tx)| (nonce, tx.latest_status.clone()))
+            .collect();
+
+        // Remove the stale transactions.
+        for (nonce, status) in &stale {
+            warn!(
+                target: LOG_TARGET,
+                "🧹 Removing stale pending transaction at nonce {} (status: {:?}, submitted >= {} blocks ago, \
+                exceeding mortality period). Gap detection will fill this nonce.",
+                nonce,
+                status,
+                mortality_period
+            );
+            self.remove_pending_but_keep_gap(*nonce);
+        }
+
+        stale
+    }
+
     /// Clean up the stale nonce gaps in the transaction manager.
     ///
     /// Removes stale nonce gaps that have already been filled (either by us or externally).

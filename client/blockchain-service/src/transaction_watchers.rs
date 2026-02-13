@@ -57,6 +57,10 @@ pub fn spawn_transaction_watcher<Runtime>(
             tx_hash
         );
 
+        // Track whether the watcher exited due to a terminal status (Finalized, Invalid, etc.)
+        // or because of the RPC subscription channel being closed unexpectedly.
+        let mut exited_with_terminal_status = false;
+
         while let Some(status_update) = receiver.recv().await {
             match serde_json::from_str::<serde_json::Value>(&status_update) {
                 Ok(json) => {
@@ -165,6 +169,7 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     e
                                 });
                                 // Finalized is a terminal state, stop watching
+                                exited_with_terminal_status = true;
                                 break;
                             } else if let Some(block_hash_json) = result.get("finalityTimeout") {
                                 let block_hash =
@@ -184,6 +189,7 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     e
                                 });
                                 // FinalityTimeout is a terminal state, stop watching
+                                exited_with_terminal_status = true;
                                 break;
                             } else if result.as_str() == Some("invalid") {
                                 error!(
@@ -198,6 +204,7 @@ pub fn spawn_transaction_watcher<Runtime>(
                                         e
                                     });
                                 // Invalid is a terminal state, stop watching
+                                exited_with_terminal_status = true;
                                 break;
                             } else if let Some(usurped_by_json) = result.get("usurped") {
                                 let usurped_by_hash =
@@ -218,6 +225,7 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     e
                                 });
                                 // Usurped is a terminal state, stop watching
+                                exited_with_terminal_status = true;
                                 break;
                             } else if result.as_str() == Some("dropped") {
                                 warn!(
@@ -232,6 +240,7 @@ pub fn spawn_transaction_watcher<Runtime>(
                                         e
                                     });
                                 // Dropped is a terminal state, stop watching
+                                exited_with_terminal_status = true;
                                 break;
                             } else {
                                 warn!(
@@ -251,6 +260,13 @@ pub fn spawn_transaction_watcher<Runtime>(
                             tx_hash,
                             error
                         );
+                        // Subscription error is effectively a terminal state so we notify the manager
+                        // so the transaction doesn't stay in `pending` indefinitely.
+                        let _ = status_tx.send((nonce, tx_hash, TransactionStatus::Dropped)).map_err(|e| {
+                            error!(target: LOG_TARGET, "Failed to send Dropped status after subscription error. Transaction hash: {:?}, nonce: {}. \n  Error: {:?}", tx_hash, nonce, e);
+                            e
+                        });
+                        exited_with_terminal_status = true;
                         break;
                     }
                 }
@@ -264,6 +280,29 @@ pub fn spawn_transaction_watcher<Runtime>(
                     );
                 }
             }
+        }
+
+        // If the RPC subscription channel was closed without a terminal status (e.g., the
+        // subscription was dropped during a reorg, or the internal RPC connection was reset),
+        // notify the transaction manager so the transaction doesn't stay in `pending`
+        // indefinitely blocking gap detection.
+        if !exited_with_terminal_status {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ RPC subscription channel closed for transaction with nonce {} (hash: {:?}) \
+                without a terminal status. The transaction may have been silently lost from the \
+                pool (e.g., after a reorg). Sending Dropped status to trigger gap detection.",
+                nonce,
+                tx_hash
+            );
+            let _ = status_tx.send((nonce, tx_hash, TransactionStatus::Dropped)).map_err(|e| {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to send Dropped status for orphaned transaction. Transaction hash: {:?}, nonce: {}. \n  Error: {:?}",
+                    tx_hash, nonce, e
+                );
+                e
+            });
         }
 
         debug!(
