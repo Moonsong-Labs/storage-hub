@@ -337,7 +337,13 @@ impl RpcConnection for MockConnection {
                 serde_json::json!("0x0000000000000000000000000000000000000000000000000000000000000064")
             }
             methods::GET_HEADER => {
-                serde_json::json!({"number": "0x64"})
+                serde_json::json!({
+                    "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "number": "0x64",
+                    "stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "extrinsicsRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "digest": { "logs": [] }
+                })
             }
             methods::ACCOUNT_NEXT_INDEX => serde_json::json!(42u64),
             methods::PENDING_EXTRINSICS => serde_json::json!([]),

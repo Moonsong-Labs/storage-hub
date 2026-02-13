@@ -13,9 +13,12 @@ use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
 
-use crate::data::rpc::{
-    connection::error::{RpcConnectionError, RpcResult},
-    methods, runtime_apis, state_queries, AnyRpcConnection, RpcConnection,
+use crate::{
+    data::rpc::{
+        connection::error::{RpcConnectionError, RpcResult},
+        methods, runtime_apis, state_queries, AnyRpcConnection, RpcConnection,
+    },
+    runtime::Header,
 };
 
 /// StorageHub RPC client that uses an RpcConnection
@@ -265,22 +268,12 @@ impl StorageHubRpcClient {
     pub async fn get_finalized_block_number(&self) -> RpcResult<u64> {
         debug!(target: "rpc::client", "get_finalized_block_number");
 
-        #[derive(serde::Deserialize)]
-        struct BlockHeader {
-            number: String,
-        }
-
         let hash: String = self.call_no_params(methods::FINALIZED_HEAD).await?;
-        let header: BlockHeader = self
+        let header: Header = self
             .call(methods::GET_HEADER, jsonrpsee::rpc_params![hash])
             .await?;
 
-        u64::from_str_radix(header.number.trim_start_matches("0x"), 16).map_err(|e| {
-            RpcConnectionError::Serialization(format!(
-                "Failed to parse block number '{}': {}",
-                header.number, e
-            ))
-        })
+        Ok(header.number.into())
     }
 
     /// Get the next expected nonce for an account.
