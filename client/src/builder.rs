@@ -205,6 +205,7 @@ where
                 self.notify_period,
                 capacity_config,
                 maintenance_mode,
+                R::role(),
                 self.metrics.clone(),
             )
             .await;
