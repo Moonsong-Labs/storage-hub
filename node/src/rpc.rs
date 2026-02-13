@@ -93,10 +93,9 @@ where
 }
 
 /// Deps for the solochain-evm RPC constructor (includes Frontier/EVM deps)
-pub struct SolochainEvmDeps<P, FL, FS, Runtime, A>
+pub struct SolochainEvmDeps<P, FL, FS, Runtime>
 where
     Runtime: StorageEnableRuntime,
-    A: sc_transaction_pool::ChainApi<Block = OpaqueBlock>,
 {
     pub client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     pub pool: Arc<P>,
@@ -108,7 +107,7 @@ where
     pub sync: Arc<SyncingService<OpaqueBlock>>,
     pub overrides: Arc<dyn fc_storage::StorageOverride<OpaqueBlock>>,
     pub frontier_backend: Arc<dyn fc_api::Backend<OpaqueBlock>>,
-    pub graph: Arc<sc_transaction_pool::Pool<A>>,
+    pub graph: Arc<P>,
     pub block_data_cache: Arc<fc_rpc::EthBlockDataCacheTask<OpaqueBlock>>,
     pub filter_pool: Option<fc_rpc_core::types::FilterPool>,
     pub fee_history_cache: fc_rpc_core::types::FeeHistoryCache,
@@ -118,15 +117,14 @@ where
     pub is_authority: bool,
 }
 
-pub fn create_full_solochain_evm<P, FL, FSH, Runtime, A>(
-    deps: SolochainEvmDeps<P, FL, FSH, Runtime, A>,
+pub fn create_full_solochain_evm<P, FL, FSH, Runtime>(
+    deps: SolochainEvmDeps<P, FL, FSH, Runtime>,
 ) -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>>
 where
     Runtime: StorageEnableRuntime,
-    P: sc_transaction_pool_api::TransactionPool<Block = OpaqueBlock> + 'static,
+    P: sc_transaction_pool_api::TransactionPool<Block = OpaqueBlock, Hash = H256> + 'static,
     FL: FileStorageT,
     FSH: ForestStorageHandler<Runtime> + Send + Sync + 'static,
-    A: sc_transaction_pool::ChainApi<Block = OpaqueBlock> + 'static,
     StorageHubClient<Runtime::RuntimeApi>: ProvideRuntimeApi<OpaqueBlock>
         + sc_client_api::HeaderBackend<OpaqueBlock>
         + sc_client_api::UsageProvider<OpaqueBlock>
@@ -195,7 +193,7 @@ where
     };
 
     io.merge(
-        Eth::<_, _, _, _, _, _, _, ()>::new(
+        Eth::<_, _, _, _, _, _, ()>::new(
             client.clone(),
             pool.clone(),
             graph.clone(),

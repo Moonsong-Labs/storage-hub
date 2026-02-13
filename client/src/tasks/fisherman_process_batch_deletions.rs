@@ -163,7 +163,7 @@ where
     fn clone(&self) -> Self {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
-            strategy: self.strategy.clone(),
+            strategy: self.strategy,
         }
     }
 }
@@ -825,7 +825,7 @@ where
             let bucket_id = H256::from_slice(file.file_metadata.bucket_id());
             let location = file.file_metadata.location().to_vec();
             let size = file.file_metadata.file_size().saturated_into();
-            let fingerprint = file.file_metadata.fingerprint().clone();
+            let fingerprint = *file.file_metadata.fingerprint();
 
             let file_deletion = FileDeletionRequest {
                 file_owner,

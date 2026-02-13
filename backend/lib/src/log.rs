@@ -4,7 +4,7 @@
 //! - The choice between JSON logging using Bunyan format or human-readable text logging
 //! - Auto-detection based on whether the output is a TTY (JSON if non-TTY, Text if TTY)
 //! - A custom writer that replaces "log." prefix with "backend_log." in Bunyan logs
-//! to avoid conflicts with reserved fields in log ingestion tools
+//!   to avoid conflicts with reserved fields in log ingestion tools
 
 use std::io::Write;
 

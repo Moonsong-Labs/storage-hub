@@ -59,7 +59,7 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: SlashableProvider<Runtime>) -> anyhow::Result<String> {
-        let provider = event.provider.clone();
+        let provider = event.provider;
         info!(
             target: LOG_TARGET,
             "Slashing provider [{:x}]",

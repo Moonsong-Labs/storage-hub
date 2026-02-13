@@ -1387,7 +1387,7 @@ where
                     {
                         let entry = msp_handler
                             .files_to_distribute
-                            .entry(file_key.clone())
+                            .entry(file_key)
                             .or_insert(FileDistributionInfo::new());
 
                         // Register BSP as one for which the file is being distributed already.
@@ -1458,7 +1458,7 @@ where
                     callback,
                 } => {
                     if let Some(ManagedProvider::Msp(msp_handler)) = &self.maybe_managed_provider {
-                        let managed_msp_id = msp_handler.msp_id.clone();
+                        let managed_msp_id = msp_handler.msp_id;
                         let current_block_hash = self.client.info().best_hash;
 
                         // Query pending storage requests (not yet accepted by MSP)

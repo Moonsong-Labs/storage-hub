@@ -21,8 +21,8 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, MultiSignature, SaturatedConversion,
 };
-use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
+use std::collections::BTreeSet;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -367,6 +367,7 @@ impl pallet_nfts::Config for Test {
     type OffchainSignature = Signature;
     type OffchainPublic = AccountPublic;
     type WeightInfo = ();
+    type BlockNumberProvider = frame_system::Pallet<Self>;
     pallet_nfts::runtime_benchmarks_enabled! {
         type Helper = ();
     }
@@ -535,6 +536,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
             (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
             (TreasuryAccount::get(), ExistentialDeposit::get()),
         ],
+        dev_accounts: None,
     }
     .assimilate_storage(&mut t)
     .unwrap();

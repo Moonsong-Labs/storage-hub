@@ -197,7 +197,11 @@ where
 
                                 break;
                             }
-                            Err(RequestFailure::Refused) if retry_attempts < 3 => {
+                            // Note: With litep2p network backend, transient connectivity errors
+                            // (ConnectionClosed, SubstreamClosed, dial-failed, etc.) are mapped to
+                            // `RequestFailure::Refused` instead of `NotConnected`. We use a high
+                            // retry count to handle peer recovery scenarios.
+                            Err(RequestFailure::Refused) if retry_attempts < 30 => {
                                 warn!(
                                     target: LOG_TARGET,
                                     "Final batch upload rejected by peer {:?}, retrying... (attempt {})",
@@ -329,7 +333,11 @@ where
                                 }
                                 break;
                             }
-                            Err(RequestFailure::Refused) if retry_attempts < 3 => {
+                            // Note: With litep2p network backend, transient connectivity errors
+                            // (ConnectionClosed, SubstreamClosed, dial-failed, etc.) are mapped to
+                            // `RequestFailure::Refused` instead of `NotConnected`. We use a high
+                            // retry count to handle peer recovery scenarios.
+                            Err(RequestFailure::Refused) if retry_attempts < 30 => {
                                 warn!(
                                     target: LOG_TARGET,
                                     "Final batch upload rejected by peer {:?}, retrying... (attempt {})",

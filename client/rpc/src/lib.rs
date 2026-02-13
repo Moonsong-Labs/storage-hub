@@ -658,7 +658,7 @@ where
         let (tx, rx) = mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(queue_buffered_size);
 
         let file_storage = Arc::clone(&self.file_storage);
-        let file_key_clone = file_key.clone();
+        let file_key_clone = file_key;
 
         // We read chunks in batches to amortize the cost of acquiring the read lock.
         // Note: we don't leave it locked as the download process velocity depends on the client receiving the file.

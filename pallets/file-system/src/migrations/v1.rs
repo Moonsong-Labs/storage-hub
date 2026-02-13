@@ -26,6 +26,8 @@
 //! - `Some((msp_id, false))` -> `MspStorageRequestStatus::Pending(msp_id)`
 //! - `Some((msp_id, true))` -> `MspStorageRequestStatus::AcceptedNewFile(msp_id)`
 
+extern crate alloc;
+
 use crate::{
     pallet::Pallet,
     types::{
@@ -45,9 +47,9 @@ use frame_support::{
 use scale_info::TypeInfo;
 
 #[cfg(feature = "try-runtime")]
-use sp_runtime::TryRuntimeError;
+use alloc::vec::Vec;
 #[cfg(feature = "try-runtime")]
-use sp_std::vec::Vec;
+use sp_runtime::TryRuntimeError;
 
 /// Module containing the old (v0) storage format.
 ///
@@ -146,7 +148,7 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV0ToV1<T> {
         let mut writes: u64 = 0;
 
         // Collect all keys first to avoid iterator invalidation
-        let keys: sp_std::vec::Vec<_> = v0::StorageRequests::<T>::iter_keys().collect();
+        let keys: alloc::vec::Vec<_> = v0::StorageRequests::<T>::iter_keys().collect();
 
         for key in keys {
             reads += 1;

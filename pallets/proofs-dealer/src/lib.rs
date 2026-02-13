@@ -17,8 +17,11 @@ pub mod types;
 pub mod utils;
 pub mod weights;
 
+extern crate alloc;
+
 #[frame_support::pallet]
 pub mod pallet {
+    use alloc::vec::Vec;
     use codec::FullCodec;
     use frame_support::traits::{EnsureOrigin, OriginTrait};
     use frame_support::{
@@ -37,7 +40,6 @@ pub mod pallet {
         traits::{CheckedSub, Convert, Zero},
         Perbill, SaturatedConversion,
     };
-    use sp_std::vec::Vec;
     use types::{KeyFor, ProviderIdFor};
 
     use crate::*;
@@ -415,7 +417,7 @@ pub mod pallet {
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         #[serde(skip)]
-        pub _phantom: sp_std::marker::PhantomData<T>,
+        pub _phantom: core::marker::PhantomData<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
