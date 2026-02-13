@@ -255,9 +255,16 @@ where
     /// `mortality_period` blocks and removes them from tracking while preserving gap detection,
     /// so the nonce gap can be filled by the gap-filling mechanism.
     ///
-    /// Transactions in `InBlock` status are excluded because their nonce is already consumed
-    /// in a valid (though not yet finalized) block. Removing them would cause the gap detector
-    /// to incorrectly try to fill an already-consumed nonce.
+    /// Transactions in `InBlock` or `Finalized` status are excluded because their nonce is
+    /// already consumed in a valid block. Removing them would cause the gap detector to
+    /// incorrectly try to fill an already-consumed nonce.
+    ///
+    /// Other terminal states (`Invalid`, `Dropped`, `Usurped`, `FinalityTimeout`) are NOT
+    /// excluded: in normal operation the transaction watcher removes them from `pending`
+    /// immediately, so they should never be here. But since this method exists precisely to
+    /// cover edge cases where the watcher didn't fire (RPC loss, silent pool drop), if one of
+    /// these somehow lingers it is better to clean it up than to leave it occupying a nonce
+    /// slot and blocking gap detection.
     ///
     /// The `mortality_period` should match the mortal era used when constructing the extrinsics.
     /// It is computed by the caller from the configurable `extrinsic_mortality` parameter.
@@ -273,9 +280,12 @@ where
             .pending
             .iter()
             .filter(|(_, tx)| {
-                // Exclude InBlock transactions: their nonce is consumed in a valid
-                // (unfinalized) block. Cleaning them up would cause false gap detection.
-                !matches!(tx.latest_status, TransactionStatus::InBlock(_))
+                // Exclude transactions whose nonce is already consumed in a valid block.
+                // Cleaning them up would cause false gap detection.
+                !matches!(
+                    tx.latest_status,
+                    TransactionStatus::InBlock(_) | TransactionStatus::Finalized(_)
+                )
             })
             .filter(|(_, tx)| {
                 // Only clean up transactions that have exceeded their mortality period.

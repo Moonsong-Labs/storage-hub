@@ -1119,8 +1119,30 @@ where
         // for longer than the mortality period and are still pending, as these transactions
         // can no longer be included in a block.
         let mortality_period = self.config.extrinsic_mortality;
-        self.transaction_manager
+        let stale = self
+            .transaction_manager
             .cleanup_stale_pending_transactions(block_number, mortality_period);
+
+        // Also remove stale transactions from the persistent TX DB so they
+        // are not resubscribed on restart.
+        // This is safe because Standalone don't have a pending tx store and Followers don't
+        // have any in memory transactions in the tx manager, so this only gets executed for the Leader.
+        if !stale.is_empty() {
+            if let Some(store) = &self.pending_tx_store {
+                let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+                let account_id: AccountId<Runtime> = caller_pub_key.into();
+                let account_bytes: Vec<u8> = account_id.as_ref().to_vec();
+                for (nonce, _status) in &stale {
+                    if let Err(e) = store.remove(&account_bytes, *nonce as i64).await {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to remove stale nonce {} from pending tx DB: {:?}",
+                            nonce, e
+                        );
+                    }
+                }
+            }
+        }
 
         let on_chain_nonce = match self.account_nonce(&block_hash) {
             Ok(nonce) => nonce,

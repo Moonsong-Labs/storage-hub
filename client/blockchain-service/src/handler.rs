@@ -1733,11 +1733,15 @@ where
                 );
             }
 
+            let mortality_seconds = period * 6;
+            let mortality_minutes = mortality_seconds as f64 / 60.0;
+
             info!(
-                    target: LOG_TARGET,
-                    "Extrinsic mortality period set to {} blocks (~{} minutes at 6s block time).",
-                    period,
-                    (period * 6) / 60
+                target: LOG_TARGET,
+                "🪦 Extrinsic mortality period set to {} blocks (~{:.1} minutes ({} seconds) at 6s block time).",
+                period,
+                mortality_minutes,
+                mortality_seconds
             );
 
             config.extrinsic_mortality = period;
