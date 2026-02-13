@@ -29,6 +29,11 @@ export interface Bucket {
   fileCount: number;
 }
 
+export interface ListBucketsResponse {
+  buckets: Bucket[];
+  totalBuckets: string;
+}
+
 export type FileStatus = "inProgress" | "ready" | "expired" | "deletionInProgress";
 
 export type FileTree = {

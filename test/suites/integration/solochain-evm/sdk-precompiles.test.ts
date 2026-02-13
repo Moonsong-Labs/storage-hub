@@ -766,15 +766,27 @@ await describeMspNet(
       // listBucketsByPage(limit=4), pages 0/1/2
       const p0 = await mspClient.buckets.listBucketsByPage(undefined, 4, 0);
       strictEqual(p0.buckets.length, 4, "page 0 should return 4 buckets");
-      strictEqual(p0.hasMore, true, "page 0 hasMore should be true");
+      strictEqual(
+        BigInt((p0.page + 1) * p0.limit) < p0.totalBuckets,
+        true,
+        "page 0 should have more results"
+      );
 
       const p1 = await mspClient.buckets.listBucketsByPage(undefined, 4, 1);
       strictEqual(p1.buckets.length, 4, "page 1 should return 4 buckets");
-      strictEqual(p1.hasMore, true, "page 1 hasMore should be true");
+      strictEqual(
+        BigInt((p1.page + 1) * p1.limit) < p1.totalBuckets,
+        true,
+        "page 1 should have more results"
+      );
 
       const p2 = await mspClient.buckets.listBucketsByPage(undefined, 4, 2);
       assert(p2.buckets.length <= 4, "page 2 should return <= 4 buckets");
-      strictEqual(p2.hasMore, false, "page 2 hasMore should be false");
+      strictEqual(
+        BigInt((p2.page + 1) * p2.limit) < p2.totalBuckets,
+        false,
+        "page 2 should not have more results"
+      );
 
       // Sanity-check: pages contain different buckets (no overlap)
       const p0Ids = new Set(p0.buckets.map((b) => b.bucketId));
