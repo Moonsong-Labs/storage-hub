@@ -98,6 +98,17 @@ pub trait IndexerOps: Send + Sync {
         offset: i64,
     ) -> RepositoryResult<Vec<Bucket>>;
 
+    /// Count all of the account's buckets with the given MSP
+    ///
+    /// # Arguments
+    /// * `msp` - the MSP (database) ID where the bucket is held
+    /// * `account` - the User account that owns the bucket
+    async fn get_buckets_count_by_user_and_msp(
+        &self,
+        msp: i64,
+        account: &str,
+    ) -> RepositoryResult<u64>;
+
     /// Retrieve all the files belonging to the given bucket
     ///
     /// # Arguments

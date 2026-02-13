@@ -298,6 +298,19 @@ impl IndexerOps for MockRepository {
             .collect())
     }
 
+    async fn get_buckets_count_by_user_and_msp(
+        &self,
+        msp: i64,
+        account: &str,
+    ) -> RepositoryResult<u64> {
+        let buckets = self.buckets.read().await;
+
+        Ok(buckets
+            .values()
+            .filter(|b| b.msp_id == Some(msp) && b.account == account)
+            .count() as u64)
+    }
+
     async fn get_files_by_bucket(
         &self,
         bucket: i64,

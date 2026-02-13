@@ -217,6 +217,23 @@ impl DBClient {
             .map_err(Into::into)
     }
 
+    /// Count all of the `user`'s buckets with the given MSP
+    pub async fn get_user_buckets_count(&self, msp: &OnchainMspId, user: &str) -> Result<u64> {
+        debug!(
+            target: "indexer_db::client::get_user_buckets_count",
+            msp = %msp,
+            user = %user,
+            "Counting user buckets"
+        );
+
+        let msp = self.get_msp(msp).await?;
+
+        self.repository
+            .get_buckets_count_by_user_and_msp(msp.id, user)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn get_file_info(&self, file_key: &[u8]) -> Result<File> {
         let hash = shp_types::Hash::from_slice(file_key);
         debug!(target: "indexer_db::client::get_file_info", file_key = %hash, "Fetching file info");
