@@ -723,6 +723,9 @@ await describeMspNet(
     });
 
     it("Should paginate buckets via the SDK (simple)", async () => {
+      const before = await mspClient.buckets.listBucketsByPage({ limit: 1, page: 0 });
+      const initialTotalBuckets = before.totalBuckets;
+
       // Create 10 buckets
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
@@ -756,50 +759,40 @@ await describeMspNet(
       // Wait for the indexer/backend to catch up so /buckets reflects the new buckets
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
-      // listBuckets(limit)
-      const first5 = await mspClient.buckets.listBuckets(undefined, 5);
-      strictEqual(first5.length, 5, "listBuckets(5) should return exactly 5 buckets");
+      const expectedTotalBuckets = initialTotalBuckets + BigInt(createdBucketNames.length);
+      const pageLimit = 4;
 
-      const first8 = await mspClient.buckets.listBuckets(undefined, 8);
-      strictEqual(first8.length, 8, "listBuckets(8) should return exactly 8 buckets");
-
-      // listBucketsByPage(limit=4), pages 0/1/2
-      const p0 = await mspClient.buckets.listBucketsByPage(undefined, 4, 0);
-      strictEqual(p0.buckets.length, 4, "page 0 should return 4 buckets");
+      // listBucketsByPage(limit=4), fetch all pages and validate count + pagination consistency
+      const p0 = await mspClient.buckets.listBucketsByPage({ limit: pageLimit, page: 0 });
       strictEqual(
-        BigInt((p0.page + 1) * p0.limit) < p0.totalBuckets,
-        true,
-        "page 0 should have more results"
+        p0.totalBuckets,
+        expectedTotalBuckets,
+        "totalBuckets should increase by the created bucket amount"
       );
 
-      const p1 = await mspClient.buckets.listBucketsByPage(undefined, 4, 1);
-      strictEqual(p1.buckets.length, 4, "page 1 should return 4 buckets");
-      strictEqual(
-        BigInt((p1.page + 1) * p1.limit) < p1.totalBuckets,
-        true,
-        "page 1 should have more results"
-      );
-
-      const p2 = await mspClient.buckets.listBucketsByPage(undefined, 4, 2);
-      assert(p2.buckets.length <= 4, "page 2 should return <= 4 buckets");
-      strictEqual(
-        BigInt((p2.page + 1) * p2.limit) < p2.totalBuckets,
-        false,
-        "page 2 should not have more results"
-      );
-
-      // Sanity-check: pages contain different buckets (no overlap)
-      const p0Ids = new Set(p0.buckets.map((b) => b.bucketId));
-      const p1Ids = new Set(p1.buckets.map((b) => b.bucketId));
-      const p2Ids = new Set(p2.buckets.map((b) => b.bucketId));
-      for (const id of p1Ids) assert(!p0Ids.has(id), "page 0 and page 1 should not overlap");
-      for (const id of p2Ids) {
-        assert(!p0Ids.has(id), "page 0 and page 2 should not overlap");
-        assert(!p1Ids.has(id), "page 1 and page 2 should not overlap");
+      const totalPages = Math.ceil(Number(p0.totalBuckets) / pageLimit);
+      const pages = [p0];
+      for (let page = 1; page < totalPages; page++) {
+        pages.push(await mspClient.buckets.listBucketsByPage({ limit: pageLimit, page }));
       }
 
-      // Expect to see the buckets we just created within these 3 pages
-      const allPageNames = [...p0.buckets, ...p1.buckets, ...p2.buckets].map((b) => b.name);
+      // Sanity-check: page limits respected, totals consistent, and pages do not overlap.
+      const seenIds = new Set<string>();
+      for (const page of pages) {
+        assert(page.buckets.length <= pageLimit, "page size should not exceed requested limit");
+        strictEqual(
+          page.totalBuckets,
+          expectedTotalBuckets,
+          "all pages should report the same totalBuckets"
+        );
+        for (const bucket of page.buckets) {
+          assert(!seenIds.has(bucket.bucketId), "pages should not overlap");
+          seenIds.add(bucket.bucketId);
+        }
+      }
+
+      // Expect to see the buckets we just created in the paginated results.
+      const allPageNames = pages.flatMap((page) => page.buckets.map((bucket) => bucket.name));
       for (const name of createdBucketNames) {
         assert(allPageNames.includes(name), `Expected to see created bucket name: ${name}`);
       }
