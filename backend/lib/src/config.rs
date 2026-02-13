@@ -11,6 +11,11 @@ use crate::constants::{
     },
     database::DEFAULT_DATABASE_URL,
     download::MAX_DOWNLOAD_SESSIONS,
+    node_health::{
+        DEFAULT_INDEXER_LAG_BLOCKS_THRESHOLD, DEFAULT_INDEXER_STALE_THRESHOLD_SECS,
+        DEFAULT_NONCE_STUCK_THRESHOLD_SECS, DEFAULT_REQUEST_MIN_THRESHOLD,
+        DEFAULT_REQUEST_WINDOW_SECS,
+    },
     rpc::{
         DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL,
         DEFAULT_MSP_TRUSTED_FILE_TRANSFER_SERVER_URL, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS,
@@ -230,11 +235,11 @@ pub struct NodeHealthConfig {
 impl Default for NodeHealthConfig {
     fn default() -> Self {
         Self {
-            indexer_stale_threshold_secs: 120,
-            indexer_lag_blocks_threshold: 10,
-            request_window_secs: 600,
-            request_min_threshold: 10,
-            nonce_stuck_threshold_secs: 600,
+            indexer_stale_threshold_secs: DEFAULT_INDEXER_STALE_THRESHOLD_SECS,
+            indexer_lag_blocks_threshold: DEFAULT_INDEXER_LAG_BLOCKS_THRESHOLD,
+            request_window_secs: DEFAULT_REQUEST_WINDOW_SECS,
+            request_min_threshold: DEFAULT_REQUEST_MIN_THRESHOLD,
+            nonce_stuck_threshold_secs: DEFAULT_NONCE_STUCK_THRESHOLD_SECS,
         }
     }
 }
