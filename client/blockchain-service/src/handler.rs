@@ -39,7 +39,7 @@ use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxSt
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::CFDequeAPI,
-    types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
+    types::{AccountId, BlockNumber, NodeRole, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
@@ -126,6 +126,8 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
+    /// The role of this node in the StorageHub network (BSP, MSP, Fisherman, User).
+    pub(crate) node_role: NodeRole,
     /// Tracks whether the node has caught up with the chain and completed initial sync tasks.
     ///
     /// This flag starts as `false` and is set to `true` after the first block is processed
@@ -1689,6 +1691,7 @@ where
         notify_period: Option<u32>,
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
+        node_role: NodeRole,
         metrics: MetricsLink,
     ) -> Self {
         let genesis_hash = client.info().genesis_hash;
@@ -1719,6 +1722,7 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
+            node_role,
             caught_up: false,
             transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
             // Temporary sender, will be replaced by the event loop during startup
