@@ -66,10 +66,10 @@ impl Services {
 
         let node_health = Arc::new(
             NodeHealthService::new(
-            postgres.clone(),
-            rpc.clone(),
-            msp.msp_id().clone(),
-            config.node_health.clone(),
+                postgres.clone(),
+                rpc.clone(),
+                msp.msp_id().clone(),
+                config.node_health.clone(),
             )
             .await,
         );

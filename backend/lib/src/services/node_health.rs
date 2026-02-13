@@ -2,12 +2,11 @@
 //! by evaluating three signals: indexer health, storage request acceptance,
 //! and transaction nonce liveness.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use chrono::Utc;
-use tokio::sync::RwLock;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 use shc_indexer_db::OnchainMspId;
 
@@ -20,32 +19,30 @@ use crate::{
     },
 };
 
+/// Tracks the last observed nonce and when it was first seen at that value.
 struct NonceState {
-    last_nonce: u64,
-    first_seen_at: Instant,
-}
-
-/// Cached MSP identity resolved once from the DB
-struct MspIdentity {
-    db_id: i64,
-    account: String,
+    nonce: u64,
+    first_seen: Instant,
 }
 
 pub struct NodeHealthService {
     db: Arc<DBClient>,
     rpc: Arc<StorageHubRpcClient>,
-    msp_id: OnchainMspId,
     config: NodeHealthConfig,
     /// MSP's database ID, resolved once at startup.
     msp_db_id: i64,
     /// MSP's signing account, resolved once at startup.
     msp_account: String,
     /// Tracks nonce over time to detect stuck transactions.
-    nonce_state: RwLock<Option<NonceState>>,
+    nonce_state: Mutex<Option<NonceState>>,
 }
 
 impl NodeHealthService {
-    pub fn new(
+    /// Create a new node health service.
+    ///
+    /// Resolves the MSP's DB identity eagerly. Panics if the MSP is not found
+    /// in the indexer DB (so it has the same fail-fast behaviour as [`MspService::new`]).
+    pub async fn new(
         db: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_id: OnchainMspId,
@@ -69,9 +66,11 @@ impl NodeHealthService {
     pub async fn check_node_health(&self) -> NodeHealthResponse {
         debug!(target: "node_health_service", "Node health check initiated");
 
-        let indexer = self.check_indexer().await;
+        // Run independent signals concurrently
+        let (indexer, tx_nonce) = tokio::join!(self.check_indexer(), self.check_tx_nonce());
+
+        // Request acceptance depends on the indexer result
         let request_acceptance = self.check_request_acceptance(&indexer).await;
-        let tx_nonce = self.check_tx_nonce().await;
 
         let overall = indexer
             .status
@@ -168,7 +167,7 @@ impl NodeHealthService {
         };
 
         let last_accepted_secs_ago = stats.last_accepted_at.map(|time| {
-                let now = Utc::now().naive_utc();
+            let now = Utc::now().naive_utc();
             (now - time).num_seconds().max(0) as u64
         });
 
@@ -180,10 +179,10 @@ impl NodeHealthService {
 
         let status =
             if stats.total >= self.config.request_min_threshold as i64 && stats.accepted == 0 {
-            SignalStatus::Unhealthy
-        } else {
-            SignalStatus::Healthy
-        };
+                SignalStatus::Unhealthy
+            } else {
+                SignalStatus::Healthy
+            };
 
         let message = match status {
             SignalStatus::Unhealthy => Some(format!(
@@ -203,16 +202,13 @@ impl NodeHealthService {
         }
     }
 
+    /// Tracks the MSP's on-chain nonce over time. If the nonce hasn't changed
+    /// for longer than `nonce_stuck_threshold_secs`, flags as unhealthy.
+    ///
+    /// On the first call after startup there is no baseline, so the signal
+    /// reports Healthy with `nonce_unchanged_for_secs: None`.
     async fn check_tx_nonce(&self) -> TxNonceSignal {
-        let (_, account) = match self.get_msp_identity().await {
-            Ok(id) => id,
-            Err(e) => {
-                warn!(target: "node_health_service", error = %e, "Failed to resolve MSP account");
-                return TxNonceSignal::unknown(format!("Failed to resolve MSP account: {}", e));
-            }
-        };
-
-        let current_nonce = match self.rpc.get_account_nonce(&account).await {
+        let current_nonce = match self.rpc.get_account_nonce(&self.msp_account).await {
             Ok(nonce) => nonce,
             Err(e) => {
                 error!(target: "node_health_service", error = %e, "Failed to get account nonce");
@@ -220,52 +216,52 @@ impl NodeHealthService {
             }
         };
 
-        let pending = match self.rpc.get_pending_extrinsics_count().await {
-            Ok(count) => count,
-            Err(e) => {
-                error!(target: "node_health_service", error = %e, "Failed to get pending extrinsics");
-                return TxNonceSignal::unknown(format!("RPC call failed: {}", e));
+        let mut state = self.nonce_state.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+
+        let unchanged_secs = match state.as_ref() {
+            Some(prev) if prev.nonce == current_nonce => Some(prev.first_seen.elapsed().as_secs()),
+            Some(_) => {
+                // Nonce changed, reset
+                *state = Some(NonceState {
+                    nonce: current_nonce,
+                    first_seen: now,
+                });
+                Some(0)
+            }
+            None => {
+                // First call, establish baseline
+                *state = Some(NonceState {
+                    nonce: current_nonce,
+                    first_seen: now,
+                });
+                None
             }
         };
 
-        let nonce_unchanged_for_secs = {
-            let mut state = self.nonce_state.write().await;
-            match state.as_mut() {
-                Some(s) if s.last_nonce == current_nonce => s.first_seen_at.elapsed().as_secs(),
-                _ => {
-                    *state = Some(NonceState {
-                        last_nonce: current_nonce,
-                        first_seen_at: Instant::now(),
-                    });
-                    0
-                }
-            }
-        };
+        let threshold = self.config.nonce_stuck_threshold_secs;
+        let is_stuck = unchanged_secs.map_or(false, |s| s >= threshold);
 
-        let is_stuck =
-            nonce_unchanged_for_secs >= self.config.nonce_stuck_threshold_secs && pending > 0;
+        let status = if is_stuck {
+            SignalStatus::Unhealthy
+        } else {
+            SignalStatus::Healthy
+        };
 
         let message = if is_stuck {
             Some(format!(
-                "Nonce stuck at {} for {}s with {} pending extrinsics (threshold: {}s)",
-                current_nonce,
-                nonce_unchanged_for_secs,
-                pending,
-                self.config.nonce_stuck_threshold_secs
+                "Nonce unchanged for {}s (threshold: {}s)",
+                unchanged_secs.unwrap_or(0),
+                threshold
             ))
         } else {
             None
         };
 
         TxNonceSignal {
-            status: if is_stuck {
-                SignalStatus::Unhealthy
-            } else {
-                SignalStatus::Healthy
-            },
+            status,
             current_nonce,
-            pending_extrinsics: pending,
-            nonce_unchanged_for_secs,
+            nonce_unchanged_for_secs: unchanged_secs,
             message,
         }
     }
@@ -283,6 +279,10 @@ mod tests {
     };
 
     async fn mock_node_health_service() -> NodeHealthService {
+        mock_node_health_service_with_config(NodeHealthConfig::default()).await
+    }
+
+    async fn mock_node_health_service_with_config(config: NodeHealthConfig) -> NodeHealthService {
         let repo = MockRepository::sample().await;
         let db = Arc::new(DBClient::new(Arc::new(repo)));
         let mock_conn = MockConnection::new();
@@ -291,7 +291,7 @@ mod tests {
         let msp_id = OnchainMspId::new(shp_types::Hash::from_slice(
             &crate::constants::rpc::DUMMY_MSP_ID,
         ));
-        NodeHealthService::new(db, rpc, msp_id, NodeHealthConfig::default())
+        NodeHealthService::new(db, rpc, msp_id, config).await
     }
 
     #[test]
@@ -323,7 +323,7 @@ mod tests {
         let service = mock_node_health_service().await;
         let response = service.check_node_health().await;
 
-        // Mock data: finalized block 100, indexer at 100, no requests, nonce 42, no pending
+        // Mock data: finalized block 100, indexer at 100, no requests, nonce 42
         assert_eq!(response.status, SignalStatus::Healthy);
         assert_eq!(response.signals.indexer.status, SignalStatus::Healthy);
         assert_eq!(
@@ -334,19 +334,46 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn nonce_tracking_starts_from_none() {
+    async fn nonce_first_check_has_no_baseline() {
         let service = mock_node_health_service().await;
 
-        // First call: nonce_state is None, so it initializes and reports 0
         let result = service.check_tx_nonce().await;
         assert_eq!(result.current_nonce, 42);
-        assert_eq!(result.nonce_unchanged_for_secs, 0);
+        // First call — no baseline yet
+        assert_eq!(result.nonce_unchanged_for_secs, None);
         assert_eq!(result.status, SignalStatus::Healthy);
+    }
 
-        // Second call: nonce still 42, tracks duration but healthy (no pending extrinsics)
+    #[tokio::test]
+    async fn nonce_subsequent_check_tracks_duration() {
+        let service = mock_node_health_service().await;
+
+        // First call establishes the baseline
+        let _ = service.check_tx_nonce().await;
+
+        // Second call should report the duration since the baseline
         let result = service.check_tx_nonce().await;
         assert_eq!(result.current_nonce, 42);
+        assert!(result.nonce_unchanged_for_secs.is_some());
         assert_eq!(result.status, SignalStatus::Healthy);
+    }
+
+    #[tokio::test]
+    async fn nonce_unhealthy_when_stuck() {
+        // Use a threshold of 0 so the nonce is immediately "stuck"
+        let config = NodeHealthConfig {
+            nonce_stuck_threshold_secs: 0,
+            ..NodeHealthConfig::default()
+        };
+        let service = mock_node_health_service_with_config(config).await;
+
+        // First call should establish the baseline
+        let _ = service.check_tx_nonce().await;
+
+        // Second call should report the duration since the baseline
+        let result = service.check_tx_nonce().await;
+        assert_eq!(result.status, SignalStatus::Unhealthy);
+        assert!(result.message.is_some());
     }
 
     #[tokio::test]

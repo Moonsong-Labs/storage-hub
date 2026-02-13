@@ -110,8 +110,10 @@ impl RequestAcceptanceSignal {
 pub struct TxNonceSignal {
     pub status: SignalStatus,
     pub current_nonce: u64,
-    pub pending_extrinsics: usize,
-    pub nonce_unchanged_for_secs: u64,
+    /// How long the nonce has been at its current value (seconds).
+    /// `None` on the first check after startup.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce_unchanged_for_secs: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
@@ -121,8 +123,7 @@ impl TxNonceSignal {
         Self {
             status: SignalStatus::Unknown,
             current_nonce: 0,
-            pending_extrinsics: 0,
-            nonce_unchanged_for_secs: 0,
+            nonce_unchanged_for_secs: None,
             message: Some(msg.into()),
         }
     }

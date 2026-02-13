@@ -283,14 +283,6 @@ impl StorageHubRpcClient {
         self.call(methods::ACCOUNT_NEXT_INDEX, jsonrpsee::rpc_params![account])
             .await
     }
-
-    /// Get the number of pending extrinsics in the node's transaction pool.
-    pub async fn get_pending_extrinsics_count(&self) -> RpcResult<usize> {
-        debug!(target: "rpc::client", "get_pending_extrinsics_count");
-
-        let extrinsics: Vec<String> = self.call_no_params(methods::PENDING_EXTRINSICS).await?;
-        Ok(extrinsics.len())
-    }
 }
 
 #[cfg(all(test, feature = "mocks"))]

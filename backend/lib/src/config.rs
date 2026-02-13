@@ -222,8 +222,8 @@ pub struct NodeHealthConfig {
     pub request_window_secs: u64,
     /// Minimum number of total requests in the window before the acceptance ratio matters.
     pub request_min_threshold: u64,
-    /// How many seconds the on-chain nonce can remain unchanged (with pending extrinsics)
-    /// before it is considered stuck.
+    /// How many seconds the on-chain nonce can remain unchanged before the signal
+    /// is considered unhealthy.
     pub nonce_stuck_threshold_secs: u64,
 }
 

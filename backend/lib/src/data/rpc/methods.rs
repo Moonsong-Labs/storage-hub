@@ -14,4 +14,3 @@ pub const STATE_QUERY: &str = "state_getStorage";
 pub const FINALIZED_HEAD: &str = "chain_getFinalizedHead";
 pub const GET_HEADER: &str = "chain_getHeader";
 pub const ACCOUNT_NEXT_INDEX: &str = "system_accountNextIndex";
-pub const PENDING_EXTRINSICS: &str = "author_pendingExtrinsics";

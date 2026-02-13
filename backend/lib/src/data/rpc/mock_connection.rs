@@ -346,7 +346,6 @@ impl RpcConnection for MockConnection {
                 })
             }
             methods::ACCOUNT_NEXT_INDEX => serde_json::json!(42u64),
-            methods::PENDING_EXTRINSICS => serde_json::json!([]),
             methods::API_CALL => self.mock_runtime_apis(params).await,
             methods::STATE_QUERY => self.mock_state_queries(params).await,
             method => {
