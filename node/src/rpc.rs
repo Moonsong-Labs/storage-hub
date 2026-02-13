@@ -32,6 +32,7 @@ pub type RpcExtension = jsonrpsee::RpcModule<()>;
 /// Full client dependencies
 pub struct FullDeps<P, FL, FS, Runtime>
 where
+    FS: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// The client instance to use.
@@ -52,7 +53,7 @@ where
     Runtime: StorageEnableRuntime,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
-    FSH: ForestStorageHandler<Runtime> + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};
@@ -95,6 +96,7 @@ where
 /// Deps for the solochain-evm RPC constructor (includes Frontier/EVM deps)
 pub struct SolochainEvmDeps<P, FL, FS, Runtime, A>
 where
+    FS: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
     A: sc_transaction_pool::ChainApi<Block = OpaqueBlock>,
 {
@@ -125,7 +127,7 @@ where
     Runtime: StorageEnableRuntime,
     P: sc_transaction_pool_api::TransactionPool<Block = OpaqueBlock> + 'static,
     FL: FileStorageT,
-    FSH: ForestStorageHandler<Runtime> + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     A: sc_transaction_pool::ChainApi<Block = OpaqueBlock> + 'static,
     StorageHubClient<Runtime::RuntimeApi>: ProvideRuntimeApi<OpaqueBlock>
         + sc_client_api::HeaderBackend<OpaqueBlock>

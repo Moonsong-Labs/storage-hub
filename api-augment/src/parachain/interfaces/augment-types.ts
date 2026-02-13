@@ -1380,6 +1380,7 @@ import type {
   AddFilesToForestStorageResult,
   BackupStorageProvider,
   BackupStorageProviderId,
+  BspStopStoringFileResult,
   BucketId,
   CheckpointChallenge,
   ChunkId,
@@ -1581,6 +1582,7 @@ declare module "@polkadot/types/types/registry" {
     BridgedBlockNumber: BridgedBlockNumber;
     BridgedHeader: BridgedHeader;
     BridgeMessageId: BridgeMessageId;
+    BspStopStoringFileResult: BspStopStoringFileResult;
     BucketId: BucketId;
     BufferedSessionChange: BufferedSessionChange;
     Bytes: Bytes;

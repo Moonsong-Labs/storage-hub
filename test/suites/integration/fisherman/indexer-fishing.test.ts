@@ -268,19 +268,17 @@ await describeMspNet(
       )
         .unwrap()
         .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
-      const cooldown = currentBlockNumber + minWaitForStopStoring;
+      const cooldown = currentBlockNumber + minWaitForStopStoring + 1;
       await userApi.block.skipTo(cooldown);
 
-      const newInclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
-        fileKey
-      ]);
-
-      const bspConfirmStopStoringResult = await userApi.block.seal({
-        calls: [
-          userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, newInclusionForestProof.toString())
-        ],
-        signer: bspKey
+      // The BSP will automatically submit bspConfirmStopStoring after the cooldown
+      // Wait for it to appear in the tx pool and seal
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspConfirmStopStoring"
       });
+
+      const bspConfirmStopStoringResult = await userApi.block.seal();
 
       await userApi.assert.eventPresent(
         "fileSystem",

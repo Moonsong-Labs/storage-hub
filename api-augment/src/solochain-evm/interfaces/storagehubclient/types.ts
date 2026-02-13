@@ -44,6 +44,14 @@ export interface BackupStorageProvider extends Struct {
 /** @name BackupStorageProviderId */
 export interface BackupStorageProviderId extends H256 {}
 
+/** @name BspStopStoringFileResult */
+export interface BspStopStoringFileResult extends Enum {
+  readonly isSuccess: boolean;
+  readonly isNotABsp: boolean;
+  readonly isBlockchainServiceNotAvailable: boolean;
+  readonly type: "Success" | "NotABsp" | "BlockchainServiceNotAvailable";
+}
+
 /** @name BucketId */
 export interface BucketId extends H256 {}
 

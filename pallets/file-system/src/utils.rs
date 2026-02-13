@@ -461,6 +461,18 @@ where
         keys
     }
 
+    pub fn query_min_wait_for_stop_storing() -> TickNumber<T> {
+        T::MinWaitForStopStoring::get()
+    }
+
+    /// Check if a pending stop storing request exists for a BSP and file key.
+    pub fn has_pending_stop_storing_request(
+        bsp_id: ProviderIdFor<T>,
+        file_key: MerkleHash<T>,
+    ) -> bool {
+        PendingStopStoringRequests::<T>::contains_key(&bsp_id, &file_key)
+    }
+
     fn query_confirm_chunks_to_prove_for_file(
         provider_id: ProviderIdFor<T>,
         storage_request_metadata: StorageRequestMetadata<T>,

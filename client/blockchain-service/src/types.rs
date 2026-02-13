@@ -182,6 +182,56 @@ impl<Runtime: StorageEnableRuntime> StopStoringForInsolventUserRequest<Runtime> 
     }
 }
 
+/// A struct that holds the information to request stop storing a file for a BSP.
+///
+/// This struct is used as an item in the `pending_request_bsp_stop_storing_requests` queue.
+/// It represents a BSP's request to stop storing a file, triggered by the RPC.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct RequestBspStopStoringRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
+    pub try_count: u32,
+}
+
+impl<Runtime: StorageEnableRuntime> RequestBspStopStoringRequest<Runtime> {
+    pub fn new(file_key: MerkleTrieHash<Runtime>) -> Self {
+        Self {
+            file_key,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
+/// A struct that holds the information to confirm stop storing a file for a BSP.
+///
+/// This struct is used as an item in the `pending_confirm_bsp_stop_storing_requests` queue.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ConfirmBspStopStoringRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
+    pub confirm_after_tick: BlockNumber<Runtime>,
+    pub try_count: u32,
+}
+
+impl<Runtime: StorageEnableRuntime> ConfirmBspStopStoringRequest<Runtime> {
+    pub fn new(
+        file_key: MerkleTrieHash<Runtime>,
+        confirm_after_tick: BlockNumber<Runtime>,
+    ) -> Self {
+        Self {
+            file_key,
+            confirm_after_tick,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
 /// A struct that holds the information to delete a file from storage.
 ///
 /// This struct is used as an item in the `pending_file_deletion_requests` queue.
@@ -994,7 +1044,7 @@ impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
 ///
 /// Used as a parameter to `bsp_forest_write_work` to indicate which pending
 /// request queue should be checked or have its front element removed.
-pub(crate) enum BspForestWriteQueue {
+pub(crate) enum BspForestWriteQueue<Runtime: StorageEnableRuntime> {
     /// Pop from the in-memory submit proof requests (BTreeSet, pops lowest tick first).
     SubmitProof,
     /// Check the persistent confirm storing request deque for pending work.
@@ -1002,6 +1052,12 @@ pub(crate) enum BspForestWriteQueue {
     ConfirmStoring,
     /// Pop from the persistent stop storing for insolvent user request deque.
     StopStoringForInsolventUser,
+    /// Peek-then-pop from the persistent confirm BSP stop storing deque.
+    /// Only pops if the front item's `confirm_after_tick` has been reached.
+    /// The contained value is the current tick used for the comparison.
+    ConfirmBspStopStoring(BlockNumber<Runtime>),
+    /// Pop from the persistent request BSP stop storing deque.
+    RequestBspStopStoring,
 }
 
 /// The result of checking or popping from a BSP forest-write request queue.
@@ -1015,6 +1071,10 @@ pub(crate) enum BspForestWriteQueuePop<Runtime: StorageEnableRuntime> {
     ConfirmStoring,
     /// A stop storing for insolvent user request was popped from the persistent deque.
     StopStoringForInsolventUser(StopStoringForInsolventUserRequest<Runtime>),
+    /// A confirm BSP stop storing request was popped from the persistent deque.
+    ConfirmBspStopStoring(ConfirmBspStopStoringRequest<Runtime>),
+    /// A request BSP stop storing request was popped from the persistent deque.
+    RequestBspStopStoring(RequestBspStopStoringRequest<Runtime>),
 }
 
 /// Result of checking for pending BSP forest-write work.
