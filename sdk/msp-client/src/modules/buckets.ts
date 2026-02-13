@@ -77,13 +77,13 @@ export class BucketsModule extends ModuleBase {
    * - `limit` defaults to 100
    * - `limit` is capped at 500 (backend max)
    */
-  async listBuckets(signal?: AbortSignal, limit = 100): Promise<Bucket[]> {
-    const res = await this.listBucketsByPage(signal, limit, 0);
+  async listBuckets(limit = 100, signal?: AbortSignal): Promise<Bucket[]> {
+    const res = await this.listBucketsByPage(limit, 0, signal);
     return res.buckets;
   }
 
   /** Fetch a single page of buckets using backend pagination (`page` + `limit`). */
-  async listBucketsByPage(signal?: AbortSignal, limit = 100, page = 0): Promise<ListBucketsByPage> {
+  async listBucketsByPage(limit = 100, page = 0, signal?: AbortSignal): Promise<ListBucketsByPage> {
     const headers = await this.withAuth();
     const cappedLimit = Math.min(Math.max(1, limit), BACKEND_MAX_BUCKETS_PER_PAGE);
     const safePage = Math.max(0, Math.floor(page));
