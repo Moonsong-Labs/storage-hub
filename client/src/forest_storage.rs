@@ -627,10 +627,7 @@ where
         // a concurrent create() from recreating the forest at the same path
         // before the disk deletion completes.
         let mut known_lock = self.known_forests.write().await;
-
-        if !known_lock.remove(key) {
-            return;
-        }
+        known_lock.remove(key);
 
         // Remove from LRU cache (drops the RocksDB handle if this is the last reference)
         self.open_forests.write().await.pop(key);
@@ -659,6 +656,7 @@ where
                 );
             }
         }
+        // TODO: Handle no storage path case.
     }
 
     async fn is_forest_storage_present(&self, key: &Self::Key) -> bool {
