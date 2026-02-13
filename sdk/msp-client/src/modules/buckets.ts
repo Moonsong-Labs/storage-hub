@@ -4,7 +4,8 @@ import type {
   GetFilesOptions,
   FileTree,
   FileStatus,
-  ListBucketsByPage
+  ListBucketsByPage,
+  ListBucketsInput
 } from "../types.js";
 import { ModuleBase } from "../base.js";
 import { ensure0xPrefix, parseDate } from "@storagehub-sdk/core";
@@ -72,25 +73,28 @@ function fixFileTree(item: FileTreeWire): FileTree {
 
 export class BucketsModule extends ModuleBase {
   /**
-   * List buckets for the current authenticated user (single request).
+   * List first page of buckets for the current authenticated user
    *
    * - `limit` defaults to 100
    * - `limit` is capped at 500 (backend max)
    */
-  async listBuckets(limit = 100, signal?: AbortSignal): Promise<Bucket[]> {
-    const res = await this.listBucketsByPage(limit, 0, signal);
+  async listBuckets(options: ListBucketsInput): Promise<Bucket[]> {
+    options.page = 0;
+    const res = await this.listBucketsByPage(options);
     return res.buckets;
   }
 
   /** Fetch a single page of buckets using backend pagination (`page` + `limit`). */
-  async listBucketsByPage(limit = 100, page = 0, signal?: AbortSignal): Promise<ListBucketsByPage> {
+  async listBucketsByPage(options: ListBucketsInput): Promise<ListBucketsByPage> {
+    const limit = options.limit ?? 100;
+    const page = options.page ?? 0;
     const headers = await this.withAuth();
     const cappedLimit = Math.min(Math.max(1, limit), BACKEND_MAX_BUCKETS_PER_PAGE);
     const safePage = Math.max(0, Math.floor(page));
 
     const wire = await this.ctx.http.get<BucketWire[]>("/buckets", {
       ...(headers ? { headers } : {}),
-      ...(signal ? { signal } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
       query: { page: safePage, limit: cappedLimit }
     });
 

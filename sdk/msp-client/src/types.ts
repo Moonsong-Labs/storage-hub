@@ -118,6 +118,12 @@ export interface DownloadResult {
   contentRange?: string | null;
 }
 
+export type ListBucketsInput = {
+  limit?: number;
+  page?: number;
+  signal?: AbortSignal;
+};
+
 // Buckets and files
 export interface Bucket {
   bucketId: `0x${string}`;
