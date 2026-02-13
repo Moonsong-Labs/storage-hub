@@ -16,7 +16,6 @@ use bigdecimal::BigDecimal;
 use chrono::Utc;
 use tokio::sync::RwLock;
 
-use chrono::NaiveDateTime;
 use shc_indexer_db::{
     models::{Bsp, Bucket, File, Msp, ServiceState},
     OnchainBspId, OnchainMspId,
@@ -27,7 +26,7 @@ use crate::{
     constants::{mocks::MOCK_ADDRESS, rpc::DUMMY_MSP_ID, test},
     data::indexer_db::repository::{
         error::{RepositoryError, RepositoryResult},
-        IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
+        IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind, RequestAcceptanceStats,
     },
     test_utils::{random_bytes_32, random_hash},
 };
@@ -379,27 +378,16 @@ impl IndexerOps for MockRepository {
         })
     }
 
-    async fn count_recent_requests_for_msp(
+    async fn get_request_acceptance_stats(
         &self,
         _msp_db_id: i64,
         _window_secs: u64,
-    ) -> RepositoryResult<i64> {
-        Ok(0)
-    }
-
-    async fn count_recent_accepted_requests_for_msp(
-        &self,
-        _msp_db_id: i64,
-        _window_secs: u64,
-    ) -> RepositoryResult<i64> {
-        Ok(0)
-    }
-
-    async fn get_last_accepted_request_time_for_msp(
-        &self,
-        _msp_db_id: i64,
-    ) -> RepositoryResult<Option<NaiveDateTime>> {
-        Ok(None)
+    ) -> RepositoryResult<RequestAcceptanceStats> {
+        Ok(RequestAcceptanceStats {
+            total: 0,
+            accepted: 0,
+            last_accepted_at: None,
+        })
     }
 }
 

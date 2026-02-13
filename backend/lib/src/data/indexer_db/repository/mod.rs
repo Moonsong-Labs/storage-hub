@@ -55,6 +55,17 @@ pub struct PaymentStreamData {
     pub kind: PaymentStreamKind,
 }
 
+/// Aggregated storage request acceptance stats for an MSP within a time window.
+#[derive(Debug, Clone)]
+pub struct RequestAcceptanceStats {
+    /// Total storage requests directed at this MSP in the window
+    pub total: i64,
+    /// Storage requests accepted (those that have an `msp_file` association) in the window
+    pub accepted: i64,
+    /// Timestamp of the most recent accepted storage request (if any)
+    pub last_accepted_at: Option<NaiveDateTime>,
+}
+
 /// Read-only operations for indexer data access.
 ///
 /// This trait provides read-only access to database entities,
@@ -148,39 +159,19 @@ pub trait IndexerOps: Send + Sync {
     /// Get the indexer service state (last indexed block, updated_at, etc.)
     async fn get_service_state(&self) -> RepositoryResult<ServiceState>;
 
-    /// Count ALL files in buckets belonging to this MSP created within the given window,
-    /// regardless of their step (Requested, Stored, Expired, etc.).
+    /// Get aggregated storage request acceptance stats for an MSP within a time window.
+    ///
+    /// Returns the total storage requests count, accepted count, and timestamp of the
+    /// most recent storage request acceptance.
     ///
     /// # Arguments
     /// * `msp_db_id` - The MSP's database ID
     /// * `window_secs` - Time window in seconds from now
-    async fn count_recent_requests_for_msp(
+    async fn get_request_acceptance_stats(
         &self,
         msp_db_id: i64,
         window_secs: u64,
-    ) -> RepositoryResult<i64>;
-
-    /// Count files in buckets belonging to this MSP created within the given window
-    /// that have an `msp_file` association (i.e., accepted by this MSP).
-    ///
-    /// # Arguments
-    /// * `msp_db_id` - The MSP's database ID
-    /// * `window_secs` - Time window in seconds from now
-    async fn count_recent_accepted_requests_for_msp(
-        &self,
-        msp_db_id: i64,
-        window_secs: u64,
-    ) -> RepositoryResult<i64>;
-
-    /// Get the most recent `created_at` timestamp for files that have an `msp_file`
-    /// association with this MSP (informational only).
-    ///
-    /// # Arguments
-    /// * `msp_db_id` - The MSP's database ID
-    async fn get_last_accepted_request_time_for_msp(
-        &self,
-        msp_db_id: i64,
-    ) -> RepositoryResult<Option<NaiveDateTime>>;
+    ) -> RepositoryResult<RequestAcceptanceStats>;
 }
 
 /// Mutable operations for test environments.

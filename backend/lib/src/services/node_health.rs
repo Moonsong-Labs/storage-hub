@@ -36,7 +36,11 @@ pub struct NodeHealthService {
     rpc: Arc<StorageHubRpcClient>,
     msp_id: OnchainMspId,
     config: NodeHealthConfig,
-    msp_identity: RwLock<Option<MspIdentity>>,
+    /// MSP's database ID, resolved once at startup.
+    msp_db_id: i64,
+    /// MSP's signing account, resolved once at startup.
+    msp_account: String,
+    /// Tracks nonce over time to detect stuck transactions.
     nonce_state: RwLock<Option<NonceState>>,
 }
 
@@ -47,37 +51,19 @@ impl NodeHealthService {
         msp_id: OnchainMspId,
         config: NodeHealthConfig,
     ) -> Self {
+        let msp = db
+            .get_msp(&msp_id)
+            .await
+            .expect("MSP must be indexed in the DB when starting NodeHealthService");
+
         Self {
             db,
             rpc,
-            msp_id,
             config,
-            msp_identity: RwLock::new(None),
-            nonce_state: RwLock::new(None),
+            msp_db_id: msp.id,
+            msp_account: msp.account,
+            nonce_state: Mutex::new(None),
         }
-    }
-
-    /// Resolve and cache the MSP's DB id and signing account in a single query
-    async fn get_msp_identity(&self) -> Result<(i64, String), String> {
-        {
-            let cached = self.msp_identity.read().await;
-            if let Some(ref identity) = *cached {
-                return Ok((identity.db_id, identity.account.clone()));
-            }
-        }
-
-        let msp = self
-            .db
-            .get_msp(&self.msp_id)
-            .await
-            .map_err(|e| format!("Failed to get MSP from DB: {}", e))?;
-
-        let result = (msp.id, msp.account.clone());
-        *self.msp_identity.write().await = Some(MspIdentity {
-            db_id: msp.id,
-            account: msp.account,
-        });
-        Ok(result)
     }
 
     pub async fn check_node_health(&self) -> NodeHealthResponse {
@@ -169,61 +155,31 @@ impl NodeHealthService {
             );
         }
 
-        let (msp_db_id, _) = match self.get_msp_identity().await {
-            Ok(id) => id,
-            Err(e) => {
-                warn!(target: "node_health_service", error = %e, "Failed to resolve MSP");
-                return RequestAcceptanceSignal::unknown(format!("Failed to resolve MSP: {}", e));
-            }
-        };
-
-        let total = match self
+        let stats = match self
             .db
-            .count_recent_requests_for_msp(msp_db_id, self.config.request_window_secs)
+            .get_request_acceptance_stats(self.msp_db_id, self.config.request_window_secs)
             .await
         {
-            Ok(count) => count,
+            Ok(stats) => stats,
             Err(e) => {
-                error!(target: "node_health_service", error = %e, "Failed to count recent requests");
+                error!(target: "node_health_service", error = %e, "Failed to get request stats");
                 return RequestAcceptanceSignal::unknown(format!("DB query failed: {}", e));
             }
         };
 
-        let accepted = match self
-            .db
-            .count_recent_accepted_requests_for_msp(msp_db_id, self.config.request_window_secs)
-            .await
-        {
-            Ok(count) => count,
-            Err(e) => {
-                error!(target: "node_health_service", error = %e, "Failed to count accepted requests");
-                return RequestAcceptanceSignal::unknown(format!("DB query failed: {}", e));
-            }
-        };
-
-        let last_accepted_secs_ago = match self
-            .db
-            .get_last_accepted_request_time_for_msp(msp_db_id)
-            .await
-        {
-            Ok(Some(time)) => {
+        let last_accepted_secs_ago = stats.last_accepted_at.map(|time| {
                 let now = Utc::now().naive_utc();
-                Some((now - time).num_seconds().max(0) as u64)
-            }
-            Ok(None) => None,
-            Err(e) => {
-                warn!(target: "node_health_service", error = %e, "Failed to get last accepted time");
-                None
-            }
-        };
+            (now - time).num_seconds().max(0) as u64
+        });
 
-        let acceptance_ratio = if total > 0 {
-            Some(accepted as f64 / total as f64)
+        let acceptance_ratio = if stats.total > 0 {
+            Some(stats.accepted as f64 / stats.total as f64)
         } else {
             None
         };
 
-        let status = if total >= self.config.request_min_threshold as i64 && accepted == 0 {
+        let status =
+            if stats.total >= self.config.request_min_threshold as i64 && stats.accepted == 0 {
             SignalStatus::Unhealthy
         } else {
             SignalStatus::Healthy
@@ -232,15 +188,15 @@ impl NodeHealthService {
         let message = match status {
             SignalStatus::Unhealthy => Some(format!(
                 "MSP not accepting files: 0/{} requests accepted in the last {}s window",
-                total, self.config.request_window_secs
+                stats.total, self.config.request_window_secs
             )),
             _ => None,
         };
 
         RequestAcceptanceSignal {
             status,
-            recent_requests_total: total,
-            recent_requests_accepted: accepted,
+            recent_requests_total: stats.total,
+            recent_requests_accepted: stats.accepted,
             acceptance_ratio,
             last_accepted_secs_ago,
             message,

@@ -34,7 +34,7 @@ use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
     pool::SmartPool,
-    IndexerOps, PaymentStreamData, PaymentStreamKind,
+    IndexerOps, PaymentStreamData, PaymentStreamKind, RequestAcceptanceStats,
 };
 
 /// PostgreSQL repository implementation.
@@ -198,60 +198,42 @@ impl IndexerOps for Repository {
         ServiceState::get(&mut conn).await.map_err(Into::into)
     }
 
-    async fn count_recent_requests_for_msp(
+    async fn get_request_acceptance_stats(
         &self,
         msp_db_id: i64,
         window_secs: u64,
-    ) -> RepositoryResult<i64> {
+    ) -> RepositoryResult<RequestAcceptanceStats> {
         let mut conn = self.pool.get().await?;
         let cutoff = chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
 
-        let count: i64 = file::table
+        let (total, accepted): (i64, i64) = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .left_join(
+                msp_file::table.on(file::id
+                    .eq(msp_file::file_id)
+                    .and(msp_file::msp_id.eq(msp_db_id))),
+            )
             .filter(bucket::msp_id.eq(msp_db_id))
             .filter(file::created_at.ge(cutoff))
-            .count()
-            .get_result(&mut *conn)
+            .select((
+                diesel::dsl::count(file::id),
+                diesel::dsl::count(msp_file::file_id.nullable()),
+            ))
+            .first(&mut *conn)
             .await?;
 
-        Ok(count)
-    }
-
-    async fn count_recent_accepted_requests_for_msp(
-        &self,
-        msp_db_id: i64,
-        window_secs: u64,
-    ) -> RepositoryResult<i64> {
-        let mut conn = self.pool.get().await?;
-        let cutoff = chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
-
-        let count: i64 = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
-            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
-            .filter(bucket::msp_id.eq(msp_db_id))
-            .filter(msp_file::msp_id.eq(msp_db_id))
-            .filter(file::created_at.ge(cutoff))
-            .count()
-            .get_result(&mut *conn)
-            .await?;
-
-        Ok(count)
-    }
-
-    async fn get_last_accepted_request_time_for_msp(
-        &self,
-        msp_db_id: i64,
-    ) -> RepositoryResult<Option<NaiveDateTime>> {
-        let mut conn = self.pool.get().await?;
-
-        let result: Option<NaiveDateTime> = file::table
+        let last_accepted_at: Option<NaiveDateTime> = file::table
             .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
             .filter(msp_file::msp_id.eq(msp_db_id))
             .select(diesel::dsl::max(file::created_at))
             .first(&mut *conn)
             .await?;
 
-        Ok(result)
+        Ok(RequestAcceptanceStats {
+            total,
+            accepted,
+            last_accepted_at,
+        })
     }
 }
 

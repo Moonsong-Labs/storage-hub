@@ -12,7 +12,6 @@ use tokio::sync::RwLock;
 #[cfg(test)]
 use bigdecimal::BigDecimal;
 
-use chrono::NaiveDateTime;
 #[cfg(test)]
 use shc_indexer_db::OnchainBspId;
 use shc_indexer_db::{
@@ -23,7 +22,7 @@ use tracing::debug;
 
 use crate::{
     constants::database::{DEFAULT_PAGE_LIMIT, MSP_CACHE_TTL_SECS},
-    data::indexer_db::repository::{PaymentStreamData, StorageOperations},
+    data::indexer_db::repository::{PaymentStreamData, RequestAcceptanceStats, StorageOperations},
     error::Result,
 };
 
@@ -265,57 +264,21 @@ impl DBClient {
             .map_err(Into::into)
     }
 
-    /// Count all recent storage requests for an MSP within a time window
-    pub async fn count_recent_requests_for_msp(
+    /// Get aggregated request acceptance stats for an MSP within a time window
+    pub async fn get_request_acceptance_stats(
         &self,
         msp_db_id: i64,
         window_secs: u64,
-    ) -> Result<i64> {
+    ) -> Result<RequestAcceptanceStats> {
         debug!(
-            target: "indexer_db::client::count_recent_requests_for_msp",
+            target: "indexer_db::client::get_request_acceptance_stats",
             msp_db_id = msp_db_id,
             window_secs = window_secs,
-            "Counting recent requests for MSP"
+            "Fetching request acceptance stats for MSP"
         );
 
         self.repository
-            .count_recent_requests_for_msp(msp_db_id, window_secs)
-            .await
-            .map_err(Into::into)
-    }
-
-    /// Count recent accepted storage requests for an MSP within a time window
-    pub async fn count_recent_accepted_requests_for_msp(
-        &self,
-        msp_db_id: i64,
-        window_secs: u64,
-    ) -> Result<i64> {
-        debug!(
-            target: "indexer_db::client::count_recent_accepted_requests_for_msp",
-            msp_db_id = msp_db_id,
-            window_secs = window_secs,
-            "Counting recent accepted requests for MSP"
-        );
-
-        self.repository
-            .count_recent_accepted_requests_for_msp(msp_db_id, window_secs)
-            .await
-            .map_err(Into::into)
-    }
-
-    /// Get the timestamp of the last accepted storage request for an MSP
-    pub async fn get_last_accepted_request_time_for_msp(
-        &self,
-        msp_db_id: i64,
-    ) -> Result<Option<NaiveDateTime>> {
-        debug!(
-            target: "indexer_db::client::get_last_accepted_request_time_for_msp",
-            msp_db_id = msp_db_id,
-            "Fetching last accepted request time for MSP"
-        );
-
-        self.repository
-            .get_last_accepted_request_time_for_msp(msp_db_id)
+            .get_request_acceptance_stats(msp_db_id, window_secs)
             .await
             .map_err(Into::into)
     }
