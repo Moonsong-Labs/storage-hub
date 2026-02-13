@@ -17,7 +17,7 @@ use chrono::Utc;
 use tokio::sync::RwLock;
 
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp},
+    models::{Bsp, Bucket, File, Msp, ServiceState},
     OnchainBspId, OnchainMspId,
 };
 use shp_types::Hash;
@@ -26,7 +26,7 @@ use crate::{
     constants::{mocks::MOCK_ADDRESS, rpc::DUMMY_MSP_ID, test},
     data::indexer_db::repository::{
         error::{RepositoryError, RepositoryResult},
-        IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
+        IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind, RequestAcceptanceStats,
     },
     test_utils::{random_bytes_32, random_hash},
 };
@@ -365,6 +365,29 @@ impl IndexerOps for MockRepository {
             .filter(|(account, _)| account == user_account)
             .map(|(_, data)| data.clone())
             .collect())
+    }
+
+    // ============ Node Health Operations ============
+    async fn get_service_state(&self) -> RepositoryResult<ServiceState> {
+        let now = Utc::now().naive_utc();
+        Ok(ServiceState {
+            id: 1,
+            last_indexed_finalized_block: 100,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    async fn get_request_acceptance_stats(
+        &self,
+        _msp_db_id: i64,
+        _window_secs: u64,
+    ) -> RepositoryResult<RequestAcceptanceStats> {
+        Ok(RequestAcceptanceStats {
+            total: 0,
+            accepted: 0,
+            last_accepted_at: None,
+        })
     }
 }
 
