@@ -302,6 +302,15 @@ impl MspService {
             }))
     }
 
+    /// Count buckets for a user.
+    pub async fn count_user_buckets(&self, user_address: &Address) -> Result<u64, Error> {
+        debug!(target: "msp_service::count_user_buckets", user = %user_address, "Counting user buckets");
+
+        self.postgres
+            .get_user_buckets_count(&self.msp_id, &user_address.to_string())
+            .await
+    }
+
     /// Get a specific bucket by its ID
     ///
     /// Verifies that the owner of the bucket is `user`. If the bucket is public, this check always passes.
