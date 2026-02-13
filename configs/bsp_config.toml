@@ -15,6 +15,9 @@ check_for_pending_proofs_period = 4
 node_key = "0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be"
 # Path to keystores
 keystore_path = "./docker/dev-keystores"
+# List of trusted MSPs allowed to request downloads from this BSP.
+trusted_msps = []
+
 # Configuration for the BSP Upload File task
 [provider.bsp_upload_file]
 # Maximum number of times to retry file upload operations

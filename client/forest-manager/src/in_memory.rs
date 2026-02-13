@@ -66,6 +66,22 @@ where
         }
     }
 
+    fn get_all_files(&self) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>> {
+        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
+        let mut files = Vec::new();
+        let mut trie_iter = trie
+            .iter()
+            .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
+
+        while let Some((_, value)) = trie_iter.next().transpose()? {
+            let metadata = FileMetadata::decode(&mut &value[..])?;
+            let file_key = metadata.file_key::<T::Hash>();
+            files.push((file_key, metadata));
+        }
+
+        Ok(files)
+    }
+
     fn generate_proof(
         &self,
         challenged_file_keys: Vec<HasherOutT<T>>,
@@ -173,6 +189,46 @@ mod tests {
     use core::cmp::min;
     use shc_common::types::{Fingerprint, Proven, StorageProofsMerkleTrieLayout};
     use sp_core::H256;
+
+    #[test]
+    fn test_get_all_files() {
+        let mut forest_storage = InMemoryForestStorage::<StorageProofsMerkleTrieLayout>::new();
+
+        let metadata_1 = FileMetadata::new(
+            "Alice".as_bytes().to_vec(),
+            "bucket".as_bytes().to_vec(),
+            "location_1".as_bytes().to_vec(),
+            100,
+            Fingerprint::default(),
+        )
+        .unwrap();
+        let metadata_2 = FileMetadata::new(
+            "Bob".as_bytes().to_vec(),
+            "bucket".as_bytes().to_vec(),
+            "location_2".as_bytes().to_vec(),
+            200,
+            Fingerprint::default(),
+        )
+        .unwrap();
+
+        let keys = ForestStorage::<StorageProofsMerkleTrieLayout, sh_parachain_runtime::Runtime>::insert_files_metadata(
+            &mut forest_storage,
+            &[metadata_1.clone(), metadata_2.clone()],
+        )
+        .unwrap();
+        assert_eq!(keys.len(), 2);
+
+        let mut all_files = ForestStorage::<
+            StorageProofsMerkleTrieLayout,
+            sh_parachain_runtime::Runtime,
+        >::get_all_files(&forest_storage)
+        .unwrap();
+        all_files.sort_by_key(|(k, _)| *k);
+
+        assert_eq!(all_files.len(), 2);
+        assert_eq!(all_files[0].0, keys[0].min(keys[1]));
+        assert_eq!(all_files[1].0, keys[0].max(keys[1]));
+    }
 
     #[test]
     fn test_initialization_with_no_existing_root() {
