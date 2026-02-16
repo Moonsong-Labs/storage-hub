@@ -623,40 +623,43 @@ where
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
-        // Hold known_forests write lock across the entire operation to prevent
-        // a concurrent create() from recreating the forest at the same path
-        // before the disk deletion completes.
-        let mut known_lock = self.known_forests.write().await;
-        known_lock.remove(key);
+        // Step 1: Call get() to ensure the Arc in the LRU cache is the one we modify.
+        // This guarantees all short-term new Arcs share the same instance.
+        if let Some(fs_arc) = self.get(key).await {
+            // Step 2: Acquire write lock and set deleting flag.
+            // From this point, any other Arc<RwLock<FS>> sharing this instance
+            // will fail on all operations.
+            let mut fs = fs_arc.write().await;
+            fs.deleting = true;
+            drop(fs);
+        }
 
-        // Remove from LRU cache (drops the RocksDB handle if this is the last reference)
-        self.open_forests.write().await.pop(key);
+        // Step 3: Delete directory from disk.
+        if let Some(ref storage_path) = self.storage_path {
+            let mut dir_path = std::path::PathBuf::new();
+            dir_path.push(storage_path);
+            dir_path.push(FOREST_STORAGE_PATH);
+            dir_path.push(key.to_string());
 
-        // Delete the forest directory from disk
-        if let Some(storage_path) = &self.storage_path {
-            let mut db_path = PathBuf::new();
-            db_path.push(storage_path);
-            db_path.push(FOREST_STORAGE_PATH);
-            db_path.push(key.to_string());
-
-            if let Err(e) = std::fs::remove_dir_all(&db_path) {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to delete forest [{}] from disk at {}: {}",
-                    key,
-                    db_path.display(),
-                    e
-                );
-            } else {
-                debug!(
-                    target: LOG_TARGET,
-                    "Deleted forest [{}] from disk at {}",
-                    key,
-                    db_path.display()
-                );
+            if dir_path.exists() {
+                if let Err(e) = std::fs::remove_dir_all(&dir_path) {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to delete forest directory [{}]: {}. Continuing with removal from caches.",
+                        dir_path.display(),
+                        e
+                    );
+                }
             }
         }
-        // TODO: Handle no storage path case.
+
+        // Step 4-5: Remove from open_forests (LRU cache).
+        // If another thread passed the known_forests check and is waiting on this lock,
+        // it will see the forest is gone from the LRU, try to open from disk, and fail.
+        self.open_forests.write().await.pop(key);
+
+        // Step 6-7: Remove from known_forests.
+        self.known_forests.write().await.remove(key);
     }
 
     async fn is_forest_storage_present(&self, key: &Self::Key) -> bool {
