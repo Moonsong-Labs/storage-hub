@@ -1363,13 +1363,13 @@ where
         &self,
         pending_volunteer_requests: Vec<ConfirmStoringRequest<Runtime>>,
     ) {
+        debug!(
+            target: LOG_TARGET,
+            "Re-queuing {} pending volunteer request(s): [0x{:x?}]",
+            pending_volunteer_requests.len(),
+            pending_volunteer_requests.iter().map(|r| r.file_key).collect::<Vec<_>>()
+        );
         for request in pending_volunteer_requests {
-            trace!(
-                target: LOG_TARGET,
-                "Re-queuing pending volunteer request for file key [{:x}]",
-                request.file_key
-            );
-
             if let Err(e) = self
                 .storage_hub_handler
                 .blockchain
@@ -1378,7 +1378,7 @@ where
             {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to re-queue pending volunteer request for file key [{:x}]: {:?}",
+                    "Failed to re-queue pending volunteer request for file key [0x{:x}]: {:?}",
                     request.file_key,
                     e
                 );
@@ -1397,13 +1397,13 @@ where
         &self,
         confirming_file_keys: &Vec<ConfirmStoringRequest<Runtime>>,
     ) {
+        info!(
+            target: LOG_TARGET,
+            "Re-queuing {} file key(s) for retry (transient error): [0x{:x?}]",
+            confirming_file_keys.len(),
+            confirming_file_keys.iter().map(|r| r.file_key).collect::<Vec<_>>()
+        );
         for request in confirming_file_keys.iter() {
-            info!(
-                target: LOG_TARGET,
-                "Re-queuing file key [{:x}] for retry (transient error)",
-                request.file_key
-            );
-
             if let Err(e) = self
                 .storage_hub_handler
                 .blockchain
@@ -1412,7 +1412,7 @@ where
             {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to re-queue confirm storing request for file key [{:x}]: {:?}",
+                    "Failed to re-queue confirm storing request for file key [0x{:x}]: {:?}",
                     request.file_key,
                     e
                 );

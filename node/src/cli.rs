@@ -170,6 +170,16 @@ pub struct ProviderConfigurations {
     #[arg(long, default_value = "60")]
     pub extrinsic_retry_timeout: Option<u64>,
 
+    /// Mortality period for extrinsics in number of blocks.
+    ///
+    /// Determines how long a submitted transaction remains valid before expiring.
+    /// Must be a power of 2 between 4 and `BlockHashCount` (4096). Non-power-of-2 values
+    /// will be rounded up to the next valid power of 2. Lower values mean transactions
+    /// expire faster, which helps recover from stuck nonces after block reorgs, but also
+    /// reduces the window for a transaction to be included on-chain.
+    #[arg(long, value_name = "BLOCKS", default_value = "256", value_parser = clap::value_parser!(u32).range(4..))]
+    pub extrinsic_mortality: Option<u32>,
+
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
     #[arg(long, default_value = "4")]
     pub check_for_pending_proofs_period: Option<u32>,
@@ -523,6 +533,11 @@ impl ProviderConfigurations {
             bs_changed = true;
         }
 
+        if let Some(extrinsic_mortality) = self.extrinsic_mortality {
+            bs_options.extrinsic_mortality = Some(extrinsic_mortality);
+            bs_changed = true;
+        }
+
         if let Some(check_for_pending_proofs_period) = self.check_for_pending_proofs_period {
             bs_options.check_for_pending_proofs_period = Some(check_for_pending_proofs_period);
             bs_changed = true;
@@ -711,6 +726,16 @@ pub struct FishermanConfigurations {
         help_heading = "Fisherman Strategy Options"
     )]
     pub fisherman_ttl_threshold_seconds: Option<u64>,
+
+    /// Mortality period for extrinsics in number of blocks.
+    ///
+    /// Determines how long a submitted transaction remains valid before expiring.
+    /// Must be a power of 2 between 4 and BlockHashCount (4096). Non-power-of-2 values
+    /// will be rounded to the nearest valid power of 2. Lower values mean transactions
+    /// expire faster, which helps recover from stuck nonces after block reorgs, but also
+    /// reduces the window for a transaction to be included.
+    #[arg(long, value_name = "BLOCKS", default_value = "256", value_parser = clap::value_parser!(u32).range(4..))]
+    pub fisherman_extrinsic_mortality: Option<u32>,
 }
 
 impl FishermanConfigurations {
@@ -731,6 +756,20 @@ impl FishermanConfigurations {
                 FishermanOrdering::Randomized => FileOrdering::Randomized,
             };
 
+            // Build blockchain_service options
+            let mut blockchain_service = None;
+            let mut bs_options = BlockchainServiceOptions::default();
+            let mut bs_changed = false;
+
+            if let Some(extrinsic_mortality) = self.fisherman_extrinsic_mortality {
+                bs_options.extrinsic_mortality = Some(extrinsic_mortality);
+                bs_changed = true;
+            }
+
+            if bs_changed {
+                blockchain_service = Some(bs_options);
+            }
+
             Some(FishermanOptions {
                 database_url: self
                     .fisherman_database_url
@@ -744,6 +783,7 @@ impl FishermanConfigurations {
                 maintenance_mode,
                 filtering,
                 ordering,
+                blockchain_service,
             })
         } else {
             None

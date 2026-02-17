@@ -585,6 +585,17 @@ await describeMspNet(
       );
     });
 
+    it("Should download the file using the direct download URL", async () => {
+      const directUrl = await mspClient.files.getDownloadUrl(bucketId, fileKey.toHex());
+      // Public file: direct download should work without auth headers.
+      const res = await fetch(directUrl);
+      strictEqual(res.status, 200, "Direct URL download should return success");
+
+      const downloaded = Buffer.from(await res.arrayBuffer());
+      const original = Buffer.from(await (await fileManager.getFileBlob()).arrayBuffer());
+      assert(downloaded.equals(original), "Direct URL downloaded file should match original");
+    });
+
     it("Should request deletion and verify complete cleanup", async () => {
       // Create the file info to request its deletion
       const registry = new TypeRegistry();

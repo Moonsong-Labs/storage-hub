@@ -47,6 +47,10 @@ max_tip = 100.0
 # Configuration for the Blockchain Service
 [provider.blockchain_service]
 extrinsic_retry_timeout = 60
+# Mortality period for extrinsics in number of blocks (default: 256, ~25 min at 6s blocks).
+# Lower values mean faster recovery from stuck nonces after block reorgs.
+# Should be a power of 2 between 4 and `BlockHashCount` (4096).
+extrinsic_mortality = 256
 # When true, the MSP will distribute accepted files to volunteering BSPs
 enable_msp_distribute_files = true
 # Maximum number of MSP respond storage requests to batch together (default: 20)
