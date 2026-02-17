@@ -1015,6 +1015,18 @@ mod benchmarks {
             },
         );
 
+        // Hold some of the user's balance so it simulates having a deposit for the payment stream.
+        // This is required because update_dynamic_rate_payment_stream recalculates the deposit and
+        // may try to release a portion of the old deposit with Precision::Exact.
+        assert_ok!(<T as crate::Config>::Currency::hold(
+            &pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            100u32.into(),
+        ));
+
+        // Register the user in the payment streams pallet so the deposit adjustment works correctly.
+        pallet_payment_streams::RegisteredUsers::<T>::insert(&user_account, 1u32);
+
         // Set the used capacity to the total capacity to simulate the worst-case scenario of treasury cut calculation when charging the payment stream.
         let total_capacity = pallet_storage_providers::TotalBspsCapacity::<T>::get();
         pallet_storage_providers::UsedBspsCapacity::<T>::put(total_capacity);
@@ -1149,14 +1161,18 @@ mod benchmarks {
             )
             .expect("Non-inclusion forest proof should be decodable");
 
-        // Collect the file metadata before the extrinsic call (since file_keys_and_proofs will be moved)
+        // Collect the file metadata from storage requests before the extrinsic call.
+        // Using to_file_metadata() ensures the expected event matches the actual event,
+        // which also derives FileMetadata from the StorageRequestMetadata.
         let confirmed_file_keys_with_metadata: Vec<_> = file_keys_and_proofs
             .iter()
             .map(|file_key_with_proof| {
-                (
-                    file_key_with_proof.file_key,
-                    file_key_with_proof.proof.file_metadata.clone(),
-                )
+                let storage_request = StorageRequests::<T>::get(&file_key_with_proof.file_key)
+                    .expect("Storage request should exist");
+                let file_metadata = storage_request
+                    .to_file_metadata()
+                    .expect("File metadata should be constructible from storage request");
+                (file_key_with_proof.file_key, file_metadata)
             })
             .collect();
 
@@ -1187,7 +1203,7 @@ mod benchmarks {
                 skipped_file_keys: BoundedVec::default(),
                 new_root: new_bsp_root,
             });
-        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+        frame_system::Pallet::<T>::assert_has_event(expected_event.into());
 
         Ok(())
     }
@@ -1276,7 +1292,12 @@ mod benchmarks {
             },
         );
 
-        // Hold some of the user's balance so it simulates having a deposit for the payment stream.
+        // Note: A fixed-rate payment stream between the MSP and the user is already created by add_bucket
+        // (via apply_delta_fixed_rate_payment_stream → create_fixed_rate_payment_stream).
+        // Scenario 3 (no existing storage request) calls do_request_storage which requires
+        // has_active_payment_stream_with_user(&msp_id, &user) to be true, and add_bucket satisfies this.
+
+        // Hold some of the user's balance so it simulates having a deposit for the BSP payment stream.
         assert_ok!(<T as crate::Config>::Currency::hold(
             &pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(),
             &user_account,
@@ -1296,8 +1317,10 @@ mod benchmarks {
             },
         );
 
-        // Register the user in the payment streams pallet so the deposit decrement works on delete.
-        pallet_payment_streams::RegisteredUsers::<T>::insert(&user_account, 1u32);
+        // Register the user with count=2 (one BSP dynamic-rate stream + one MSP fixed-rate stream from add_bucket).
+        // add_bucket already set this to 1 for the fixed-rate stream; we override to 2 to account for
+        // the manually inserted dynamic-rate stream. The deletion during the extrinsic will decrement to 1.
+        pallet_payment_streams::RegisteredUsers::<T>::insert(&user_account, 2u32);
 
         // Worst-case scenario is for the storage request to not exist previously (so it has to be created) and for the BSP
         // to be able to serve the file (since there's an extra write to storage):
@@ -1424,6 +1447,10 @@ mod benchmarks {
         );
 
         // Create the bucket to store in the MSP
+        // Note: add_bucket creates a fixed-rate payment stream between the MSP and the user
+        // (via apply_delta_fixed_rate_payment_stream → create_fixed_rate_payment_stream),
+        // which is required by bsp_request_stop_storing scenario 3 (do_request_storage checks
+        // has_active_payment_stream_with_user). It also sets RegisteredUsers to 1.
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,
             user_account.clone(),
@@ -1432,6 +1459,10 @@ mod benchmarks {
             None,
             value_prop_id,
         )?;
+
+        // Override RegisteredUsers to 2 (1 from add_bucket's fixed-rate stream + 1 for the manual dynamic-rate stream).
+        // bsp_request_stop_storing will delete the dynamic-rate stream, decrementing this to 1.
+        pallet_payment_streams::RegisteredUsers::<T>::insert(&user_account, 2u32);
 
         // Get the file key for the BSP to request stop storing
         let encoded_file_key = fetch_file_key_for_inclusion_proof();
@@ -1602,6 +1633,9 @@ mod benchmarks {
                 price_index: 100u32.into(),
             },
         );
+
+        // Register the user in the payment streams pallet so the deposit decrement works when the stream is deleted.
+        pallet_payment_streams::RegisteredUsers::<T>::insert(&user_account, 1u32);
 
         // Create the bucket to store in the MSP
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
