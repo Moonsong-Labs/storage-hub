@@ -919,7 +919,10 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the BSP has correctly volunteered for the file (inline bsps map)
-        assert!(StorageRequests::<T>::get(&file_key).unwrap().bsps.contains_key(&bsp_id));
+        assert!(StorageRequests::<T>::get(&file_key)
+            .unwrap()
+            .bsps
+            .contains_key(&bsp_id));
 
         // Ensure the expected event was emitted.
         let expected_event =
@@ -1059,6 +1062,8 @@ mod benchmarks {
                 <T as frame_system::Config>::Hash::decode(&mut fingerprint_hash.as_ref())
                     .expect("Fingerprint should be decodable as it is a hash");
             let size = file_key_proof.file_metadata.file_size();
+            let max_replication_target: ReplicationTargetType<T> =
+                T::MaxReplicationTarget::get().into();
             let mut storage_request_metadata = StorageRequestMetadata::<T> {
 				requested_at:
 					<<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
@@ -1072,11 +1077,11 @@ mod benchmarks {
 				user_peer_ids: Default::default(),
 				bsps_required: T::StandardReplicationTarget::get(),
 				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
-				bsps_volunteered: T::MaxReplicationTarget::get().into(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+				bsps_volunteered: max_replication_target.saturating_sub(ReplicationTargetType::<T>::one()), // Maximize the BSPs volunteered minus one (leave room for the actual BSP to volunteer)
 				bsps: BoundedBTreeMap::new(),
 				deposit_paid: Default::default(),
 			};
-            for i in 0u64..T::MaxReplicationTarget::get().into() {
+            for i in 0u64..(max_replication_target.saturating_sub(ReplicationTargetType::<T>::one())).into() {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
@@ -1216,12 +1221,7 @@ mod benchmarks {
         let encoded_bsp_root = get_bsp_root();
         let bsp_root = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_root.as_ref())
             .expect("BSP root should be decodable as it is a hash");
-        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
-            let bsp = bsp.as_mut().expect("BSP should exist.");
-            bsp.root = bsp_root
-        });
-
-        // Get the file's metadata
+        // Get the file's metadata (before mutating BSP so we have file_size)
         let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
         let file_fingerprint = <T as frame_system::Config>::Hash::decode(
             &mut file_metadata.fingerprint().as_hash().as_ref(),
@@ -1232,6 +1232,13 @@ mod benchmarks {
         let file_bucket_id =
             <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id().as_ref())
                 .expect("Bucket ID should be decodable as it is a hash");
+
+        // Set BSP root and increase capacity_used (BSP is already storing this file)
+        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
+            let bsp = bsp.as_mut().expect("BSP should exist.");
+            bsp.root = bsp_root;
+            bsp.capacity_used += file_size;
+        });
 
         // Create the bucket to store in the MSP
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
@@ -1255,6 +1262,42 @@ mod benchmarks {
                 &mut encoded_inclusion_proof.as_ref(),
             )
             .expect("Inclusion forest proof should be decodable");
+
+        // Create the dynamic-rate payment stream between the user and the BSP.
+        // The extrinsic requires this to exist so it can update the amount provided after stop storing.
+        pallet_payment_streams::DynamicRatePaymentStreams::<T>::insert(
+            &bsp_id,
+            &user_account,
+            DynamicRatePaymentStream {
+                amount_provided: (file_size as u32).into(),
+                price_index_when_last_charged: 0u32.into(),
+                user_deposit: 100u32.into(),
+                out_of_funds_tick: None,
+            },
+        );
+
+        // Hold some of the user's balance so it simulates having a deposit for the payment stream.
+        assert_ok!(<T as crate::Config>::Currency::hold(
+            &pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            100u32.into(),
+        ));
+
+        // Set the used capacity to the total capacity to simulate the worst-case scenario of treasury cut calculation when charging the payment stream.
+        let total_capacity = pallet_storage_providers::TotalBspsCapacity::<T>::get();
+        pallet_storage_providers::UsedBspsCapacity::<T>::put(total_capacity);
+
+        // Update the last chargeable info of the BSP to make it actually charge the user
+        pallet_payment_streams::LastChargeableInfo::<T>::insert(
+            &bsp_id,
+            pallet_payment_streams::types::ProviderLastChargeableInfo {
+                last_chargeable_tick: frame_system::Pallet::<T>::block_number(),
+                price_index: 100u32.into(),
+            },
+        );
+
+        // Register the user in the payment streams pallet so the deposit decrement works on delete.
+        pallet_payment_streams::RegisteredUsers::<T>::insert(&user_account, 1u32);
 
         // Worst-case scenario is for the storage request to not exist previously (so it has to be created) and for the BSP
         // to be able to serve the file (since there's an extra write to storage):
@@ -1287,7 +1330,10 @@ mod benchmarks {
         assert!(StorageRequests::<T>::contains_key(&file_key));
 
         // Ensure the BSP was added to the BSPs of the storage request
-        assert!(StorageRequests::<T>::get(&file_key).unwrap().bsps.contains_key(&bsp_id));
+        assert!(StorageRequests::<T>::get(&file_key)
+            .unwrap()
+            .bsps
+            .contains_key(&bsp_id));
 
         // Ensure the pending stop storage request was added to storage
         assert!(PendingStopStoringRequests::<T>::contains_key(
@@ -2522,7 +2568,9 @@ mod benchmarks {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
-                let _ = storage_request_metadata.bsps.try_insert(volunteered_bsp_id, true);
+                let _ = storage_request_metadata
+                    .bsps
+                    .try_insert(volunteered_bsp_id, true);
             }
 
             // Hold the deposit so cleanup_storage_request can release it (triggers Currency::release).
@@ -2861,7 +2909,9 @@ mod benchmarks {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
-                let _ = storage_request_metadata.bsps.try_insert(volunteered_bsp_id, true);
+                let _ = storage_request_metadata
+                    .bsps
+                    .try_insert(volunteered_bsp_id, true);
             }
 
             // Hold the deposit so cleanup_storage_request can release it (triggers Currency::release).
