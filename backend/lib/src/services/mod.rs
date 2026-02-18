@@ -64,12 +64,15 @@ impl Services {
         let msp =
             Arc::new(MspService::new(postgres.clone(), rpc.clone(), config.msp.clone()).await);
 
-        let node_health = Arc::new(NodeHealthService::new(
-            postgres.clone(),
-            rpc.clone(),
-            msp.msp_id().clone(),
-            config.node_health.clone(),
-        ));
+        let node_health = Arc::new(
+            NodeHealthService::new(
+                postgres.clone(),
+                rpc.clone(),
+                msp.msp_id().clone(),
+                config.node_health.clone(),
+            )
+            .await,
+        );
 
         let download_sessions = Arc::new(DownloadSessionManager::new(
             config.file_transfer.max_download_sessions,
