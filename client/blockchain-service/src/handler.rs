@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
@@ -39,7 +40,7 @@ use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxSt
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::CFDequeAPI,
-    types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
+    types::{AccountId, BlockNumber, NodeRole, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_telemetry::{observe_histogram, MetricsLink, STATUS_FAILURE, STATUS_SUCCESS};
@@ -126,6 +127,8 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
+    /// The role of this node in the StorageHub network (BSP, MSP, Fisherman, User).
+    pub(crate) node_role: NodeRole,
     /// Tracks whether the node has caught up with the chain and completed initial sync tasks.
     ///
     /// This flag starts as `false` and is set to `true` after the first block is processed
@@ -198,6 +201,17 @@ where
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: u64,
 
+    /// Mortality period for extrinsics in number of blocks.
+    ///
+    /// Determines how long a submitted transaction remains valid before expiring.
+    /// Lower values mean faster recovery from stuck nonces after block reorgs (since the
+    /// stale retracted transaction cleanup uses this as its threshold), but also reduce
+    /// the window for a transaction to be included.
+    ///
+    /// This value is sanitized at runtime: it will be rounded to the nearest valid power
+    /// of two and clamped to `[4, BlockHashCount]` to ensure it produces a valid mortal era.
+    pub extrinsic_mortality: u32,
+
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch
     /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
     pub check_for_pending_proofs_period: BlockNumber<Runtime>,
@@ -227,6 +241,7 @@ where
     fn default() -> Self {
         Self {
             extrinsic_retry_timeout: 30,
+            extrinsic_mortality: 256,
             check_for_pending_proofs_period: 4u32.into(),
             peer_id: None,
             enable_msp_distribute_files: false,
@@ -1689,8 +1704,53 @@ where
         notify_period: Option<u32>,
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
+        node_role: NodeRole,
         metrics: MetricsLink,
     ) -> Self {
+        // Sanitize the extrinsic mortality period to ensure it produces a valid mortal era.
+        let config = {
+            let mut config = config;
+            let original = config.extrinsic_mortality;
+            let max_period = BlockHashCount::get();
+
+            // Apply the same rounding as `Era::mortal()`: next power of two, clamp to [4, 65536]
+            let mut period = original
+                .checked_next_power_of_two()
+                .unwrap_or(1 << 16)
+                .clamp(4, 1 << 16);
+
+            // Ensure we don't exceed `BlockHashCount` (birth block hash must still be in storage).
+            // Keep halving until we fit, maintaining a valid power of two.
+            while period > max_period && period > 4 {
+                period >>= 1;
+            }
+
+            if period != original {
+                warn!(
+                    target: LOG_TARGET,
+                    "Configured extrinsic mortality {} is not a valid mortal era period. \
+                    Sanitized to {} blocks (must be a power of 2 in [4, {}]).",
+                    original,
+                    period,
+                    max_period
+                );
+            }
+
+            let mortality_seconds = period * 6;
+            let mortality_minutes = mortality_seconds as f64 / 60.0;
+
+            info!(
+                target: LOG_TARGET,
+                "🪦 Extrinsic mortality period set to {} blocks (~{:.1} minutes ({} seconds) at 6s block time).",
+                period,
+                mortality_minutes,
+                mortality_seconds
+            );
+
+            config.extrinsic_mortality = period;
+            config
+        };
+
         let genesis_hash = client.info().genesis_hash;
         Self {
             config,
@@ -1719,6 +1779,7 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
+            node_role,
             caught_up: false,
             transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
             // Temporary sender, will be replaced by the event loop during startup
