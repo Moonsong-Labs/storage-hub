@@ -25,42 +25,63 @@ struct NonceState {
     first_seen: Instant,
 }
 
+/// Cached MSP identity resolved lazily from the DB on first health check.
+/// Lazy resolution avoids panicking at startup if the indexer hasn't
+/// indexed the MSP yet (race condition in Docker-based integration tests).
+struct MspIdentity {
+    db_id: i64,
+    account: String,
+}
+
 pub struct NodeHealthService {
     db: Arc<DBClient>,
     rpc: Arc<StorageHubRpcClient>,
     config: NodeHealthConfig,
-    /// MSP's database ID, resolved once at startup.
-    msp_db_id: i64,
-    /// MSP's signing account, resolved once at startup.
-    msp_account: String,
+    msp_id: OnchainMspId,
+    msp_identity: Mutex<Option<MspIdentity>>,
     /// Tracks nonce over time to detect stuck transactions.
     nonce_state: Mutex<Option<NonceState>>,
 }
 
 impl NodeHealthService {
-    /// Create a new node health service.
-    ///
-    /// Resolves the MSP's DB identity eagerly. Panics if the MSP is not found
-    /// in the indexer DB (so it has the same fail-fast behaviour as [`MspService::new`]).
-    pub async fn new(
+    pub fn new(
         db: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_id: OnchainMspId,
         config: NodeHealthConfig,
     ) -> Self {
-        let msp = db
-            .get_msp(&msp_id)
-            .await
-            .expect("MSP must be indexed in the DB when starting NodeHealthService");
-
         Self {
             db,
             rpc,
+            msp_id,
             config,
-            msp_db_id: msp.id,
-            msp_account: msp.account,
+            msp_identity: Mutex::new(None),
             nonce_state: Mutex::new(None),
         }
+    }
+
+    /// Resolve and cache the MSP's DB id and signing account.
+    /// Returns cached values on subsequent calls.
+    async fn get_msp_identity(&self) -> Result<(i64, String), String> {
+        {
+            let cached = self.msp_identity.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(ref id) = *cached {
+                return Ok((id.db_id, id.account.clone()));
+            }
+        }
+
+        let msp = self
+            .db
+            .get_msp(&self.msp_id)
+            .await
+            .map_err(|e| format!("Failed to get MSP from DB: {}", e))?;
+
+        let result = (msp.id, msp.account.clone());
+        *self.msp_identity.lock().unwrap_or_else(|e| e.into_inner()) = Some(MspIdentity {
+            db_id: msp.id,
+            account: msp.account,
+        });
+        Ok(result)
     }
 
     pub async fn check_node_health(&self) -> NodeHealthResponse {
@@ -154,9 +175,17 @@ impl NodeHealthService {
             );
         }
 
+        let (msp_db_id, _) = match self.get_msp_identity().await {
+            Ok(id) => id,
+            Err(e) => {
+                error!(target: "node_health_service", error = %e, "Failed to resolve MSP");
+                return RequestAcceptanceSignal::unknown(format!("Failed to resolve MSP: {}", e));
+            }
+        };
+
         let stats = match self
             .db
-            .get_request_acceptance_stats(self.msp_db_id, self.config.request_window_secs)
+            .get_request_acceptance_stats(msp_db_id, self.config.request_window_secs)
             .await
         {
             Ok(stats) => stats,
@@ -208,7 +237,15 @@ impl NodeHealthService {
     /// On the first call after startup there is no baseline, so the signal
     /// reports Healthy with `nonce_unchanged_for_secs: None`.
     async fn check_tx_nonce(&self) -> TxNonceSignal {
-        let current_nonce = match self.rpc.get_account_nonce(&self.msp_account).await {
+        let (_, account) = match self.get_msp_identity().await {
+            Ok(id) => id,
+            Err(e) => {
+                error!(target: "node_health_service", error = %e, "Failed to resolve MSP account");
+                return TxNonceSignal::unknown(format!("Failed to resolve MSP account: {}", e));
+            }
+        };
+
+        let current_nonce = match self.rpc.get_account_nonce(&account).await {
             Ok(nonce) => nonce,
             Err(e) => {
                 error!(target: "node_health_service", error = %e, "Failed to get account nonce");
@@ -291,7 +328,7 @@ mod tests {
         let msp_id = OnchainMspId::new(shp_types::Hash::from_slice(
             &crate::constants::rpc::DUMMY_MSP_ID,
         ));
-        NodeHealthService::new(db, rpc, msp_id, config).await
+        NodeHealthService::new(db, rpc, msp_id, config)
     }
 
     #[test]
