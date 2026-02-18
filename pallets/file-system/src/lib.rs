@@ -58,7 +58,7 @@ pub mod pallet {
             fungible::*,
             nonfungibles_v2::{Create, Destroy, Inspect as NonFungiblesInspect},
         },
-        Blake2_128Concat,
+        Blake2_128Concat, BoundedBTreeMap,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
@@ -420,6 +420,20 @@ pub mod pallet {
     #[pallet::storage]
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, MerkleHash<T>, StorageRequestMetadata<T>>;
+
+    /// BSP volunteer/confirmation state for each active storage request.
+    ///
+    /// Maps a file key to the set of BSPs that have volunteered or confirmed storing
+    /// the file. The value is `false` for volunteered-only and `true` for confirmed.
+    /// This map is created when the first BSP volunteers and removed when the storage
+    /// request is cleaned up.
+    #[pallet::storage]
+    pub type StorageRequestBsps<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        MerkleHash<T>,
+        BoundedBTreeMap<ProviderIdFor<T>, bool, MaxReplicationTarget<T>>,
+    >;
 
     /// Bookkeeping of the buckets containing open storage requests.
     #[pallet::storage]

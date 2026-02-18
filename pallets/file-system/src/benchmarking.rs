@@ -546,11 +546,13 @@ mod benchmarks {
             let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
             bsp_ids.push(bsp_id);
         }
+        let mut bsps_map = BoundedBTreeMap::new();
+        for bsp_id in bsp_ids {
+            let _ = bsps_map.try_insert(bsp_id, true);
+        }
+        StorageRequestBsps::<T>::insert(&file_key, bsps_map);
         StorageRequests::<T>::mutate(file_key, |storage_request| {
             let m = storage_request.as_mut().unwrap();
-            for bsp_id in bsp_ids {
-                let _ = m.bsps.try_insert(bsp_id, true);
-            }
             m.bsps_volunteered = n.into();
             m.bsps_confirmed = n.into();
         });
@@ -675,7 +677,6 @@ mod benchmarks {
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
-                    bsps: BoundedBTreeMap::new(),
 					deposit_paid: Default::default(),
                 };
                 let file_key = Pallet::<T>::compute_file_key(
@@ -738,7 +739,7 @@ mod benchmarks {
                     <T as frame_system::Config>::Hash::decode(&mut fingerprint_hash.as_ref())
                         .expect("Fingerprint should be decodable as it is a hash");
                 let size = file_key_proof.file_metadata.file_size();
-                let mut storage_request_metadata = StorageRequestMetadata::<T> {
+                let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
 					expires_at: BlockNumberFor::<T>::max_value(),
@@ -752,16 +753,17 @@ mod benchmarks {
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
                     bsps_volunteered: T::MaxReplicationTarget::get().into(), // Maximize the BSPs volunteered since the logic has to drain them from storage
-                    bsps: BoundedBTreeMap::new(),
 					deposit_paid: Default::default(),
                 };
+                let mut bsps_map = BoundedBTreeMap::new();
                 for i in 0u64..T::MaxReplicationTarget::get().into() {
                     let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
                     mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                     let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
-                    let _ = storage_request_metadata.bsps.try_insert(bsp_id, false);
+                    let _ = bsps_map.try_insert(bsp_id, false);
                 }
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
+                <StorageRequestBsps<T>>::insert(&file_keys_to_accept[j], bsps_map);
                 <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_keys_to_accept[j], ());
 
                 // Create the FileKeyWithProof object
@@ -918,10 +920,9 @@ mod benchmarks {
         _(bsp_signed_origin, file_key);
 
         /*********** Post-benchmark checks: ***********/
-        // Ensure the BSP has correctly volunteered for the file (inline bsps map)
-        assert!(StorageRequests::<T>::get(&file_key)
+        // Ensure the BSP has correctly volunteered for the file
+        assert!(StorageRequestBsps::<T>::get(&file_key)
             .unwrap()
-            .bsps
             .contains_key(&bsp_id));
 
         // Ensure the expected event was emitted.
@@ -1076,7 +1077,7 @@ mod benchmarks {
             let size = file_key_proof.file_metadata.file_size();
             let max_replication_target: ReplicationTargetType<T> =
                 T::MaxReplicationTarget::get().into();
-            let mut storage_request_metadata = StorageRequestMetadata::<T> {
+            let storage_request_metadata = StorageRequestMetadata::<T> {
 				requested_at:
 					<<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
 				expires_at: BlockNumberFor::<T>::max_value(),
@@ -1090,16 +1091,17 @@ mod benchmarks {
 				bsps_required: T::StandardReplicationTarget::get(),
 				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
 				bsps_volunteered: max_replication_target.saturating_sub(ReplicationTargetType::<T>::one()), // Maximize the BSPs volunteered minus one (leave room for the actual BSP to volunteer)
-				bsps: BoundedBTreeMap::new(),
 				deposit_paid: Default::default(),
 			};
+            let mut bsps_map = BoundedBTreeMap::new();
             for i in 0u64..(max_replication_target.saturating_sub(ReplicationTargetType::<T>::one())).into() {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
-                let _ = storage_request_metadata.bsps.try_insert(bsp_id, false);
+                let _ = bsps_map.try_insert(bsp_id, false);
             }
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
+            <StorageRequestBsps<T>>::insert(&file_key, bsps_map);
             <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
             // Create the FileKeyWithProof object
@@ -1353,9 +1355,8 @@ mod benchmarks {
         assert!(StorageRequests::<T>::contains_key(&file_key));
 
         // Ensure the BSP was added to the BSPs of the storage request
-        assert!(StorageRequests::<T>::get(&file_key)
+        assert!(StorageRequestBsps::<T>::get(&file_key)
             .unwrap()
-            .bsps
             .contains_key(&bsp_id));
 
         // Ensure the pending stop storage request was added to storage
@@ -2108,15 +2109,14 @@ mod benchmarks {
                 MspStorageRequestStatus::AcceptedNewFile(msp_id);
         });
 
-        // Add n BSPs to the storage request's inline bsps map (benchmarked function cleans up the request).
-        StorageRequests::<T>::mutate(file_key, |storage_request| {
-            let m = storage_request.as_mut().unwrap();
-            for i in 0..amount_of_bsps {
-                let bsp_account: T::AccountId = account("BSP", i, 0);
-                let bsp_id = T::Hashing::hash_of(&bsp_account);
-                let _ = m.bsps.try_insert(bsp_id, false);
-            }
-        });
+        // Add n BSPs to the storage request's BSP map (benchmarked function cleans up the request).
+        let mut bsps_map = BoundedBTreeMap::new();
+        for i in 0..amount_of_bsps {
+            let bsp_account: T::AccountId = account("BSP", i, 0);
+            let bsp_id = T::Hashing::hash_of(&bsp_account);
+            let _ = bsps_map.try_insert(bsp_id, false);
+        }
+        StorageRequestBsps::<T>::insert(&file_key, bsps_map);
 
         /*********** Call the function to benchmark: ***********/
         #[block]
@@ -2217,27 +2217,28 @@ mod benchmarks {
             storage_request.as_mut().unwrap().msp_status = MspStorageRequestStatus::Pending(msp_id);
         });
 
-        // Add n BSPs to the storage request's inline bsps map; set one as confirmed for priority challenge path.
-        StorageRequests::<T>::mutate(file_key, |storage_request| {
-            let m = storage_request.as_mut().unwrap();
-            let mut first_bsp = None;
-            for i in 0..amount_of_bsps {
-                let bsp_account: T::AccountId = account("BSP", i, 0);
-                let bsp_id = T::Hashing::hash_of(&bsp_account);
-                if first_bsp.is_none() {
-                    first_bsp = Some(bsp_id);
-                }
-                let _ = m.bsps.try_insert(bsp_id, false);
+        // Add n BSPs to the storage request's BSP map; set one as confirmed for priority challenge path.
+        let mut bsps_map = BoundedBTreeMap::new();
+        let mut first_bsp = None;
+        for i in 0..amount_of_bsps {
+            let bsp_account: T::AccountId = account("BSP", i, 0);
+            let bsp_id = T::Hashing::hash_of(&bsp_account);
+            if first_bsp.is_none() {
+                first_bsp = Some(bsp_id);
             }
-            if let Some(id) = first_bsp {
-                let mut new_bsps = BoundedBTreeMap::new();
-                for (k, v) in m.bsps.iter() {
-                    let _ = new_bsps.try_insert(*k, if *k == id { true } else { *v });
-                }
-                m.bsps = new_bsps;
-                m.bsps_confirmed = ReplicationTargetType::<T>::one();
+            let _ = bsps_map.try_insert(bsp_id, false);
+        }
+        if let Some(id) = first_bsp {
+            let mut new_bsps = BoundedBTreeMap::new();
+            for (k, v) in bsps_map.iter() {
+                let _ = new_bsps.try_insert(*k, if *k == id { true } else { *v });
             }
-        });
+            bsps_map = new_bsps;
+            StorageRequests::<T>::mutate(file_key, |storage_request| {
+                storage_request.as_mut().unwrap().bsps_confirmed = ReplicationTargetType::<T>::one();
+            });
+        }
+        StorageRequestBsps::<T>::insert(&file_key, bsps_map);
 
         /*********** Call the function to benchmark: ***********/
         #[block]
@@ -2582,7 +2583,7 @@ mod benchmarks {
             let max_replication_target: ReplicationTargetType<T> =
                 T::MaxReplicationTarget::get().into();
 
-            let mut storage_request_metadata = StorageRequestMetadata::<T> {
+            let storage_request_metadata = StorageRequestMetadata::<T> {
                 requested_at: frame_system::Pallet::<T>::block_number(),
                 expires_at: expiration_tick,
                 owner: user_account.clone(),
@@ -2595,16 +2596,14 @@ mod benchmarks {
                 bsps_required: max_replication_target,
                 bsps_confirmed: max_replication_target,
                 bsps_volunteered: max_replication_target,
-                bsps: BoundedBTreeMap::new(),
                 deposit_paid: deposit,
             };
+            let mut bsps_map = BoundedBTreeMap::new();
             for i in 0u64..T::MaxReplicationTarget::get().into() {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
-                let _ = storage_request_metadata
-                    .bsps
-                    .try_insert(volunteered_bsp_id, true);
+                let _ = bsps_map.try_insert(volunteered_bsp_id, true);
             }
 
             // Hold the deposit so cleanup_storage_request can release it (triggers Currency::release).
@@ -2614,8 +2613,9 @@ mod benchmarks {
                 deposit,
             )?;
 
-            // Insert storage request so it gets cleaned up during file deletion.
+            // Insert storage request and BSP map so they get cleaned up during file deletion.
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
+            <StorageRequestBsps<T>>::insert(&file_key, bsps_map);
 
             // Associate file with bucket so cleanup_storage_request removes this entry.
             <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
@@ -2923,7 +2923,7 @@ mod benchmarks {
             let max_replication_target: ReplicationTargetType<T> =
                 T::MaxReplicationTarget::get().into();
 
-            let mut storage_request_metadata = StorageRequestMetadata::<T> {
+            let storage_request_metadata = StorageRequestMetadata::<T> {
                 requested_at: frame_system::Pallet::<T>::block_number(),
                 expires_at: expiration_tick,
                 owner: user_account.clone(),
@@ -2936,16 +2936,14 @@ mod benchmarks {
                 bsps_required: max_replication_target,
                 bsps_confirmed: max_replication_target,
                 bsps_volunteered: max_replication_target,
-                bsps: BoundedBTreeMap::new(),
                 deposit_paid: deposit,
             };
+            let mut bsps_map = BoundedBTreeMap::new();
             for i in 0u64..T::MaxReplicationTarget::get().into() {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
-                let _ = storage_request_metadata
-                    .bsps
-                    .try_insert(volunteered_bsp_id, true);
+                let _ = bsps_map.try_insert(volunteered_bsp_id, true);
             }
 
             // Hold the deposit so cleanup_storage_request can release it (triggers Currency::release).
@@ -2955,8 +2953,9 @@ mod benchmarks {
                 deposit,
             )?;
 
-            // Insert storage request so it gets cleaned up during file deletion.
+            // Insert storage request and BSP map so they get cleaned up during file deletion.
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
+            <StorageRequestBsps<T>>::insert(&file_key, bsps_map);
 
             // Associate file with bucket so cleanup_storage_request removes this entry.
             <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());

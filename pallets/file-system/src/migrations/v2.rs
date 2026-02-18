@@ -17,9 +17,9 @@
 
 //! Migration from storage version 1 to 2.
 //!
-//! This migration inlines the `StorageRequestBsps` double map into `StorageRequestMetadata`
-//! as a `bsps: BoundedBTreeMap<ProviderIdFor<T>, bool, MaxReplicationTarget<T>>` field.
-//! After migration, the `StorageRequestBsps` storage is drained per request and no longer used.
+//! This migration moves the `StorageRequestBsps` double map into a single-entry
+//! `StorageMap<MerkleHash, BoundedBTreeMap<ProviderIdFor, bool, MaxReplicationTarget>>`.
+//! The `StorageRequestMetadata` encoding is unchanged (both v1 and v2 lack a `bsps` field).
 
 use crate::{
     pallet::Pallet,
@@ -45,11 +45,12 @@ use sp_runtime::TryRuntimeError;
 #[cfg(feature = "try-runtime")]
 use sp_std::vec::Vec;
 
-/// Module containing the old (v1) storage format before inlining BSPs.
+/// Module containing the old (v1) storage format before the BSP map migration.
 pub mod v1 {
     use super::*;
 
     /// V1 representation of `StorageRequestMetadata` (no inline `bsps` field).
+    /// This matches the current `StorageRequestMetadata` exactly.
     #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
     #[scale_info(skip_type_params(T))]
     pub struct StorageRequestMetadataV1<T: Config> {
@@ -92,8 +93,8 @@ pub mod v1 {
     >;
 }
 
-/// Implements [`UncheckedOnRuntimeUpgrade`], migrating the state from V1 to V2 by inlining
-/// `StorageRequestBsps` into each `StorageRequestMetadata`.
+/// Implements [`UncheckedOnRuntimeUpgrade`], migrating the state from V1 to V2 by moving
+/// `StorageRequestBsps` from a DoubleMap to a single-entry `StorageMap`.
 pub struct InnerMigrateV1ToV2<T: Config>(core::marker::PhantomData<T>);
 
 impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
@@ -114,6 +115,8 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
         let mut reads: u64 = 0;
         let mut writes: u64 = 0;
 
+        // Re-encode StorageRequests entries from v1 format to current format.
+        // The field layout is identical, but re-encoding ensures any future codec changes are applied.
         let keys: sp_std::vec::Vec<_> = v1::StorageRequests::<T>::iter_keys().collect();
 
         for file_key in keys {
@@ -122,35 +125,6 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
             let Some(old_metadata) = v1::StorageRequests::<T>::take(&file_key) else {
                 continue;
             };
-
-            // Drain old BSP entries for this file key and build inline map (with bounded overflow handling).
-            let mut bsps_map: BTreeMap<ProviderIdFor<T>, bool> = BTreeMap::new();
-            for (bsp_id, bsp_meta) in v1::StorageRequestBsps::<T>::drain_prefix(&file_key) {
-                reads += 1;
-                writes += 1; // drain counts as a write per deleted entry
-                let confirmed = bsp_meta.confirmed;
-                // Respect MaxReplicationTarget: if we already have max entries, skip extra (defensive).
-                if bsps_map.len() as u32 >= T::MaxReplicationTarget::get() {
-                    log::warn!(
-                        target: "runtime::file-system",
-                        "Migration: skipping BSP {:?} for file_key (max entries reached)",
-                        bsp_id
-                    );
-                    continue;
-                }
-                bsps_map.insert(bsp_id, confirmed);
-            }
-
-            let mut bounded_bsps =
-                frame_support::BoundedBTreeMap::<ProviderIdFor<T>, bool, MaxReplicationTarget<T>>::new();
-            for (bsp_id, confirmed) in bsps_map {
-                if bounded_bsps.try_insert(bsp_id, confirmed).is_err() {
-                    log::warn!(
-                        target: "runtime::file-system",
-                        "Migration: skipping BSP entry (inline map full)"
-                    );
-                }
-            }
 
             let new_metadata = StorageRequestMetadata::<T> {
                 requested_at: old_metadata.requested_at,
@@ -165,7 +139,6 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
                 bsps_required: old_metadata.bsps_required,
                 bsps_confirmed: old_metadata.bsps_confirmed,
                 bsps_volunteered: old_metadata.bsps_volunteered,
-                bsps: bounded_bsps,
                 deposit_paid: old_metadata.deposit_paid,
             };
 
@@ -173,10 +146,44 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
             writes += 1;
         }
 
+        // Drain old DoubleMap and group by file_key into new StorageMap.
+        let mut grouped: BTreeMap<MerkleHash<T>, BTreeMap<ProviderIdFor<T>, bool>> =
+            BTreeMap::new();
+
+        for (file_key, bsp_id, bsp_meta) in v1::StorageRequestBsps::<T>::drain() {
+            reads += 1;
+            writes += 1; // drain counts as a write per deleted entry
+            grouped
+                .entry(file_key)
+                .or_default()
+                .insert(bsp_id, bsp_meta.confirmed);
+        }
+
+        // Write grouped BSP maps into the new StorageRequestBsps StorageMap.
+        for (file_key, bsp_map) in grouped {
+            let mut bounded_bsps = frame_support::BoundedBTreeMap::<
+                ProviderIdFor<T>,
+                bool,
+                MaxReplicationTarget<T>,
+            >::new();
+            for (bsp_id, confirmed) in bsp_map {
+                if bounded_bsps.try_insert(bsp_id, confirmed).is_err() {
+                    log::warn!(
+                        target: "runtime::file-system",
+                        "Migration: skipping BSP entry (map full for file_key)"
+                    );
+                }
+            }
+            if !bounded_bsps.is_empty() {
+                crate::StorageRequestBsps::<T>::insert(&file_key, bounded_bsps);
+                writes += 1;
+            }
+        }
+
         log::info!(
             target: "runtime::file-system",
-            "Migration v1->v2 complete: migrated {} storage requests",
-            writes
+            "Migration v1->v2 complete: {} reads, {} writes",
+            reads, writes
         );
 
         T::DbWeight::get().reads_writes(reads, writes)
@@ -195,9 +202,17 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
             TryRuntimeError::Other("Migration failed: storage request count mismatch")
         );
 
-        // Verify all migrated entries have decodable metadata with bsps field
-        for (_key, metadata) in crate::StorageRequests::<T>::iter() {
-            let _ = &metadata.bsps;
+        // Verify all BSP entries are readable from the new StorageMap
+        for (file_key, bsps) in crate::StorageRequestBsps::<T>::iter() {
+            ensure!(
+                !bsps.is_empty(),
+                TryRuntimeError::Other("Migration failed: empty BSP map should not be stored")
+            );
+            // Verify the storage request exists for this BSP entry
+            ensure!(
+                crate::StorageRequests::<T>::contains_key(&file_key),
+                TryRuntimeError::Other("Migration failed: orphaned BSP map entry")
+            );
         }
 
         log::info!(
@@ -255,6 +270,7 @@ mod tests {
                 <Test as frame_system::Config>::DbWeight::get().reads_writes(0, 0)
             );
             assert_eq!(crate::StorageRequests::<Test>::iter().count(), 0);
+            assert_eq!(crate::StorageRequestBsps::<Test>::iter().count(), 0);
         });
     }
 
@@ -272,14 +288,15 @@ mod tests {
             );
 
             let new_meta = crate::StorageRequests::<Test>::get(file_key).unwrap();
-            assert!(new_meta.bsps.is_empty());
             assert_eq!(new_meta.owner, v1_meta.owner);
             assert_eq!(new_meta.size, v1_meta.size);
+            // No BSP map entry should exist
+            assert!(crate::StorageRequestBsps::<Test>::get(file_key).is_none());
         });
     }
 
     #[test]
-    fn migration_inlines_bsps_confirmed_and_unconfirmed() {
+    fn migration_moves_bsps_to_separate_map() {
         new_test_ext().execute_with(|| {
             let file_key = H256::random();
             let bsp1 = H256::random();
@@ -297,16 +314,17 @@ mod tests {
             );
 
             let weight = InnerMigrateV1ToV2::<Test>::on_runtime_upgrade();
-            // 1 read request + 2 read+write for drain_prefix (2 BSP entries)
+            // 1 read+write for storage request + 2 read+write for drain + 1 write for new BSP map
             assert_eq!(
                 weight,
-                <Test as frame_system::Config>::DbWeight::get().reads_writes(3, 3)
+                <Test as frame_system::Config>::DbWeight::get().reads_writes(3, 4)
             );
 
-            let new_meta = crate::StorageRequests::<Test>::get(file_key).unwrap();
-            assert_eq!(new_meta.bsps.len(), 2);
-            assert_eq!(new_meta.bsps.get(&bsp1), Some(&false));
-            assert_eq!(new_meta.bsps.get(&bsp2), Some(&true));
+            // BSP data should be in the new StorageRequestBsps map
+            let bsps = crate::StorageRequestBsps::<Test>::get(file_key).unwrap();
+            assert_eq!(bsps.len(), 2);
+            assert_eq!(bsps.get(&bsp1), Some(&false));
+            assert_eq!(bsps.get(&bsp2), Some(&true));
         });
     }
 
@@ -365,7 +383,6 @@ mod tests {
             assert_eq!(new_meta.bsps_confirmed, v1_meta.bsps_confirmed);
             assert_eq!(new_meta.bsps_volunteered, v1_meta.bsps_volunteered);
             assert_eq!(new_meta.deposit_paid, v1_meta.deposit_paid);
-            assert!(new_meta.bsps.is_empty());
         });
     }
 }

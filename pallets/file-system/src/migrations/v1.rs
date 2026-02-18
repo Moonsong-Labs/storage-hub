@@ -41,7 +41,6 @@ use frame_support::{
     storage_alias,
     traits::{Get, UncheckedOnRuntimeUpgrade},
     weights::Weight,
-    BoundedBTreeMap,
 };
 use scale_info::TypeInfo;
 
@@ -160,7 +159,7 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV0ToV1<T> {
                     Some((msp_id, true)) => MspStorageRequestStatus::AcceptedNewFile(msp_id),
                 };
 
-                // Create the new metadata with the transformed field (v1 format has no bsps; add empty for current type)
+                // Create the new metadata with the transformed field
                 let new_metadata = StorageRequestMetadata::<T> {
                     requested_at: old_metadata.requested_at,
                     expires_at: old_metadata.expires_at,
@@ -174,7 +173,6 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV0ToV1<T> {
                     bsps_required: old_metadata.bsps_required,
                     bsps_confirmed: old_metadata.bsps_confirmed,
                     bsps_volunteered: old_metadata.bsps_volunteered,
-                    bsps: BoundedBTreeMap::new(),
                     deposit_paid: old_metadata.deposit_paid,
                 };
 

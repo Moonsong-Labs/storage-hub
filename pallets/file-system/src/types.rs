@@ -81,9 +81,6 @@ pub struct StorageRequestMetadata<T: Config> {
     /// There can be more than `bsps_required` volunteers, but it is essentially a race for BSPs to confirm that they are storing the data.
     pub bsps_volunteered: ReplicationTargetType<T>,
 
-    /// Inline map of BSP ID to confirmation state (false = volunteered, true = confirmed storing).
-    pub bsps: BoundedBTreeMap<ProviderIdFor<T>, bool, MaxReplicationTarget<T>>,
-
     /// Deposit paid by the user to open this storage request.
     ///
     /// This is used to pay for the cost of the BSPs volunteering for the storage request in case it either expires
@@ -101,6 +98,41 @@ impl<T: Config> StorageRequestMetadata<T> {
             self.fingerprint.as_ref().into(),
         )
         .map_err(|_| Error::<T>::FailedToCreateFileMetadata.into())
+    }
+
+    /// Convert this storage request metadata into an [`IncompleteStorageRequestMetadata`],
+    /// using the provided BSP map to determine which BSPs have confirmed storage.
+    pub fn to_incomplete_metadata(
+        &self,
+        bsps: &BoundedBTreeMap<ProviderIdFor<T>, bool, MaxReplicationTarget<T>>,
+    ) -> IncompleteStorageRequestMetadata<T> {
+        // Collect all confirmed BSPs from the provided bsps map
+        let confirmed_bsps: sp_std::vec::Vec<_> = bsps
+            .iter()
+            .filter(|(_, confirmed)| **confirmed)
+            .map(|(bsp_id, _)| *bsp_id)
+            .collect();
+
+        // Check if the MSP has accepted the storage request with a non-inclusion forest proof, as
+        // this means the file is new and we should mark it for bucket removal.
+        // If the MSP accepted the storage request with an inclusion forest proof, the file already
+        // existed in the bucket from a previous storage request, so we should not mark it for bucket removal.
+        let pending_bucket_removal = matches!(
+            self.msp_status,
+            MspStorageRequestStatus::AcceptedNewFile(_)
+        );
+
+        let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
+
+        IncompleteStorageRequestMetadata {
+            owner: self.owner.clone(),
+            bucket_id: self.bucket_id,
+            location: self.location.clone(),
+            file_size: self.size,
+            fingerprint: self.fingerprint,
+            pending_bsp_removals: bounded_bsps,
+            pending_bucket_removal,
+        }
     }
 }
 
@@ -654,39 +686,6 @@ impl<T: Config> IncompleteStorageRequestMetadata<T> {
                 // Remove BSP from the pending list
                 self.pending_bsp_removals.retain(|&bsp_id| bsp_id != id);
             }
-        }
-    }
-}
-
-impl<T: Config> From<&StorageRequestMetadata<T>> for IncompleteStorageRequestMetadata<T> {
-    fn from(storage_request: &StorageRequestMetadata<T>) -> Self {
-        // Collect all confirmed BSPs from the inline bsps map
-        let confirmed_bsps: sp_std::vec::Vec<_> = storage_request
-            .bsps
-            .iter()
-            .filter(|(_, confirmed)| **confirmed)
-            .map(|(bsp_id, _)| *bsp_id)
-            .collect();
-
-        // Check if the MSP has accepted the storage request with a non-inclusion forest proof, as
-        // this means the file is new and we should mark it for bucket removal.
-        // If the MSP accepted the storage request with an inclusion forest proof, the file already
-        // existed in the bucket from a previous storage request, so we should not mark it for bucket removal.
-        let pending_bucket_removal = matches!(
-            storage_request.msp_status,
-            MspStorageRequestStatus::AcceptedNewFile(_)
-        );
-
-        let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
-
-        Self {
-            owner: storage_request.owner.clone(),
-            bucket_id: storage_request.bucket_id,
-            location: storage_request.location.clone(),
-            file_size: storage_request.size,
-            fingerprint: storage_request.fingerprint,
-            pending_bsp_removals: bounded_bsps,
-            pending_bucket_removal,
         }
     }
 }

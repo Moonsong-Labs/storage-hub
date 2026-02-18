@@ -11,8 +11,8 @@ use crate::{
     },
     weights::WeightInfo,
     Config, Error, Event, IncompleteStorageRequests, NextAvailableStorageRequestExpirationTick,
-    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
-    StorageRequests, UserOperationPauseFlagsStorage,
+    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestBsps,
+    StorageRequestExpirations, StorageRequests, UserOperationPauseFlagsStorage,
 };
 use codec::Encode;
 use frame_support::{
@@ -2665,7 +2665,6 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
                     })
@@ -2821,7 +2820,6 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
                     })
@@ -2862,7 +2860,6 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
                     })
@@ -2997,7 +2994,6 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
                     })
@@ -3422,8 +3418,8 @@ mod revoke_storage_request {
 
                 // Check inline bsps for confirmed BSPs
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(false)
                 );
 
@@ -4372,7 +4368,6 @@ mod msp_respond_storage_request {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: 100,
 						deposit_paid: 0,
                     },
@@ -4448,7 +4443,6 @@ mod msp_respond_storage_request {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: 100,
 						deposit_paid: 0,
                     },
@@ -4696,7 +4690,6 @@ mod msp_respond_storage_request {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: 100,
 						deposit_paid: 0,
                     },
@@ -4776,7 +4769,6 @@ mod msp_respond_storage_request {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: 100,
 						deposit_paid: 0,
                     },
@@ -5307,8 +5299,8 @@ mod bsp_volunteer {
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(false)
                 );
 
@@ -5400,8 +5392,8 @@ mod bsp_volunteer {
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(false)
                 );
 
@@ -5523,8 +5515,8 @@ mod bsp_volunteer {
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(false)
                 );
 
@@ -6300,12 +6292,6 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 								),
@@ -6314,8 +6300,8 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -6669,12 +6655,6 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -6683,8 +6663,8 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -6819,12 +6799,6 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -6833,8 +6807,8 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -7215,8 +7189,8 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -7236,12 +7210,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -7369,8 +7337,8 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -7390,12 +7358,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -7526,8 +7488,8 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -7547,12 +7509,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -7775,8 +7731,8 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -7796,11 +7752,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
@@ -7829,8 +7780,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequests::<Test>::get(file_key)
-                    .map_or(true, |m| !m.bsps.contains_key(&bsp_id)));
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -7847,7 +7798,6 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
                     })
@@ -7991,8 +7941,8 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -8012,11 +7962,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
@@ -8051,8 +7996,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequests::<Test>::get(file_key)
-                    .map_or(true, |m| !m.bsps.contains_key(&bsp_id)));
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -8069,7 +8014,6 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
                     })
@@ -8194,8 +8138,8 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -8215,11 +8159,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
@@ -8265,8 +8204,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequests::<Test>::get(file_key)
-                    .map_or(true, |m| !m.bsps.contains_key(&bsp_id)));
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -8283,7 +8222,6 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
                     })
@@ -8476,8 +8414,8 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -8497,11 +8435,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
@@ -8530,8 +8463,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequests::<Test>::get(file_key)
-                    .map_or(true, |m| !m.bsps.contains_key(&bsp_id)));
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -8549,7 +8482,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
-						bsps: BoundedBTreeMap::new(),
 						deposit_paid: new_deposit_paid,
                     })
                 );
@@ -8740,13 +8672,13 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under both location
 				assert_eq!(
-                    file_system::StorageRequests::<Test>::get(first_file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(first_file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 				assert_eq!(
-                    file_system::StorageRequests::<Test>::get(second_file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(second_file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -8766,11 +8698,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
@@ -8789,11 +8716,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
@@ -8814,8 +8736,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequests::<Test>::get(first_file_key)
-                    .map_or(true, |m| !m.bsps.contains_key(&bsp_id)));
+                assert!(file_system::StorageRequestBsps::<Test>::get(first_file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -8833,7 +8755,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
-						bsps: BoundedBTreeMap::new(),
 						deposit_paid: new_deposit_paid,
                     })
                 );
@@ -9038,8 +8959,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequests::<Test>::get(file_key)
-                    .map_or(true, |m| !m.bsps.contains_key(&bsp_id)));
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -9056,7 +8977,6 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
                     })
@@ -9181,7 +9101,6 @@ mod bsp_stop_storing {
                         bsps_required: current_bsps_required.checked_add(1).unwrap(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
                     })
@@ -9298,7 +9217,6 @@ mod bsp_stop_storing {
                         bsps_required: 1,
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
                     })
@@ -9894,19 +9812,14 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
 
                 // Assert that the inline bsps was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -10154,11 +10067,6 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
@@ -10347,19 +10255,14 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
 
                 // Assert that the inline bsps was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -10638,19 +10541,14 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
 
                 // Assert that the inline bsps was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -10909,19 +10807,14 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(bsp_id, true);
-							m
-						},
 						deposit_paid: new_deposit_paid,
                     })
                 );
 
                 // Assert that the inline bsps was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .and_then(|m| m.bsps.get(&bsp_id).copied()),
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
                     Some(true)
                 );
 
@@ -11161,11 +11054,6 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(Providers::get_provider_id(&bsp_account_id).unwrap(), true);
-							m
-						},
 						deposit_paid: storage_request_deposit,
                     })
                 );
@@ -11369,11 +11257,6 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						bsps: {
-							let mut m = BoundedBTreeMap::new();
-							let _ = m.try_insert(Providers::get_provider_id(&bsp_account_id).unwrap(), true);
-							m
-						},
 						deposit_paid: storage_request_deposit,
                     })
                 );
@@ -12536,7 +12419,6 @@ mod request_file_deletion {
                     bsps_confirmed: 0,
                     bsps_volunteered: 0,
                     expires_at: current_tick + 100,
-                    bsps: BoundedBTreeMap::new(),
                     deposit_paid: 0,
                 },
             );
@@ -14111,7 +13993,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_eq!(storage_request.bsps_confirmed, 1);
 
                 // BSP is in inline bsps map
-                let initial_bsps: Vec<_> = file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let initial_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(initial_bsps.len(), 1, "Should have 1 BSP associated with storage request initially");
                 assert_eq!(initial_bsps[0].0, bsp_id, "BSP should be associated with storage request");
 
@@ -14137,7 +14019,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     "Storage request should be removed from bucket associations"
                 );
                 // All BSPs should be removed from storage request associations
-                let final_bsps: Vec<_> = file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14328,7 +14210,7 @@ mod delete_files_for_incomplete_storage_request_tests {
 
                 // Verify BSP is in inline bsps for file2
                 let initial_bsps_file2: Vec<_> =
-                    file_system::StorageRequests::<Test>::get(&file_key2).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key2).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(
                     initial_bsps_file2.len(),
                     1,
@@ -14353,7 +14235,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     "Storage request should be removed from bucket associations"
                 );
                 let final_bsps: Vec<_> =
-                    file_system::StorageRequests::<Test>::get(&file_key1).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key1).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14369,7 +14251,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     "Storage request should be removed from bucket associations"
                 );
                 let final_bsps: Vec<_> =
-                    file_system::StorageRequests::<Test>::get(&file_key2).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key2).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14554,7 +14436,7 @@ mod delete_files_for_incomplete_storage_request_tests {
 
                 // Both BSPs are in inline bsps map
                 let initial_bsps: Vec<_> =
-                    file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(
                     initial_bsps.len(),
                     2,
@@ -14590,7 +14472,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     "Storage request should be removed from bucket associations"
                 );
                 let final_bsps: Vec<_> =
-                    file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -15350,7 +15232,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed, file_key));
 
                 // Verify BSP volunteered
-                let volunteered_bsps: Vec<_> = file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let volunteered_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(volunteered_bsps.len(), 1, "BSP should have volunteered");
                 assert_eq!(volunteered_bsps[0].0, bsp_id, "Correct BSP should have volunteered");
 
@@ -15370,7 +15252,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 );
 
                 // 2. BSP associations should be completely cleaned up
-                let final_bsps: Vec<_> = file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
 
                 // 3. Bucket storage requests should be cleaned up
@@ -15442,7 +15324,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 );
 
                 // 2. BSP associations should be completely cleaned up
-                let final_bsps: Vec<_> = file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
 
                 // 3. Bucket storage requests should be cleaned up
@@ -15517,7 +15399,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 );
 
                 // 2. BSP associations should be completely cleaned up
-                let final_bsps: Vec<_> = file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
 
                 // 3. Bucket storage requests should be cleaned up
@@ -15612,7 +15494,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 );
 
                 // 2. BSP associations should be completely cleaned up
-                let final_bsps: Vec<_> = file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
 
                 // 3. Bucket storage requests should be cleaned up
@@ -15698,10 +15580,10 @@ mod delete_files_for_incomplete_storage_request_tests {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: current_tick + 100,
-                        bsps,
                         deposit_paid: 0,
                     },
                 );
+                StorageRequestBsps::<Test>::insert(&file_key, bsps);
 
                 // Delete file from bucket (simulating bucket deletion before storage request is fulfilled)
                 // This should create an incomplete storage request
@@ -15997,7 +15879,6 @@ mod delete_files_for_incomplete_storage_request_tests {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0, // NO BSPs confirmed
                         bsps_volunteered: 0,
-                        bsps: BoundedBTreeMap::new(),
                         expires_at: current_tick + 100,
                         deposit_paid: 0,
                     },
@@ -16107,7 +15988,7 @@ mod delete_files_for_incomplete_storage_request_tests {
 
                 // Verify BSP volunteered
                 let volunteered_bsps: Vec<_> =
-                    file_system::StorageRequests::<Test>::get(&file_key).map(|m| m.bsps.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(volunteered_bsps.len(), 1, "BSP should have volunteered");
                 assert_eq!(
                     volunteered_bsps[0].0, bsp_id,

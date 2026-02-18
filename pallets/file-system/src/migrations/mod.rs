@@ -25,6 +25,6 @@ pub mod v1;
 
 /// Module containing migration logic from storage version 1 to 2.
 ///
-/// This migration inlines the `StorageRequestBsps` double map into
-/// `StorageRequestMetadata.bsps`.
+/// This migration moves the `StorageRequestBsps` double map into a single-entry
+/// `StorageMap<MerkleHash, BoundedBTreeMap<ProviderIdFor, bool, MaxReplicationTarget>>`.
 pub mod v2;
