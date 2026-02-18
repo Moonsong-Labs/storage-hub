@@ -96,7 +96,6 @@ import type {
   PalletFileSystemRejectedStorageRequest,
   PalletFileSystemRejectedStorageRequestReason,
   PalletFileSystemReplicationTarget,
-  PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletFileSystemStorageRequestMspAcceptedFileKeys,
   PalletFileSystemStorageRequestMspBucketResponse,
@@ -347,7 +346,6 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;
     PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
     PalletFileSystemReplicationTarget: PalletFileSystemReplicationTarget;
-    PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
     PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
     PalletFileSystemStorageRequestMspAcceptedFileKeys: PalletFileSystemStorageRequestMspAcceptedFileKeys;
     PalletFileSystemStorageRequestMspBucketResponse: PalletFileSystemStorageRequestMspBucketResponse;
