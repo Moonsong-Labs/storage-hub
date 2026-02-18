@@ -11,7 +11,7 @@
  *
  * @example
  * ```ts
- * import { describeNetwork } from "../testrunner";
+ * import { describeNetwork } from "./testrunner";
  *
  * describeNetwork(
  *   "10 BSP scale test",
@@ -49,6 +49,9 @@ export type { GeneratedIdentity, HexString } from "./keyGenerator";
 // Port allocation (re-export for potential customization)
 export { PortAllocator } from "./portAllocator";
 export type { Ports, PortAllocatorConfig } from "./portAllocator";
+
+// Test runner for dynamic network tests
+export * from "./testrunner";
 
 // Service generation types (useful for advanced customization)
 export type {

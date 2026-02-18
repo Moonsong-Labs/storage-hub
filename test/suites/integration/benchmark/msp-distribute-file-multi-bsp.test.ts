@@ -19,7 +19,7 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { describeNetwork } from "../../../util/bspNet/testrunner";
+import { describeNetwork } from "../../../util/netLaunch/dynamic/testrunner";
 import type { EnrichedBspApi } from "../../../util";
 
 /**
@@ -152,7 +152,7 @@ await describeNetwork(
       // Wait for MSP to sync with the chain tip before expecting it to process the storage request
       await blockProducerApi.wait.nodeCatchUpToChainTip(mspApi);
 
-      // Step 4: Wait for MSP to download file using the wait helper
+      // Step 4: Wait for MSP to download file
       await mspApi.wait.fileStorageComplete(fileKey);
 
       // Wait for BSP volunteers and MSP response in tx pool (60 second timeout for large networks)
@@ -174,7 +174,7 @@ await describeNetwork(
       // Step 5: Delete file from user node (so BSPs must get it from MSP)
       await userApi.rpc.storagehubclient.removeFilesFromFileStorage([fileKey]);
 
-      // Verify file was deleted using the wait helper
+      // Verify file was deleted
       await userApi.wait.fileDeletionFromFileStorage(fileKey);
 
       // Step 6: Verify BSPs volunteered and wait for them to confirm storing
@@ -188,7 +188,7 @@ await describeNetwork(
         `Expected ${BSP_COUNT} AcceptedBspVolunteer events`
       );
 
-      // Wait for all BSPs to confirm storing using the wait helper (60 second timeout for large networks)
+      // Wait for all BSPs to confirm storing (60 second timeout for large networks)
       await blockProducerApi.wait.bspStored({
         expectedExts: BSP_COUNT,
         timeoutMs: 60000,
@@ -206,11 +206,11 @@ await describeNetwork(
         `Expected ${BSP_COUNT} BspConfirmedStoring events`
       );
 
-      // Step 7: Verify all BSPs have the file in their storage using wait helpers
+      // Step 7: Verify all BSPs have the file in their storage
       for (let i = 0; i < BSP_COUNT; i++) {
         const bspApi = await ctx.network.getBspApi(i);
 
-        // Verify file is in BSP's file storage using wait helper
+        // Verify file is in BSP's file storage
         await bspApi.wait.fileStorageComplete(fileKey);
 
         // Verify file is in BSP's forest (direct check since there's no "waitForFileInForest" helper)
