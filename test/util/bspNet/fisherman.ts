@@ -1,9 +1,8 @@
-import { strictEqual, notEqual } from "node:assert";
-import assert from "node:assert";
+import assert, { notEqual, strictEqual } from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
 import type { EventRecord, SignedBlock } from "@polkadot/types/interfaces";
-import { waitFor } from "./waits";
 import type { EnrichedBspApi } from ".";
+import { waitFor } from "./waits";
 
 /**
  * Result returned by verification functions when returnResults is true
@@ -59,12 +58,29 @@ export interface VerifyBucketDeletionResultsOptions {
 export interface WaitForFishermanBatchDeletionsOptions {
   /** The block producer api (normally userApi) */
   blockProducerApi: EnrichedBspApi;
-  /** Either "User" or "Incomplete" to determine which deletion cycle to wait for */
+  /** Either "User" or "Incomplete" to determine which deletion type to wait for */
   deletionType: "User" | "Incomplete";
   /** Optional. Total expected extrinsics (BSP + bucket) to verify in the transaction pool */
   expectExt?: number;
   /** Optional. Whether to seal a block after verifying extrinsics. Defaults to false. */
   sealBlock?: boolean;
+  /**
+   * Optional. Maximum time to wait for the fisherman to submit the deletion extrinsic(s) into the tx pool.
+   * Defaults to 30 seconds.
+   */
+  timeoutMs?: number;
+  /**
+   * Optional. Poll interval used while waiting.
+   * Defaults to 500ms.
+   */
+  pollMs?: number;
+  /**
+   * Optional. If true, requires the tx pool to contain exactly `expectExt` matching extrinsics.
+   *
+   * Defaults to false, because the new event-driven scheduler may submit additional batches quickly,
+   * making an exact count fragile in tests.
+   */
+  exactLength?: boolean;
 }
 
 /**
@@ -467,21 +483,18 @@ export const verifyBucketDeletionResults = async (
  * Waits for fisherman to process batch deletions by sealing blocks until
  * the fisherman submits extrinsics for the specified deletion type.
  *
- * This handles the alternating User/Incomplete deletion cycle timing issue
- * where fisherman might be on the wrong cycle when deletions are created.
+ * This polls the tx pool for the expected deletion extrinsic(s). The
+ * fisherman batch deletion scheduling is timer-driven + event-driven
+ * (permit-drop notifications), not block-import driven.
  *
- * The function first checks if the extrinsics are already in the transaction pool.
- * If they are, the polling loop is skipped. Otherwise, it uses a polling loop that:
- * 1. Seals a block
- * 2. Checks for the fisherman log message (with short timeout)
- * 3. If not found, waits and repeats
- * 4. Once found, optionally verifies extrinsics in tx pool
- *
- * After the loop (or if skipped), the function verifies that the expected
+ * After the polling loop, the function verifies that the expected
  * number of extrinsics are present in the transaction pool.
  *
  * If `expectExt` is provided, this function will verify that the expected
  * number of extrinsics are present in the transaction pool before returning.
+ * If `exactLength` is true, the function will verify that the number of extrinsics
+ * is exactly `expectExt`. If `exactLength` is false, the function will verify that
+ * the number of extrinsics is greater than or equal to `expectExt`.
  *
  * If `sealBlock` is true, a block will be sealed after verifying extrinsics
  * and the result (with events) will be returned.
@@ -493,62 +506,46 @@ export const verifyBucketDeletionResults = async (
 export const waitForFishermanBatchDeletions = async (
   options: WaitForFishermanBatchDeletionsOptions
 ): Promise<FishermanBatchDeletionsResult | undefined> => {
-  const { blockProducerApi: api, deletionType, expectExt, sealBlock = false } = options;
+  const {
+    blockProducerApi: api,
+    deletionType,
+    expectExt,
+    sealBlock = false,
+    timeoutMs = 30_000,
+    pollMs = 500,
+    exactLength = false
+  } = options;
 
   const methodName =
     deletionType === "User" ? "deleteFiles" : "deleteFilesForIncompleteStorageRequest";
 
-  // Check if extrinsics are already in the transaction pool before starting the loop
-  let extrinsicsAlreadyPresent = false;
+  const iterations = Math.max(1, Math.ceil(timeoutMs / pollMs));
   try {
-    await api.assert.extrinsicPresent({
-      method: methodName,
-      module: "fileSystem",
-      checkTxPool: true,
-      assertLength: expectExt,
-      exactLength: !!expectExt,
-      timeout: 5000
-    });
-    extrinsicsAlreadyPresent = true;
-  } catch (_) {
-    // Extrinsics not in pool yet, will proceed with the loop
-  }
-
-  // If extrinsics are already present, skip the polling loop
-  if (!extrinsicsAlreadyPresent) {
-    // Poll for fisherman extrinsic, sealing blocks between checks
-    // Wait 5 second interval (fisherman configuration "--fisherman-batch-interval-seconds=5")
-    // to leave time for the fisherman to switch processing deletion types
-    const maxAttempts = 5; // 5 attempts * 5 seconds = 25 seconds total timeout
-    let found = false;
-
-    for (let attempt = 0; attempt < maxAttempts && !found; attempt++) {
-      // Seal a block to trigger fisherman interval processing
-      await api.block.seal();
-
-      // Check if fisherman has submitted the extrinsics (with short timeout to avoid blocking)
-      try {
-        // Ensure deletion type extrinsic is present in transaction pool
-        await api.assert.extrinsicPresent({
-          method: methodName,
-          module: "fileSystem",
-          checkTxPool: true,
-          assertLength: expectExt,
-          exactLength: !!expectExt,
-          timeout: 10000 // Small timeout since fisherman should have submitted by now
-        });
-        found = true;
-      } catch (_) {
-        // Extrinsic not found yet, continue to next iteration
-        if (attempt === maxAttempts - 1) {
-          throw new Error(
-            `Timeout waiting for fisherman to process ${deletionType} deletions after ${
-              maxAttempts * 5
-            } seconds`
-          );
+    await waitFor({
+      delay: pollMs,
+      iterations,
+      lambda: async () => {
+        try {
+          // Keep the inner timeout short; outer polling controls total time.
+          await api.assert.extrinsicPresent({
+            method: methodName,
+            module: "fileSystem",
+            checkTxPool: true,
+            assertLength: expectExt,
+            exactLength: exactLength && expectExt !== undefined,
+            timeout: Math.max(250, pollMs)
+          });
+          return true;
+        } catch (_) {
+          return false;
         }
       }
-    }
+    });
+  } catch (e) {
+    throw new Error(
+      `Timeout waiting for fisherman to submit ${deletionType} deletion extrinsic(s) ` +
+        `(${methodName}) to tx pool after ${(iterations * pollMs) / 1000}s: ${e}`
+    );
   }
 
   // Optionally seal a block after verification and return the result
@@ -596,12 +593,17 @@ export const retryableWaitAndVerifyBatchDeletions = async (
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     // Wait for batch deletions and seal block
-    const deletionResult = await waitForFishermanBatchDeletions({
-      blockProducerApi,
-      deletionType,
-      expectExt,
-      sealBlock: true
-    });
+    let deletionResult: FishermanBatchDeletionsResult | undefined;
+    try {
+      deletionResult = await waitForFishermanBatchDeletions({
+        blockProducerApi,
+        deletionType,
+        expectExt,
+        sealBlock: true
+      });
+    } catch (_) {
+      continue;
+    }
 
     if (!deletionResult) {
       throw new Error("waitForBatchDeletions returned undefined when sealBlock is true");

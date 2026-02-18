@@ -131,6 +131,18 @@ pub trait IndexerOps: Send + Sync {
         &self,
         user_account: &str,
     ) -> RepositoryResult<Vec<PaymentStreamData>>;
+
+    /// Get the number of files stored by the given MSP
+    ///
+    /// # Arguments
+    /// * `msp` - The on-chain MSP ID
+    ///
+    /// # Returns
+    /// * The number of files stored by that MSP
+    async fn get_number_of_files_stored_by_msp(
+        &self,
+        onchain_msp_id: &OnchainMspId,
+    ) -> RepositoryResult<u64>;
 }
 
 /// Mutable operations for test environments.

@@ -326,6 +326,33 @@ impl IndexerOps for MockRepository {
             .ok_or_else(|| RepositoryError::not_found("File"))
     }
 
+    async fn get_number_of_files_stored_by_msp(
+        &self,
+        onchain_msp_id: &OnchainMspId,
+    ) -> RepositoryResult<u64> {
+        // Get the MSP to find its database ID
+        let msp = self.get_msp_by_onchain_id(onchain_msp_id).await?;
+
+        // Get all buckets that belong to this MSP
+        let buckets = self.buckets.read().await;
+        let bucket_ids: Vec<i64> = buckets
+            .values()
+            .filter(|b| b.msp_id == Some(msp.id))
+            .map(|b| b.id)
+            .collect();
+        drop(buckets);
+
+        // Get all files that belong to these buckets and count distinct file_keys
+        let files = self.files.read().await;
+        let distinct_file_keys: std::collections::HashSet<Vec<u8>> = files
+            .values()
+            .filter(|f| bucket_ids.contains(&f.bucket_id))
+            .map(|f| f.file_key.clone())
+            .collect();
+
+        Ok(distinct_file_keys.len() as u64)
+    }
+
     // ============ Payment Stream Operations ============
     async fn get_payment_streams_for_user(
         &self,

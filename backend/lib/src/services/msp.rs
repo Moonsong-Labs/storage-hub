@@ -9,7 +9,7 @@ use bigdecimal::{BigDecimal, RoundingMode};
 use std::collections::HashSet;
 use tokio::sync::RwLock;
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use codec::{Decode, Encode};
 use futures::stream;
 use serde::{Deserialize, Serialize};
@@ -201,6 +201,16 @@ impl MspService {
                 ))
             })?;
 
+        let files_amount = self
+            .postgres
+            .get_number_of_files_stored_by_msp(&self.msp_id)
+            .await
+            .map_err(|e| {
+                Error::BadRequest(format!(
+                    "Failed to retrieve number of files stored by MSP: {e}"
+                ))
+            })?;
+
         debug!(?info, %active_users, "msp stats");
 
         let stats = StatsResponse {
@@ -213,6 +223,7 @@ impl MspService {
             last_capacity_change: BigDecimal::from(info.last_capacity_change).to_string(),
             value_props_amount: BigDecimal::from(info.amount_of_value_props).to_string(),
             buckets_amount: BigDecimal::from(info.amount_of_buckets).to_string(),
+            files_amount: BigDecimal::from(files_amount).to_string(),
         };
 
         // Update cache with the new value
@@ -611,7 +622,25 @@ impl MspService {
         let mut trie = InMemoryFileDataTrie::<StorageProofsMerkleTrieLayout>::new();
 
         // Prepare the overflow buffer that will hold any data that doesn't exactly fit in a chunk.
-        let mut overflow_buffer = Vec::new();
+        //
+        // Use `BytesMut` so we can consume a prefix in O(1) via `split_to`,
+        // instead of repeatedly `drain(..k)`ing a `Vec` (which shifts remaining bytes and can
+        // become quadratic over large uploads).
+        let mut overflow_buffer = BytesMut::new();
+
+        // Accumulate chunks into batches before inserting into the trie, to reduce per-chunk overhead
+        // (allocator pressure + trie-mutator rebuild costs).
+        let chunks_per_batch =
+            (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / FILE_CHUNK_SIZE as usize).max(1);
+        if BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE < FILE_CHUNK_SIZE as usize {
+            warn!(
+                target: "msp_service::process_and_upload_file",
+                batch_max_bytes = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+                chunk_size_bytes = FILE_CHUNK_SIZE,
+                "BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE is smaller than FILE_CHUNK_SIZE; falling back to 1 chunk per batch"
+            );
+        }
+        let mut pending_chunks: Vec<Vec<u8>> = Vec::with_capacity(chunks_per_batch);
 
         // Initialize the chunk index.
         let mut chunk_index = 0;
@@ -625,38 +654,52 @@ impl MspService {
 
             // While the overflow buffer is larger than FILE_CHUNK_SIZE, process a chunk.
             while overflow_buffer.len() >= FILE_CHUNK_SIZE as usize {
-                let chunk = overflow_buffer[..FILE_CHUNK_SIZE as usize].to_vec();
-
-                // Insert the chunk into the trie.
-                trie.write_chunk(&ChunkId::new(chunk_index), &chunk)
-                    .map_err(|e| {
-                        Error::BadRequest(format!(
-                            "Failed to write chunk {} to trie: {}",
-                            chunk_index, e
-                        ))
-                    })?;
+                // Consume the next FILE_CHUNK_SIZE bytes without shifting the remaining buffer.
+                let chunk = overflow_buffer
+                    .split_to(FILE_CHUNK_SIZE as usize)
+                    .as_ref()
+                    .to_vec();
+                pending_chunks.push(chunk);
 
                 // Increment the chunk index.
                 chunk_index += 1;
 
-                // Remove the chunk from the overflow buffer.
-                overflow_buffer.drain(..FILE_CHUNK_SIZE as usize);
+                if pending_chunks.len() == chunks_per_batch {
+                    let start_index = chunk_index - pending_chunks.len() as u64;
+                    let batch = std::mem::take(&mut pending_chunks);
+
+                    trie.write_chunks_batched(start_index, batch).map_err(|e| {
+                        Error::BadRequest(format!(
+                            "Failed to write chunk batch (start={}, count={}) to trie: {}",
+                            start_index, chunks_per_batch, e
+                        ))
+                    })?;
+                }
             }
         }
 
         // Check the overflow buffer to see if the file didn't fit exactly in an integer number of chunks.
         if !overflow_buffer.is_empty() {
-            // Insert the chunk into the trie.
-            trie.write_chunk(&ChunkId::new(chunk_index), &overflow_buffer)
-                .map_err(|e| {
-                    Error::BadRequest(format!(
-                        "Failed to write final chunk {} to trie: {}",
-                        chunk_index, e
-                    ))
-                })?;
+            let overflow_bytes = overflow_buffer.as_ref().to_vec();
+            pending_chunks.push(overflow_bytes);
 
             // Increment the chunk index to get the total amount of chunks.
             chunk_index += 1;
+        }
+
+        // Flush any remaining pending chunks into the trie.
+        if !pending_chunks.is_empty() {
+            let start_index = chunk_index - pending_chunks.len() as u64;
+            let batch = std::mem::take(&mut pending_chunks);
+
+            trie.write_chunks_batched(start_index, batch).map_err(|e| {
+                Error::BadRequest(format!(
+                    "Failed to write final chunk batch (start={}, count={}) to trie: {}",
+                    start_index,
+                    chunk_index - start_index,
+                    e
+                ))
+            })?;
         }
 
         // Validate that the file fingerprint matches the trie root.
@@ -782,18 +825,26 @@ impl MspService {
         total_chunks: u64,
     ) -> Result<(), Error> {
         // Get how many chunks fit in a batch of BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, rounding down.
-        const CHUNKS_PER_BATCH: u64 = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64 / FILE_CHUNK_SIZE;
+        let chunks_per_batch = (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64 / FILE_CHUNK_SIZE).max(1);
+        if BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE < FILE_CHUNK_SIZE as usize {
+            warn!(
+                target: "msp_service::legacy_upload_file_in_batches",
+                batch_max_bytes = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+                chunk_size_bytes = FILE_CHUNK_SIZE,
+                "BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE is smaller than FILE_CHUNK_SIZE; falling back to 1 chunk per batch"
+            );
+        }
 
         // Initialize the index of the initial chunk to process in this batch.
         let mut batch_start_chunk_index = 0;
-        let total_batches = (total_chunks + CHUNKS_PER_BATCH - 1) / CHUNKS_PER_BATCH;
+        let total_batches = (total_chunks + chunks_per_batch - 1) / chunks_per_batch;
         let mut batch_number = 1;
 
         // Start processing batches, until all chunks have been processed.
         while batch_start_chunk_index < total_chunks {
             // Get the chunks to send in this batch, capping at the total amount of chunks of the file.
             let chunks = (batch_start_chunk_index
-                ..(batch_start_chunk_index + CHUNKS_PER_BATCH).min(total_chunks))
+                ..(batch_start_chunk_index + chunks_per_batch).min(total_chunks))
                 .map(ChunkId::new)
                 .collect::<HashSet<_>>();
             let chunks_in_batch = chunks.len() as u64;

@@ -11,6 +11,25 @@
 //! - **Batch processing**: Queries pending deletions from indexer database, grouped by target
 //! - **Parallel execution**: Processes each target (BSP/Bucket) concurrently in parallel futures
 //! - **Lock management**: Always releases the global lock after processing, even on errors
+//! - **Scheduler signalling**: When any work is discovered, the handler must call
+//!   `permit_guard.mark_did_work()` so the fisherman scheduler can choose the correct backoff
+//!   strategy for the next cycle
+//!
+//! ## Scheduler signalling (`permit_guard.mark_did_work()`)
+//!
+//! The fisherman scheduler is driven by the drop of the batch semaphore guard held inside the
+//! [`BatchFileDeletions`] event. When the guard is dropped, it notifies the fisherman service
+//! event loop with a `did_work` boolean:
+//!
+//! - If `did_work = true`, the scheduler applies the normal **cooldown** (fast cadence).
+//! - If `did_work = false`, the scheduler increments the "no work" streak and may eventually
+//!   switch to the slower **idle poll interval**.
+//!
+//! This task **must** call `permit_guard.mark_did_work()` once it has determined there is at
+//! least one deletion target to process (i.e. it will spawn at least one target future). If this
+//! call is omitted, the scheduler will incorrectly treat the cycle as "no work", which can push
+//! it into idle backoff even while deletions exist — increasing end-to-end deletion latency and
+//! reducing throughput.
 //!
 //! ## Processing Flow
 //!
@@ -156,10 +175,11 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<String> {
-        // Hold the Arc reference to the permit for the lifetime of this handler
-        // The permit will be automatically released when this handler completes or fails
-        // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
-        let permit_arc = event.permit;
+        // Hold the Arc reference to the permit guard for the lifetime of this handler.
+        //
+        // The underlying semaphore permit will be automatically released when this handler
+        // completes or fails, and the guard will notify the fisherman service event loop on drop.
+        let permit_guard = event.permit;
 
         info!(
             target: LOG_TARGET,
@@ -242,6 +262,9 @@ where
             ));
         }
 
+        // Mark that we found work so the scheduler can apply cooldown rather than idle backoff.
+        permit_guard.mark_did_work();
+
         // Await all futures
         debug!(
             target: LOG_TARGET,
@@ -279,10 +302,6 @@ where
                 successes
             );
         }
-
-        // Explicitly drop to release the semaphore permit
-        // Next batch deletion cycle will be able to acquire a new permit
-        drop(permit_arc);
 
         Ok(format!(
             "Processed batch file deletions: {} successes, {} failures",
@@ -407,15 +426,31 @@ where
         match deletion_type {
             shc_indexer_db::models::FileDeletionType::User => {
                 self.submit_user_deletion_extrinsic(&remaining_files, provider_id, forest_proof)
-                    .await?;
+                    .await
+                    .map_err(|e|
+                        anyhow!(
+                            "User deletion failed for {} files, target {:?}. File keys: [{}]. Error: {:?}",
+                            remaining_files.len(),
+                            target,
+                            remaining_file_keys.display_hex_list(),
+                            e
+                        ))?;
             }
             shc_indexer_db::models::FileDeletionType::Incomplete => {
                 self.submit_incomplete_deletion_extrinsic(
                     &remaining_file_keys,
                     provider_id,
-                    forest_proof,
+                    forest_proof
                 )
-                .await?;
+                .await
+                .map_err(|e|
+                    anyhow!(
+                        "Incomplete deletion failed for {} files, target {:?}. File keys: [{}]. Error: {:?}",
+                        remaining_file_keys.len(),
+                        target,
+                        remaining_file_keys.display_hex_list(),
+                        e
+                    ))?;
             }
         }
 
@@ -851,7 +886,10 @@ where
                     e
                 );
                 anyhow!("Failed to submit delete_files extrinsic: {:?}", e)
-            })?;
+            })?
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await
+            .map_err(|e| anyhow!("Failed to watch for success: {:?}", e))?;
 
         info!(
             target: LOG_TARGET,
@@ -929,7 +967,10 @@ where
                     "Failed to submit delete_files_for_incomplete_storage_request extrinsic: {:?}",
                     e
                 )
-            })?;
+            })?
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await
+            .map_err(|e| anyhow!("Failed to watch for success: {:?}", e))?;
 
         info!(
             target: LOG_TARGET,

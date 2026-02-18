@@ -246,8 +246,10 @@ where
 
 /// Handles the [`ProcessConfirmStoringRequest`] event.
 ///
-/// This event is triggered by the runtime when it decides it is the right time to submit a confirm
-/// storing extrinsic (and update the local forest root).
+/// This event is triggered by the blockchain service when there are pending confirm storing
+/// requests in the queue. The task pulls and filters requests in a loop until the batch is
+/// full or the queue is empty, avoiding the issue where pre-batched lists may contain many
+/// stale entries.
 impl<NT, Runtime> EventHandler<ProcessConfirmStoringRequest<Runtime>>
     for BspUploadFileTask<NT, Runtime>
 where
@@ -259,22 +261,16 @@ where
         &mut self,
         event: ProcessConfirmStoringRequest<Runtime>,
     ) -> anyhow::Result<String> {
+        // Hold the forest root write permit for the duration of this handler.
+        // When this guard is dropped (on return, error, or panic), the semaphore
+        // permit is released and the blockchain service is notified to process
+        // the next pending forest-write request.
+        let _forest_root_write_permit = event.forest_root_write_permit;
+
         info!(
             target: LOG_TARGET,
-            "Processing ConfirmStoringRequest: {:?}",
-            event.data.confirm_storing_requests,
+            "Processing ConfirmStoringRequest",
         );
-
-        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
-        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
 
         // Get the BSP ID of the Provider running this node and its current Forest root.
         let own_provider_id = self
@@ -298,49 +294,43 @@ where
         };
         let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
-        // Filter out already-confirmed or stale (i.e. fulfilled, revoked or expired) storage requests.
-        // This avoids expensive proof generation since the runtime API `query_bsp_confirm_chunks_to_prove_for_file` does
-        // not return an error for already-confirmed.
-        // Also re-queues requests with pending volunteer transactions (not yet on-chain).
-        let pending_file_keys_set: HashSet<FileKey> = self
+        // Determine the effective batch size: take the minimum of the runtime limit
+        // and the client-side safety cap.
+        let runtime_max = self
             .storage_hub_handler
             .blockchain
-            .query_pending_bsp_confirm_storage_requests(event.data.confirm_storing_requests.clone())
-            .await?
-            .into_iter()
-            .collect();
+            .query_max_batch_confirm_storage_requests()
+            .await?;
+        let client_max = self
+            .storage_hub_handler
+            .provider_config
+            .blockchain_service
+            .bsp_confirm_file_batch_size;
+        let max_batch_size = std::cmp::min(runtime_max, client_max);
 
-        // Filter confirm_storing_requests to only those still pending confirmation
-        let confirm_storing_requests: Vec<_> = event
-            .data
-            .confirm_storing_requests
-            .iter()
-            .filter(|req| {
-                let file_key: FileKey = req.file_key.as_ref().into();
-                let is_pending = pending_file_keys_set.contains(&file_key);
-                if !is_pending {
-                    info!(
-                        target: LOG_TARGET,
-                        "Filtering out file key [{:x}]: no volunteer registered on chain (not pending confirmation)",
-                        req.file_key
-                    );
-                }
-                is_pending
-            })
-            .cloned()
-            .collect();
+        // Pull and filter requests from the queue until we have a full batch or the queue is empty.
+        // This approach ensures we fill the batch with valid requests even if many are stale.
+        let confirm_storing_requests = self
+            .pull_and_filter_confirm_requests(max_batch_size)
+            .await?;
 
         if confirm_storing_requests.is_empty() {
-            // Release the forest root write lock before returning.
-            self.storage_hub_handler
-                .blockchain
-                .release_forest_root_write_lock(forest_root_write_tx)
-                .await?;
             return Ok(
                 "Skipped ProcessConfirmStoringRequest: no more requests to confirm after filtering"
                     .to_string(),
             );
         }
+
+        info!(
+            target: LOG_TARGET,
+            "Processing {} confirm storing requests: [{}]",
+            confirm_storing_requests.len(),
+            confirm_storing_requests
+                .iter()
+                .map(|request| format!("0x{:x}", request.file_key))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
 
         // Query runtime for the chunks to prove for the file.
         let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();
@@ -385,7 +375,6 @@ where
         }
 
         if confirm_storing_requests_with_chunks_to_prove.iter().count() == 0 {
-            trace!(target: LOG_TARGET, "Skipping ConfirmStoringRequest: No keys to confirm after querying chunks to prove.");
             return Ok(
                 "Skipped ProcessConfirmStoringRequest: no keys to confirm after querying chunks"
                     .to_string(),
@@ -512,12 +501,6 @@ where
                 self.requeue_confirm_storing_requests(&confirming_file_keys)
                     .await;
 
-                // Release the forest root write lock before returning error
-                self.storage_hub_handler
-                    .blockchain
-                    .release_forest_root_write_lock(forest_root_write_tx)
-                    .await?;
-
                 return Err(anyhow!(
                     "Failed to confirm file after {} retries: {:?}",
                     self.config.max_try_count,
@@ -532,12 +515,6 @@ where
                     let err_msg = format!("Failed to handle confirm storing extrinsic result for {} file key(s): {:?}", confirming_file_keys.len(), err);
                     error!(target: LOG_TARGET, err_msg);
 
-                    // Release the forest root write lock before returning error
-                    self.storage_hub_handler
-                        .blockchain
-                        .release_forest_root_write_lock(forest_root_write_tx)
-                        .await?;
-
                     return Err(anyhow!(err_msg));
                 }
             }
@@ -551,12 +528,6 @@ where
                     .await;
             }
         }
-
-        // Release the forest root write "lock" and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await?;
 
         Ok(format!(
             "Processed ProcessConfirmStoringRequest for BSP [0x{:x}] for file keys: [{}]",
@@ -1302,6 +1273,119 @@ where
         drop(write_file_storage);
     }
 
+    /// Pull and filter confirm storing requests from the queue until we have enough valid
+    /// requests or the queue is empty.
+    ///
+    /// This method implements the pull-filter loop that:
+    /// 1. Pops items from the queue
+    /// 2. Filters them without re-queuing pending volunteer requests
+    /// 3. Accumulates valid requests up to the batch size
+    /// 4. Re-queues pending volunteer requests at the end (avoiding infinite loops where we pop → filter (re-queue) → pop same item again).
+    /// 5. Returns the valid (non-stale) requests.
+    ///
+    /// Note: Pending volunteer requests are always re-queued, even if an error occurs during
+    /// processing. This ensures requests are not lost due to transient failures.
+    async fn pull_and_filter_confirm_requests(
+        &self,
+        max_batch_size: u32,
+    ) -> anyhow::Result<Vec<ConfirmStoringRequest<Runtime>>> {
+        let mut pending_volunteer_requests = Vec::new();
+
+        // Run the main logic, capturing any error
+        let result = self
+            .pull_and_filter_confirm_requests_inner(max_batch_size, &mut pending_volunteer_requests)
+            .await;
+
+        // Always re-queue pending volunteer requests (best effort, errors logged)
+        self.requeue_pending_volunteer_requests(pending_volunteer_requests)
+            .await;
+
+        result
+    }
+
+    /// Inner implementation of pull_and_filter_confirm_requests.
+    ///
+    /// Separated to allow cleanup (re-queuing pending volunteer requests) even on error.
+    async fn pull_and_filter_confirm_requests_inner(
+        &self,
+        max_batch_size: u32,
+        pending_volunteer_requests: &mut Vec<ConfirmStoringRequest<Runtime>>,
+    ) -> anyhow::Result<Vec<ConfirmStoringRequest<Runtime>>> {
+        let mut valid_requests = Vec::new();
+        let mut remaining_slots = max_batch_size as usize;
+
+        while remaining_slots > 0 {
+            // Pop items from queue
+            let popped = self
+                .storage_hub_handler
+                .blockchain
+                .pop_confirm_storing_requests(remaining_slots as u32)
+                .await?;
+
+            if popped.is_empty() {
+                // Queue is empty
+                break;
+            }
+
+            // Filter the valid requests without re-queuing the pending volunteer ones.
+            let (pending_confirm, pending_volunteer) = self
+                .storage_hub_handler
+                .blockchain
+                .filter_confirm_storing_requests(popped)
+                .await?;
+
+            // Accumulate pending volunteer for re-queue at end
+            pending_volunteer_requests.extend(pending_volunteer);
+
+            // Keep valid requests up to the batch limit
+            for request in pending_confirm {
+                if remaining_slots == 0 {
+                    // We've hit the batch limit, re-queue this request
+                    self.storage_hub_handler
+                        .blockchain
+                        .queue_confirm_bsp_request(request)
+                        .await?;
+                } else {
+                    valid_requests.push(request);
+                    remaining_slots = remaining_slots.saturating_sub(1);
+                }
+            }
+        }
+
+        Ok(valid_requests)
+    }
+
+    /// Re-queues pending volunteer requests on a best-effort basis.
+    ///
+    /// Errors are logged but not propagated, ensuring cleanup completes even if
+    /// some re-queue operations fail.
+    async fn requeue_pending_volunteer_requests(
+        &self,
+        pending_volunteer_requests: Vec<ConfirmStoringRequest<Runtime>>,
+    ) {
+        debug!(
+            target: LOG_TARGET,
+            "Re-queuing {} pending volunteer request(s): [0x{:x?}]",
+            pending_volunteer_requests.len(),
+            pending_volunteer_requests.iter().map(|r| r.file_key).collect::<Vec<_>>()
+        );
+        for request in pending_volunteer_requests {
+            if let Err(e) = self
+                .storage_hub_handler
+                .blockchain
+                .queue_confirm_bsp_request(request.clone())
+                .await
+            {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to re-queue pending volunteer request for file key [0x{:x}]: {:?}",
+                    request.file_key,
+                    e
+                );
+            }
+        }
+    }
+
     /// Re-queues confirm storing requests for retry.
     ///
     /// Used when extrinsic submission fails or proof errors are detected.
@@ -1313,13 +1397,13 @@ where
         &self,
         confirming_file_keys: &Vec<ConfirmStoringRequest<Runtime>>,
     ) {
+        info!(
+            target: LOG_TARGET,
+            "Re-queuing {} file key(s) for retry (transient error): [0x{:x?}]",
+            confirming_file_keys.len(),
+            confirming_file_keys.iter().map(|r| r.file_key).collect::<Vec<_>>()
+        );
         for request in confirming_file_keys.iter() {
-            info!(
-                target: LOG_TARGET,
-                "Re-queuing file key [{:x}] for retry (transient error)",
-                request.file_key
-            );
-
             if let Err(e) = self
                 .storage_hub_handler
                 .blockchain
@@ -1328,7 +1412,7 @@ where
             {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to re-queue confirm storing request for file key [{:x}]: {:?}",
+                    "Failed to re-queue confirm storing request for file key [0x{:x}]: {:?}",
                     request.file_key,
                     e
                 );
