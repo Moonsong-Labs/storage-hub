@@ -104,11 +104,11 @@ await describeMspNet(
       // Create MspClient without session provider initially
       mspClient = await MspClient.connect(mspBackendHttpConfig);
 
-      // Wait for the backend to be ready
+      // Wait for the backend to be ready (needs extra time for MSP identity polling at startup)
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.backend.containerName,
         searchString: "Server listening",
-        timeout: 10000
+        timeout: 30000
       });
 
       // Ensure the connection works
