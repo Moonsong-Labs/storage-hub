@@ -18,13 +18,13 @@
 //! Migration from storage version 1 to 2.
 //!
 //! This migration moves the `StorageRequestBsps` double map into a single-entry
-//! `StorageMap<MerkleHash, BoundedBTreeMap<ProviderIdFor, bool, MaxReplicationTarget>>`.
+//! `StorageMap<MerkleHash, BoundedBTreeMap<ProviderIdFor, bool, MaxBspVolunteers>>`.
 //! The `StorageRequestMetadata` encoding is unchanged (both v1 and v2 lack a `bsps` field).
 
 use crate::{
     pallet::Pallet,
     types::{
-        BalanceOf, BucketIdFor, FileLocation, Fingerprint, MaxReplicationTarget, MerkleHash,
+        BalanceOf, BucketIdFor, FileLocation, Fingerprint, MaxBspVolunteers, MerkleHash,
         MspStorageRequestStatus, PeerIds, ProviderIdFor, ReplicationTargetType, StorageDataUnit,
         StorageRequestMetadata, TickNumber,
     },
@@ -100,8 +100,30 @@ pub struct InnerMigrateV1ToV2<T: Config>(core::marker::PhantomData<T>);
 impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
     #[cfg(feature = "try-runtime")]
     fn pre_upgrade() -> Result<Vec<u8>, TryRuntimeError> {
+        use frame_support::ensure;
+        use sp_std::collections::btree_map::BTreeMap as StdBTreeMap;
+
         let request_count = v1::StorageRequests::<T>::iter().count() as u32;
-        let bsp_entries: u32 = v1::StorageRequestBsps::<T>::iter().count() as u32;
+
+        // Single-pass: count BSPs per file_key using iter() which yields (K1, K2, V).
+        let mut per_file_counts: StdBTreeMap<MerkleHash<T>, u32> = StdBTreeMap::new();
+        for (file_key, _bsp_id, _) in v1::StorageRequestBsps::<T>::iter() {
+            *per_file_counts.entry(file_key).or_default() += 1;
+        }
+        let bsp_entries: u32 = per_file_counts.values().copied().sum();
+
+        // Fail-fast: if any file_key has more BSP entries than MaxBspVolunteers, the
+        // migration would silently drop the excess. Abort try-runtime before any data is touched.
+        let max_bsps = T::MaxBspVolunteers::get();
+        for (_, count) in &per_file_counts {
+            ensure!(
+                *count <= max_bsps,
+                TryRuntimeError::Other(
+                    "pre_upgrade: BSP count for a file_key exceeds MaxBspVolunteers"
+                )
+            );
+        }
+
         log::info!(
             target: "runtime::file-system",
             "Pre-upgrade: {} storage requests, {} BSP entries to migrate",
@@ -164,7 +186,7 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
             let mut bounded_bsps = frame_support::BoundedBTreeMap::<
                 ProviderIdFor<T>,
                 bool,
-                MaxReplicationTarget<T>,
+                MaxBspVolunteers<T>,
             >::new();
             for (bsp_id, confirmed) in bsp_map {
                 if bounded_bsps.try_insert(bsp_id, confirmed).is_err() {
@@ -193,7 +215,12 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
     fn post_upgrade(state: Vec<u8>) -> Result<(), TryRuntimeError> {
         use frame_support::ensure;
 
-        let (old_count, _old_bsp_count) = <(u32, u32)>::decode(&mut &state[..])
+        ensure!(
+            Pallet::<T>::on_chain_storage_version() == StorageVersion::new(2),
+            TryRuntimeError::Other("Migration failed: on-chain storage version not updated to 2")
+        );
+
+        let (old_count, old_bsp_count) = <(u32, u32)>::decode(&mut &state[..])
             .map_err(|_| TryRuntimeError::Other("Failed to decode pre-upgrade state"))?;
 
         let new_count = crate::StorageRequests::<T>::iter().count() as u32;
@@ -203,6 +230,7 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
         );
 
         // Verify all BSP entries are readable from the new StorageMap
+        let mut new_bsp_total: u32 = 0;
         for (file_key, bsps) in crate::StorageRequestBsps::<T>::iter() {
             ensure!(
                 !bsps.is_empty(),
@@ -213,12 +241,20 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
                 crate::StorageRequests::<T>::contains_key(&file_key),
                 TryRuntimeError::Other("Migration failed: orphaned BSP map entry")
             );
+            new_bsp_total = new_bsp_total.saturating_add(bsps.len() as u32);
         }
+
+        // Verify no BSP entries were lost during migration.
+        ensure!(
+            old_bsp_count == new_bsp_total,
+            TryRuntimeError::Other("Migration failed: BSP entry count mismatch (entries were lost)")
+        );
 
         log::info!(
             target: "runtime::file-system",
-            "Post-upgrade: verified {} storage requests",
-            new_count
+            "Post-upgrade: verified {} storage requests, {} BSP entries",
+            new_count,
+            new_bsp_total
         );
 
         Ok(())
@@ -343,6 +379,37 @@ mod tests {
             InnerMigrateV1ToV2::<Test>::on_runtime_upgrade();
 
             assert!(v1::StorageRequestBsps::<Test>::iter_prefix(&file_key).next().is_none());
+        });
+    }
+
+    #[test]
+    fn migration_truncates_bsps_at_max_bsp_volunteers_when_limit_exceeded() {
+        new_test_ext().execute_with(|| {
+            // Insert MaxBspVolunteers + 1 BSPs so the migration must truncate.
+            let max = <MaxBspVolunteers<Test> as frame_support::traits::Get<u32>>::get() as u64;
+            let file_key = H256::random();
+            v1::StorageRequests::<Test>::insert(file_key, create_v1_metadata());
+
+            let bsp_ids: Vec<H256> = (0u64..max + 1).map(H256::from_low_u64_be).collect();
+            for bsp_id in &bsp_ids {
+                v1::StorageRequestBsps::<Test>::insert(
+                    file_key,
+                    bsp_id,
+                    v1::StorageRequestBspsMetadataV1 {
+                        confirmed: false,
+                        _phantom: Default::default(),
+                    },
+                );
+            }
+
+            InnerMigrateV1ToV2::<Test>::on_runtime_upgrade();
+
+            // Old double-map must be fully drained.
+            assert!(v1::StorageRequestBsps::<Test>::iter_prefix(&file_key).next().is_none());
+
+            // New map is capped at MaxBspVolunteers.
+            let bsps = crate::StorageRequestBsps::<Test>::get(file_key).unwrap();
+            assert_eq!(bsps.len(), max as usize);
         });
     }
 

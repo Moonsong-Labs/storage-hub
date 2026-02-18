@@ -479,13 +479,25 @@ mod benchmarks {
         n: Linear<
             1,
             {
+                Into::<u64>::into(T::MaxBspVolunteers::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+        m: Linear<
+            1,
+            {
                 Into::<u64>::into(T::MaxReplicationTarget::get())
                     .try_into()
                     .unwrap()
             },
         >,
     ) -> Result<(), BenchmarkError> {
-        let replication_target: u32 = n.into();
+        // `n` = total BSP volunteers (drives BSP map size / proof cost).
+        // `m` = replication target (how many BSPs must confirm; bounds `bsps_confirmed`).
+        let num_volunteers: u32 = n.into();
+        let replication_target: u32 = m.into();
+        let num_confirmed = num_volunteers.min(replication_target);
         let user: T::AccountId = account("Alice", 0, 0);
         let signed_origin = RawOrigin::Signed(user.clone());
         mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
@@ -538,23 +550,20 @@ mod benchmarks {
         let file_key =
             Pallet::<T>::compute_file_key(user, bucket_id, location, size, fingerprint).unwrap();
 
-        // Build BSP IDs and populate the inline bsps map and counters for the storage request (worst case for revoke).
-        let mut bsp_ids = Vec::new();
-        for i in 0..replication_target {
+        // Populate the BSP volunteer map with `num_volunteers` entries.
+        // First `num_confirmed` are marked confirmed (true), the rest unconfirmed (false).
+        let mut bsps_map = BoundedBTreeMap::new();
+        for i in 0..num_volunteers {
             let bsp_user: T::AccountId = account("bsp", i as u32, i as u32);
             mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
             let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
-            bsp_ids.push(bsp_id);
-        }
-        let mut bsps_map = BoundedBTreeMap::new();
-        for bsp_id in bsp_ids {
-            let _ = bsps_map.try_insert(bsp_id, true);
+            let _ = bsps_map.try_insert(bsp_id, i < num_confirmed);
         }
         StorageRequestBsps::<T>::insert(&file_key, bsps_map);
         StorageRequests::<T>::mutate(file_key, |storage_request| {
-            let m = storage_request.as_mut().unwrap();
-            m.bsps_volunteered = n.into();
-            m.bsps_confirmed = n.into();
+            let req = storage_request.as_mut().unwrap();
+            req.bsps_volunteered = num_volunteers.into();
+            req.bsps_confirmed = num_confirmed.into();
         });
 
         #[extrinsic_call]
@@ -752,11 +761,11 @@ mod benchmarks {
                     user_peer_ids: Default::default(),
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
-                    bsps_volunteered: T::MaxReplicationTarget::get().into(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+                    bsps_volunteered: T::MaxBspVolunteers::get().into(), // Maximize the BSPs volunteered since the logic has to drain them from storage
 					deposit_paid: Default::default(),
                 };
                 let mut bsps_map = BoundedBTreeMap::new();
-                for i in 0u64..T::MaxReplicationTarget::get().into() {
+                for i in 0u64..T::MaxBspVolunteers::get().into() {
                     let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
                     mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                     let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
@@ -1075,8 +1084,8 @@ mod benchmarks {
                 <T as frame_system::Config>::Hash::decode(&mut fingerprint_hash.as_ref())
                     .expect("Fingerprint should be decodable as it is a hash");
             let size = file_key_proof.file_metadata.file_size();
-            let max_replication_target: ReplicationTargetType<T> =
-                T::MaxReplicationTarget::get().into();
+            let max_bsp_volunteers: ReplicationTargetType<T> =
+                T::MaxBspVolunteers::get().into();
             let storage_request_metadata = StorageRequestMetadata::<T> {
 				requested_at:
 					<<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
@@ -1090,11 +1099,11 @@ mod benchmarks {
 				user_peer_ids: Default::default(),
 				bsps_required: T::StandardReplicationTarget::get(),
 				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
-				bsps_volunteered: max_replication_target.saturating_sub(ReplicationTargetType::<T>::one()), // Maximize the BSPs volunteered minus one (leave room for the actual BSP to volunteer)
+				bsps_volunteered: max_bsp_volunteers.saturating_sub(ReplicationTargetType::<T>::one()), // Maximize the BSPs volunteered minus one (leave room for the actual BSP to volunteer)
 				deposit_paid: Default::default(),
 			};
             let mut bsps_map = BoundedBTreeMap::new();
-            for i in 0u64..(max_replication_target.saturating_sub(ReplicationTargetType::<T>::one())).into() {
+            for i in 0u64..(max_bsp_volunteers.saturating_sub(ReplicationTargetType::<T>::one())).into() {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
@@ -2033,7 +2042,7 @@ mod benchmarks {
             0,
             {
                 <<T as pallet::Config>::ReplicationTargetType as Into<u64>>::into(
-                    T::MaxReplicationTarget::get().into(),
+                    T::MaxBspVolunteers::get().into(),
                 ) as u32
             },
         >,
@@ -2142,7 +2151,7 @@ mod benchmarks {
             0,
             {
                 <<T as pallet::Config>::ReplicationTargetType as Into<u64>>::into(
-                    T::MaxReplicationTarget::get().into(),
+                    T::MaxBspVolunteers::get().into(),
                 ) as u32
             },
         >,
@@ -2580,8 +2589,8 @@ mod benchmarks {
             // We maximize BSPs volunteered/confirmed since cleanup_storage_request drains all BSPs from storage.
             let expiration_tick = frame_system::Pallet::<T>::block_number() + 100u32.into();
             let deposit: BalanceOf<T> = T::BaseStorageRequestCreationDeposit::get();
-            let max_replication_target: ReplicationTargetType<T> =
-                T::MaxReplicationTarget::get().into();
+            let max_bsp_volunteers: ReplicationTargetType<T> =
+                T::MaxBspVolunteers::get().into();
 
             let storage_request_metadata = StorageRequestMetadata::<T> {
                 requested_at: frame_system::Pallet::<T>::block_number(),
@@ -2593,13 +2602,13 @@ mod benchmarks {
                 size,
                 msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted triggers incomplete storage request creation
                 user_peer_ids: Default::default(),
-                bsps_required: max_replication_target,
-                bsps_confirmed: max_replication_target,
-                bsps_volunteered: max_replication_target,
+                bsps_required: max_bsp_volunteers,
+                bsps_confirmed: max_bsp_volunteers,
+                bsps_volunteered: max_bsp_volunteers,
                 deposit_paid: deposit,
             };
             let mut bsps_map = BoundedBTreeMap::new();
-            for i in 0u64..T::MaxReplicationTarget::get().into() {
+            for i in 0u64..T::MaxBspVolunteers::get().into() {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
@@ -2920,8 +2929,8 @@ mod benchmarks {
             // We maximize BSPs volunteered/confirmed since cleanup_storage_request drains all BSPs from storage.
             let expiration_tick = frame_system::Pallet::<T>::block_number() + 100u32.into();
             let deposit: BalanceOf<T> = T::BaseStorageRequestCreationDeposit::get();
-            let max_replication_target: ReplicationTargetType<T> =
-                T::MaxReplicationTarget::get().into();
+            let max_bsp_volunteers: ReplicationTargetType<T> =
+                T::MaxBspVolunteers::get().into();
 
             let storage_request_metadata = StorageRequestMetadata::<T> {
                 requested_at: frame_system::Pallet::<T>::block_number(),
@@ -2933,13 +2942,13 @@ mod benchmarks {
                 size,
                 msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted triggers incomplete storage request creation
                 user_peer_ids: Default::default(),
-                bsps_required: max_replication_target,
-                bsps_confirmed: max_replication_target,
-                bsps_volunteered: max_replication_target,
+                bsps_required: max_bsp_volunteers,
+                bsps_confirmed: max_bsp_volunteers,
+                bsps_volunteered: max_bsp_volunteers,
                 deposit_paid: deposit,
             };
             let mut bsps_map = BoundedBTreeMap::new();
-            for i in 0u64..T::MaxReplicationTarget::get().into() {
+            for i in 0u64..T::MaxBspVolunteers::get().into() {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);

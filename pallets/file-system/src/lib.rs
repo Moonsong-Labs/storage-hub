@@ -384,6 +384,13 @@ pub mod pallet {
         #[pallet::constant]
         type MaxReplicationTarget: Get<u32>;
 
+        /// Maximum number of BSPs that can volunteer for a single storage request.
+        ///
+        /// This bounds the per-file BSP volunteer map independently from `MaxReplicationTarget`.
+        /// Must be >= MaxReplicationTarget to allow enough BSPs to fill any storage request.
+        #[pallet::constant]
+        type MaxBspVolunteers: Get<u32>;
+
         /// The amount of ticks that the user has to pay upfront when issuing a storage request.
         ///
         /// This is to compensate the system load that the process of file retrieval will have on the network.
@@ -432,7 +439,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         MerkleHash<T>,
-        BoundedBTreeMap<ProviderIdFor<T>, bool, MaxReplicationTarget<T>>,
+        BoundedBTreeMap<ProviderIdFor<T>, bool, MaxBspVolunteers<T>>,
     >;
 
     /// Bookkeeping of the buckets containing open storage requests.
@@ -1078,6 +1085,9 @@ pub mod pallet {
         /// Operation is currently paused.
         #[codec(index = 69)]
         UserOperationPaused,
+        /// Too many BSPs have already volunteered for the storage request.
+        #[codec(index = 70)]
+        TooManyBspVolunteers,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1283,9 +1293,10 @@ pub mod pallet {
         /// Revoke storage request
         #[pallet::call_index(7)]
         #[pallet::weight({
-          let confirmed = StorageRequests::<T>::get(file_key).map_or(0, |metadata| metadata.bsps_confirmed.into());
-          let weight = T::WeightInfo::revoke_storage_request(confirmed as u32);
-
+          let meta = StorageRequests::<T>::get(file_key);
+          let volunteered = meta.as_ref().map_or(0u64, |s| s.bsps_volunteered.into()) as u32;
+          let confirmed = meta.as_ref().map_or(0u64, |s| s.bsps_confirmed.into()) as u32;
+          let weight = T::WeightInfo::revoke_storage_request(volunteered, confirmed);
           weight.saturating_add(T::DbWeight::get().reads_writes(1, 0))
         })]
         pub fn revoke_storage_request(
@@ -1774,6 +1785,7 @@ pub mod pallet {
                 T::UltraHighSecurityReplicationTarget::get();
             let max_replication_target: ReplicationTargetType<T> =
                 T::MaxReplicationTarget::get().into();
+            let max_bsp_volunteers: ReplicationTargetType<T> = T::MaxBspVolunteers::get().into();
             let storage_request_ttl = T::StorageRequestTtl::get();
             let tick_range_to_max_threshold = T::TickRangeToMaximumThreshold::get();
             let min_wait_for_stop_storing = T::MinWaitForStopStoring::get();
@@ -1807,6 +1819,10 @@ pub mod pallet {
             assert!(
                 max_replication_target >= ultra_high_security_replication_target,
                 "Max replication target cannot be smaller than the most secure replication target."
+            );
+            assert!(
+                max_bsp_volunteers >= max_replication_target,
+                "MaxBspVolunteers must be >= MaxReplicationTarget so storage requests can be fulfilled."
             );
 
             assert!(

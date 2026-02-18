@@ -104,7 +104,7 @@ impl<T: Config> StorageRequestMetadata<T> {
     /// using the provided BSP map to determine which BSPs have confirmed storage.
     pub fn to_incomplete_metadata(
         &self,
-        bsps: &BoundedBTreeMap<ProviderIdFor<T>, bool, MaxReplicationTarget<T>>,
+        bsps: &BoundedBTreeMap<ProviderIdFor<T>, bool, MaxBspVolunteers<T>>,
     ) -> IncompleteStorageRequestMetadata<T> {
         // Collect all confirmed BSPs from the provided bsps map
         let confirmed_bsps: sp_std::vec::Vec<_> = bsps
@@ -731,6 +731,9 @@ pub type ReplicationTargetType<T> = <T as crate::Config>::ReplicationTargetType;
 
 /// Alias for the `MaxReplicationTarget` type used in the FileSystem pallet.
 pub type MaxReplicationTarget<T> = <T as crate::Config>::MaxReplicationTarget;
+
+/// Alias for the `MaxBspVolunteers` type used in the FileSystem pallet.
+pub type MaxBspVolunteers<T> = <T as crate::Config>::MaxBspVolunteers;
 
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;

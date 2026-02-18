@@ -1912,7 +1912,7 @@ where
 
         // Add BSP to the separate BSP map (false = not confirmed).
         bsps.try_insert(bsp_id, false)
-            .map_err(|_| Error::<T>::ReplicationTargetExceedsMaximum)?;
+            .map_err(|_| Error::<T>::TooManyBspVolunteers)?;
         <StorageRequestBsps<T>>::set(&file_key, Some(bsps));
 
         // Increment the number of BSPs volunteered.
