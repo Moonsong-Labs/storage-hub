@@ -11,7 +11,7 @@ use shc_common::types::{
 use crate::{
     traits::{
         ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
-        FileStorageWriteOutcome,
+        FileStorageWriteOutcome, TrustedTransferBatchWrite,
     },
     LOG_TARGET,
 };
@@ -502,6 +502,23 @@ where
         };
         info!("Key removed to the exclude list : {:?}", key);
         Ok(())
+    }
+}
+
+impl<T: TrieLayout + 'static> TrustedTransferBatchWrite<T> for InMemoryFileStorage<T>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
+    fn write_chunks_batched_trusted(
+        &mut self,
+        file_key: &HasherOutT<T>,
+        chunks: Vec<(ChunkId, Chunk)>,
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
+        let mut last = FileStorageWriteOutcome::FileIncomplete;
+        for (chunk_id, data) in chunks {
+            last = self.write_chunk(file_key, &chunk_id, &data)?;
+        }
+        Ok(last)
     }
 }
 

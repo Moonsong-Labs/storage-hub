@@ -245,3 +245,21 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         exclude_type: ExcludeType,
     ) -> Result<(), FileStorageError>;
 }
+
+/// Trusted file transfer fast-path: batched chunk writes.
+///
+/// This is intended **only** for the MSP trusted file transfer HTTP server ingestion path.
+/// It allows storage implementations (notably RocksDB-backed MPT) to amortize expensive
+/// per-chunk commit/metadata updates by applying many chunks in one operation.
+///
+/// Existing `FileStorage::write_chunk` behavior is unchanged; this is an additive, opt-in API.
+pub trait TrustedTransferBatchWrite<T: TrieLayout>: FileStorage<T> {
+    /// Write a batch of chunks for `file_key` and return whether the file is complete.
+    ///
+    /// `chunks` is a vector of `(ChunkId, Chunk)` pairs.
+    fn write_chunks_batched_trusted(
+        &mut self,
+        file_key: &HasherOutT<T>,
+        chunks: Vec<(ChunkId, Chunk)>,
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>;
+}
