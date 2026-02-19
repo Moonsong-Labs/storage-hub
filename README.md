@@ -18,14 +18,19 @@ It is organized:
 .
 ├── .github                <---- GitHub Actions and related files
 ├── client                 <---- storage-hub substrate client-side modules
+├── configs                <---- Example TOML configuration files for providers, fisherman and backend
+├── docker                 <---- storage-hub docker files, scripts and keystore files
 ├── node                   <---- storage-hub node implementation
 ├── pallets                <---- storage-hub pallets
 ├── primitives             <---- storage-hub primitives
+├── prompts                <---- storage-hub prompts for AI agents to do specific "repetitive" tasks
+├── release                <---- storage-hub release utilities and release notes
 ├── resources
 ├── runtime                <---- storage-hub runtime
+├── scripts                <---- storage-hub utility scripts for automating repetitive tasks
+├── sdk                    <---- storage-hub SDK
 ├── support                <---- Traits and implementations used by storage-hub
 ├── test                   <---- Testing module for storage-hub, including Zombienet and TypeScript tests
-├── configs                <---- Example TOML configuration files for providers, fisherman and backend
 ├── .gitignore
 ├── biome.json
 ├── Cargo.lock
