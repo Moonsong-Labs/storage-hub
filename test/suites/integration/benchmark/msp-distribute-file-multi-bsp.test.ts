@@ -4,8 +4,6 @@
  * This test verifies that an MSP can distribute a file to multiple BSPs in parallel.
  * It uses the dynamic network infrastructure to launch a network with N BSPs and 1 MSP.
  *
- * NOTE: BSP-0 is the block producer in dev mode (Aura). All block sealing uses BSP-0's API.
- *
  * Test flow:
  * 1. Set replication target to BSP_COUNT
  * 2. Create bucket and load file into user storage
@@ -46,7 +44,6 @@ await describeNetwork(
     ctx.before(async () => {
       userApi = await ctx.network.getUserApi(0);
       mspApi = await ctx.network.getMspApi(0);
-      // BSP-0 is the block producer in dev mode with Aura
       blockProducerApi = await ctx.network.getBlockProducerApi();
     });
 

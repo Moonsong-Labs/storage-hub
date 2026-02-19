@@ -124,15 +124,15 @@ export class DynamicNetworkContext extends BaseNetworkContext {
   }
 
   /**
-   * Gets API connection for the block producer node (BSP-0).
+   * Gets API connection for the block producer node (user-0).
    *
-   * In dev mode with manual sealing and Aura, only BSP-0 can produce blocks.
-   * Use this API for all `block.seal()` operations.
+   * By convention, user-0 is used for block sealing, consistent with bspnet/fullnet
+   * tests where sh-user is the block-sealing node.
    *
-   * @returns EnrichedBspApi connected to BSP-0
+   * @returns EnrichedBspApi connected to user-0
    */
   async getBlockProducerApi(): Promise<EnrichedBspApi> {
-    return this.connectionPool.getOrCreate("bsp-0");
+    return this.connectionPool.getOrCreate("user-0");
   }
 
   /**
@@ -407,26 +407,37 @@ export async function launchNetworkFromTopology(
     await startMspContainersPhase(identities.msps, composeFile, cwd, reporter, bootnodeInfo);
     await startUsersPhase(identities.users, composeFile, cwd, reporter, runtimeType, bootnodeInfo);
 
+    // bsp0Api was only needed for BSP-1..N registration — disconnect it now
     if (bsp0Api) {
-      await context.preFundAccounts(bsp0Api);
-      await context.setupRuntimeParams(bsp0Api);
-      await bsp0Api.block.seal();
+      await bsp0Api.disconnect();
+      bsp0Api = undefined;
+    }
+
+    // Use user-0 for chain setup, consistent with bspnet/fullnet where sh-user is the block-sealing node
+    if (identities.users.length > 0) {
+      const user0Api = await BspNetTestApi.create(
+        `ws://127.0.0.1:${identities.users[0].ports.rpc}`,
+        runtimeType
+      );
+
+      await context.preFundAccounts(user0Api);
+      await context.setupRuntimeParams(user0Api);
+      await user0Api.block.seal();
 
       for (const mspInfo of identities.msps) {
-        await registerProvider(bsp0Api, mspInfo);
+        await registerProvider(user0Api, mspInfo);
 
         const mspApi = await BspNetTestApi.create(
           `ws://127.0.0.1:${mspInfo.ports.rpc}`,
           runtimeType
         );
 
-        await bsp0Api.wait.nodeCatchUpToChainTip(mspApi);
+        await user0Api.wait.nodeCatchUpToChainTip(mspApi);
         await fetchProviderId(mspApi, mspInfo.identity);
         await mspApi.disconnect();
       }
 
-      await bsp0Api.disconnect();
-      bsp0Api = undefined;
+      await user0Api.disconnect();
     }
 
     await startProvidersPhase(
