@@ -101,9 +101,9 @@ export function normalizeTopology(topology: NetworkTopology): NormalizedTopology
  * Validates that a topology configuration is valid.
  *
  * Requirements:
- * - At least 1 BSP (required for block production in dev mode)
- * - At least 1 MSP (required for storage request handling)
- * - At least 1 User (required for submitting transactions)
+ * - At least 1 BSP
+ * - At least 1 MSP
+ * - At least 1 User
  *
  * Note: Indexer configuration is implicit and not validated here.
  * MSPs and Fishermen always get dedicated Indexer + Postgres pairs.
@@ -116,16 +116,16 @@ export function validateTopology(topology: NetworkTopology): void {
 
   // BSP-0 is required for block production (Aura assigns to first dev node)
   if (normalized.bsps.length === 0) {
-    throw new Error("Topology must have at least 1 BSP (required for block production)");
+    throw new Error("Topology must have at least 1 BSP");
   }
 
   // MSP is required for storage request handling
   if (normalized.msps.length === 0) {
-    throw new Error("Topology must have at least 1 MSP (required for storage requests)");
+    throw new Error("Topology must have at least 1 MSP");
   }
 
   // User node is required for submitting transactions
   if (normalized.users.length === 0) {
-    throw new Error("Topology must have at least 1 User (required for transactions)");
+    throw new Error("Topology must have at least 1 User");
   }
 }

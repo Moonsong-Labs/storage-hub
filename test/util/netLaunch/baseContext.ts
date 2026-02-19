@@ -2,7 +2,7 @@
  * Base class for network contexts.
  *
  * Provides shared functionality that both NetworkLauncher and DynamicNetworkContext
- * inherit. Methods here are the actual implementations, not wrappers.
+ * inherit.
  *
  * Usage pattern:
  * ```ts
@@ -65,7 +65,7 @@ export const DEFAULT_FUND_AMOUNT = 10000n * 10n ** 12n;
  * Abstract base class for network contexts.
  *
  * Both NetworkLauncher and DynamicNetworkContext extend this class
- * to inherit shared functionality with identical implementations.
+ * to inherit shared functionality.
  */
 export abstract class BaseNetworkContext {
   /**
