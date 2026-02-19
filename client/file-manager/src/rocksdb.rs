@@ -1369,11 +1369,21 @@ where
 mod tests {
     use super::*;
     use kvdb_memorydb::InMemory;
-    use shc_common::types::{Fingerprint, FILE_CHUNK_SIZE};
+    use kvdb_rocksdb::Database as RocksDbDatabase;
+    use shc_common::types::{Fingerprint, FILE_CHUNK_SIZE, H_LENGTH};
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_runtime::AccountId32;
     use sp_trie::LayoutV1;
+    use std::path::PathBuf;
+    use std::sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    };
+    use std::time::{Instant, SystemTime};
+
+    static BENCHMARK_DB_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
+    static BENCHMARK_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn stored_chunks_count(
         trie: &RocksDbFileDataTrie<LayoutV1<BlakeTwo256>, InMemory>,
@@ -2063,5 +2073,177 @@ mod tests {
 
         // Idempotent: deleting bucket B again does nothing and should not error
         assert!(file_storage.delete_files_with_prefix(&[11u8; 32]).is_ok());
+    }
+
+    const MIB: u64 = 1024 * 1024;
+    const TRUSTED_BATCH_SIZE_BYTES: usize = 2 * 1024 * 1024;
+
+    fn unique_temp_rocksdb_path(label: &str) -> PathBuf {
+        let nanos = SystemTime::UNIX_EPOCH
+            .elapsed()
+            .expect("System time should be after UNIX epoch")
+            .as_nanos();
+        let seq = BENCHMARK_DB_PATH_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+        std::env::temp_dir().join(format!(
+            "sh-file-manager-rocksdb-{label}-pid{}-{nanos}-{seq}",
+            std::process::id(),
+        ))
+    }
+
+    fn setup_disk_backed_storage_for_size(
+        size_mb: u64,
+    ) -> (
+        PathBuf,
+        RocksDbFileStorage<LayoutV1<BlakeTwo256>, RocksDbDatabase>,
+        H256,
+        u64,
+    ) {
+        let db_path = unique_temp_rocksdb_path(&format!("{size_mb}mb"));
+        let db_path_str = db_path.to_string_lossy().into_owned();
+
+        let storage =
+            RocksDbFileStorage::<LayoutV1<BlakeTwo256>, RocksDbDatabase>::rocksdb_storage(
+                db_path_str,
+            )
+            .expect("Should create disk-backed RocksDB storage for benchmark");
+
+        let mut file_storage =
+            RocksDbFileStorage::<LayoutV1<BlakeTwo256>, RocksDbDatabase>::new(storage);
+
+        let file_size_bytes = size_mb
+            .checked_mul(MIB)
+            .expect("File size in bytes should not overflow");
+        let chunk_count =
+            file_size_bytes / FILE_CHUNK_SIZE + (file_size_bytes % FILE_CHUNK_SIZE != 0) as u64;
+
+        let mut fingerprint_bytes = [0u8; H_LENGTH];
+        fingerprint_bytes[..8].copy_from_slice(&size_mb.to_le_bytes());
+
+        let metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [size_mb as u8; 32].to_vec(),
+            format!("rocksdb-write-bench-{size_mb}mb").into_bytes(),
+            file_size_bytes,
+            Fingerprint::from(fingerprint_bytes),
+        )
+        .expect("Metadata should be valid for benchmark file");
+
+        let file_key = metadata.file_key::<BlakeTwo256>();
+        file_storage
+            .insert_file(file_key, metadata)
+            .expect("Should insert benchmark file metadata");
+
+        (db_path, file_storage, file_key, chunk_count)
+    }
+
+    fn run_disk_write_benchmark(size_mb: u64) {
+        let (db_path, mut file_storage, file_key, chunk_count) =
+            setup_disk_backed_storage_for_size(size_mb);
+        let batch_size_chunks =
+            usize::max(1, TRUSTED_BATCH_SIZE_BYTES / (FILE_CHUNK_SIZE as usize));
+
+        let mut next_chunk_id: u64 = 0;
+        let mut total_batches: u64 = 0;
+        let mut write_only_time = std::time::Duration::ZERO;
+        let benchmark_start = Instant::now();
+
+        while next_chunk_id < chunk_count {
+            let remaining_chunks = chunk_count - next_chunk_id;
+            let chunks_in_batch = usize::min(batch_size_chunks, remaining_chunks as usize);
+
+            let mut batch = Vec::with_capacity(chunks_in_batch);
+            for _ in 0..chunks_in_batch {
+                let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
+                chunk[..8].copy_from_slice(&next_chunk_id.to_le_bytes());
+                batch.push((ChunkId::new(next_chunk_id), chunk));
+                next_chunk_id += 1;
+            }
+
+            let write_start = Instant::now();
+            let _ = file_storage
+                .write_chunks_batched_trusted(&file_key, batch)
+                .expect("Trusted batch write should succeed");
+            write_only_time = write_only_time.saturating_add(write_start.elapsed());
+            total_batches = total_batches.saturating_add(1);
+        }
+
+        let total_time = benchmark_start.elapsed();
+        let stored_chunks = file_storage
+            .stored_chunks_count(&file_key)
+            .expect("Should read stored chunk count");
+        assert_eq!(
+            stored_chunks, chunk_count,
+            "Stored chunk count should match the number of written chunks",
+        );
+
+        let throughput_mb_s = size_mb as f64 / total_time.as_secs_f64();
+        eprintln!(
+            "ROCKSDB WRITE BENCH: size_mb={size_mb} chunks={chunk_count} batches={total_batches} total_ms={} write_ms={} throughput_mb_s={throughput_mb_s:.2}",
+            total_time.as_millis(),
+            write_only_time.as_millis(),
+        );
+
+        drop(file_storage);
+        let _ = std::fs::remove_dir_all(db_path);
+    }
+
+    fn run_disk_write_benchmark_regular(size_mb: u64) {
+        let (db_path, mut file_storage, file_key, chunk_count) =
+            setup_disk_backed_storage_for_size(size_mb);
+        let benchmark_start = Instant::now();
+        let mut write_only_time = std::time::Duration::ZERO;
+
+        for chunk_index in 0..chunk_count {
+            let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
+            chunk[..8].copy_from_slice(&chunk_index.to_le_bytes());
+
+            let write_start = Instant::now();
+            let _ = file_storage
+                .write_chunk(&file_key, &ChunkId::new(chunk_index), &chunk)
+                .expect("Regular write_chunk should succeed");
+            write_only_time = write_only_time.saturating_add(write_start.elapsed());
+        }
+
+        let total_time = benchmark_start.elapsed();
+        let stored_chunks = file_storage
+            .stored_chunks_count(&file_key)
+            .expect("Should read stored chunk count");
+        assert_eq!(
+            stored_chunks, chunk_count,
+            "Stored chunk count should match the number of written chunks",
+        );
+
+        let throughput_mb_s = size_mb as f64 / total_time.as_secs_f64();
+        eprintln!(
+            "ROCKSDB WRITE BENCH REGULAR: size_mb={size_mb} chunks={chunk_count} total_ms={} write_ms={} throughput_mb_s={throughput_mb_s:.2}",
+            total_time.as_millis(),
+            write_only_time.as_millis(),
+        );
+
+        drop(file_storage);
+        let _ = std::fs::remove_dir_all(db_path);
+    }
+
+    #[test]
+    #[ignore = "Disk benchmark for RocksDB write path. Run with: cargo test -p shc-file-manager rocksdb_write_benchmark_trusted_batch_sizes -- --ignored --nocapture"]
+    fn rocksdb_write_benchmark_trusted_batch_sizes() {
+        let _guard = BENCHMARK_TEST_LOCK
+            .lock()
+            .expect("Benchmark lock should not be poisoned");
+        for size_mb in [1u64, 10, 50] {
+            run_disk_write_benchmark(size_mb);
+        }
+    }
+
+    #[test]
+    #[ignore = "Disk benchmark for regular RocksDB write_chunk path. Run with: cargo test -p shc-file-manager rocksdb_write_benchmark_regular_chunk_sizes -- --ignored --nocapture"]
+    fn rocksdb_write_benchmark_regular_chunk_sizes() {
+        let _guard = BENCHMARK_TEST_LOCK
+            .lock()
+            .expect("Benchmark lock should not be poisoned");
+        for size_mb in [1u64, 10, 50] {
+            run_disk_write_benchmark_regular(size_mb);
+        }
     }
 }
