@@ -26,8 +26,19 @@ const LOG_TARGET: &str = "msp-check-bucket-file-storage-task";
 
 /// MSP task that handles [`CheckBucketFileStorage`] events.
 ///
-/// This is boilerplate wiring only. Behaviour will be implemented separately.
-/// TODO: DOCUMENT THIS TASK
+/// This task verifies that every file referenced by a bucket forest is present and complete in
+/// local file storage. When files are missing or incomplete, it attempts recovery by discovering
+/// serving BSP peers via the indexer and then delegating downloads to the file download manager.
+///
+/// Processing flow:
+/// - Load all `(file_key, metadata)` entries from the bucket forest
+/// - Check each file in local file storage for presence and completion
+/// - For missing/incomplete files, query indexer records and collect BSP peer IDs
+/// - Register candidate peers in the peer manager and trigger file recovery
+/// - Report a final per-bucket recovery summary (recovered/failed/panicked)
+///
+/// If the forest is empty, or recovery dependencies are unavailable (for example, indexer disabled
+/// or unreachable), the task exits gracefully with an informative result string.
 pub struct MspCheckBucketFileStorageTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
