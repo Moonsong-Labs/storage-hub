@@ -212,11 +212,11 @@ where
 
         // Spawn for each BSP group
         for (bsp_id, files) in grouped_deletions.bsp_deletions {
-            debug!(
+            info!(
                 target: LOG_TARGET,
-                "🎣 Spawning future for BSP {:?} with {} files",
+                "🎣 Found {} pending file deletions in DB for target BspId({:?})",
+                files.len(),
                 bsp_id,
-                files.len()
             );
 
             let deletion_target = FileDeletionTarget::BspId(bsp_id);
@@ -230,11 +230,11 @@ where
 
         // Spawn for each Bucket group
         for (bucket_id, files) in grouped_deletions.bucket_deletions {
-            debug!(
+            info!(
                 target: LOG_TARGET,
-                "🎣 Spawning future for Bucket {:?} with {} files",
+                "🎣 Found {} pending file deletions in DB for target BucketId({:?})",
+                files.len(),
                 bucket_id,
-                files.len()
             );
 
             let deletion_target = FileDeletionTarget::BucketId(bucket_id);
