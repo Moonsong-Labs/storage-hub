@@ -1,5 +1,6 @@
 //! MSP service implementation
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -7,25 +8,24 @@ use alloy_core::{hex::ToHexExt, primitives::Address};
 use axum_extra::extract::multipart::Field;
 use bigdecimal::{BigDecimal, RoundingMode};
 use std::collections::HashSet;
+use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::sync::RwLock;
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use codec::{Decode, Encode};
-use futures::stream;
 use serde::{Deserialize, Serialize};
-use shc_common::{
-    trusted_file_transfer::encode_chunk_with_id,
-    types::{
-        ChunkId, FileKeyProof, FileMetadata, StorageProofsMerkleTrieLayout,
-        BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
-    },
+use shc_common::types::{
+    ChunkId, FileKeyProof, FileMetadata, StorageProofsMerkleTrieLayout,
+    BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
 };
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
 use sp_core::Blake2Hasher;
+use tokio_util::io::ReaderStream;
 use tracing::{debug, warn};
+use uuid::Uuid;
 
 use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
@@ -58,6 +58,82 @@ pub struct FileDownloadResult {
 struct StatsCacheEntry {
     stats: StatsResponse,
     last_refreshed: Instant,
+}
+
+/// Temporary on-disk spool for trusted upload forwarding.
+///
+/// This stores chunk records in the wire format expected by the trusted transfer server:
+/// `[ChunkId: 8 bytes (u64, little-endian)][Chunk data: N bytes]...`
+///
+/// The file is automatically deleted on drop.
+struct UploadSpool {
+    path: PathBuf,
+    writer: Option<BufWriter<tokio::fs::File>>,
+    bytes_written: u64,
+}
+
+impl UploadSpool {
+    async fn create() -> Result<Self, Error> {
+        let mut path = std::env::temp_dir();
+        path.push(format!("sh-upload-{}.bin", Uuid::now_v7()));
+
+        let file = tokio::fs::File::create(&path)
+            .await
+            .map_err(|e| Error::Storage(Box::new(e)))?;
+
+        Ok(Self {
+            path,
+            writer: Some(BufWriter::with_capacity(1024 * 1024, file)),
+            bytes_written: 0,
+        })
+    }
+
+    async fn write_chunk_record(&mut self, chunk_id: u64, chunk: &[u8]) -> Result<(), Error> {
+        let writer = self.writer.as_mut().ok_or(Error::Internal)?;
+        self.bytes_written = self
+            .bytes_written
+            .saturating_add(8)
+            .saturating_add(chunk.len() as u64);
+
+        writer
+            .write_all(&chunk_id.to_le_bytes())
+            .await
+            .map_err(|e| Error::Storage(Box::new(e)))?;
+        writer
+            .write_all(chunk)
+            .await
+            .map_err(|e| Error::Storage(Box::new(e)))?;
+        Ok(())
+    }
+
+    async fn finish_for_reading(&mut self) -> Result<(), Error> {
+        if let Some(writer) = self.writer.as_mut() {
+            writer
+                .flush()
+                .await
+                .map_err(|e| Error::Storage(Box::new(e)))?;
+        }
+
+        // Close file handle before re-opening for streaming.
+        let _ = self.writer.take();
+        Ok(())
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn bytes_written(&self) -> u64 {
+        self.bytes_written
+    }
+}
+
+impl Drop for UploadSpool {
+    fn drop(&mut self) {
+        // Ensure writer handle is closed before deleting the temp file.
+        let _ = self.writer.take();
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 /// Service for handling MSP-related operations
@@ -593,6 +669,7 @@ impl MspService {
         mut file_data_stream: Field,
         file_metadata: FileMetadata,
     ) -> Result<FileUploadResponse, Error> {
+        let upload_start = Instant::now();
         debug!(
             target: "msp_service::process_and_upload_file",
             file_key = %file_key,
@@ -621,6 +698,16 @@ impl MspService {
         // Initialize the trie that will hold the chunked file data.
         let mut trie = InMemoryFileDataTrie::<StorageProofsMerkleTrieLayout>::new();
 
+        // For the trusted file transfer upload method, spool the outbound wire bytes locally
+        // while ingesting the multipart stream. This preserves the policy:
+        // "verify fingerprint first, only then contact MSP",
+        // while avoiding a second pass that re-reads all chunks from the trie for sending.
+        let mut spool = if self.msp_config.use_legacy_upload_method {
+            None
+        } else {
+            Some(UploadSpool::create().await?)
+        };
+
         // Prepare the overflow buffer that will hold any data that doesn't exactly fit in a chunk.
         //
         // Use `BytesMut` so we can consume a prefix in O(1) via `split_to`,
@@ -643,7 +730,7 @@ impl MspService {
         let mut pending_chunks: Vec<Vec<u8>> = Vec::with_capacity(chunks_per_batch);
 
         // Initialize the chunk index.
-        let mut chunk_index = 0;
+        let mut chunk_index: u64 = 0;
 
         // Start streaming the file data into the trie, chunking it into FILE_CHUNK_SIZE chunks in the process.
         while let Some(bytes_read) = file_data_stream.chunk().await.map_err(|e| {
@@ -659,6 +746,10 @@ impl MspService {
                     .split_to(FILE_CHUNK_SIZE as usize)
                     .as_ref()
                     .to_vec();
+
+                if let Some(spool) = spool.as_mut() {
+                    spool.write_chunk_record(chunk_index, &chunk).await?;
+                }
                 pending_chunks.push(chunk);
 
                 // Increment the chunk index.
@@ -681,6 +772,12 @@ impl MspService {
         // Check the overflow buffer to see if the file didn't fit exactly in an integer number of chunks.
         if !overflow_buffer.is_empty() {
             let overflow_bytes = overflow_buffer.as_ref().to_vec();
+
+            if let Some(spool) = spool.as_mut() {
+                spool
+                    .write_chunk_record(chunk_index, &overflow_bytes)
+                    .await?;
+            }
             pending_chunks.push(overflow_bytes);
 
             // Increment the chunk index to get the total amount of chunks.
@@ -701,6 +798,15 @@ impl MspService {
                 ))
             })?;
         }
+
+        warn!(
+            target: "msp_service::process_and_upload_file",
+            file_key = %file_key,
+            chunks = chunk_index,
+            spooled_bytes = spool.as_ref().map_or(0, UploadSpool::bytes_written),
+            elapsed_ms = upload_start.elapsed().as_millis(),
+            "UPLOAD INGEST + TRIE BUILD DONE (PRE-VERIFY)"
+        );
 
         // Validate that the file fingerprint matches the trie root.
         let computed_root = trie.get_root();
@@ -736,10 +842,21 @@ impl MspService {
                 })?;
         } else {
             debug!(target: "msp_service::process_and_upload_file", "Using new trusted file transfer server upload method");
-            self.send_chunks_to_msp(trie, file_key, total_chunks)
+            let spool = spool.as_mut().ok_or(Error::Internal)?;
+            spool.finish_for_reading().await?;
+            self.send_spooled_chunks_to_msp(spool.path(), file_key, spool.bytes_written())
                 .await
                 .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP: {}", e)))?;
         }
+
+        warn!(
+            target: "msp_service::process_and_upload_file",
+            file_key = %file_key,
+            chunks = total_chunks,
+            spooled_bytes = spool.as_ref().map_or(0, UploadSpool::bytes_written),
+            total_elapsed_ms = upload_start.elapsed().as_millis(),
+            "END-TO-END UPLOAD HANDLER FINISHED"
+        );
 
         // If the complete file was uploaded to the MSP successfully, we can return the response.
         let bytes_location = file_metadata.location();
@@ -764,34 +881,28 @@ impl MspService {
 }
 
 impl MspService {
-    /// Send chunks to the MSP trusted file transfer server
-    async fn send_chunks_to_msp(
+    /// Send pre-verified chunks to the MSP trusted file transfer server.
+    ///
+    /// The backend enforces "verify fingerprint first, only then contact MSP" by spooling the
+    /// outbound wire bytes locally during ingestion. This method then streams that spool.
+    ///
+    /// Wire format:
+    /// `[ChunkId: 8 bytes (u64, little-endian)][Chunk data: N bytes]...`
+    async fn send_spooled_chunks_to_msp(
         &self,
-        trie: InMemoryFileDataTrie<StorageProofsMerkleTrieLayout>,
+        spool_path: &Path,
         file_key: &str,
-        total_chunks: u64,
+        spooled_bytes: u64,
     ) -> Result<(), Error> {
         let url = format!(
             "{}/upload/{}",
             self.msp_config.trusted_file_transfer_server_url, file_key
         );
 
-        let chunks_iter = (0..total_chunks).map(move |chunk_index| {
-            let chunk_id = ChunkId::new(chunk_index);
-
-            let chunk_data = trie.get_chunk(&chunk_id).map_err(|e| {
-                std::io::Error::other(format!("Failed to read chunk {}: {}", chunk_index, e))
-            })?;
-
-            let encoded = encode_chunk_with_id(chunk_id, &chunk_data);
-
-            Ok::<_, std::io::Error>(Bytes::from(encoded))
-        });
-
-        // Prepend the header and convert to a stream
-        let body_stream = stream::iter(chunks_iter);
-
-        let body = reqwest::Body::wrap_stream(body_stream);
+        let file = tokio::fs::File::open(spool_path)
+            .await
+            .map_err(|e| Error::Storage(Box::new(e)))?;
+        let body = reqwest::Body::wrap_stream(ReaderStream::new(file));
 
         // Send the POST request
         let client = reqwest::Client::new();
@@ -809,8 +920,8 @@ impl MspService {
                 .await
                 .unwrap_or_else(|_| "Unable to read response".to_string());
             return Err(Error::BadRequest(format!(
-                "MSP trusted file transfer server returned error: {} - {}",
-                status, body
+                "MSP trusted file transfer server returned error: {} - {} (file_key={}, spooled_bytes={})",
+                status, body, file_key, spooled_bytes
             )));
         }
         Ok(())
