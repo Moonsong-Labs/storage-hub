@@ -6,13 +6,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use chrono::Utc;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 use shc_indexer_db::OnchainMspId;
 
 use crate::{
     config::NodeHealthConfig,
-    constants::retry::get_retry_delay,
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient},
     models::node_health::{
         IndexerSignal, NodeHealthResponse, NodeHealthSignals, RequestAcceptanceSignal,
@@ -30,45 +29,23 @@ pub struct NodeHealthService {
     db: Arc<DBClient>,
     rpc: Arc<StorageHubRpcClient>,
     config: NodeHealthConfig,
-    msp_db_id: i64,
-    msp_account: String,
+    msp_id: OnchainMspId,
     /// Tracks nonce over time to detect stuck transactions.
     nonce_state: Mutex<Option<NonceState>>,
 }
 
 impl NodeHealthService {
-    /// Resolves the MSP's DB identity at startup, polling with backoff until
-    /// the indexer has indexed the MSP (same pattern as [`MspService::discover_provider_id`]).
-    pub async fn new(
+    pub fn new(
         db: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_id: OnchainMspId,
         config: NodeHealthConfig,
     ) -> Self {
-        let mut attempt = 0u32;
-        let msp = loop {
-            match db.get_msp(&msp_id).await {
-                Ok(msp) => break msp,
-                Err(_) => {
-                    let delay_secs = get_retry_delay(attempt);
-                    warn!(
-                        target: "node_health_service",
-                        delay_secs,
-                        attempt = attempt + 1,
-                        "MSP not yet indexed in DB; retrying in {delay_secs}s..."
-                    );
-                    tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
-                    attempt += 1;
-                }
-            }
-        };
-
         Self {
             db,
             rpc,
+            msp_id,
             config,
-            msp_db_id: msp.id,
-            msp_account: msp.account,
             nonce_state: Mutex::new(None),
         }
     }
@@ -164,9 +141,20 @@ impl NodeHealthService {
             );
         }
 
+        let msp = match self.db.get_msp(&self.msp_id).await {
+            Ok(msp) => msp,
+            Err(e) => {
+                error!(target: "node_health_service", error = %e, "Failed to resolve MSP from DB");
+                return RequestAcceptanceSignal::unknown(format!(
+                    "MSP not found in indexer DB: {}",
+                    e
+                ));
+            }
+        };
+
         let stats = match self
             .db
-            .get_request_acceptance_stats(self.msp_db_id, self.config.request_window_secs)
+            .get_request_acceptance_stats(msp.id, self.config.request_window_secs)
             .await
         {
             Ok(stats) => stats,
@@ -218,7 +206,15 @@ impl NodeHealthService {
     /// On the first call after startup there is no baseline, so the signal
     /// reports Healthy with `nonce_unchanged_for_secs: None`.
     async fn check_tx_nonce(&self) -> TxNonceSignal {
-        let current_nonce = match self.rpc.get_account_nonce(&self.msp_account).await {
+        let msp_account = match self.db.get_msp(&self.msp_id).await {
+            Ok(msp) => msp.account,
+            Err(e) => {
+                error!(target: "node_health_service", error = %e, "Failed to resolve MSP account");
+                return TxNonceSignal::unknown(format!("MSP not found in indexer DB: {}", e));
+            }
+        };
+
+        let current_nonce = match self.rpc.get_account_nonce(&msp_account).await {
             Ok(nonce) => nonce,
             Err(e) => {
                 error!(target: "node_health_service", error = %e, "Failed to get account nonce");
@@ -301,7 +297,7 @@ mod tests {
         let msp_id = OnchainMspId::new(shp_types::Hash::from_slice(
             &crate::constants::rpc::DUMMY_MSP_ID,
         ));
-        NodeHealthService::new(db, rpc, msp_id, config).await
+        NodeHealthService::new(db, rpc, msp_id, config)
     }
 
     #[test]
