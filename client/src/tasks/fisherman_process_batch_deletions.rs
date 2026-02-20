@@ -72,11 +72,8 @@ use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage
 use shc_indexer_db::models::{FileFiltering, FileOrdering};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::sync::RwLock;
 
 use crate::{
     handler::StorageHubHandler,
@@ -165,7 +162,7 @@ where
     /// Tracks the retry count per deletion target. When a deletion extrinsic for a target
     /// fails, the count is incremented and used with RetryStrategy::compute_tip to derive
     /// an escalating tip for the next attempt. Reset to 0 on success.
-    tip_tracker: Arc<Mutex<HashMap<Vec<u8>, u32>>>,
+    tip_tracker: Arc<RwLock<HashMap<Vec<u8>, u32>>>,
 }
 
 impl<NT, Runtime> Clone for FishermanTask<NT, Runtime>
@@ -343,7 +340,7 @@ where
         Self {
             storage_hub_handler,
             strategy,
-            tip_tracker: Arc::new(Mutex::new(HashMap::new())),
+            tip_tracker: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -456,10 +453,13 @@ where
 
         // Look up the retry count for this target and compute the tip.
         let key = Self::target_key(&target);
-        let retry_count = {
-            let tracker = self.tip_tracker.lock().expect("tip tracker lock poisoned");
-            tracker.get(&key).copied().unwrap_or(0)
-        };
+        let retry_count = self
+            .tip_tracker
+            .read()
+            .await
+            .get(&key)
+            .copied()
+            .unwrap_or(0);
         let tip_strategy = RetryStrategy::new(
             DELETION_TIP_MAX_RETRIES,
             DELETION_TIP_MAX,
@@ -512,11 +512,10 @@ where
 
         match &submit_result {
             Ok(()) => {
-                let mut tracker = self.tip_tracker.lock().expect("tip tracker lock poisoned");
-                tracker.remove(&key);
+                self.tip_tracker.write().await.remove(&key);
             }
             Err(_) => {
-                let mut tracker = self.tip_tracker.lock().expect("tip tracker lock poisoned");
+                let mut tracker = self.tip_tracker.write().await;
                 let count = tracker.entry(key).or_insert(0);
                 *count = (*count + 1).min(DELETION_TIP_MAX_RETRIES);
             }
