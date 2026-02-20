@@ -2,5 +2,5 @@
 /* eslint-disable */
 // import type lookup before we augment - in some environments
 // this is required to allow for ambient/previous definitions
-import '@polkadot/api-base/types/consts';
+import "@polkadot/api-base/types/consts";
 //# sourceMappingURL=augment-api-consts.js.map

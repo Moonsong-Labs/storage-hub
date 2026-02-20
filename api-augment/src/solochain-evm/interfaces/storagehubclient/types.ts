@@ -413,6 +413,13 @@ export interface StorageRequestMetadata extends Struct {
   readonly deposit_paid: BalanceOf;
 }
 
+/** @name PendingStopStoringRequest */
+export interface PendingStopStoringRequest extends Struct {
+  readonly tick_when_requested: BlockNumber;
+  readonly file_owner: AccountId;
+  readonly file_size: StorageDataUnit;
+}
+
 /** @name TrieRemoveMutation */
 export interface TrieRemoveMutation extends Null {}
 

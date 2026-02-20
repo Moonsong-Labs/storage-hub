@@ -289,6 +289,11 @@ export const SHARED_TYPES = {
             NotABsp: null,
             BlockchainServiceNotAvailable: null
         }
+    },
+    PendingStopStoringRequest: {
+        tick_when_requested: "BlockNumber",
+        file_owner: "AccountId",
+        file_size: "StorageDataUnit"
     }
 };
 // Parachain currently does not override base account types

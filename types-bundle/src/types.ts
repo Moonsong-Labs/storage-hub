@@ -291,6 +291,11 @@ export const SHARED_TYPES: RegistryTypes = {
       NotABsp: null,
       BlockchainServiceNotAvailable: null
     }
+  },
+  PendingStopStoringRequest: {
+    tick_when_requested: "BlockNumber",
+    file_owner: "AccountId",
+    file_size: "StorageDataUnit"
   }
 };
 

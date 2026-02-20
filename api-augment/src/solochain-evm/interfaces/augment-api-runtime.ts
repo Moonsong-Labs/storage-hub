@@ -83,6 +83,7 @@ import type {
   IsStorageRequestOpenToVolunteersError,
   MainStorageProviderId,
   Multiaddresses,
+  PendingStopStoringRequest,
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
@@ -509,6 +510,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           mspId: MainStorageProviderId | string | Uint8Array
         ) => Observable<BTreeMap<H256, StorageRequestMetadata>>
+      >;
+      /**
+       * Get all pending stop storing requests for a BSP.
+       **/
+      pendingStopStoringRequestsByBsp: AugmentedCall<
+        ApiType,
+        (
+          bspId: BackupStorageProviderId | string | Uint8Array
+        ) => Observable<BTreeMap<H256, PendingStopStoringRequest>>
       >;
       /**
        * Generic call

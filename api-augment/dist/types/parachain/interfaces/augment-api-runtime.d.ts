@@ -1,29 +1,29 @@
-import '@polkadot/api-base/types/calls';
-import type { ApiTypes, AugmentedCall, DecoratedCallBase } from '@polkadot/api-base/types';
-import type { BTreeMap, Bytes, Null, Option, Result, Vec, bool, u128, u32 } from '@polkadot/types-codec';
-import type { AnyNumber, IMethod, ITuple } from '@polkadot/types-codec/types';
-import type { CheckInherentsResult, InherentData } from '@polkadot/types/interfaces/blockbuilder';
-import type { BlockHash } from '@polkadot/types/interfaces/chain';
-import type { AuthorityId } from '@polkadot/types/interfaces/consensus';
-import type { CollationInfo } from '@polkadot/types/interfaces/cumulus';
-import type { CallDryRunEffects, XcmDryRunApiError, XcmDryRunEffects } from '@polkadot/types/interfaces/dryRunApi';
-import type { Extrinsic } from '@polkadot/types/interfaces/extrinsics';
-import type { GenesisBuildErr } from '@polkadot/types/interfaces/genesisBuilder';
-import type { OpaqueMetadata } from '@polkadot/types/interfaces/metadata';
-import type { FeeDetails, RuntimeDispatchInfo } from '@polkadot/types/interfaces/payment';
-import type { AccountId, Balance, Block, BlockNumber, Call, ExtrinsicInclusionMode, H256, Header, Index, KeyTypeId, OriginCaller, RuntimeCall, Slot, SlotDuration, Weight, WeightV2 } from '@polkadot/types/interfaces/runtime';
-import type { RuntimeVersion } from '@polkadot/types/interfaces/state';
-import type { ApplyExtrinsicResult, Key } from '@polkadot/types/interfaces/system';
-import type { TransactionSource, TransactionValidity } from '@polkadot/types/interfaces/txqueue';
-import type { VersionedMultiLocation, VersionedXcm } from '@polkadot/types/interfaces/xcm';
-import type { XcmPaymentApiError } from '@polkadot/types/interfaces/xcmPaymentApi';
-import type { Error } from '@polkadot/types/interfaces/xcmRuntimeApi';
-import type { XcmVersionedAssetId, XcmVersionedLocation, XcmVersionedXcm } from '@polkadot/types/lookup';
-import type { IExtrinsic, Observable } from '@polkadot/types/types';
-import type { BackupStorageProvider, BackupStorageProviderId, BucketId, ChunkId, GenericApplyDeltaEventInfoError, GetBspInfoError, GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError, GetNextDeadlineTickError, GetProofSubmissionRecordError, GetStakeError, GetUsersWithDebtOverThresholdError, IncompleteStorageRequestMetadataResponse, IsStorageRequestOpenToVolunteersError, MainStorageProviderId, Multiaddresses, ProviderId, QueryAvailableStorageCapacityError, QueryBspConfirmChunksToProveForFileError, QueryBspsVolunteeredForFileError, QueryBucketsForMspError, QueryBucketsOfUserStoredByMspError, QueryEarliestChangeCapacityBlockError, QueryFileEarliestVolunteerBlockError, QueryIncompleteStorageRequestMetadataError, QueryMspConfirmChunksToProveForFileError, QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, RandomnessOutput, StorageDataUnit, StorageProviderId, StorageRequestMetadata, TrieRemoveMutation, ValuePropositionWithId } from '@storagehub/api-augment/parachain/interfaces/storagehubclient';
+import "@polkadot/api-base/types/calls";
+import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
+import type { BTreeMap, Bytes, Null, Option, Result, Vec, bool, u128, u32 } from "@polkadot/types-codec";
+import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
+import type { CheckInherentsResult, InherentData } from "@polkadot/types/interfaces/blockbuilder";
+import type { BlockHash } from "@polkadot/types/interfaces/chain";
+import type { AuthorityId } from "@polkadot/types/interfaces/consensus";
+import type { CollationInfo } from "@polkadot/types/interfaces/cumulus";
+import type { CallDryRunEffects, XcmDryRunApiError, XcmDryRunEffects } from "@polkadot/types/interfaces/dryRunApi";
+import type { Extrinsic } from "@polkadot/types/interfaces/extrinsics";
+import type { GenesisBuildErr } from "@polkadot/types/interfaces/genesisBuilder";
+import type { OpaqueMetadata } from "@polkadot/types/interfaces/metadata";
+import type { FeeDetails, RuntimeDispatchInfo } from "@polkadot/types/interfaces/payment";
+import type { AccountId, Balance, Block, BlockNumber, Call, ExtrinsicInclusionMode, H256, Header, Index, KeyTypeId, OriginCaller, RuntimeCall, Slot, SlotDuration, Weight, WeightV2 } from "@polkadot/types/interfaces/runtime";
+import type { RuntimeVersion } from "@polkadot/types/interfaces/state";
+import type { ApplyExtrinsicResult, Key } from "@polkadot/types/interfaces/system";
+import type { TransactionSource, TransactionValidity } from "@polkadot/types/interfaces/txqueue";
+import type { VersionedMultiLocation, VersionedXcm } from "@polkadot/types/interfaces/xcm";
+import type { XcmPaymentApiError } from "@polkadot/types/interfaces/xcmPaymentApi";
+import type { Error } from "@polkadot/types/interfaces/xcmRuntimeApi";
+import type { XcmVersionedAssetId, XcmVersionedLocation, XcmVersionedXcm } from "@polkadot/types/lookup";
+import type { IExtrinsic, Observable } from "@polkadot/types/types";
+import type { BackupStorageProvider, BackupStorageProviderId, BucketId, ChunkId, GenericApplyDeltaEventInfoError, GetBspInfoError, GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError, GetNextDeadlineTickError, GetProofSubmissionRecordError, GetStakeError, GetUsersWithDebtOverThresholdError, IncompleteStorageRequestMetadataResponse, IsStorageRequestOpenToVolunteersError, MainStorageProviderId, Multiaddresses, PendingStopStoringRequest, ProviderId, QueryAvailableStorageCapacityError, QueryBspConfirmChunksToProveForFileError, QueryBspsVolunteeredForFileError, QueryBucketsForMspError, QueryBucketsOfUserStoredByMspError, QueryEarliestChangeCapacityBlockError, QueryFileEarliestVolunteerBlockError, QueryIncompleteStorageRequestMetadataError, QueryMspConfirmChunksToProveForFileError, QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, RandomnessOutput, StorageDataUnit, StorageProviderId, StorageRequestMetadata, TrieRemoveMutation, ValuePropositionWithId } from "@storagehub/api-augment/parachain/interfaces/storagehubclient";
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
 export type __DecoratedCallBase<ApiType extends ApiTypes> = DecoratedCallBase<ApiType>;
-declare module '@polkadot/api-base/types/calls' {
+declare module "@polkadot/api-base/types/calls" {
     interface AugmentedCalls<ApiType extends ApiTypes> {
         /** 0xbc9d89904f5b923f/1 */
         accountNonceApi: {
@@ -228,6 +228,10 @@ declare module '@polkadot/api-base/types/calls' {
              * Get the storage requests for a given MSP.
              **/
             storageRequestsByMsp: AugmentedCall<ApiType, (mspId: MainStorageProviderId | string | Uint8Array) => Observable<BTreeMap<H256, StorageRequestMetadata>>>;
+            /**
+             * Get all pending stop storing requests for a BSP.
+             **/
+            pendingStopStoringRequestsByBsp: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array) => Observable<BTreeMap<H256, PendingStopStoringRequest>>>;
             /**
              * Generic call
              **/
@@ -458,7 +462,7 @@ declare module '@polkadot/api-base/types/calls' {
             /**
              * Validate the transaction.
              **/
-            validateTransaction: AugmentedCall<ApiType, (source: TransactionSource | 'InBlock' | 'Local' | 'External' | number | Uint8Array, tx: Extrinsic | IExtrinsic | string | Uint8Array, blockHash: BlockHash | string | Uint8Array) => Observable<TransactionValidity>>;
+            validateTransaction: AugmentedCall<ApiType, (source: TransactionSource | "InBlock" | "Local" | "External" | number | Uint8Array, tx: Extrinsic | IExtrinsic | string | Uint8Array, blockHash: BlockHash | string | Uint8Array) => Observable<TransactionValidity>>;
             /**
              * Generic call
              **/
