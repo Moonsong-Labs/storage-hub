@@ -3,7 +3,12 @@ import type { Hash } from "@polkadot/types/interfaces";
 import { describeMspNet, type EnrichedBspApi } from "../../../util";
 import { BACKEND_URI } from "../../../util/backend/consts";
 import { fetchJwtToken } from "../../../util/backend/jwt";
-import type { Bucket, FileInfo, FileListResponse } from "../../../util/backend/types";
+import type {
+  Bucket,
+  FileInfo,
+  FileListResponse,
+  ListBucketsResponse
+} from "../../../util/backend/types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
   ETH_SH_USER_ADDRESS,
@@ -79,9 +84,10 @@ await describeMspNet(
 
       strictEqual(response.status, 200, "/buckets should return OK status");
 
-      const buckets = (await response.json()) as Bucket[];
+      const buckets = (await response.json()) as ListBucketsResponse;
 
-      strictEqual(buckets.length, 0);
+      strictEqual(buckets.totalBuckets, "0");
+      strictEqual(buckets.buckets.length, 0);
     });
 
     it("Should create a bucket with a file", async () => {
@@ -166,11 +172,14 @@ await describeMspNet(
 
       strictEqual(response.status, 200, "/buckets should return OK status");
 
-      const buckets = (await response.json()) as Bucket[];
+      const bucketsResponse = (await response.json()) as ListBucketsResponse;
 
-      assert(buckets.length > 0, "should contain at least the bucket added during init");
+      assert(
+        BigInt(bucketsResponse.totalBuckets) > 0n,
+        "should contain at least the bucket added during init"
+      );
 
-      const sample_bucket = buckets.find((bucket) => bucket.bucketId === bucketId);
+      const sample_bucket = bucketsResponse.buckets.find((bucket) => bucket.bucketId === bucketId);
       assert(sample_bucket, "list should include bucket added in initialization");
     });
 

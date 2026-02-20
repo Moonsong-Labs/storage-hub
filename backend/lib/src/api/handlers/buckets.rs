@@ -11,7 +11,7 @@ use tracing::debug;
 use crate::{
     api::handlers::pagination::Pagination,
     error::Error,
-    models::files::FileListResponse,
+    models::{buckets::ListBucketsResponse, files::FileListResponse},
     services::{
         auth::{AuthenticatedUser, User},
         Services,
@@ -24,12 +24,18 @@ pub async fn list_buckets(
     Pagination { limit, offset }: Pagination,
 ) -> Result<impl IntoResponse, Error> {
     debug!(user = %address, "GET list buckets");
-    let response = services
+    let buckets = services
         .msp
         .list_user_buckets(&address, offset, limit)
         .await?
         .collect::<Vec<_>>();
-    Ok(Json(response))
+
+    let total_buckets = services.msp.count_user_buckets(&address).await?;
+
+    Ok(Json(ListBucketsResponse {
+        buckets,
+        total_buckets: total_buckets.to_string(),
+    }))
 }
 
 pub async fn get_bucket(

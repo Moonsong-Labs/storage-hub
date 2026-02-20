@@ -115,6 +115,27 @@ impl IndexerOps for Repository {
         Ok(buckets)
     }
 
+    async fn get_buckets_count_by_user_and_msp(
+        &self,
+        msp: i64,
+        account: &str,
+    ) -> RepositoryResult<u64> {
+        let mut conn = self.pool.get().await?;
+
+        let count: i64 = bucket::table
+            .filter(bucket::account.eq(account))
+            .filter(bucket::msp_id.eq(msp))
+            .count()
+            .get_result(&mut conn)
+            .await?;
+
+        u64::try_from(count).map_err(|_| {
+            RepositoryError::configuration(format!(
+                "bucket count should be non-negative, got {count}"
+            ))
+        })
+    }
+
     async fn get_files_by_bucket(
         &self,
         bucket: i64,
