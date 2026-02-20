@@ -623,10 +623,10 @@ where
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
-        // Step 1: Call get() to ensure the Arc in the LRU cache is the one we modify.
+        // Ensure the Arc in the LRU cache is the one we modify.
         // This guarantees all short-term new Arcs share the same instance.
         if let Some(fs_arc) = self.get(key).await {
-            // Step 2: Acquire write lock and set deleting flag.
+            // Acquire write lock and set deleting flag.
             // From this point, any other Arc<RwLock<FS>> sharing this instance
             // will fail on all operations.
             let mut fs = fs_arc.write().await;
@@ -634,7 +634,7 @@ where
             drop(fs);
         }
 
-        // Step 3: Delete directory from disk.
+        // Delete directory from disk.
         if let Some(ref storage_path) = self.storage_path {
             let mut dir_path = std::path::PathBuf::new();
             dir_path.push(storage_path);
@@ -653,12 +653,12 @@ where
             }
         }
 
-        // Step 4-5: Remove from open_forests (LRU cache).
+        // Remove from open_forests (LRU cache).
         // If another thread passed the known_forests check and is waiting on this lock,
         // it will see the forest is gone from the LRU, try to open from disk, and fail.
         self.open_forests.write().await.pop(key);
 
-        // Step 6-7: Remove from known_forests.
+        // Remove from known_forests.
         self.known_forests.write().await.remove(key);
     }
 
