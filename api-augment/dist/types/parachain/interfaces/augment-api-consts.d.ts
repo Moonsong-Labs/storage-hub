@@ -1,11 +1,11 @@
-import "@polkadot/api-base/types/consts";
-import type { ApiTypes, AugmentedConst } from "@polkadot/api-base/types";
-import type { Option, u128, u16, u32, u64, u8 } from "@polkadot/types-codec";
-import type { Codec } from "@polkadot/types-codec/types";
-import type { AccountId32, H256, Perbill } from "@polkadot/types/interfaces/runtime";
-import type { FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpVersionRuntimeVersion, SpWeightsRuntimeDbWeight, SpWeightsWeightV2Weight } from "@polkadot/types/lookup";
+import '@polkadot/api-base/types/consts';
+import type { ApiTypes, AugmentedConst } from '@polkadot/api-base/types';
+import type { Option, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
+import type { Codec } from '@polkadot/types-codec/types';
+import type { AccountId32, H256, Perbill } from '@polkadot/types/interfaces/runtime';
+import type { FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpVersionRuntimeVersion, SpWeightsRuntimeDbWeight, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
 export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>;
-declare module "@polkadot/api-base/types/consts" {
+declare module '@polkadot/api-base/types/consts' {
     interface AugmentedConsts<ApiType extends ApiTypes> {
         aura: {
             /**

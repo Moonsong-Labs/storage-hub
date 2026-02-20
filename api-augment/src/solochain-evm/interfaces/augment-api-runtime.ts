@@ -412,6 +412,16 @@ declare module "@polkadot/api-base/types/calls" {
        **/
       getMaxBatchConfirmStorageRequests: AugmentedCall<ApiType, () => Observable<u32>>;
       /**
+       * Check if a BSP has a pending stop storing request for a file.
+       **/
+      hasPendingStopStoringRequest: AugmentedCall<
+        ApiType,
+        (
+          bspId: BackupStorageProviderId | string | Uint8Array,
+          fileKey: H256 | string | Uint8Array
+        ) => Observable<bool>
+      >;
+      /**
        * Check if a storage request is open to volunteers.
        **/
       isStorageRequestOpenToVolunteers: AugmentedCall<
@@ -429,6 +439,15 @@ declare module "@polkadot/api-base/types/calls" {
           startAfter: Option<H256> | null | Uint8Array | H256 | string,
           limit: u32 | AnyNumber | Uint8Array
         ) => Observable<Vec<H256>>
+      >;
+      /**
+       * Get all pending stop storing requests for a BSP.
+       **/
+      pendingStopStoringRequestsByBsp: AugmentedCall<
+        ApiType,
+        (
+          bspId: BackupStorageProviderId | string | Uint8Array
+        ) => Observable<BTreeMap<H256, PendingStopStoringRequest>>
       >;
       /**
        * Get pending storage requests for a Main Storage Provider.
@@ -483,6 +502,10 @@ declare module "@polkadot/api-base/types/calls" {
         >
       >;
       /**
+       * Query the minimum wait period for stop storing requests.
+       **/
+      queryMinWaitForStopStoring: AugmentedCall<ApiType, () => Observable<BlockNumber>>;
+      /**
        * Query the chunks that a MSP needs to prove to confirm that it is storing a file.
        **/
       queryMspConfirmChunksToProveForFile: AugmentedCall<
@@ -510,15 +533,6 @@ declare module "@polkadot/api-base/types/calls" {
         (
           mspId: MainStorageProviderId | string | Uint8Array
         ) => Observable<BTreeMap<H256, StorageRequestMetadata>>
-      >;
-      /**
-       * Get all pending stop storing requests for a BSP.
-       **/
-      pendingStopStoringRequestsByBsp: AugmentedCall<
-        ApiType,
-        (
-          bspId: BackupStorageProviderId | string | Uint8Array
-        ) => Observable<BTreeMap<H256, PendingStopStoringRequest>>
       >;
       /**
        * Generic call

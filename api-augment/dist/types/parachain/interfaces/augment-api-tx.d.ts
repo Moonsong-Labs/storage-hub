@@ -1,13 +1,13 @@
-import "@polkadot/api-base/types/submittable";
-import type { ApiTypes, AugmentedSubmittable, SubmittableExtrinsic, SubmittableExtrinsicFunction } from "@polkadot/api-base/types";
-import type { Bytes, Compact, Option, Vec, bool, u128, u32, u64 } from "@polkadot/types-codec";
-import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
-import type { AccountId32, Call, H256, MultiAddress } from "@polkadot/types/interfaces/runtime";
-import type { CumulusPrimitivesCoreAggregateMessageOrigin, CumulusPrimitivesParachainInherentParachainInherentData, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileDeletionRequest, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters, ShParachainRuntimeSessionKeys, SpRuntimeMultiSignature, SpTrieStorageProofCompactProof, SpWeightsWeightV2Weight, StagingXcmExecutorAssetTransferTransferType, StagingXcmV5Location, XcmV3WeightLimit, XcmVersionedAssetId, XcmVersionedAssets, XcmVersionedLocation, XcmVersionedXcm } from "@polkadot/types/lookup";
+import '@polkadot/api-base/types/submittable';
+import type { ApiTypes, AugmentedSubmittable, SubmittableExtrinsic, SubmittableExtrinsicFunction } from '@polkadot/api-base/types';
+import type { Bytes, Compact, Option, Vec, bool, u128, u32, u64 } from '@polkadot/types-codec';
+import type { AnyNumber, IMethod, ITuple } from '@polkadot/types-codec/types';
+import type { AccountId32, Call, H256, MultiAddress } from '@polkadot/types/interfaces/runtime';
+import type { CumulusPrimitivesCoreAggregateMessageOrigin, CumulusPrimitivesParachainInherentParachainInherentData, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileDeletionRequest, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters, ShParachainRuntimeSessionKeys, SpRuntimeMultiSignature, SpTrieStorageProofCompactProof, SpWeightsWeightV2Weight, StagingXcmExecutorAssetTransferTransferType, StagingXcmV5Location, XcmV3WeightLimit, XcmVersionedAssetId, XcmVersionedAssets, XcmVersionedLocation, XcmVersionedXcm } from '@polkadot/types/lookup';
 export type __AugmentedSubmittable = AugmentedSubmittable<() => unknown>;
 export type __SubmittableExtrinsic<ApiType extends ApiTypes> = SubmittableExtrinsic<ApiType>;
 export type __SubmittableExtrinsicFunction<ApiType extends ApiTypes> = SubmittableExtrinsicFunction<ApiType>;
-declare module "@polkadot/api-base/types/submittable" {
+declare module '@polkadot/api-base/types/submittable' {
     interface AugmentedSubmittables<ApiType extends ApiTypes> {
         balances: {
             /**
@@ -19,10 +19,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * Unlike sending funds to a _burn_ address, which merely makes the funds inaccessible,
              * this `burn` operation will reduce total issuance by the amount _burned_.
              **/
-            burn: AugmentedSubmittable<(value: Compact<u128> | AnyNumber | Uint8Array, keepAlive: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Compact<u128>,
-                bool
-            ]>;
+            burn: AugmentedSubmittable<(value: Compact<u128> | AnyNumber | Uint8Array, keepAlive: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [Compact<u128>, bool]>;
             /**
              * Adjust the total issuance in a saturating way.
              *
@@ -30,10 +27,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * # Example
              **/
-            forceAdjustTotalIssuance: AugmentedSubmittable<(direction: PalletBalancesAdjustmentDirection | "Increase" | "Decrease" | number | Uint8Array, delta: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                PalletBalancesAdjustmentDirection,
-                Compact<u128>
-            ]>;
+            forceAdjustTotalIssuance: AugmentedSubmittable<(direction: PalletBalancesAdjustmentDirection | 'Increase' | 'Decrease' | number | Uint8Array, delta: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [PalletBalancesAdjustmentDirection, Compact<u128>]>;
             /**
              * Set the regular balance of a given account.
              *
@@ -49,10 +43,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array, newFree: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                Compact<u128>
-            ]>;
+            } | string | Uint8Array, newFree: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress, Compact<u128>]>;
             /**
              * Exactly as `transfer_allow_death`, except the origin must be root and the source account
              * may be specified.
@@ -77,11 +68,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array, value: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                MultiAddress,
-                Compact<u128>
-            ]>;
+            } | string | Uint8Array, value: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress, MultiAddress, Compact<u128>]>;
             /**
              * Unreserve some balance from a user by force.
              *
@@ -97,10 +84,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array, amount: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                u128
-            ]>;
+            } | string | Uint8Array, amount: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress, u128]>;
             /**
              * Transfer the entire transferable balance from the caller account.
              *
@@ -128,10 +112,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array, keepAlive: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                bool
-            ]>;
+            } | string | Uint8Array, keepAlive: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress, bool]>;
             /**
              * Transfer some liquid free balance to another account.
              *
@@ -151,10 +132,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array, value: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                Compact<u128>
-            ]>;
+            } | string | Uint8Array, value: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress, Compact<u128>]>;
             /**
              * Same as the [`transfer_allow_death`] call, but with a check that the transfer will not
              * kill the origin account.
@@ -173,10 +151,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array, value: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                Compact<u128>
-            ]>;
+            } | string | Uint8Array, value: Compact<u128> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress, Compact<u128>]>;
             /**
              * Upgrade a specified account.
              *
@@ -187,9 +162,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * be upgraded. (We let some not have to be upgraded just in order to allow for the
              * possibility of churn).
              **/
-            upgradeAccounts: AugmentedSubmittable<(who: Vec<AccountId32> | (AccountId32 | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [
-                Vec<AccountId32>
-            ]>;
+            upgradeAccounts: AugmentedSubmittable<(who: Vec<AccountId32> | (AccountId32 | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<AccountId32>]>;
             /**
              * Generic tx
              **/
@@ -211,20 +184,11 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array, bucket: H256 | string | Uint8Array, itemId: u32 | AnyNumber | Uint8Array, readAccessRegex: Option<Bytes> | null | Uint8Array | Bytes | string) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                H256,
-                u32,
-                Option<Bytes>
-            ]>;
+            } | string | Uint8Array, bucket: H256 | string | Uint8Array, itemId: u32 | AnyNumber | Uint8Array, readAccessRegex: Option<Bytes> | null | Uint8Array | Bytes | string) => SubmittableExtrinsic<ApiType>, [MultiAddress, H256, u32, Option<Bytes>]>;
             /**
              * Update read access for an item.
              **/
-            updateReadAccess: AugmentedSubmittable<(bucket: H256 | string | Uint8Array, itemId: u32 | AnyNumber | Uint8Array, readAccessRegex: Option<Bytes> | null | Uint8Array | Bytes | string) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                u32,
-                Option<Bytes>
-            ]>;
+            updateReadAccess: AugmentedSubmittable<(bucket: H256 | string | Uint8Array, itemId: u32 | AnyNumber | Uint8Array, readAccessRegex: Option<Bytes> | null | Uint8Array | Bytes | string) => SubmittableExtrinsic<ApiType>, [H256, u32, Option<Bytes>]>;
             /**
              * Generic tx
              **/
@@ -237,9 +201,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * The origin for this call must be the `UpdateOrigin`.
              **/
-            addInvulnerable: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                AccountId32
-            ]>;
+            addInvulnerable: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32]>;
             /**
              * Deregister `origin` as a collator candidate. Note that the collator can only leave on
              * session change. The `CandidacyBond` will be unreserved immediately.
@@ -261,9 +223,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * The origin for this call must be the `UpdateOrigin`.
              **/
-            removeInvulnerable: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                AccountId32
-            ]>;
+            removeInvulnerable: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32]>;
             /**
              * Set the candidacy bond amount.
              *
@@ -273,9 +233,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * The origin for this call must be the `UpdateOrigin`.
              **/
-            setCandidacyBond: AugmentedSubmittable<(bond: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u128
-            ]>;
+            setCandidacyBond: AugmentedSubmittable<(bond: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u128]>;
             /**
              * Set the ideal number of non-invulnerable collators. If lowering this number, then the
              * number of running collators could be higher than this figure. Aside from that edge case,
@@ -283,9 +241,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * The origin for this call must be the `UpdateOrigin`.
              **/
-            setDesiredCandidates: AugmentedSubmittable<(max: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32
-            ]>;
+            setDesiredCandidates: AugmentedSubmittable<(max: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32]>;
             /**
              * Set the list of invulnerable (fixed) collators. These collators must do some
              * preparation, namely to have registered session keys.
@@ -301,9 +257,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Must be called by the `UpdateOrigin`.
              **/
-            setInvulnerables: AugmentedSubmittable<(updated: Vec<AccountId32> | (AccountId32 | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [
-                Vec<AccountId32>
-            ]>;
+            setInvulnerables: AugmentedSubmittable<(updated: Vec<AccountId32> | (AccountId32 | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<AccountId32>]>;
             /**
              * The caller `origin` replaces a candidate `target` in the collator candidate list by
              * reserving `deposit`. The amount `deposit` reserved by the caller must be greater than
@@ -313,10 +267,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * caller does not have registered session keys, the target is not a collator candidate,
              * and/or the `deposit` amount cannot be reserved.
              **/
-            takeCandidateSlot: AugmentedSubmittable<(deposit: u128 | AnyNumber | Uint8Array, target: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u128,
-                AccountId32
-            ]>;
+            takeCandidateSlot: AugmentedSubmittable<(deposit: u128 | AnyNumber | Uint8Array, target: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u128, AccountId32]>;
             /**
              * Update the candidacy bond of collator candidate `origin` to a new amount `new_deposit`.
              *
@@ -326,9 +277,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * This call will fail if `origin` is not a collator candidate, the updated bond is lower
              * than the minimum candidacy bond, and/or the amount cannot be reserved.
              **/
-            updateBond: AugmentedSubmittable<(newDeposit: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u128
-            ]>;
+            updateBond: AugmentedSubmittable<(newDeposit: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u128]>;
             /**
              * Generic tx
              **/
@@ -370,10 +319,7 @@ declare module "@polkadot/api-base/types/submittable" {
              **/
             bspConfirmStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                SpTrieStorageProofCompactProof
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, SpTrieStorageProofCompactProof]>;
             /**
              * Used by a BSP to confirm they are storing data of a storage request.
              **/
@@ -382,10 +328,7 @@ declare module "@polkadot/api-base/types/submittable" {
             } | string | Uint8Array, fileKeysAndProofs: Vec<PalletFileSystemFileKeyWithProof> | (PalletFileSystemFileKeyWithProof | {
                 fileKey?: any;
                 proof?: any;
-            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [
-                SpTrieStorageProofCompactProof,
-                Vec<PalletFileSystemFileKeyWithProof>
-            ]>;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [SpTrieStorageProofCompactProof, Vec<PalletFileSystemFileKeyWithProof>]>;
             /**
              * Executed by a BSP to request to stop storing a file.
              *
@@ -431,16 +374,7 @@ declare module "@polkadot/api-base/types/submittable" {
              **/
             bspRequestStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId32 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                H256,
-                Bytes,
-                AccountId32,
-                H256,
-                u64,
-                bool,
-                SpTrieStorageProofCompactProof
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId32, H256, u64, bool, SpTrieStorageProofCompactProof]>;
             /**
              * Used by a BSP to volunteer for storing a file.
              *
@@ -449,21 +383,12 @@ declare module "@polkadot/api-base/types/submittable" {
              * if the maximum number of BSPs has been reached. A successful assignment as BSP means
              * that some of the collateral tokens of that MSP are frozen.
              **/
-            bspVolunteer: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            bspVolunteer: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Create and associate a collection with a bucket.
              **/
-            createAndAssociateCollectionWithBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
-            createBucket: AugmentedSubmittable<(mspId: H256 | string | Uint8Array, name: Bytes | string | Uint8Array, private: bool | boolean | Uint8Array, valuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                Bytes,
-                bool,
-                H256
-            ]>;
+            createAndAssociateCollectionWithBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
+            createBucket: AugmentedSubmittable<(mspId: H256 | string | Uint8Array, name: Bytes | string | Uint8Array, private: bool | boolean | Uint8Array, valuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, Bytes, bool, H256]>;
             /**
              * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
              * This way, the User is allowed to remove now unused buckets to recover their deposit for them.
@@ -473,9 +398,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * To check if a bucket is empty, we compare its current root with the one of an empty trie.
              **/
-            deleteBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            deleteBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Deletes files from a provider's forest, changing its root
              *
@@ -498,11 +421,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 fingerprint?: any;
             } | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Vec<PalletFileSystemFileDeletionRequest>,
-                Option<H256>,
-                SpTrieStorageProofCompactProof
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, SpTrieStorageProofCompactProof]>;
             /**
              * Delete files from an incomplete (rejected, expired or revoked) storage request.
              *
@@ -515,11 +434,7 @@ declare module "@polkadot/api-base/types/submittable" {
              **/
             deleteFilesForIncompleteStorageRequest: AugmentedSubmittable<(fileKeys: Vec<H256> | (H256 | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Vec<H256>,
-                Option<H256>,
-                SpTrieStorageProofCompactProof
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<H256>, Option<H256>, SpTrieStorageProofCompactProof]>;
             /**
              * Issue a new storage request for a file
              **/
@@ -535,19 +450,8 @@ declare module "@polkadot/api-base/types/submittable" {
                 UltraHighSecurity: any;
             } | {
                 Custom: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                Bytes,
-                H256,
-                u64,
-                H256,
-                Vec<Bytes>,
-                PalletFileSystemReplicationTarget
-            ]>;
-            mspRespondMoveBucketRequest: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, response: PalletFileSystemBucketMoveRequestResponse | "Accepted" | "Rejected" | number | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                PalletFileSystemBucketMoveRequestResponse
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, Bytes, H256, u64, H256, Vec<Bytes>, PalletFileSystemReplicationTarget]>;
+            mspRespondMoveBucketRequest: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, response: PalletFileSystemBucketMoveRequestResponse | 'Accepted' | 'Rejected' | number | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, PalletFileSystemBucketMoveRequestResponse]>;
             /**
              * Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
              *
@@ -563,12 +467,8 @@ declare module "@polkadot/api-base/types/submittable" {
                 bucketId?: any;
                 accept?: any;
                 reject?: any;
-            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [
-                Vec<PalletFileSystemStorageRequestMspBucketResponse>
-            ]>;
-            mspStopStoringBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<PalletFileSystemStorageRequestMspBucketResponse>]>;
+            mspStopStoringBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Executed by a MSP to stop storing a bucket from an insolvent user.
              *
@@ -585,9 +485,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * accept storage requests for insolvent users and BSPs can't volunteer nor confirm them either) and afterwards any BSPs that
              * had confirmed the file can just call `sp_stop_storing_for_insolvent_user` to get rid of it.
              **/
-            mspStopStoringBucketForInsolventUser: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            mspStopStoringBucketForInsolventUser: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Request deletion of a file using a signed delete intention.
              *
@@ -604,25 +502,12 @@ declare module "@polkadot/api-base/types/submittable" {
                 Sr25519: any;
             } | {
                 Ecdsa: any;
-            } | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, fingerprint: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                PalletFileSystemFileOperationIntention,
-                SpRuntimeMultiSignature,
-                H256,
-                Bytes,
-                u64,
-                H256
-            ]>;
-            requestMoveBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, newMspId: H256 | string | Uint8Array, newValuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                H256,
-                H256
-            ]>;
+            } | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, fingerprint: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [PalletFileSystemFileOperationIntention, SpRuntimeMultiSignature, H256, Bytes, u64, H256]>;
+            requestMoveBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, newMspId: H256 | string | Uint8Array, newValuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, H256]>;
             /**
              * Revoke storage request
              **/
-            revokeStorageRequest: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            revokeStorageRequest: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Set the pause flags that control which user operations are currently allowed.
              *
@@ -632,9 +517,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * This call replaces the entire bitmask in storage with the provided value.
              **/
-            setUserOperationPauseFlags: AugmentedSubmittable<(newFlags: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32
-            ]>;
+            setUserOperationPauseFlags: AugmentedSubmittable<(newFlags: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32]>;
             /**
              * Executed by a SP to stop storing a file from an insolvent user.
              *
@@ -645,19 +528,8 @@ declare module "@polkadot/api-base/types/submittable" {
              **/
             stopStoringForInsolventUser: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId32 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                H256,
-                Bytes,
-                AccountId32,
-                H256,
-                u64,
-                SpTrieStorageProofCompactProof
-            ]>;
-            updateBucketPrivacy: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, private: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                bool
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId32, H256, u64, SpTrieStorageProofCompactProof]>;
+            updateBucketPrivacy: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, private: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, bool]>;
             /**
              * Generic tx
              **/
@@ -688,12 +560,7 @@ declare module "@polkadot/api-base/types/submittable" {
             } | string | Uint8Array, page: u32 | AnyNumber | Uint8Array, index: u32 | AnyNumber | Uint8Array, weightLimit: SpWeightsWeightV2Weight | {
                 refTime?: any;
                 proofSize?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                CumulusPrimitivesCoreAggregateMessageOrigin,
-                u32,
-                u32,
-                SpWeightsWeightV2Weight
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [CumulusPrimitivesCoreAggregateMessageOrigin, u32, u32, SpWeightsWeightV2Weight]>;
             /**
              * Remove a page which has no more messages remaining to be processed or is stale.
              **/
@@ -703,10 +570,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Parent: any;
             } | {
                 Sibling: any;
-            } | string | Uint8Array, pageIndex: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                CumulusPrimitivesCoreAggregateMessageOrigin,
-                u32
-            ]>;
+            } | string | Uint8Array, pageIndex: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [CumulusPrimitivesCoreAggregateMessageOrigin, u32]>;
             /**
              * Generic tx
              **/
@@ -734,11 +598,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                MultiAddress
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32, MultiAddress]>;
             /**
              * Approve an item to be transferred by a delegated third-party account.
              *
@@ -765,12 +625,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array, maybeDeadline: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                MultiAddress,
-                Option<u32>
-            ]>;
+            } | string | Uint8Array, maybeDeadline: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [u32, u32, MultiAddress, Option<u32>]>;
             /**
              * Destroy a single item.
              *
@@ -784,10 +639,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            burn: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32
-            ]>;
+            burn: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32]>;
             /**
              * Allows to buy an item if it's up for sale.
              *
@@ -799,11 +651,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `ItemBought` on success.
              **/
-            buyItem: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array, bidPrice: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                u128
-            ]>;
+            buyItem: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array, bidPrice: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32, u128]>;
             /**
              * Cancel one of the transfer approvals for a specific item.
              *
@@ -830,11 +678,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                MultiAddress
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32, MultiAddress]>;
             /**
              * Cancel the previously provided approval to change item's attributes.
              * All the previously set attributes by the `delegate` will be removed.
@@ -859,12 +703,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address20: any;
             } | string | Uint8Array, witness: PalletNftsCancelAttributesApprovalWitness | {
                 accountAttributes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                MultiAddress,
-                PalletNftsCancelAttributesApprovalWitness
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32, MultiAddress, PalletNftsCancelAttributesApprovalWitness]>;
             /**
              * Cancel an atomic swap.
              *
@@ -876,10 +715,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `SwapCancelled` on success.
              **/
-            cancelSwap: AugmentedSubmittable<(offeredCollection: u32 | AnyNumber | Uint8Array, offeredItem: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32
-            ]>;
+            cancelSwap: AugmentedSubmittable<(offeredCollection: u32 | AnyNumber | Uint8Array, offeredItem: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32]>;
             /**
              * Claim an atomic swap.
              * This method executes a pending swap, that was created by a counterpart before.
@@ -897,13 +733,7 @@ declare module "@polkadot/api-base/types/submittable" {
             claimSwap: AugmentedSubmittable<(sendCollection: u32 | AnyNumber | Uint8Array, sendItem: u32 | AnyNumber | Uint8Array, receiveCollection: u32 | AnyNumber | Uint8Array, receiveItem: u32 | AnyNumber | Uint8Array, witnessPrice: Option<PalletNftsPriceWithDirection> | null | Uint8Array | PalletNftsPriceWithDirection | {
                 amount?: any;
                 direction?: any;
-            } | string) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                u32,
-                u32,
-                Option<PalletNftsPriceWithDirection>
-            ]>;
+            } | string) => SubmittableExtrinsic<ApiType>, [u32, u32, u32, u32, Option<PalletNftsPriceWithDirection>]>;
             /**
              * Cancel all the approvals of a specific item.
              *
@@ -919,10 +749,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            clearAllTransferApprovals: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32
-            ]>;
+            clearAllTransferApprovals: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32]>;
             /**
              * Clear an attribute for a collection or item.
              *
@@ -948,12 +775,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 ItemOwner: any;
             } | {
                 Account: any;
-            } | string | Uint8Array, key: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                Option<u32>,
-                PalletNftsAttributeNamespace,
-                Bytes
-            ]>;
+            } | string | Uint8Array, key: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, Option<u32>, PalletNftsAttributeNamespace, Bytes]>;
             /**
              * Clear the metadata for a collection.
              *
@@ -968,9 +790,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            clearCollectionMetadata: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32
-            ]>;
+            clearCollectionMetadata: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32]>;
             /**
              * Clear the metadata for an item.
              *
@@ -986,10 +806,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            clearMetadata: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32
-            ]>;
+            clearMetadata: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32]>;
             /**
              * Issue a new collection of non-fungible items from a public origin.
              *
@@ -1021,10 +838,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 settings?: any;
                 maxSupply?: any;
                 mintSettings?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                PalletNftsCollectionConfig
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress, PalletNftsCollectionConfig]>;
             /**
              * Register a new atomic swap, declaring an intention to send an `item` in exchange for
              * `desired_item` from origin to target on the current blockchain.
@@ -1046,14 +860,7 @@ declare module "@polkadot/api-base/types/submittable" {
             createSwap: AugmentedSubmittable<(offeredCollection: u32 | AnyNumber | Uint8Array, offeredItem: u32 | AnyNumber | Uint8Array, desiredCollection: u32 | AnyNumber | Uint8Array, maybeDesiredItem: Option<u32> | null | Uint8Array | u32 | AnyNumber, maybePrice: Option<PalletNftsPriceWithDirection> | null | Uint8Array | PalletNftsPriceWithDirection | {
                 amount?: any;
                 direction?: any;
-            } | string, duration: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                u32,
-                Option<u32>,
-                Option<PalletNftsPriceWithDirection>,
-                u32
-            ]>;
+            } | string, duration: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32, u32, Option<u32>, Option<PalletNftsPriceWithDirection>, u32]>;
             /**
              * Destroy a collection of fungible items.
              *
@@ -1077,10 +884,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 itemMetadatas?: any;
                 itemConfigs?: any;
                 attributes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                PalletNftsDestroyWitness
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, PalletNftsDestroyWitness]>;
             /**
              * Change the config of a collection.
              *
@@ -1097,10 +901,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 settings?: any;
                 maxSupply?: any;
                 mintSettings?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                PalletNftsCollectionConfig
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, PalletNftsCollectionConfig]>;
             /**
              * Change the Owner of a collection.
              *
@@ -1123,10 +924,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                MultiAddress
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, MultiAddress]>;
             /**
              * Issue a new collection of non-fungible items from a privileged origin.
              *
@@ -1158,10 +956,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 settings?: any;
                 maxSupply?: any;
                 mintSettings?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                PalletNftsCollectionConfig
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress, PalletNftsCollectionConfig]>;
             /**
              * Mint an item of a particular collection from a privileged origin.
              *
@@ -1189,12 +984,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address20: any;
             } | string | Uint8Array, itemConfig: PalletNftsItemConfig | {
                 settings?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                MultiAddress,
-                PalletNftsItemConfig
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32, MultiAddress, PalletNftsItemConfig]>;
             /**
              * Force-set an attribute for a collection or item.
              *
@@ -1222,14 +1012,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 ItemOwner: any;
             } | {
                 Account: any;
-            } | string | Uint8Array, key: Bytes | string | Uint8Array, value: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Option<AccountId32>,
-                u32,
-                Option<u32>,
-                PalletNftsAttributeNamespace,
-                Bytes,
-                Bytes
-            ]>;
+            } | string | Uint8Array, key: Bytes | string | Uint8Array, value: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Option<AccountId32>, u32, Option<u32>, PalletNftsAttributeNamespace, Bytes, Bytes]>;
             /**
              * Disallows specified settings for the whole collection.
              *
@@ -1244,10 +1027,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            lockCollection: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, lockSettings: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u64
-            ]>;
+            lockCollection: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, lockSettings: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u64]>;
             /**
              * Disallows changing the metadata or attributes of the item.
              *
@@ -1267,12 +1047,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            lockItemProperties: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array, lockMetadata: bool | boolean | Uint8Array, lockAttributes: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                bool,
-                bool
-            ]>;
+            lockItemProperties: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array, lockMetadata: bool | boolean | Uint8Array, lockAttributes: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32, bool, bool]>;
             /**
              * Disallow further unprivileged transfer of an item.
              *
@@ -1285,10 +1060,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            lockItemTransfer: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32
-            ]>;
+            lockItemTransfer: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32]>;
             /**
              * Mint an item of a particular collection.
              *
@@ -1320,12 +1092,7 @@ declare module "@polkadot/api-base/types/submittable" {
             } | string | Uint8Array, witnessData: Option<PalletNftsMintWitness> | null | Uint8Array | PalletNftsMintWitness | {
                 ownedItem?: any;
                 mintPrice?: any;
-            } | string) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                MultiAddress,
-                Option<PalletNftsMintWitness>
-            ]>;
+            } | string) => SubmittableExtrinsic<ApiType>, [u32, u32, MultiAddress, Option<PalletNftsMintWitness>]>;
             /**
              * Mint an item by providing the pre-signed approval.
              *
@@ -1355,11 +1122,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Sr25519: any;
             } | {
                 Ecdsa: any;
-            } | string | Uint8Array, signer: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                PalletNftsPreSignedMint,
-                SpRuntimeMultiSignature,
-                AccountId32
-            ]>;
+            } | string | Uint8Array, signer: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [PalletNftsPreSignedMint, SpRuntimeMultiSignature, AccountId32]>;
             /**
              * Allows to pay the tips.
              *
@@ -1374,9 +1137,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 item?: any;
                 receiver?: any;
                 amount?: any;
-            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [
-                Vec<PalletNftsItemTip>
-            ]>;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<PalletNftsItemTip>]>;
             /**
              * Re-evaluate the deposits on some items.
              *
@@ -1396,10 +1157,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(items.len())`
              **/
-            redeposit: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, items: Vec<u32> | (u32 | AnyNumber | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                Vec<u32>
-            ]>;
+            redeposit: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, items: Vec<u32> | (u32 | AnyNumber | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [u32, Vec<u32>]>;
             /**
              * Set (or reset) the acceptance of ownership for a particular account.
              *
@@ -1412,9 +1170,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `OwnershipAcceptanceChanged`.
              **/
-            setAcceptOwnership: AugmentedSubmittable<(maybeCollection: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [
-                Option<u32>
-            ]>;
+            setAcceptOwnership: AugmentedSubmittable<(maybeCollection: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [Option<u32>]>;
             /**
              * Set an attribute for a collection or item.
              *
@@ -1447,13 +1203,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 ItemOwner: any;
             } | {
                 Account: any;
-            } | string | Uint8Array, key: Bytes | string | Uint8Array, value: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                Option<u32>,
-                PalletNftsAttributeNamespace,
-                Bytes,
-                Bytes
-            ]>;
+            } | string | Uint8Array, key: Bytes | string | Uint8Array, value: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, Option<u32>, PalletNftsAttributeNamespace, Bytes, Bytes]>;
             /**
              * Set attributes for an item by providing the pre-signed approval.
              *
@@ -1481,11 +1231,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Sr25519: any;
             } | {
                 Ecdsa: any;
-            } | string | Uint8Array, signer: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                PalletNftsPreSignedAttributes,
-                SpRuntimeMultiSignature,
-                AccountId32
-            ]>;
+            } | string | Uint8Array, signer: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [PalletNftsPreSignedAttributes, SpRuntimeMultiSignature, AccountId32]>;
             /**
              * Set the maximum number of items a collection could have.
              *
@@ -1497,10 +1243,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `CollectionMaxSupplySet` event when successful.
              **/
-            setCollectionMaxSupply: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, maxSupply: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32
-            ]>;
+            setCollectionMaxSupply: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, maxSupply: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32]>;
             /**
              * Set the metadata for a collection.
              *
@@ -1518,10 +1261,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            setCollectionMetadata: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, data: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                Bytes
-            ]>;
+            setCollectionMetadata: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, data: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, Bytes]>;
             /**
              * Set the metadata for an item.
              *
@@ -1540,11 +1280,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            setMetadata: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array, data: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                Bytes
-            ]>;
+            setMetadata: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array, data: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32, Bytes]>;
             /**
              * Set (or reset) the price for an item.
              *
@@ -1568,12 +1304,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                Option<u128>,
-                Option<MultiAddress>
-            ]>;
+            } | string) => SubmittableExtrinsic<ApiType>, [u32, u32, Option<u128>, Option<MultiAddress>]>;
             /**
              * Change the Issuer, Admin and Freezer of a collection.
              *
@@ -1622,12 +1353,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                Option<MultiAddress>,
-                Option<MultiAddress>,
-                Option<MultiAddress>
-            ]>;
+            } | string) => SubmittableExtrinsic<ApiType>, [u32, Option<MultiAddress>, Option<MultiAddress>, Option<MultiAddress>]>;
             /**
              * Move an item from the sender account to another.
              *
@@ -1654,11 +1380,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32,
-                MultiAddress
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32, MultiAddress]>;
             /**
              * Change the Owner of a collection.
              *
@@ -1682,10 +1404,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                MultiAddress
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, MultiAddress]>;
             /**
              * Re-allow unprivileged transfer of an item.
              *
@@ -1698,10 +1417,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Weight: `O(1)`
              **/
-            unlockItemTransfer: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                u32
-            ]>;
+            unlockItemTransfer: AugmentedSubmittable<(collection: u32 | AnyNumber | Uint8Array, item: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, u32]>;
             /**
              * Update mint settings.
              *
@@ -1719,10 +1435,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 startBlock?: any;
                 endBlock?: any;
                 defaultItemSettings?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32,
-                PalletNftsMintSettings
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, PalletNftsMintSettings]>;
             /**
              * Generic tx
              **/
@@ -1751,12 +1464,8 @@ declare module "@polkadot/api-base/types/submittable" {
                 relayChainState?: any;
                 downwardMessages?: any;
                 horizontalMessages?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                CumulusPrimitivesParachainInherentParachainInherentData
-            ]>;
-            sudoSendUpwardMessage: AugmentedSubmittable<(message: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Bytes
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [CumulusPrimitivesParachainInherentParachainInherentData]>;
+            sudoSendUpwardMessage: AugmentedSubmittable<(message: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
             /**
              * Generic tx
              **/
@@ -1771,9 +1480,7 @@ declare module "@polkadot/api-base/types/submittable" {
              **/
             setParameter: AugmentedSubmittable<(keyValue: ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters | {
                 RuntimeConfig: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters]>;
             /**
              * Generic tx
              **/
@@ -1812,9 +1519,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
              * will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
              **/
-            chargeMultipleUsersPaymentStreams: AugmentedSubmittable<(userAccounts: Vec<AccountId32> | (AccountId32 | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [
-                Vec<AccountId32>
-            ]>;
+            chargeMultipleUsersPaymentStreams: AugmentedSubmittable<(userAccounts: Vec<AccountId32> | (AccountId32 | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<AccountId32>]>;
             /**
              * Dispatchable extrinsic that allows Providers to charge a payment stream from a User.
              *
@@ -1845,9 +1550,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
              * will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
              **/
-            chargePaymentStreams: AugmentedSubmittable<(userAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                AccountId32
-            ]>;
+            chargePaymentStreams: AugmentedSubmittable<(userAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32]>;
             /**
              * Dispatchable extrinsic that allows a user flagged as without funds long ago enough to clear this flag from its account,
              * allowing it to begin contracting and paying for services again. It should have previously paid all its outstanding debt.
@@ -1885,11 +1588,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `DynamicRatePaymentStreamCreated` event when successful.
              **/
-            createDynamicRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array, amountProvided: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                AccountId32,
-                u64
-            ]>;
+            createDynamicRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array, amountProvided: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, AccountId32, u64]>;
             /**
              * Dispatchable extrinsic that allows root to add a fixed-rate payment stream from a User to a Provider.
              *
@@ -1910,11 +1609,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `FixedRatePaymentStreamCreated` event when successful.
              **/
-            createFixedRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array, rate: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                AccountId32,
-                u128
-            ]>;
+            createFixedRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array, rate: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, AccountId32, u128]>;
             /**
              * Dispatchable extrinsic that allows root to delete an existing dynamic-rate payment stream between a User and a Provider.
              *
@@ -1932,10 +1627,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `DynamicRatePaymentStreamDeleted` event when successful.
              **/
-            deleteDynamicRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                AccountId32
-            ]>;
+            deleteDynamicRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, AccountId32]>;
             /**
              * Dispatchable extrinsic that allows root to delete an existing fixed-rate payment stream between a User and a Provider.
              *
@@ -1953,10 +1645,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `FixedRatePaymentStreamDeleted` event when successful.
              **/
-            deleteFixedRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                AccountId32
-            ]>;
+            deleteFixedRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, AccountId32]>;
             /**
              * Dispatchable extrinsic that allows a user flagged as without funds to pay the Providers that still have payment streams
              * with it, in order to recover as much of its deposits as possible.
@@ -1980,9 +1669,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * There was an idea to limit the amount of Providers that can be received by this extrinsic using a constant in the configuration of this pallet,
              * but the correct benchmarking of this extrinsic should be enough to avoid any potential abuse.
              **/
-            payOutstandingDebt: AugmentedSubmittable<(providers: Vec<H256> | (H256 | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [
-                Vec<H256>
-            ]>;
+            payOutstandingDebt: AugmentedSubmittable<(providers: Vec<H256> | (H256 | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<H256>]>;
             /**
              * Dispatchable extrinsic that allows root to update an existing dynamic-rate payment stream between a User and a Provider.
              *
@@ -2001,11 +1688,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `DynamicRatePaymentStreamUpdated` event when successful.
              **/
-            updateDynamicRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array, newAmountProvided: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                AccountId32,
-                u64
-            ]>;
+            updateDynamicRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array, newAmountProvided: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, AccountId32, u64]>;
             /**
              * Dispatchable extrinsic that allows root to update an existing fixed-rate payment stream between a User and a Provider.
              *
@@ -2024,11 +1707,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `FixedRatePaymentStreamUpdated` event when successful.
              **/
-            updateFixedRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array, newRate: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                AccountId32,
-                u128
-            ]>;
+            updateFixedRatePaymentStream: AugmentedSubmittable<(providerId: H256 | string | Uint8Array, userAccount: AccountId32 | string | Uint8Array, newRate: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, AccountId32, u128]>;
             /**
              * Generic tx
              **/
@@ -2055,10 +1734,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 V4: any;
             } | {
                 V5: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedAssets,
-                XcmVersionedLocation
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedAssets, XcmVersionedLocation]>;
             /**
              * Execute an XCM message from a local, signed, origin.
              *
@@ -2078,10 +1754,7 @@ declare module "@polkadot/api-base/types/submittable" {
             } | string | Uint8Array, maxWeight: SpWeightsWeightV2Weight | {
                 refTime?: any;
                 proofSize?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedXcm,
-                SpWeightsWeightV2Weight
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedXcm, SpWeightsWeightV2Weight]>;
             /**
              * Set a safe XCM version (the version that XCM should be encoded with if the most recent
              * version a destination can accept is unknown).
@@ -2089,9 +1762,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * - `origin`: Must be an origin specified by AdminOrigin.
              * - `maybe_xcm_version`: The default XCM encoding version, or `None` to disable.
              **/
-            forceDefaultXcmVersion: AugmentedSubmittable<(maybeXcmVersion: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [
-                Option<u32>
-            ]>;
+            forceDefaultXcmVersion: AugmentedSubmittable<(maybeXcmVersion: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [Option<u32>]>;
             /**
              * Ask a location to notify us regarding their XCM version and any changes to it.
              *
@@ -2104,18 +1775,14 @@ declare module "@polkadot/api-base/types/submittable" {
                 V4: any;
             } | {
                 V5: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedLocation
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation]>;
             /**
              * Set or unset the global suspension state of the XCM executor.
              *
              * - `origin`: Must be an origin specified by AdminOrigin.
              * - `suspended`: `true` to suspend, `false` to resume.
              **/
-            forceSuspension: AugmentedSubmittable<(suspended: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                bool
-            ]>;
+            forceSuspension: AugmentedSubmittable<(suspended: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [bool]>;
             /**
              * Require that a particular destination should no longer notify us regarding any XCM
              * version changes.
@@ -2130,9 +1797,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 V4: any;
             } | {
                 V5: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedLocation
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation]>;
             /**
              * Extoll that a particular destination can be communicated with through a particular
              * version of XCM.
@@ -2144,10 +1809,7 @@ declare module "@polkadot/api-base/types/submittable" {
             forceXcmVersion: AugmentedSubmittable<(location: StagingXcmV5Location | {
                 parents?: any;
                 interior?: any;
-            } | string | Uint8Array, version: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                StagingXcmV5Location,
-                u32
-            ]>;
+            } | string | Uint8Array, version: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [StagingXcmV5Location, u32]>;
             /**
              * Transfer some assets from the local chain to the destination chain through their local,
              * destination or remote reserve.
@@ -2202,13 +1864,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Unlimited: any;
             } | {
                 Limited: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedLocation,
-                XcmVersionedLocation,
-                XcmVersionedAssets,
-                u32,
-                XcmV3WeightLimit
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32, XcmV3WeightLimit]>;
             /**
              * Teleport some assets from the local chain to some destination chain.
              *
@@ -2251,13 +1907,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Unlimited: any;
             } | {
                 Limited: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedLocation,
-                XcmVersionedLocation,
-                XcmVersionedAssets,
-                u32,
-                XcmV3WeightLimit
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32, XcmV3WeightLimit]>;
             /**
              * Transfer some assets from the local chain to the destination chain through their local,
              * destination or remote reserve.
@@ -2308,12 +1958,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 V4: any;
             } | {
                 V5: any;
-            } | string | Uint8Array, feeAssetItem: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedLocation,
-                XcmVersionedLocation,
-                XcmVersionedAssets,
-                u32
-            ]>;
+            } | string | Uint8Array, feeAssetItem: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32]>;
             send: AugmentedSubmittable<(dest: XcmVersionedLocation | {
                 V3: any;
             } | {
@@ -2326,10 +1971,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 V4: any;
             } | {
                 V5: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedLocation,
-                XcmVersionedXcm
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation, XcmVersionedXcm]>;
             /**
              * Teleport some assets from the local chain to some destination chain.
              *
@@ -2368,12 +2010,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 V4: any;
             } | {
                 V5: any;
-            } | string | Uint8Array, feeAssetItem: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedLocation,
-                XcmVersionedLocation,
-                XcmVersionedAssets,
-                u32
-            ]>;
+            } | string | Uint8Array, feeAssetItem: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32]>;
             /**
              * Transfer some assets from the local chain to the destination chain through their local,
              * destination or remote reserve, or through teleports.
@@ -2431,13 +2068,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Unlimited: any;
             } | {
                 Limited: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedLocation,
-                XcmVersionedLocation,
-                XcmVersionedAssets,
-                u32,
-                XcmV3WeightLimit
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32, XcmV3WeightLimit]>;
             /**
              * Transfer assets from the local chain to the destination chain using explicit transfer
              * types for assets and fees.
@@ -2532,15 +2163,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Unlimited: any;
             } | {
                 Limited: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                XcmVersionedLocation,
-                XcmVersionedAssets,
-                StagingXcmExecutorAssetTransferTransferType,
-                XcmVersionedAssetId,
-                StagingXcmExecutorAssetTransferTransferType,
-                XcmVersionedXcm,
-                XcmV3WeightLimit
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation, XcmVersionedAssets, StagingXcmExecutorAssetTransferTransferType, XcmVersionedAssetId, StagingXcmExecutorAssetTransferTransferType, XcmVersionedXcm, XcmV3WeightLimit]>;
             /**
              * Generic tx
              **/
@@ -2555,9 +2178,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * Users are charged a small fee for submitting a challenge, which
              * goes to the Treasury.
              **/
-            challenge: AugmentedSubmittable<(key: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            challenge: AugmentedSubmittable<(key: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Initialise a Provider's challenge cycle.
              *
@@ -2566,21 +2187,14 @@ declare module "@polkadot/api-base/types/submittable" {
              * Sets the last tick the Provider submitted a proof for to the current tick, and sets the
              * deadline for submitting a proof to the current tick + the Provider's period + the tolerance.
              **/
-            forceInitialiseChallengeCycle: AugmentedSubmittable<(provider: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
-            priorityChallenge: AugmentedSubmittable<(key: H256 | string | Uint8Array, shouldRemoveKey: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256,
-                bool
-            ]>;
+            forceInitialiseChallengeCycle: AugmentedSubmittable<(provider: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
+            priorityChallenge: AugmentedSubmittable<(key: H256 | string | Uint8Array, shouldRemoveKey: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, bool]>;
             /**
              * Set the [`ChallengesTickerPaused`] to `true` or `false`.
              *
              * Only callable by sudo.
              **/
-            setPaused: AugmentedSubmittable<(paused: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                bool
-            ]>;
+            setPaused: AugmentedSubmittable<(paused: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [bool]>;
             /**
              * For a Provider to submit a proof.
              *
@@ -2611,10 +2225,7 @@ declare module "@polkadot/api-base/types/submittable" {
             submitProof: AugmentedSubmittable<(proof: PalletProofsDealerProof | {
                 forestProof?: any;
                 keyProofs?: any;
-            } | string | Uint8Array, provider: Option<H256> | null | Uint8Array | H256 | string) => SubmittableExtrinsic<ApiType>, [
-                PalletProofsDealerProof,
-                Option<H256>
-            ]>;
+            } | string | Uint8Array, provider: Option<H256> | null | Uint8Array | H256 | string) => SubmittableExtrinsic<ApiType>, [PalletProofsDealerProof, Option<H256>]>;
             /**
              * Generic tx
              **/
@@ -2639,9 +2250,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `MultiAddressAdded` event when successful.
              **/
-            addMultiaddress: AugmentedSubmittable<(newMultiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Bytes
-            ]>;
+            addMultiaddress: AugmentedSubmittable<(newMultiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
             /**
              * Dispatchable extrinsic only callable by an MSP that allows it to add a value proposition to its service
              *
@@ -2650,11 +2259,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `ValuePropAdded` event when successful.
              **/
-            addValueProp: AugmentedSubmittable<(pricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array, commitment: Bytes | string | Uint8Array, bucketDataLimit: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u128,
-                Bytes,
-                u64
-            ]>;
+            addValueProp: AugmentedSubmittable<(pricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array, commitment: Bytes | string | Uint8Array, bucketDataLimit: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u128, Bytes, u64]>;
             /**
              * Dispatchable extrinsic that allows users to sign off as a Backup Storage Provider.
              *
@@ -2714,9 +2319,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `CapacityChanged` event when successful.
              **/
-            changeCapacity: AugmentedSubmittable<(newCapacity: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u64
-            ]>;
+            changeCapacity: AugmentedSubmittable<(newCapacity: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u64]>;
             /**
              * Dispatchable extrinsic that allows users to confirm their sign up as a Storage Provider, either MSP or BSP.
              *
@@ -2742,9 +2345,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * - The deposit that the user has to pay to register as a SP is held when the user requests to register as a SP
              * - If this extrinsic is successful, it will be free for the caller, to incentive state de-bloating
              **/
-            confirmSignUp: AugmentedSubmittable<(providerAccount: Option<AccountId32> | null | Uint8Array | AccountId32 | string) => SubmittableExtrinsic<ApiType>, [
-                Option<AccountId32>
-            ]>;
+            confirmSignUp: AugmentedSubmittable<(providerAccount: Option<AccountId32> | null | Uint8Array | AccountId32 | string) => SubmittableExtrinsic<ApiType>, [Option<AccountId32>]>;
             /**
              * Delete a provider from the system.
              *
@@ -2762,9 +2363,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * This operation is free if successful to encourage the community to delete insolvent providers,
              * debloating the state.
              **/
-            deleteProvider: AugmentedSubmittable<(providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            deleteProvider: AugmentedSubmittable<(providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Dispatchable extrinsic that allows to forcefully and automatically sing up a Backup Storage Provider.
              *
@@ -2786,14 +2385,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `BspRequestSignUpSuccess` and `BspSignUpSuccess` events when successful.
              **/
-            forceBspSignUp: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array, bspId: H256 | string | Uint8Array, capacity: u64 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], paymentAccount: AccountId32 | string | Uint8Array, weight: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [
-                AccountId32,
-                H256,
-                u64,
-                Vec<Bytes>,
-                AccountId32,
-                Option<u32>
-            ]>;
+            forceBspSignUp: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array, bspId: H256 | string | Uint8Array, capacity: u64 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], paymentAccount: AccountId32 | string | Uint8Array, weight: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [AccountId32, H256, u64, Vec<Bytes>, AccountId32, Option<u32>]>;
             /**
              * Dispatchable extrinsic that allows to forcefully and automatically sign up a Main Storage Provider.
              *
@@ -2818,25 +2410,14 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `MspRequestSignUpSuccess` and `MspSignUpSuccess` events when successful.
              **/
-            forceMspSignUp: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array, mspId: H256 | string | Uint8Array, capacity: u64 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], valuePropPricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array, commitment: Bytes | string | Uint8Array, valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array, paymentAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                AccountId32,
-                H256,
-                u64,
-                Vec<Bytes>,
-                u128,
-                Bytes,
-                u64,
-                AccountId32
-            ]>;
+            forceMspSignUp: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array, mspId: H256 | string | Uint8Array, capacity: u64 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], valuePropPricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array, commitment: Bytes | string | Uint8Array, valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array, paymentAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32, H256, u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]>;
             /**
              * Dispatchable extrinsic only callable by an MSP that allows it to make a value proposition unavailable.
              *
              * This operation cannot be reversed. You can only add new value propositions.
              * This will not affect existing buckets which are using this value proposition.
              **/
-            makeValuePropUnavailable: AugmentedSubmittable<(valuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            makeValuePropUnavailable: AugmentedSubmittable<(valuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Dispatchable extrinsic that allows users to sign off as a Main Storage Provider.
              *
@@ -2853,9 +2434,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `MspSignOffSuccess` event when successful.
              **/
-            mspSignOff: AugmentedSubmittable<(mspId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            mspSignOff: AugmentedSubmittable<(mspId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Dispatchable extrinsic that allows BSPs and MSPs to remove an existing multiaddress from their account.
              *
@@ -2873,9 +2452,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `MultiAddressRemoved` event when successful.
              **/
-            removeMultiaddress: AugmentedSubmittable<(multiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Bytes
-            ]>;
+            removeMultiaddress: AugmentedSubmittable<(multiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
             /**
              * Dispatchable extrinsic that allows users to sign up as a Backup Storage Provider.
              *
@@ -2901,11 +2478,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `BspRequestSignUpSuccess` event when successful.
              **/
-            requestBspSignUp: AugmentedSubmittable<(capacity: u64 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], paymentAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u64,
-                Vec<Bytes>,
-                AccountId32
-            ]>;
+            requestBspSignUp: AugmentedSubmittable<(capacity: u64 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], paymentAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u64, Vec<Bytes>, AccountId32]>;
             /**
              * Dispatchable extrinsic that allows users to request to sign up as a Main Storage Provider.
              *
@@ -2934,14 +2507,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * Emits `MspRequestSignUpSuccess` event when successful.
              **/
-            requestMspSignUp: AugmentedSubmittable<(capacity: u64 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], valuePropPricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array, commitment: Bytes | string | Uint8Array, valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array, paymentAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u64,
-                Vec<Bytes>,
-                u128,
-                Bytes,
-                u64,
-                AccountId32
-            ]>;
+            requestMspSignUp: AugmentedSubmittable<(capacity: u64 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], valuePropPricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array, commitment: Bytes | string | Uint8Array, valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array, paymentAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]>;
             /**
              * Dispatchable extrinsic to slash a _slashable_ Storage Provider.
              *
@@ -2950,9 +2516,7 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * This is a free operation to incentivise the community to slash misbehaving providers.
              **/
-            slash: AugmentedSubmittable<(providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            slash: AugmentedSubmittable<(providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * BSP operation to stop all of your automatic cycles.
              *
@@ -3016,10 +2580,7 @@ declare module "@polkadot/api-base/types/submittable" {
              **/
             setKeys: AugmentedSubmittable<(keys: ShParachainRuntimeSessionKeys | {
                 aura?: any;
-            } | string | Uint8Array, proof: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                ShParachainRuntimeSessionKeys,
-                Bytes
-            ]>;
+            } | string | Uint8Array, proof: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [ShParachainRuntimeSessionKeys, Bytes]>;
             /**
              * Generic tx
              **/
@@ -3046,15 +2607,11 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress]>;
             /**
              * Authenticates the sudo key and dispatches a function call with `Root` origin.
              **/
-            sudo: AugmentedSubmittable<(call: Call | IMethod | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Call
-            ]>;
+            sudo: AugmentedSubmittable<(call: Call | IMethod | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Call]>;
             /**
              * Authenticates the sudo key and dispatches a function call with `Signed` origin from
              * a given account.
@@ -3071,10 +2628,7 @@ declare module "@polkadot/api-base/types/submittable" {
                 Address32: any;
             } | {
                 Address20: any;
-            } | string | Uint8Array, call: Call | IMethod | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                MultiAddress,
-                Call
-            ]>;
+            } | string | Uint8Array, call: Call | IMethod | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [MultiAddress, Call]>;
             /**
              * Authenticates the sudo key and dispatches a function call with `Root` origin.
              * This function does not check the weight of the call, and instead allows the
@@ -3085,10 +2639,7 @@ declare module "@polkadot/api-base/types/submittable" {
             sudoUncheckedWeight: AugmentedSubmittable<(call: Call | IMethod | string | Uint8Array, weight: SpWeightsWeightV2Weight | {
                 refTime?: any;
                 proofSize?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Call,
-                SpWeightsWeightV2Weight
-            ]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Call, SpWeightsWeightV2Weight]>;
             /**
              * Generic tx
              **/
@@ -3106,18 +2657,14 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * All origins are allowed.
              **/
-            applyAuthorizedUpgrade: AugmentedSubmittable<(code: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Bytes
-            ]>;
+            applyAuthorizedUpgrade: AugmentedSubmittable<(code: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
             /**
              * Authorize an upgrade to a given `code_hash` for the runtime. The runtime can be supplied
              * later.
              *
              * This call requires Root origin.
              **/
-            authorizeUpgrade: AugmentedSubmittable<(codeHash: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            authorizeUpgrade: AugmentedSubmittable<(codeHash: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Authorize an upgrade to a given `code_hash` for the runtime. The runtime can be supplied
              * later.
@@ -3128,66 +2675,47 @@ declare module "@polkadot/api-base/types/submittable" {
              *
              * This call requires Root origin.
              **/
-            authorizeUpgradeWithoutChecks: AugmentedSubmittable<(codeHash: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                H256
-            ]>;
+            authorizeUpgradeWithoutChecks: AugmentedSubmittable<(codeHash: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Kill all storage items with a key that starts with the given prefix.
              *
              * **NOTE:** We rely on the Root origin to provide us the number of subkeys under
              * the prefix we are removing to accurately calculate the weight of this function.
              **/
-            killPrefix: AugmentedSubmittable<(prefix: Bytes | string | Uint8Array, subkeys: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Bytes,
-                u32
-            ]>;
+            killPrefix: AugmentedSubmittable<(prefix: Bytes | string | Uint8Array, subkeys: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes, u32]>;
             /**
              * Kill some items from storage.
              **/
-            killStorage: AugmentedSubmittable<(keys: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [
-                Vec<Bytes>
-            ]>;
+            killStorage: AugmentedSubmittable<(keys: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Vec<Bytes>]>;
             /**
              * Make some on-chain remark.
              *
              * Can be executed by every `origin`.
              **/
-            remark: AugmentedSubmittable<(remark: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Bytes
-            ]>;
+            remark: AugmentedSubmittable<(remark: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
             /**
              * Make some on-chain remark and emit event.
              **/
-            remarkWithEvent: AugmentedSubmittable<(remark: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Bytes
-            ]>;
+            remarkWithEvent: AugmentedSubmittable<(remark: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
             /**
              * Set the new runtime code.
              **/
-            setCode: AugmentedSubmittable<(code: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Bytes
-            ]>;
+            setCode: AugmentedSubmittable<(code: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
             /**
              * Set the new runtime code without doing any checks of the given `code`.
              *
              * Note that runtime upgrades will not run if this is called with a not-increasing spec
              * version!
              **/
-            setCodeWithoutChecks: AugmentedSubmittable<(code: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Bytes
-            ]>;
+            setCodeWithoutChecks: AugmentedSubmittable<(code: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
             /**
              * Set the number of pages in the WebAssembly environment's heap.
              **/
-            setHeapPages: AugmentedSubmittable<(pages: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u64
-            ]>;
+            setHeapPages: AugmentedSubmittable<(pages: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u64]>;
             /**
              * Set some items of storage.
              **/
-            setStorage: AugmentedSubmittable<(items: Vec<ITuple<[Bytes, Bytes]>> | [Bytes | string | Uint8Array, Bytes | string | Uint8Array][]) => SubmittableExtrinsic<ApiType>, [
-                Vec<ITuple<[Bytes, Bytes]>>
-            ]>;
+            setStorage: AugmentedSubmittable<(items: Vec<ITuple<[Bytes, Bytes]>> | ([Bytes | string | Uint8Array, Bytes | string | Uint8Array])[]) => SubmittableExtrinsic<ApiType>, [Vec<ITuple<[Bytes, Bytes]>>]>;
             /**
              * Generic tx
              **/
@@ -3215,9 +2743,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * `on_finalize`)
              * - 1 event handler `on_timestamp_set`. Must be `O(1)`.
              **/
-            set: AugmentedSubmittable<(now: Compact<u64> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                Compact<u64>
-            ]>;
+            set: AugmentedSubmittable<(now: Compact<u64> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [Compact<u64>]>;
             /**
              * Generic tx
              **/
@@ -3245,9 +2771,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * - `origin`: Must pass `Root`.
              * - `new`: Desired value for `QueueConfigData.drop_threshold`
              **/
-            updateDropThreshold: AugmentedSubmittable<(updated: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32
-            ]>;
+            updateDropThreshold: AugmentedSubmittable<(updated: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32]>;
             /**
              * Overwrites the number of pages which the queue must be reduced to before it signals
              * that message sending may recommence after it has been suspended.
@@ -3255,9 +2779,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * - `origin`: Must pass `Root`.
              * - `new`: Desired value for `QueueConfigData.resume_threshold`
              **/
-            updateResumeThreshold: AugmentedSubmittable<(updated: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32
-            ]>;
+            updateResumeThreshold: AugmentedSubmittable<(updated: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32]>;
             /**
              * Overwrites the number of pages which must be in the queue for the other side to be
              * told to suspend their sending.
@@ -3265,9 +2787,7 @@ declare module "@polkadot/api-base/types/submittable" {
              * - `origin`: Must pass `Root`.
              * - `new`: Desired value for `QueueConfigData.suspend_value`
              **/
-            updateSuspendThreshold: AugmentedSubmittable<(updated: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [
-                u32
-            ]>;
+            updateSuspendThreshold: AugmentedSubmittable<(updated: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32]>;
             /**
              * Generic tx
              **/

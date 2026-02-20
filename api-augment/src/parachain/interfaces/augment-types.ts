@@ -1404,6 +1404,7 @@ import type {
   MerklePatriciaRoot,
   MspStorageRequestStatus,
   Multiaddresses,
+  PendingStopStoringRequest,
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
@@ -2290,6 +2291,7 @@ declare module "@polkadot/types/types/registry" {
     PendingPause: PendingPause;
     PendingResume: PendingResume;
     PendingSlashes: PendingSlashes;
+    PendingStopStoringRequest: PendingStopStoringRequest;
     Perbill: Perbill;
     Percent: Percent;
     PerDispatchClassU32: PerDispatchClassU32;

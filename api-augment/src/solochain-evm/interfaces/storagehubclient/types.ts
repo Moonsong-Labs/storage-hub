@@ -235,6 +235,13 @@ export interface MspStorageRequestStatus extends Enum {
 /** @name Multiaddresses */
 export interface Multiaddresses extends Vec<Bytes> {}
 
+/** @name PendingStopStoringRequest */
+export interface PendingStopStoringRequest extends Struct {
+  readonly tick_when_requested: BlockNumber;
+  readonly file_owner: AccountId;
+  readonly file_size: StorageDataUnit;
+}
+
 /** @name ProviderId */
 export interface ProviderId extends H256 {}
 
@@ -411,13 +418,6 @@ export interface StorageRequestMetadata extends Struct {
   readonly bsps_confirmed: u32;
   readonly bsps_volunteered: u32;
   readonly deposit_paid: BalanceOf;
-}
-
-/** @name PendingStopStoringRequest */
-export interface PendingStopStoringRequest extends Struct {
-  readonly tick_when_requested: BlockNumber;
-  readonly file_owner: AccountId;
-  readonly file_size: StorageDataUnit;
 }
 
 /** @name TrieRemoveMutation */

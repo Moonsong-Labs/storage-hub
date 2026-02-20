@@ -1,27 +1,27 @@
-import "@polkadot/api-base/types/calls";
-import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
-import type { BTreeMap, Bytes, Null, Option, Result, U256, Vec, bool, u256, u32, u64 } from "@polkadot/types-codec";
-import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
-import type { BabeEquivocationProof, BabeGenesisConfiguration, Epoch, OpaqueKeyOwnershipProof } from "@polkadot/types/interfaces/babe";
-import type { CheckInherentsResult, InherentData } from "@polkadot/types/interfaces/blockbuilder";
-import type { BlockHash } from "@polkadot/types/interfaces/chain";
-import type { AuthorityId } from "@polkadot/types/interfaces/consensus";
-import type { BlockV2, EthReceiptV3, EthTransactionStatus, TransactionV2 } from "@polkadot/types/interfaces/eth";
-import type { EvmAccount, EvmCallInfoV2, EvmCreateInfoV2 } from "@polkadot/types/interfaces/evm";
-import type { Extrinsic } from "@polkadot/types/interfaces/extrinsics";
-import type { GenesisBuildErr } from "@polkadot/types/interfaces/genesisBuilder";
-import type { AuthorityList, GrandpaEquivocationProof, SetId } from "@polkadot/types/interfaces/grandpa";
-import type { OpaqueMetadata } from "@polkadot/types/interfaces/metadata";
-import type { FeeDetails, RuntimeDispatchInfo } from "@polkadot/types/interfaces/payment";
-import type { AccountId, Balance, Block, BlockNumber, Call, ExtrinsicInclusionMode, H160, H256, Header, Index, KeyTypeId, Permill, Slot, Weight } from "@polkadot/types/interfaces/runtime";
-import type { RuntimeVersion } from "@polkadot/types/interfaces/state";
-import type { ApplyExtrinsicResult, DispatchError, Key } from "@polkadot/types/interfaces/system";
-import type { TransactionSource, TransactionValidity } from "@polkadot/types/interfaces/txqueue";
-import type { IExtrinsic, Observable } from "@polkadot/types/types";
-import type { BackupStorageProvider, BackupStorageProviderId, BucketId, ChunkId, GenericApplyDeltaEventInfoError, GetBspInfoError, GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError, GetNextDeadlineTickError, GetProofSubmissionRecordError, GetStakeError, GetUsersWithDebtOverThresholdError, IncompleteStorageRequestMetadataResponse, IsStorageRequestOpenToVolunteersError, MainStorageProviderId, Multiaddresses, PendingStopStoringRequest, ProviderId, QueryAvailableStorageCapacityError, QueryBspConfirmChunksToProveForFileError, QueryBspsVolunteeredForFileError, QueryBucketsForMspError, QueryBucketsOfUserStoredByMspError, QueryEarliestChangeCapacityBlockError, QueryFileEarliestVolunteerBlockError, QueryIncompleteStorageRequestMetadataError, QueryMspConfirmChunksToProveForFileError, QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, RandomnessOutput, StorageDataUnit, StorageProviderId, StorageRequestMetadata, TrieRemoveMutation, ValuePropositionWithId } from "@storagehub/api-augment/solochain-evm/interfaces/storagehubclient";
+import '@polkadot/api-base/types/calls';
+import type { ApiTypes, AugmentedCall, DecoratedCallBase } from '@polkadot/api-base/types';
+import type { BTreeMap, Bytes, Null, Option, Result, U256, Vec, bool, u256, u32, u64 } from '@polkadot/types-codec';
+import type { AnyNumber, IMethod, ITuple } from '@polkadot/types-codec/types';
+import type { BabeEquivocationProof, BabeGenesisConfiguration, Epoch, OpaqueKeyOwnershipProof } from '@polkadot/types/interfaces/babe';
+import type { CheckInherentsResult, InherentData } from '@polkadot/types/interfaces/blockbuilder';
+import type { BlockHash } from '@polkadot/types/interfaces/chain';
+import type { AuthorityId } from '@polkadot/types/interfaces/consensus';
+import type { BlockV2, EthReceiptV3, EthTransactionStatus, TransactionV2 } from '@polkadot/types/interfaces/eth';
+import type { EvmAccount, EvmCallInfoV2, EvmCreateInfoV2 } from '@polkadot/types/interfaces/evm';
+import type { Extrinsic } from '@polkadot/types/interfaces/extrinsics';
+import type { GenesisBuildErr } from '@polkadot/types/interfaces/genesisBuilder';
+import type { AuthorityList, GrandpaEquivocationProof, SetId } from '@polkadot/types/interfaces/grandpa';
+import type { OpaqueMetadata } from '@polkadot/types/interfaces/metadata';
+import type { FeeDetails, RuntimeDispatchInfo } from '@polkadot/types/interfaces/payment';
+import type { AccountId, Balance, Block, BlockNumber, Call, ExtrinsicInclusionMode, H160, H256, Header, Index, KeyTypeId, Permill, Slot, Weight } from '@polkadot/types/interfaces/runtime';
+import type { RuntimeVersion } from '@polkadot/types/interfaces/state';
+import type { ApplyExtrinsicResult, DispatchError, Key } from '@polkadot/types/interfaces/system';
+import type { TransactionSource, TransactionValidity } from '@polkadot/types/interfaces/txqueue';
+import type { IExtrinsic, Observable } from '@polkadot/types/types';
+import type { BackupStorageProvider, BackupStorageProviderId, BucketId, ChunkId, GenericApplyDeltaEventInfoError, GetBspInfoError, GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError, GetNextDeadlineTickError, GetProofSubmissionRecordError, GetStakeError, GetUsersWithDebtOverThresholdError, IncompleteStorageRequestMetadataResponse, IsStorageRequestOpenToVolunteersError, MainStorageProviderId, Multiaddresses, PendingStopStoringRequest, ProviderId, QueryAvailableStorageCapacityError, QueryBspConfirmChunksToProveForFileError, QueryBspsVolunteeredForFileError, QueryBucketsForMspError, QueryBucketsOfUserStoredByMspError, QueryEarliestChangeCapacityBlockError, QueryFileEarliestVolunteerBlockError, QueryIncompleteStorageRequestMetadataError, QueryMspConfirmChunksToProveForFileError, QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, RandomnessOutput, StorageDataUnit, StorageProviderId, StorageRequestMetadata, TrieRemoveMutation, ValuePropositionWithId } from '@storagehub/api-augment/solochain-evm/interfaces/storagehubclient';
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
 export type __DecoratedCallBase<ApiType extends ApiTypes> = DecoratedCallBase<ApiType>;
-declare module "@polkadot/api-base/types/calls" {
+declare module '@polkadot/api-base/types/calls' {
     interface AugmentedCalls<ApiType extends ApiTypes> {
         /** 0xbc9d89904f5b923f/1 */
         accountNonceApi: {
@@ -162,7 +162,7 @@ declare module "@polkadot/api-base/types/calls" {
             /**
              * Returns a frame_ethereum::call response. If `estimate` is true,
              **/
-            call: AugmentedCall<ApiType, (from: H160 | string | Uint8Array, to: H160 | string | Uint8Array, data: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: U256 | AnyNumber | Uint8Array, maxFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, estimate: bool | boolean | Uint8Array, accessList: Option<Vec<ITuple<[H160, Vec<H256>]>>> | null | Uint8Array | Vec<ITuple<[H160, Vec<H256>]>> | [H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]][]) => Observable<Result<EvmCallInfoV2, DispatchError>>>;
+            call: AugmentedCall<ApiType, (from: H160 | string | Uint8Array, to: H160 | string | Uint8Array, data: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: U256 | AnyNumber | Uint8Array, maxFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, estimate: bool | boolean | Uint8Array, accessList: Option<Vec<ITuple<[H160, Vec<H256>]>>> | null | Uint8Array | Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[]) => Observable<Result<EvmCallInfoV2, DispatchError>>>;
             /**
              * Returns runtime defined pallet_evm::ChainId.
              **/
@@ -170,7 +170,7 @@ declare module "@polkadot/api-base/types/calls" {
             /**
              * Returns a frame_ethereum::call response. If `estimate` is true,
              **/
-            create: AugmentedCall<ApiType, (from: H160 | string | Uint8Array, data: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: U256 | AnyNumber | Uint8Array, maxFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, estimate: bool | boolean | Uint8Array, accessList: Option<Vec<ITuple<[H160, Vec<H256>]>>> | null | Uint8Array | Vec<ITuple<[H160, Vec<H256>]>> | [H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]][]) => Observable<Result<EvmCreateInfoV2, DispatchError>>>;
+            create: AugmentedCall<ApiType, (from: H160 | string | Uint8Array, data: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: U256 | AnyNumber | Uint8Array, maxFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, estimate: bool | boolean | Uint8Array, accessList: Option<Vec<ITuple<[H160, Vec<H256>]>>> | null | Uint8Array | Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[]) => Observable<Result<EvmCreateInfoV2, DispatchError>>>;
             /**
              * Return all the current data for a block in a single runtime call.
              **/
@@ -219,6 +219,10 @@ declare module "@polkadot/api-base/types/calls" {
              **/
             getMaxBatchConfirmStorageRequests: AugmentedCall<ApiType, () => Observable<u32>>;
             /**
+             * Check if a BSP has a pending stop storing request for a file.
+             **/
+            hasPendingStopStoringRequest: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array, fileKey: H256 | string | Uint8Array) => Observable<bool>>;
+            /**
              * Check if a storage request is open to volunteers.
              **/
             isStorageRequestOpenToVolunteers: AugmentedCall<ApiType, (fileKey: H256 | string | Uint8Array) => Observable<Result<bool, IsStorageRequestOpenToVolunteersError>>>;
@@ -226,6 +230,10 @@ declare module "@polkadot/api-base/types/calls" {
              * List incomplete storage request keys with pagination.
              **/
             listIncompleteStorageRequestKeys: AugmentedCall<ApiType, (startAfter: Option<H256> | null | Uint8Array | H256 | string, limit: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>>;
+            /**
+             * Get all pending stop storing requests for a BSP.
+             **/
+            pendingStopStoringRequestsByBsp: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array) => Observable<BTreeMap<H256, PendingStopStoringRequest>>>;
             /**
              * Get pending storage requests for a Main Storage Provider.
              **/
@@ -247,6 +255,10 @@ declare module "@polkadot/api-base/types/calls" {
              **/
             queryIncompleteStorageRequestMetadata: AugmentedCall<ApiType, (fileKey: H256 | string | Uint8Array) => Observable<Result<IncompleteStorageRequestMetadataResponse, QueryIncompleteStorageRequestMetadataError>>>;
             /**
+             * Query the minimum wait period for stop storing requests.
+             **/
+            queryMinWaitForStopStoring: AugmentedCall<ApiType, () => Observable<BlockNumber>>;
+            /**
              * Query the chunks that a MSP needs to prove to confirm that it is storing a file.
              **/
             queryMspConfirmChunksToProveForFile: AugmentedCall<ApiType, (mspId: MainStorageProviderId | string | Uint8Array, fileKey: H256 | string | Uint8Array) => Observable<Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>>>;
@@ -258,10 +270,6 @@ declare module "@polkadot/api-base/types/calls" {
              * Get the storage requests for a given MSP.
              **/
             storageRequestsByMsp: AugmentedCall<ApiType, (mspId: MainStorageProviderId | string | Uint8Array) => Observable<BTreeMap<H256, StorageRequestMetadata>>>;
-            /**
-             * Get all pending stop storing requests for a BSP.
-             **/
-            pendingStopStoringRequestsByBsp: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array) => Observable<BTreeMap<H256, PendingStopStoringRequest>>>;
             /**
              * Generic call
              **/
@@ -501,7 +509,7 @@ declare module "@polkadot/api-base/types/calls" {
             /**
              * Validate the transaction.
              **/
-            validateTransaction: AugmentedCall<ApiType, (source: TransactionSource | "InBlock" | "Local" | "External" | number | Uint8Array, tx: Extrinsic | IExtrinsic | string | Uint8Array, blockHash: BlockHash | string | Uint8Array) => Observable<TransactionValidity>>;
+            validateTransaction: AugmentedCall<ApiType, (source: TransactionSource | 'InBlock' | 'Local' | 'External' | number | Uint8Array, tx: Extrinsic | IExtrinsic | string | Uint8Array, blockHash: BlockHash | string | Uint8Array) => Observable<TransactionValidity>>;
             /**
              * Generic call
              **/
