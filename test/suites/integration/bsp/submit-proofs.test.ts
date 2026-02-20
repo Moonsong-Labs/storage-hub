@@ -204,12 +204,6 @@ await describeBspNet(
     });
 
     it("BSP can correctly delete a file from its forest and runtime correctly updates its root", async () => {
-      // Generate the inclusion proof for the file key that BSP-Three requested to stop storing.
-      const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
-        null,
-        [fileMetadata.fileKey]
-      );
-
       // Wait enough blocks for the deletion to be allowed.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
@@ -222,20 +216,19 @@ await describeBspNet(
       )
         .unwrap()
         .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
-      const cooldown = currentBlockNumber + minWaitForStopStoring;
+      const cooldown = currentBlockNumber + minWaitForStopStoring + 1;
       await userApi.block.skipTo(cooldown);
-      await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
 
-      // Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
-      const block = await userApi.block.seal({
-        calls: [
-          bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
-            fileMetadata.fileKey,
-            inclusionForestProof.toString()
-          )
-        ],
-        signer: bspThreeKey
+      // The BSP will automatically submit bspConfirmStopStoring after the cooldown
+      // Wait for it to appear in the tx pool and seal
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspConfirmStopStoring"
       });
+
+      // Seal the block containing the confirmation
+      const block = await userApi.block.seal();
+
       // Check for the confirm stopped storing event.
       const confirmStopStoringEvent = await userApi.assert.eventPresent(
         "fileSystem",

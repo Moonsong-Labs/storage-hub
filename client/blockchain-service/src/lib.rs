@@ -32,7 +32,7 @@ pub async fn spawn_blockchain_service<FSH, Runtime>(
     config: BlockchainServiceConfig<Runtime>,
     client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     keystore: KeystorePtr,
-    rpc_handlers: Arc<RpcHandlers>,
+    rpc_handlers: Option<Arc<RpcHandlers>>,
     forest_storage_handler: FSH,
     rocksdb_root_path: impl Into<PathBuf>,
     notify_period: Option<u32>,

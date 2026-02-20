@@ -230,6 +230,8 @@ async fn init_sh_builder<R, S, Runtime: StorageEnableRuntime>(
     keystore: KeystorePtr,
     client: Arc<StorageEnableClient<Runtime>>,
     prometheus_registry: Option<&Registry>,
+    rocksdb_root_path: impl Into<PathBuf> + Clone,
+    maintenance_mode: bool,
 ) -> Result<
     Option<(
         StorageHubBuilder<R, S, Runtime>,
@@ -414,6 +416,16 @@ where
         }
     };
 
+    // Spawn the Blockchain Service.
+    builder
+        .with_blockchain(
+            client.clone(),
+            keystore.clone(),
+            rocksdb_root_path.clone(),
+            maintenance_mode,
+        )
+        .await;
+
     // Create RPC configuration
     let storage_hub_client_rpc_config = builder.create_rpc_config(keystore, rpc_config);
 
@@ -438,15 +450,18 @@ where
 {
     let rocks_db_path = rocksdb_root_path.into();
 
-    // Spawn the Blockchain Service if node is running as a Storage Provider
+    // Safeguard: if the blockchain service wasn't created in init_sh_builder, create it here
+    // with default config. All node roles should have it created by this point, but this
+    // ensures we never proceed without one.
+    if sh_builder.blockchain.is_none() {
+        sh_builder
+            .with_blockchain(client, keystore, rocks_db_path.clone(), maintenance_mode)
+            .await;
+    }
+
+    // Set the RPC handlers for the Blockchain Service
     sh_builder
-        .with_blockchain(
-            client.clone(),
-            keystore.clone(),
-            Arc::new(rpc_handlers),
-            rocks_db_path.clone(),
-            maintenance_mode,
-        )
+        .set_blockchain_rpc_handlers(Arc::new(rpc_handlers))
         .await;
 
     // Spawn the trusted file transfer server if configured
@@ -979,7 +994,10 @@ where
             }
         };
 
-    // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
+    // Get the base path for the node (the RocksDB root path)
+    let base_path = config.base_path.path().to_path_buf().clone();
+
+    // If a role is configured, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, ParachainRuntime>(
             &role_options,
@@ -990,6 +1008,8 @@ where
             keystore.clone(),
             client.clone(),
             prometheus_registry.as_ref(),
+            base_path.clone(),
+            maintenance_mode,
         )
         .await?
         {
@@ -1013,8 +1033,6 @@ where
         })
     };
 
-    let base_path = config.base_path.path().to_path_buf().clone();
-
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
@@ -1030,10 +1048,10 @@ where
         telemetry: telemetry.as_mut(),
     })?;
 
-    // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(_) = role_options {
+    // Finish building the StorageHubHandler and run role-specific tasks.
+    if let Some(sh_builder) = sh_builder {
         finish_sh_builder_and_run_tasks(
-            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            sh_builder,
             client.clone(),
             rpc_handlers.clone(),
             keystore.clone(),
@@ -1307,7 +1325,10 @@ where
     // Create command_sink for RPC
     let (command_sink, _) = futures::channel::mpsc::channel(1000);
 
-    // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
+    // Get the base path for the node (the RocksDB root path)
+    let base_path = config.base_path.path().to_path_buf().clone();
+
+    // If a role is configured, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, ParachainRuntime>(
             &role_options,
@@ -1318,6 +1339,8 @@ where
             keystore.clone(),
             client.clone(),
             prometheus_registry.as_ref(),
+            base_path.clone(),
+            true, // maintenance_mode = true
         )
         .await?
         {
@@ -1358,10 +1381,10 @@ where
         telemetry: telemetry.as_mut(),
     })?;
 
-    // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(_) = role_options {
+    // Finish building the StorageHubHandler and run role-specific tasks.
+    if let Some(sh_builder) = sh_builder {
         finish_sh_builder_and_run_tasks(
-            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            sh_builder,
             client.clone(),
             rpc_handlers,
             keystore.clone(),
@@ -1517,7 +1540,10 @@ where
         );
     }
 
-    // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
+    // Get the base path for the node (the RocksDB root path)
+    let base_path = parachain_config.base_path.path().to_path_buf().clone();
+
+    // If a role is configured, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, ParachainRuntime>(
             &role_options,
@@ -1528,6 +1554,8 @@ where
             keystore.clone(),
             client.clone(),
             prometheus_registry.as_ref(),
+            base_path.clone(),
+            maintenance_mode,
         )
         .await?
         {
@@ -1551,8 +1579,6 @@ where
         })
     };
 
-    let base_path = parachain_config.base_path.path().to_path_buf().clone();
-
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
@@ -1568,10 +1594,10 @@ where
         telemetry: telemetry.as_mut(),
     })?;
 
-    // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(_) = role_options {
+    // Finish building the StorageHubHandler and run role-specific tasks.
+    if let Some(sh_builder) = sh_builder {
         finish_sh_builder_and_run_tasks(
-            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            sh_builder,
             client.clone(),
             rpc_handlers.clone(),
             keystore.clone(),
@@ -1736,7 +1762,10 @@ where
     // Get prometheus registry for metrics
     let prometheus_registry = parachain_config.prometheus_registry().cloned();
 
-    // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
+    // Get the base path for the node (the RocksDB root path)
+    let base_path = parachain_config.base_path.path().to_path_buf().clone();
+
+    // If a role is configured, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, ParachainRuntime>(
             &role_options,
@@ -1747,6 +1776,8 @@ where
             keystore.clone(),
             client.clone(),
             prometheus_registry.as_ref(),
+            base_path.clone(),
+            true, // maintenance_mode = true
         )
         .await?
         {
@@ -1787,10 +1818,10 @@ where
         telemetry: telemetry.as_mut(),
     })?;
 
-    // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(_) = role_options {
+    // Finish building the StorageHubHandler and run role-specific tasks.
+    if let Some(sh_builder) = sh_builder {
         finish_sh_builder_and_run_tasks(
-            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            sh_builder,
             client.clone(),
             rpc_handlers.clone(),
             keystore.clone(),
@@ -2197,7 +2228,10 @@ where
     // Get prometheus registry for metrics
     let prometheus_registry = config.prometheus_registry().cloned();
 
-    // Build StorageHub services if provider
+    // Get the base path for the node (the RocksDB root path)
+    let base_path = config.base_path.path().to_path_buf().clone();
+
+    // If a role is configured, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, SolochainEvmRuntime>(
             &role_options,
@@ -2208,6 +2242,8 @@ where
             keystore_container.keystore(),
             client.clone(),
             prometheus_registry.as_ref(),
+            base_path.clone(),
+            false,
         )
         .await?
         {
@@ -2307,9 +2343,6 @@ where
             .map_err(Into::into)
         })
     };
-
-    let base_path = config.base_path.path().to_path_buf().clone();
-    let prometheus_registry = config.prometheus_registry().cloned();
 
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
@@ -2465,14 +2498,15 @@ where
         }
     }
 
-    if let Some(_) = role_options {
+    // Finish building the StorageHubHandler and run role-specific tasks.
+    if let Some(sh_builder) = sh_builder {
         finish_sh_builder_and_run_tasks(
-            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            sh_builder,
             client.clone(),
             rpc_handlers.clone(),
             keystore_container.keystore(),
             base_path.clone(),
-            false,
+            maintenance_mode,
         )
         .await?;
     }
@@ -2869,6 +2903,9 @@ where
     // Get prometheus registry for metrics
     let prometheus_registry = config.prometheus_registry().cloned();
 
+    // Get the base path for the node (the RocksDB root path)
+    let base_path = config.base_path.path().to_path_buf().clone();
+
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, SolochainEvmRuntime>(
             &role_options,
@@ -2879,6 +2916,8 @@ where
             keystore_container.keystore(),
             client.clone(),
             prometheus_registry.as_ref(),
+            base_path.clone(),
+            false,
         )
         .await?
         {
@@ -2939,8 +2978,6 @@ where
             .map_err(Into::into)
         })
     };
-
-    let base_path = config.base_path.path().to_path_buf().clone();
 
     let node_name = config.network.node_name.clone();
     let prometheus_registry = config.prometheus_registry().cloned();
@@ -3118,14 +3155,15 @@ where
         }
     }
 
-    if let Some(_) = role_options {
+    // Finish building the StorageHubHandler and run role-specific tasks.
+    if let Some(sh_builder) = sh_builder {
         finish_sh_builder_and_run_tasks(
-            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            sh_builder,
             client.clone(),
             rpc_handlers.clone(),
             keystore_container.keystore(),
             base_path.clone(),
-            false,
+            maintenance_mode,
         )
         .await?;
     }
@@ -3208,6 +3246,9 @@ where
     // Get prometheus registry for metrics
     let prometheus_registry = config.prometheus_registry().cloned();
 
+    // Get the base path for the node (the RocksDB root path)
+    let base_path = config.base_path.path().to_path_buf().clone();
+
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, SolochainEvmRuntime>(
             &role_options,
@@ -3218,6 +3259,8 @@ where
             keystore_container.keystore(),
             client.clone(),
             prometheus_registry.as_ref(),
+            base_path.clone(),
+            true, // maintenance_mode = true
         )
         .await?
         {
@@ -3265,8 +3308,6 @@ where
         })
     };
 
-    let base_path = config.base_path.path().to_path_buf().clone();
-
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
@@ -3282,9 +3323,10 @@ where
         telemetry: telemetry.as_mut(),
     })?;
 
-    if let Some(_) = role_options {
+    // Finish building the StorageHubHandler and run role-specific tasks.
+    if let Some(sh_builder) = sh_builder {
         finish_sh_builder_and_run_tasks(
-            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            sh_builder,
             client.clone(),
             rpc_handlers,
             keystore_container.keystore(),

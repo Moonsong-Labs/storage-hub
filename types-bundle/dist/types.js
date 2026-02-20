@@ -282,6 +282,18 @@ export const SHARED_TYPES = {
             Success: "Vec<Vec<u8>>",
             NotAnMsp: null
         }
+    },
+    BspStopStoringFileResult: {
+        _enum: {
+            Success: null,
+            NotABsp: null,
+            BlockchainServiceNotAvailable: null
+        }
+    },
+    PendingStopStoringRequest: {
+        tick_when_requested: "BlockNumber",
+        file_owner: "AccountId",
+        file_size: "StorageDataUnit"
     }
 };
 // Parachain currently does not override base account types

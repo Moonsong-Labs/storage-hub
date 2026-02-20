@@ -133,6 +133,35 @@ const FILE_SYSTEM_V1 = {
         description: "Get the maximum batch size for confirm storage requests.",
         params: [],
         type: "u32"
+    },
+    query_min_wait_for_stop_storing: {
+        description: "Query the minimum wait period for stop storing requests.",
+        params: [],
+        type: "BlockNumber"
+    },
+    has_pending_stop_storing_request: {
+        description: "Check if a BSP has a pending stop storing request for a file.",
+        params: [
+            {
+                name: "bspId",
+                type: "BackupStorageProviderId"
+            },
+            {
+                name: "fileKey",
+                type: "H256"
+            }
+        ],
+        type: "bool"
+    },
+    pending_stop_storing_requests_by_bsp: {
+        description: "Get all pending stop storing requests for a BSP.",
+        params: [
+            {
+                name: "bspId",
+                type: "BackupStorageProviderId"
+            }
+        ],
+        type: "BTreeMap<H256, PendingStopStoringRequest>"
     }
 };
 const PROOFS_DEALER_V1 = {
