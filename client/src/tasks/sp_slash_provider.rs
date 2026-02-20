@@ -62,14 +62,14 @@ where
         let provider = event.provider.clone();
         info!(
             target: LOG_TARGET,
-            "Slashing provider [{:x}]",
+            "Slashing provider [0x{:x}]",
             provider,
         );
 
         self.handle_slashable_provider_event(event).await?;
 
         Ok(format!(
-            "Handled SlashableProvider event for provider [{:x}]",
+            "Handled SlashableProvider event for provider [0x{:x}]",
             provider
         ))
     }
