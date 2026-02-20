@@ -81,7 +81,10 @@ pub type UncheckedExtrinsic =
     generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
 
 /// Migrations to run on runtime upgrade.
-pub type Migrations = (pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,);
+pub type Migrations = (
+    pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,
+    pallet_file_system::migrations::v2::MigrateV1ToV2<Runtime>,
+);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -131,7 +134,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     spec_name: alloc::borrow::Cow::Borrowed("sh-parachain-runtime"),
     impl_name: alloc::borrow::Cow::Borrowed("sh-parachain-runtime"),
     authoring_version: 1,
-    spec_version: 1,
+    spec_version: 2,
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 1,

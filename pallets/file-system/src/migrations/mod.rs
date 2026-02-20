@@ -22,3 +22,9 @@
 /// This migration transforms the `msp` field in `StorageRequestMetadata` from
 /// `Option<(ProviderId, bool)>` to `MspStorageRequestStatus<T>`.
 pub mod v1;
+
+/// Module containing migration logic from storage version 1 to 2.
+///
+/// This migration moves the `StorageRequestBsps` double map into a single-entry
+/// `StorageMap<MerkleHash, BoundedBTreeMap<ProviderIdFor, bool, MaxReplicationTarget>>`.
+pub mod v2;

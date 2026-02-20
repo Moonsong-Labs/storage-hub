@@ -166,7 +166,10 @@ pub type UncheckedExtrinsic =
     fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
 /// Migrations to run on runtime upgrade.
-pub type Migrations = (pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,);
+pub type Migrations = (
+    pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,
+    pallet_file_system::migrations::v2::MigrateV1ToV2<Runtime>,
+);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -210,7 +213,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     spec_name: alloc::borrow::Cow::Borrowed("sh-solochain-evm"),
     impl_name: alloc::borrow::Cow::Borrowed("sh-solochain-evm"),
     authoring_version: 1,
-    spec_version: 1,
+    spec_version: 2,
     impl_version: 0,
     apis: RUNTIME_API_VERSIONS,
     transaction_version: 1,
@@ -758,6 +761,10 @@ impl_runtime_apis! {
 
         fn get_max_batch_confirm_storage_requests() -> u32 {
             FileSystem::get_max_batch_confirm_storage_requests()
+        }
+
+        fn get_max_msp_respond_file_keys() -> u32 {
+            FileSystem::get_max_msp_respond_file_keys()
         }
     }
 

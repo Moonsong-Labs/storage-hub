@@ -195,6 +195,20 @@ pub mod dynamic_params {
         /// cost for the user to issue a storage request for a 1 GB file would be:
         /// 50 NANOUNITs per gigabyte per tick * 12 BSPs * 72k ticks * 1 GB = 0.0432 UNITs
         pub static UpfrontTicksToPay: BlockNumber = 72_000;
+
+        /// Maximum number of BSPs that can volunteer for a single storage request.
+        #[codec(index = 30)]
+        #[allow(non_upper_case_globals)]
+        pub static MaxBspVolunteers: ReplicationTargetType = 1_000;
+
+        /// Maximum number of file keys an MSP can accept per bucket in a single
+        /// `msp_respond_storage_requests_multiple_buckets` call.
+        ///
+        /// Default: 10 (matches existing benchmark range `m: Linear<1, 10>`).
+        /// Increase alongside benchmark range updates after re-running benchmarks.
+        #[codec(index = 31)]
+        #[allow(non_upper_case_globals)]
+        pub static MaxMspRespondFileKeys: ReplicationTargetType = 10;
     }
 }
 

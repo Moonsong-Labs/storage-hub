@@ -116,6 +116,7 @@ use std::{
     time::Duration,
 };
 
+use frame_support::BoundedVec;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{
@@ -1039,7 +1040,7 @@ where
                 };
 
                 Some(StorageRequestMspAcceptedFileKeys {
-                    file_keys_and_proofs: accept.clone(),
+                    file_keys_and_proofs: BoundedVec::truncate_from(accept.clone()),
                     forest_proof: forest_proof.proof,
                 })
             } else {

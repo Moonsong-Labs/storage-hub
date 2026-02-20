@@ -2,6 +2,7 @@ use anyhow::Result;
 use log::{debug, error, info, trace, warn};
 use std::{collections::HashSet, str, sync::Arc};
 
+use frame_support::BoundedVec;
 use sc_client_api::HeaderBackend;
 use sc_network_types::PeerId;
 use sp_api::ProvideRuntimeApi;
@@ -495,7 +496,14 @@ where
 
         // Check for pending RespondStorage requests.
         {
-            let max_batch_respond = self.config.msp_respond_storage_batch_size;
+            let best_hash = self.client.info().best_hash;
+            let runtime_max = self
+                .client
+                .runtime_api()
+                .get_max_msp_respond_file_keys(best_hash)
+                .unwrap_or(self.config.msp_respond_storage_batch_size);
+            let max_batch_respond =
+                std::cmp::min(runtime_max, self.config.msp_respond_storage_batch_size);
 
             // Batch multiple RespondStorage requests up to the configured maximum.
             let mut respond_storage_requests = Vec::new();
@@ -529,7 +537,9 @@ where
                 );
                 next_event_data = Some(
                     ProcessMspRespondStoringRequestData {
-                        respond_storing_requests: respond_storage_requests,
+                        respond_storing_requests: BoundedVec::truncate_from(
+                            respond_storage_requests,
+                        ),
                     }
                     .into(),
                 );
