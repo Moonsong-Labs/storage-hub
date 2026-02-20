@@ -11,6 +11,11 @@ use crate::constants::{
     },
     database::DEFAULT_DATABASE_URL,
     download::MAX_DOWNLOAD_SESSIONS,
+    node_health::{
+        DEFAULT_INDEXER_LAG_BLOCKS_THRESHOLD, DEFAULT_INDEXER_STALE_THRESHOLD_SECS,
+        DEFAULT_NONCE_STUCK_THRESHOLD_SECS, DEFAULT_REQUEST_MIN_THRESHOLD,
+        DEFAULT_REQUEST_WINDOW_SECS,
+    },
     rpc::{
         DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL,
         DEFAULT_MSP_TRUSTED_FILE_TRANSFER_SERVER_URL, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS,
@@ -36,6 +41,8 @@ pub struct Config {
     pub msp: MspConfig,
     pub database: DatabaseConfig,
     pub file_transfer: FileTransferConfig,
+    #[serde(default)]
+    pub node_health: NodeHealthConfig,
 }
 
 /// Log format configuration
@@ -205,6 +212,38 @@ pub struct MspConfig {
     pub use_legacy_upload_method: bool,
 }
 
+/// Node health monitoring configuration
+///
+/// Configures thresholds for the `/node-health` endpoint, which checks
+/// whether the MSP node is operating correctly.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeHealthConfig {
+    /// How many seconds the indexer's `updated_at` can lag behind `now`
+    /// before it is considered stuck.
+    pub indexer_stale_threshold_secs: u64,
+    /// Maximum acceptable block lag between the indexer and the finalized chain head.
+    pub indexer_lag_blocks_threshold: u64,
+    /// Time window in seconds for counting recent storage requests.
+    pub request_window_secs: u64,
+    /// Minimum number of total requests in the window before the acceptance ratio matters.
+    pub request_min_threshold: u64,
+    /// How many seconds the on-chain nonce can remain unchanged before the signal
+    /// is considered unhealthy.
+    pub nonce_stuck_threshold_secs: u64,
+}
+
+impl Default for NodeHealthConfig {
+    fn default() -> Self {
+        Self {
+            indexer_stale_threshold_secs: DEFAULT_INDEXER_STALE_THRESHOLD_SECS,
+            indexer_lag_blocks_threshold: DEFAULT_INDEXER_LAG_BLOCKS_THRESHOLD,
+            request_window_secs: DEFAULT_REQUEST_WINDOW_SECS,
+            request_min_threshold: DEFAULT_REQUEST_MIN_THRESHOLD,
+            nonce_stuck_threshold_secs: DEFAULT_NONCE_STUCK_THRESHOLD_SECS,
+        }
+    }
+}
+
 /// Database configuration for PostgreSQL connection
 ///
 /// Manages the connection parameters for the PostgreSQL database
@@ -265,6 +304,7 @@ impl Default for Config {
                 max_upload_sessions: MAX_UPLOAD_SESSIONS,
                 max_download_sessions: MAX_DOWNLOAD_SESSIONS,
             },
+            node_health: NodeHealthConfig::default(),
         }
     }
 }

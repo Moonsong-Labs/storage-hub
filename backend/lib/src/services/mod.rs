@@ -21,11 +21,13 @@ pub mod auth;
 pub mod download_session;
 pub mod health;
 pub mod msp;
+pub mod node_health;
 pub mod upload_session;
 
 use download_session::DownloadSessionManager;
 use health::HealthService;
 use msp::MspService;
+use node_health::NodeHealthService;
 use upload_session::UploadSessionManager;
 
 /// Container for all backend services
@@ -34,6 +36,7 @@ pub struct Services {
     pub config: Config,
     pub auth: Arc<AuthService>,
     pub health: Arc<HealthService>,
+    pub node_health: Arc<NodeHealthService>,
     pub msp: Arc<MspService>,
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<DBClient>,
@@ -61,6 +64,13 @@ impl Services {
         let msp =
             Arc::new(MspService::new(postgres.clone(), rpc.clone(), config.msp.clone()).await);
 
+        let node_health = Arc::new(NodeHealthService::new(
+            postgres.clone(),
+            rpc.clone(),
+            msp.msp_id().clone(),
+            config.node_health.clone(),
+        ));
+
         let download_sessions = Arc::new(DownloadSessionManager::new(
             config.file_transfer.max_download_sessions,
         ));
@@ -72,6 +82,7 @@ impl Services {
             config,
             auth,
             health,
+            node_health,
             msp,
             storage,
             postgres,
@@ -98,8 +109,8 @@ impl Services {
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
 
-        // Create mock database client
-        let repo = MockRepository::new();
+        // Create mock database client with sample data (including MSP with DUMMY_MSP_ID)
+        let repo = MockRepository::sample().await;
         let postgres = Arc::new(DBClient::new(Arc::new(repo)));
 
         // Create mock RPC client
