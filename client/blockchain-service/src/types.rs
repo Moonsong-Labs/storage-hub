@@ -964,6 +964,10 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 
     /// Enqueue a BSP confirm stop storing request if it is not already tracked.
     ///
+    /// **Queue ordering invariant**: `pending_confirm_bsp_stop_storing` must remain sorted by
+    /// `confirm_after_tick` (ascending) at all times, because `pop_ready_confirm_bsp_stop_storing`
+    /// only inspects the front element.
+    ///
     /// Retries (`try_count > 0`) are pushed to the front of the queue since their
     /// `confirm_after_tick` has already been reached when the previous attempt failed.
     pub(crate) fn enqueue_confirm_bsp_stop_storing(

@@ -1276,6 +1276,13 @@ where
             ));
         }
 
+        // Sort the rebuilt queue by confirm_after_tick so that
+        // `pop_ready_confirm_bsp_stop_storing` (which only checks the front) remains correct.
+        bsp_handler
+            .pending_confirm_bsp_stop_storing
+            .make_contiguous()
+            .sort_by_key(|r| r.confirm_after_tick);
+
         // Remove the file keys from the request queue.
         if !keys_to_remove_from_request_queue.is_empty() {
             bsp_handler.remove_request_bsp_stop_storing_keys(&keys_to_remove_from_request_queue);
