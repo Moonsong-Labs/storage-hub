@@ -9,6 +9,7 @@ pub mod fisherman_process_batch_deletions;
 pub mod mock_bsp_volunteer;
 pub mod mock_sp_react_to_event;
 pub mod msp_charge_fees;
+pub mod msp_check_bucket_file_storage;
 pub mod msp_delete_bucket;
 pub mod msp_delete_file;
 pub mod msp_distribute_file;

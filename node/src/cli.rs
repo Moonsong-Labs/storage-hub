@@ -1,6 +1,7 @@
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Deserializer};
 use shp_types::StorageDataUnit;
+use sp_core::H256;
 use std::{path::PathBuf, str::FromStr};
 
 use crate::command::ProviderOptions;
@@ -431,6 +432,19 @@ pub struct ProviderConfigurations {
         default_value = "7070"
     )]
     pub trusted_file_transfer_server_port: Option<u16>,
+
+    /// List of trusted MSP on-chain IDs allowed to request downloads from this BSP.
+    ///
+    /// This flag is only valid when running as a BSP provider.
+    ///
+    /// Format: comma-separated list of hex IDs, e.g. `0x…`.
+    #[arg(
+        long = "trusted-msps",
+        value_delimiter = ',',
+        value_name = "MSP_ID",
+        help_heading = "BSP Download Authorisation"
+    )]
+    pub trusted_msps: Vec<H256>,
 }
 
 impl ProviderConfigurations {
@@ -605,6 +619,7 @@ impl ProviderConfigurations {
             trusted_file_transfer_server: self.trusted_file_transfer_server,
             trusted_file_transfer_server_host: self.trusted_file_transfer_server_host.clone(),
             trusted_file_transfer_server_port: self.trusted_file_transfer_server_port,
+            trusted_msps: self.trusted_msps.clone(),
         }
     }
 }
@@ -886,7 +901,7 @@ pub struct Cli {
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
-        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts"
+        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts", "trusted_msps",
     ])]
     pub provider_config_file: Option<String>,
 
