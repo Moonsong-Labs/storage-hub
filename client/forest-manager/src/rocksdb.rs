@@ -353,6 +353,23 @@ where
         }
     }
 
+    fn get_all_files(&self) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>> {
+        let db = self.as_hash_db();
+        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
+        let mut files = Vec::new();
+        let mut trie_iter = trie
+            .iter()
+            .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
+
+        while let Some((_, value)) = trie_iter.next().transpose()? {
+            let metadata = FileMetadata::decode(&mut &value[..])?;
+            let file_key = metadata.file_key::<T::Hash>();
+            files.push((file_key, metadata));
+        }
+
+        Ok(files)
+    }
+
     fn generate_proof(
         &self,
         challenged_file_keys: Vec<HasherOutT<T>>,
@@ -654,6 +671,53 @@ mod tests {
         assert_eq!(file_metadata.location(), "location".as_bytes());
         assert_eq!(file_metadata.owner(), "Alice".as_bytes());
         assert_eq!(file_metadata.fingerprint(), &Fingerprint::default());
+    }
+
+    #[test]
+    fn test_get_all_files() {
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
+
+        let metadata_1 = FileMetadata::new(
+            "Alice".as_bytes().to_vec(),
+            "bucket".as_bytes().to_vec(),
+            "location_1".as_bytes().to_vec(),
+            100,
+            Fingerprint::default(),
+        )
+        .unwrap();
+        let metadata_2 = FileMetadata::new(
+            "Bob".as_bytes().to_vec(),
+            "bucket".as_bytes().to_vec(),
+            "location_2".as_bytes().to_vec(),
+            200,
+            Fingerprint::default(),
+        )
+        .unwrap();
+
+        ForestStorage::<StorageProofsMerkleTrieLayout, sh_parachain_runtime::Runtime>::insert_files_metadata(
+            &mut forest_storage,
+            &[metadata_1, metadata_2],
+        )
+        .unwrap();
+
+        let all_files =
+            ForestStorage::<StorageProofsMerkleTrieLayout, sh_parachain_runtime::Runtime>::get_all_files(
+                &forest_storage,
+            )
+            .unwrap();
+
+        assert_eq!(all_files.len(), 2);
+
+        let mut sizes = all_files
+            .iter()
+            .map(|(_, m)| m.file_size())
+            .collect::<Vec<_>>();
+        sizes.sort_unstable();
+        assert_eq!(sizes, vec![100, 200]);
+
+        for (_, metadata) in all_files {
+            assert_eq!(metadata.bucket_id(), "bucket".as_bytes());
+        }
     }
 
     #[test]
