@@ -939,7 +939,7 @@ export class NetworkLauncher {
         additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
-    const { rpcPort: bspTwoRpcPort } = await addBsp(
+    const { containerName: bspTwoContainerName, rpcPort: bspTwoRpcPort } = await addBsp(
       api,
       api.accounts.bspTwoKey,
       api.accounts.sudo,
@@ -952,7 +952,7 @@ export class NetworkLauncher {
         additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
-    const { rpcPort: bspThreeRpcPort } = await addBsp(
+    const { containerName: bspThreeContainerName, rpcPort: bspThreeRpcPort } = await addBsp(
       api,
       api.accounts.bspThreeKey,
       api.accounts.sudo,
@@ -987,13 +987,13 @@ export class NetworkLauncher {
     });
 
     await bspTwoApi.docker.waitForLog({
-      containerName: "storage-hub-sh-bsp-two",
+      containerName: bspTwoContainerName,
       searchString: "✅ RPC handlers set for BlockchainService",
       timeout: 15000
     });
 
     await bspThreeApi.docker.waitForLog({
-      containerName: "storage-hub-sh-bsp-three",
+      containerName: bspThreeContainerName,
       searchString: "✅ RPC handlers set for BlockchainService",
       timeout: 15000
     });
