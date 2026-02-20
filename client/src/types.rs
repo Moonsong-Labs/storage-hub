@@ -153,7 +153,13 @@ impl ShStorageLayer for NoStorageLayer {}
 ///
 /// This trait makes the [`FileStorage`] trait's generic type parameter concrete, and sets
 /// it to the [`StorageProofsMerkleTrieLayout`] used in StorageHub.
-pub trait FileStorageT: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync {}
+pub trait FileStorageT:
+    FileStorage<StorageProofsMerkleTrieLayout>
+    + shc_file_manager::traits::TrustedTransferBatchWrite<StorageProofsMerkleTrieLayout>
+    + Send
+    + Sync
+{
+}
 impl FileStorageT for InMemoryFileStorage<StorageProofsMerkleTrieLayout> {}
 impl<DB> FileStorageT for RocksDbFileStorage<StorageProofsMerkleTrieLayout, DB> where
     DB: KeyValueDB + 'static

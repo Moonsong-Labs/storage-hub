@@ -425,6 +425,16 @@ pub struct ProviderConfigurations {
         default_value = "7070"
     )]
     pub trusted_file_transfer_server_port: Option<u16>,
+
+    /// Batch size in bytes used by MSP trusted upload ingestion (default: 2MB).
+    #[arg(
+        long,
+        value_name = "BYTES",
+        help_heading = "Trusted File Transfer Server Options",
+        default_value = "2097152",
+        value_parser = clap::value_parser!(u64).range(1..)
+    )]
+    pub trusted_file_transfer_batch_size_bytes: Option<u64>,
 }
 
 impl ProviderConfigurations {
@@ -593,6 +603,7 @@ impl ProviderConfigurations {
             trusted_file_transfer_server: self.trusted_file_transfer_server,
             trusted_file_transfer_server_host: self.trusted_file_transfer_server_host.clone(),
             trusted_file_transfer_server_port: self.trusted_file_transfer_server_port,
+            trusted_file_transfer_batch_size_bytes: self.trusted_file_transfer_batch_size_bytes,
         }
     }
 }
@@ -871,6 +882,7 @@ pub struct Cli {
         "check_for_pending_proofs_period",
         "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
         "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", "msp_database_url",
+        "trusted_file_transfer_batch_size_bytes",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
