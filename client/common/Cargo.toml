@@ -49,7 +49,6 @@ sp-trie = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
 sp-rpc = { workspace = true }
-sp-std = { workspace = true }
 substrate-frame-rpc-system = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "arithmetic"] }
 
@@ -114,7 +113,6 @@ std = [
 	"sp-trie/std",
 	"sp-io/std",
 	"sp-runtime/std",
-	"sp-std/std",
 	"trie-db/std",
 	"polkadot-primitives/std",
 	"cumulus-primitives-core?/std",

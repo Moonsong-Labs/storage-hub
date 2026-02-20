@@ -21,6 +21,8 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+extern crate alloc;
+
 pub use pallet::*;
 pub use scale_info::Type;
 use types::{BackupStorageProviderId, MainStorageProviderId, SignUpRequest, StorageDataUnit};

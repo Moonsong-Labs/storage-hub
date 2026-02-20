@@ -24,7 +24,6 @@ frame-support = { workspace = true }
 # Substrate
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
-sp-std = { workspace = true }
 sp-trie = { workspace = true }
 
 [dev-dependencies]
@@ -44,7 +43,6 @@ std = [
     "sp-core/std",
     "sp-io/std",
     "sp-runtime/std",
-    "sp-std/std",
     "sp-trie/std",
 ]
 try-runtime = ["frame-support/try-runtime", "sp-runtime/try-runtime"]

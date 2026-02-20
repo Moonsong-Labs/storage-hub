@@ -61,7 +61,7 @@ impl User {
     /// Will return the authenticated user address or error if the user is unauthenticated
     pub fn address(&self) -> Result<&Address, Error> {
         match self {
-            Self::Authenticated { address } => Ok(&address),
+            Self::Authenticated { address } => Ok(address),
             _ => Err(Error::Unauthorized("User not authenticated".to_owned())),
         }
     }
@@ -99,7 +99,7 @@ impl User {
         }
 
         Ok(Self::Authenticated {
-            address: claims.address.clone(),
+            address: claims.address,
         })
     }
 

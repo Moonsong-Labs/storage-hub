@@ -79,7 +79,7 @@ impl IndexerOps for Repository {
     async fn get_msp_by_onchain_id(&self, onchain_msp_id: &OnchainMspId) -> RepositoryResult<Msp> {
         let mut conn = self.pool.get().await?;
 
-        Msp::get_by_onchain_msp_id(&mut conn, onchain_msp_id.clone())
+        Msp::get_by_onchain_msp_id(&mut conn, *onchain_msp_id)
             .await
             .map_err(Into::into)
     }

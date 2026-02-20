@@ -1,19 +1,19 @@
-use codec::{Decode, Encode, MaxEncodedLen};
+extern crate alloc;
+
+use alloc::collections::BTreeMap;
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use core::fmt::{Debug, Formatter, Result};
 use frame_support::traits::fungible;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
 use shp_traits::{CommitmentVerifier, ReadChallengeableProvidersInterface};
-use sp_std::{
-    collections::btree_map::BTreeMap,
-    fmt::{Debug, Formatter, Result},
-};
 
 /// Type that encapsulates the proof a Provider submits.
 ///
 /// The proof consists of a forest proof and a set of key proofs.
 /// A good proof would have a forest proof that proves that some keys belong to a
 /// Merkle Patricia Forest of a Provider, and the corresponding key proofs for those keys.
-#[derive(Encode, Decode, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct Proof<T: crate::Config> {
     /// The proof that the Provider submits to prove that the keys belong to their Merkle
@@ -37,7 +37,7 @@ impl<T: crate::Config> Debug for Proof<T> {
 
 /// Type that encapsulates the proof a Provider submits for a single key within a Merkle Patricia
 /// Forest.
-#[derive(Encode, Decode, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct KeyProof<T: crate::Config> {
     /// The actual key proof.
@@ -101,7 +101,7 @@ pub struct ProofSubmissionRecord<T: crate::Config> {
 /// from the Merkle Patricia Forest. This key will be removed if `should_remove_key` is `true` and
 /// if when the Provider responds to this challenge with a proof, in that proof there is an inclusion
 /// proof for that key (i.e. the key is in the Merkle Patricia Forest).
-#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, MaxEncodedLen)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, Clone, PartialEq, MaxEncodedLen)]
 #[scale_info(skip_type_params(T))]
 pub struct CustomChallenge<T: crate::Config> {
     /// The key being challenged.

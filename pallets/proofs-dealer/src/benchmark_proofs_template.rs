@@ -15,7 +15,7 @@
 
 use sp_core::crypto::Ss58Codec;
 use sp_runtime::AccountId32;
-use sp_std::{vec, vec::Vec};
+use alloc::{vec, vec::Vec};
 
 #[rustfmt::skip]
 pub fn get_seed() -> Vec<u8> {

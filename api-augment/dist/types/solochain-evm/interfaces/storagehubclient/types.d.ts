@@ -1,4 +1,4 @@
-import type { Bytes, Enum, Null, Struct, U8aFixed, Vec, bool, u32, u64 } from '@polkadot/types-codec';
+import type { Bytes, Enum, Null, Struct, U8aFixed, Vec, bool, u128, u32, u64 } from '@polkadot/types-codec';
 import type { EthereumAccountId } from '@polkadot/types/interfaces/eth';
 import type { BalanceOf, BlockNumber, H256 } from '@polkadot/types/interfaces/runtime';
 /** @name AccountId */
@@ -340,12 +340,14 @@ export interface ValuePropId extends H256 {
 }
 /** @name ValueProposition */
 export interface ValueProposition extends Struct {
-    readonly price_per_giga_unit_of_data_per_block: u64;
-    readonly bucket_data_limit: StorageDataUnit;
+    readonly pricePerGigaUnitOfDataPerBlock: u128;
+    readonly commitment: Bytes;
+    readonly bucketDataLimit: StorageDataUnit;
+    readonly available: bool;
 }
 /** @name ValuePropositionWithId */
 export interface ValuePropositionWithId extends Struct {
     readonly id: ValuePropId;
-    readonly value_prop: ValueProposition;
+    readonly valueProp: ValueProposition;
 }
 export type PHANTOM_STORAGEHUBCLIENT = 'storagehubclient';
