@@ -173,7 +173,7 @@ await describeMspNet(
       // Ensure the new bucket-check task reports the expected success message.
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
-        searchString: "OK: all 3 forest files are present and complete in file storage",
+        searchString: `OK: all ${files.length} forest files are present and complete in file storage`,
         timeout: 10_000,
         tail: 2_000
       });
@@ -238,7 +238,7 @@ await describeMspNet(
       // Assert that the task logs the recovery summary and that it reports 3 recovered.
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
-        searchString: "recovery finished: recovered=3, failed=0, panicked=0, total=3",
+        searchString: `recovery finished: recovered=${files.length}, failed=0, panicked=0, total=${files.length}`,
         timeout: 10_000,
         tail: 5_000
       });
