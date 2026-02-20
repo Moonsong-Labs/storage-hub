@@ -456,7 +456,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "🎣 Successfully deleted {} files for target {:?}: [{}]",
+            "🎣 Successfully submitted deletion for {} files for target {:?}: [{}]",
             remaining_files.len(),
             target,
             remaining_file_keys.display_hex_list()
@@ -730,14 +730,14 @@ where
                 Ok(false) => {
                     warn!(
                         target: LOG_TARGET,
-                        "🎣 File key [{:x}] not found in forest after catch-up, skipping deletion",
+                        "🎣 File key [{:#x}] not found in forest after catch-up, skipping deletion",
                         file_key
                     );
                 }
                 Err(e) => {
                     error!(
                         target: LOG_TARGET,
-                        "🎣 Error checking file key [{:x}] in forest: {:?}, skipping",
+                        "🎣 Error checking file key [{:#x}] in forest: {:?}, skipping",
                         file_key,
                         e
                     );
@@ -893,7 +893,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "🎣 Successfully submitted delete_files extrinsic for {} files",
+            "🎣 Successfully submitted delete_files extrinsic for {} files (included in block, pending finalization)",
             file_deletion_requests_bounded_len
         );
 
@@ -974,7 +974,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "🎣 Successfully submitted delete_files_for_incomplete_storage_request extrinsic for {} files",
+            "🎣 Successfully submitted delete_files_for_incomplete_storage_request extrinsic for {} files (included in block, pending finalization)",
             file_keys_bounded_len
         );
 
