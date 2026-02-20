@@ -129,6 +129,8 @@ pub struct FileDeletionStrategy {
     pub filtering: FileFiltering,
     /// Ordering strategy - how to order filtered files for processing.
     pub ordering: FileOrdering,
+    /// Tip added to deletion extrinsics to prioritize them over BSP confirm extrinsics.
+    pub deletion_tip: u128,
 }
 
 /// Single task that handles [`BatchFileDeletions`] events.
@@ -875,7 +877,8 @@ where
                     Duration::from_secs(120),
                     Some("fileSystem".to_string()),
                     Some("deleteFiles".to_string()),
-                ),
+                )
+                .with_tip(self.strategy.deletion_tip),
             )
             .await
             .map_err(|e| {
@@ -953,7 +956,8 @@ where
                     Duration::from_secs(120),
                     Some("fileSystem".to_string()),
                     Some("deleteFilesForIncompleteStorageRequest".to_string()),
-                ),
+                )
+                .with_tip(self.strategy.deletion_tip),
             )
             .await
             .map_err(|e| {
