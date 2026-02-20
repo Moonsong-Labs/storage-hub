@@ -1550,8 +1550,15 @@ where
 
         // Queue the request to stop storing the file.
         let request = RequestBspStopStoringRequest::new(file_key.into());
-        let result = match blockchain.queue_bsp_request_stop_storing(request).await {
-            Ok(_) => Ok(BspStopStoringFileResult::Success),
+        match blockchain.queue_bsp_request_stop_storing(request).await {
+            Ok(_) => {
+                info!(
+                        target: LOG_TARGET,
+                        "bsp_stop_storing_file called for file_key=[0x{:x}]. Stop storing request queued successfully.",
+                        file_key
+                );
+                Ok(BspStopStoringFileResult::Success)
+            }
             Err(e) => {
                 error!(
                     target: LOG_TARGET,
@@ -1564,15 +1571,7 @@ where
                     e
                 )))
             }
-        };
-
-        info!(
-            target: LOG_TARGET,
-            "bsp_stop_storing_file called for file_key=[0x{:x}]. Stop storing request queued successfully.",
-            file_key
-        );
-
-        result
+        }
     }
 }
 
