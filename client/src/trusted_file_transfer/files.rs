@@ -18,6 +18,7 @@ use crate::{trusted_file_transfer::server::LOG_TARGET, types::FileStorageT};
 pub(crate) async fn process_chunk_stream<FL>(
     file_storage: &RwLock<FL>,
     file_key: &sp_core::H256,
+    batch_target_bytes: usize,
     request_body: Body,
 ) -> anyhow::Result<()>
 where
@@ -28,8 +29,6 @@ where
     let mut last_write_outcome = FileStorageWriteOutcome::FileIncomplete;
     let mut pending: Vec<(ChunkId, Vec<u8>)> = Vec::new();
     let mut pending_bytes: usize = 0;
-    // 2MB batch size ---> Will be configure using cli params
-    const BATCH_TARGET_BYTES: usize = 2 * 1024 * 1024;
 
     // Process request stream, storing chunks as they are received
     while let Some(try_bytes) = request_stream.next().await {
@@ -41,7 +40,7 @@ where
             pending_bytes += CHUNK_ID_SIZE + chunk_data.len();
             pending.push((chunk_id, chunk_data));
 
-            if pending_bytes >= BATCH_TARGET_BYTES {
+            if pending_bytes >= batch_target_bytes {
                 let batch = std::mem::take(&mut pending);
                 pending_bytes = 0;
                 last_write_outcome = write_chunk_batch(file_storage, file_key, batch).await?;
@@ -149,9 +148,14 @@ mod tests {
         file_storage.insert_file(file_key, metadata).unwrap();
         let file_storage = Arc::new(RwLock::new(file_storage));
 
-        process_chunk_stream(&file_storage, &file_key, body)
-            .await
-            .unwrap();
+        process_chunk_stream(
+            &file_storage,
+            &file_key,
+            crate::trusted_file_transfer::server::DEFAULT_BATCH_TARGET_BYTES,
+            body,
+        )
+        .await
+        .unwrap();
 
         let storage = file_storage.read().await;
         for i in 0..chunk_count {
@@ -210,9 +214,14 @@ mod tests {
         file_storage.insert_file(file_key, metadata).unwrap();
         let file_storage = Arc::new(RwLock::new(file_storage));
 
-        process_chunk_stream(&file_storage, &file_key, body)
-            .await
-            .unwrap();
+        process_chunk_stream(
+            &file_storage,
+            &file_key,
+            crate::trusted_file_transfer::server::DEFAULT_BATCH_TARGET_BYTES,
+            body,
+        )
+        .await
+        .unwrap();
 
         let storage = file_storage.read().await;
         for i in 0..full_chunk_count {
