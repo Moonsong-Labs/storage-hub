@@ -298,8 +298,7 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMspAcceptedFileKeys<T: Config> {
-    // TODO: Turn this into a BoundedVec
-    pub file_keys_and_proofs: Vec<FileKeyWithProof<T>>,
+    pub file_keys_and_proofs: BoundedVec<FileKeyWithProof<T>, MaxMspRespondFileKeys<T>>,
     /// File keys which have already been accepted by the MSP in a previous storage request should be included
     /// in the proof.
     pub forest_proof: ForestProof<T>,
@@ -733,6 +732,9 @@ pub type MaxReplicationTarget<T> = <T as crate::Config>::MaxReplicationTarget;
 
 /// Alias for the `MaxBspVolunteers` type used in the FileSystem pallet.
 pub type MaxBspVolunteers<T> = <T as crate::Config>::MaxBspVolunteers;
+
+/// Alias for the `MaxMspRespondFileKeys` type used in the FileSystem pallet.
+pub type MaxMspRespondFileKeys<T> = <T as crate::Config>::MaxMspRespondFileKeys;
 
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;

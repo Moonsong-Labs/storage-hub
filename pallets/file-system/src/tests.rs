@@ -5,9 +5,9 @@ use crate::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
         FileKeyWithProof, FileLocation, FileMetadata, FileOperation, FileOperationIntention,
         IncompleteStorageRequestMetadata, MoveBucketRequestMetadata, MspStorageRequestStatus,
-        PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
-        StorageRequestTtl, ThresholdType, TickNumber, UserOperationPauseFlags, ValuePropId,
+        PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
+        ThresholdType, TickNumber, UserOperationPauseFlags, ValuePropId,
     },
     weights::WeightInfo,
     Config, Error, Event, IncompleteStorageRequests, NextAvailableStorageRequestExpirationTick,
@@ -18,13 +18,13 @@ use codec::Encode;
 use frame_support::{
     assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
-    BoundedBTreeMap,
     traits::{
         fungible::{InspectHold, Mutate},
         nonfungibles_v2::Destroy,
         Hooks, OriginTrait,
     },
     weights::Weight,
+    BoundedBTreeMap,
 };
 use pallet_payment_streams::types::UnitsProvidedFor;
 use pallet_proofs_dealer::ProviderToProofSubmissionRecord;
@@ -723,7 +723,7 @@ mod delete_bucket_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key: FileSystem::compute_file_key(
                                     owner.clone(),
                                     bucket_id,
@@ -811,7 +811,7 @@ mod delete_bucket_tests {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: FileSystem::compute_file_key(
                                         owner.clone(),
                                         bucket_id,
@@ -988,7 +988,7 @@ mod delete_bucket_tests {
 					vec![StorageRequestMspBucketResponse {
 						bucket_id,
 						accept: Some(StorageRequestMspAcceptedFileKeys {
-							file_keys_and_proofs: vec![FileKeyWithProof {
+							file_keys_and_proofs: bounded_vec![FileKeyWithProof {
 								file_key: FileSystem::compute_file_key(
 									owner.clone(),
 									bucket_id,
@@ -1328,7 +1328,7 @@ mod request_move_bucket {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3496,7 +3496,7 @@ mod msp_respond_storage_request {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3551,7 +3551,7 @@ mod msp_respond_storage_request {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3786,7 +3786,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: first_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: first_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3801,7 +3801,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: second_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: second_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3937,7 +3937,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: first_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: first_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3952,7 +3952,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: second_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: second_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4098,7 +4098,7 @@ mod msp_respond_storage_request {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4159,7 +4159,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4230,7 +4230,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4304,7 +4304,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4379,7 +4379,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![],
@@ -4460,7 +4460,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![],
@@ -4532,7 +4532,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4601,7 +4601,7 @@ mod msp_respond_storage_request {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4622,7 +4622,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4702,7 +4702,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4781,7 +4781,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -5778,7 +5778,7 @@ mod bsp_confirm {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -10037,7 +10037,7 @@ mod stop_storing_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -11024,7 +11024,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -11227,7 +11227,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -11501,7 +11501,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -11668,7 +11668,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -11904,7 +11904,7 @@ mod msp_stop_storing_bucket {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -13593,7 +13593,7 @@ mod delete_file_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -14210,7 +14210,9 @@ mod delete_files_for_incomplete_storage_request_tests {
 
                 // Verify BSP is in inline bsps for file2
                 let initial_bsps_file2: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::get(&file_key2).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key2)
+                        .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                        .unwrap_or_default();
                 assert_eq!(
                     initial_bsps_file2.len(),
                     1,
@@ -14234,8 +14236,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                         .is_none(),
                     "Storage request should be removed from bucket associations"
                 );
-                let final_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::get(&file_key1).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key1)
+                    .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                    .unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14250,8 +14253,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                         .is_none(),
                     "Storage request should be removed from bucket associations"
                 );
-                let final_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::get(&file_key2).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key2)
+                    .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                    .unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14435,8 +14439,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 );
 
                 // Both BSPs are in inline bsps map
-                let initial_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let initial_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key)
+                    .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                    .unwrap_or_default();
                 assert_eq!(
                     initial_bsps.len(),
                     2,
@@ -14471,8 +14476,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                         .is_none(),
                     "Storage request should be removed from bucket associations"
                 );
-                let final_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key)
+                    .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                    .unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14705,7 +14711,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -14827,7 +14833,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -14978,7 +14984,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -15462,7 +15468,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -15854,7 +15860,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![file_key_with_proof],
+                            file_keys_and_proofs: bounded_vec![file_key_with_proof],
                             forest_proof: CompactProof {
                                 encoded_nodes: vec![file_key.as_ref().to_vec()],
                             },
@@ -15988,7 +15994,9 @@ mod delete_files_for_incomplete_storage_request_tests {
 
                 // Verify BSP volunteered
                 let volunteered_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key)
+                        .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                        .unwrap_or_default();
                 assert_eq!(volunteered_bsps.len(), 1, "BSP should have volunteered");
                 assert_eq!(
                     volunteered_bsps[0].0, bsp_id,

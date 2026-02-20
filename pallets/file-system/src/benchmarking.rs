@@ -606,8 +606,22 @@ mod benchmarks {
     #[benchmark]
     fn msp_respond_storage_requests_multiple_buckets(
         n: Linear<1, 10>,
-        m: Linear<1, 10>,
-        l: Linear<1, 10>,
+        m: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxMspRespondFileKeys::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+        l: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxMspRespondFileKeys::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
         v: Linear<
             1,
             {
@@ -722,7 +736,8 @@ mod benchmarks {
                         account("bsp_reject", i as u32 + (j * 1000), i as u32);
                     mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                     let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
-                    let _ = reject_bsps_map.try_insert(bsp_id, i < (replication_target as u64).min(1));
+                    let _ =
+                        reject_bsps_map.try_insert(bsp_id, i < (replication_target as u64).min(1));
                 }
                 <StorageRequestBsps<T>>::insert(&file_key, reject_bsps_map);
 
@@ -823,7 +838,7 @@ mod benchmarks {
                 .expect("Non-inclusion forest proof should be decodable");
 
             let accept = StorageRequestMspAcceptedFileKeys {
-                file_keys_and_proofs,
+                file_keys_and_proofs: BoundedVec::truncate_from(file_keys_and_proofs),
                 forest_proof: non_inclusion_forest_proof,
             };
 
@@ -1151,7 +1166,9 @@ mod benchmarks {
 			};
             let mut bsps_map = BoundedBTreeMap::new();
             let num_in_map = (volunteer_count as u64).saturating_sub(1);
-            let num_confirmed_in_map = (replication_target as u64).saturating_sub(1).min(num_in_map);
+            let num_confirmed_in_map = (replication_target as u64)
+                .saturating_sub(1)
+                .min(num_in_map);
             for i in 0u64..num_in_map {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;

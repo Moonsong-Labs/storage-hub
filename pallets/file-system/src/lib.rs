@@ -391,6 +391,14 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBspVolunteers: Get<u32>;
 
+        /// Maximum number of file keys an MSP can accept per bucket in a single
+        /// `msp_respond_storage_requests_multiple_buckets` call.
+        ///
+        /// Bounds `StorageRequestMspAcceptedFileKeys.file_keys_and_proofs`.
+        /// Clients should also respect this via the `get_max_msp_respond_file_keys` runtime API.
+        #[pallet::constant]
+        type MaxMspRespondFileKeys: Get<u32>;
+
         /// The amount of ticks that the user has to pay upfront when issuing a storage request.
         ///
         /// This is to compensate the system load that the process of file retrieval will have on the network.

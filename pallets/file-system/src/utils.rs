@@ -50,9 +50,8 @@ use crate::{
         ForestProof, IncompleteStorageRequestMetadata, MerkleHash, MoveBucketRequestMetadata,
         MspStorageRequestStatus, MultiAddresses, PeerIds, PendingStopStoringRequest, ProviderIdFor,
         RejectedStorageRequest, ReplicationTarget, ReplicationTargetType, StorageDataUnit,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
-        StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber,
-        UserOperationPauseFlags, ValuePropId,
+        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        StorageRequestMspResponse, TickNumber, UserOperationPauseFlags, ValuePropId,
     },
     weights::WeightInfo,
     BucketsWithStorageRequests, Error, Event, HoldReason, IncompleteStorageRequests, Pallet,
@@ -388,8 +387,7 @@ where
             QueryBspsVolunteeredForFileError::StorageRequestNotFound
         );
 
-        let bsps = <StorageRequestBsps<T>>::get(&file_key)
-            .unwrap_or_default();
+        let bsps = <StorageRequestBsps<T>>::get(&file_key).unwrap_or_default();
 
         Ok(bsps.keys().cloned().collect())
     }
@@ -2074,10 +2072,7 @@ where
             let bsps = <StorageRequestBsps<T>>::get(&file_key).unwrap_or_default();
 
             // Check that the BSP has volunteered for the storage request.
-            ensure!(
-                bsps.contains_key(&bsp_id),
-                Error::<T>::BspNotVolunteered
-            );
+            ensure!(bsps.contains_key(&bsp_id), Error::<T>::BspNotVolunteered);
 
             let confirmed_value = expect_or_err!(
                 bsps.get(&bsp_id),
@@ -3041,6 +3036,10 @@ where
         T::MaxBatchConfirmStorageRequests::get()
     }
 
+    pub fn get_max_msp_respond_file_keys() -> u32 {
+        T::MaxMspRespondFileKeys::get()
+    }
+
     /// Removes multiple file keys from the bucket's forest in a single operation, updating the bucket's root.
     ///
     /// Does not enforce the presence of an MSP storing the bucket. If no MSP is found to be
@@ -3442,9 +3441,7 @@ where
 mod hooks {
     use crate::{
         pallet,
-        types::{
-            MerkleHash, MspStorageRequestStatus, RejectedStorageRequestReason, TickNumber,
-        },
+        types::{MerkleHash, MspStorageRequestStatus, RejectedStorageRequestReason, TickNumber},
         utils::BucketIdFor,
         weights::WeightInfo,
         Event, MoveBucketRequestExpirations, NextStartingTickToCleanUp, Pallet,
@@ -3649,8 +3646,8 @@ mod hooks {
                         if !storage_request_metadata.bsps_confirmed.is_zero() {
                             // There are BSPs that have confirmed storing the file, so we need to create an incomplete storage request metadata
                             // This will allow the fisherman node to delete the file from the confirmed BSPs.
-                            let incomplete_storage_request_metadata =
-                                storage_request_metadata.to_incomplete_metadata(&bsps.clone().unwrap_or_default());
+                            let incomplete_storage_request_metadata = storage_request_metadata
+                                .to_incomplete_metadata(&bsps.clone().unwrap_or_default());
 
                             Self::add_incomplete_storage_request(
                                 file_key,

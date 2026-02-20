@@ -379,6 +379,10 @@ impl_runtime_apis! {
         fn get_max_batch_confirm_storage_requests() -> u32 {
             FileSystem::get_max_batch_confirm_storage_requests()
         }
+
+        fn get_max_msp_respond_file_keys() -> u32 {
+            FileSystem::get_max_msp_respond_file_keys()
+        }
     }
 
     impl pallet_payment_streams_runtime_api::PaymentStreamsApi<Block, ProviderIdFor<Runtime>, Balance, AccountId> for Runtime {
