@@ -72,9 +72,11 @@ use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage
 use shc_indexer_db::models::{FileFiltering, FileOrdering};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use crate::{
     handler::StorageHubHandler,
@@ -82,6 +84,11 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "fisherman-batch-deletions-task";
+
+/// Tip escalation parameters for deletion extrinsics, matching BSP confirm defaults.
+const DELETION_TIP_MAX_RETRIES: u32 = 3;
+const DELETION_TIP_MAX: u128 = 500;
+const DELETION_TIP_BASE_MULTIPLIER: f64 = 2.0;
 
 /// Grouped pending deletions ready for batch processing.
 ///
@@ -133,11 +140,6 @@ pub struct FileDeletionStrategy {
     /// Ordering strategy - how to order filtered files for processing.
     pub ordering: FileOrdering,
 }
-
-/// Tip escalation parameters for deletion extrinsics, matching BSP confirm defaults.
-const DELETION_TIP_MAX_RETRIES: u32 = 3;
-const DELETION_TIP_MAX: u128 = 500;
-const DELETION_TIP_BASE_MULTIPLIER: f64 = 2.0;
 
 /// Single task that handles [`BatchFileDeletions`] events.
 ///
