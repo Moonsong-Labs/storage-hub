@@ -25,12 +25,12 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     events::{
-        DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
-        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
-        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        StartMovedBucketDownload,
+        CheckBucketFileStorage, DistributeFileToBsp, FinalisedBucketMovedAway,
+        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected, ForestWriteLockTaskData,
+        MoveBucketRequestedForMsp, NewStorageRequest, ProcessMspRespondStoringRequest,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
     state::BlockchainServiceStateStoreRwContext,
@@ -1123,6 +1123,10 @@ where
                 Some(_) => {
                     trace!(target: LOG_TARGET, "Bucket [0x{:x}] root verified: [0x{:x}]", bucket_id, onchain_root);
                     verified += 1;
+
+                    // In this case, we emit a `CheckBucketFileStorage` event to the MSP task to check that the files in
+                    // this bucket's forest have their full data in the file storage, and recover them if necessary.
+                    self.emit(CheckBucketFileStorage { bucket_id });
                 }
                 // Success Case: Local forest does not exist and the on-chain root is the default root (bucket is empty).
                 None => {

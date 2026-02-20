@@ -278,8 +278,19 @@ where
         file_transfer_request_protocol
             .expect("FileTransfer request protocol should already be initialised.");
 
+    let trusted_msps = match &role_options {
+        RoleOptions::Provider(ProviderOptions {
+            provider_type: ProviderType::Bsp,
+            trusted_msps,
+            ..
+        }) => trusted_msps.clone(),
+        _ => Vec::new(),
+    };
+
     builder
         .with_file_transfer(
+            client.clone(),
+            trusted_msps,
             file_transfer_request_receiver,
             file_transfer_request_protocol_name,
             network.clone(),

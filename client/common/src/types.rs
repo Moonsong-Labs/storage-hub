@@ -15,7 +15,7 @@ use std::{
 ///
 /// let keys = vec![H256::zero(), H256::repeat_byte(0xff)];
 /// println!("File keys: [{}]", keys.display_hex_list());
-/// // Output: File keys: [0x0000...0000, 0xffff...ffff]
+/// // Output: File keys: [0x0000..0000, 0xffff..ffff]
 /// ```
 pub trait DisplayHexListExt {
     fn display_hex_list(&self) -> String;
@@ -24,7 +24,7 @@ pub trait DisplayHexListExt {
 impl<T: LowerHex> DisplayHexListExt for [T] {
     fn display_hex_list(&self) -> String {
         self.iter()
-            .map(|k| format!("{:x}", k))
+            .map(|k| format!("{:#x}", k))
             .collect::<Vec<_>>()
             .join(", ")
     }

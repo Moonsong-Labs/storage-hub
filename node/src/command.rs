@@ -10,6 +10,7 @@ use sc_service::config::{BasePath, PrometheusConfig};
 use serde::Deserialize;
 use sh_parachain_runtime::Block;
 use shp_types::StorageDataUnit;
+use sp_core::H256;
 
 use crate::{
     chain_spec::{self, NetworkType},
@@ -83,6 +84,11 @@ pub struct ProviderOptions {
     /// Port for trusted file transfer HTTP server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trusted_file_transfer_server_port: Option<u16>,
+    /// List of trusted MSP on-chain IDs allowed to request downloads from this BSP.
+    ///
+    /// Only applicable when running as a BSP provider.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trusted_msps: Vec<H256>,
 }
 
 /// Role configuration enum that ensures mutual exclusivity between Provider and Fisherman roles.
@@ -433,6 +439,19 @@ pub fn run() -> Result<()> {
                     {
                         return Err(
                             "The --msp-database-url parameter can only be used when running as an MSP provider."
+                                .into(),
+                        );
+                    }
+                }
+            }
+
+            // Validate that trusted_msps is only used for BSP
+            if cli.provider_config.provider && !cli.provider_config.trusted_msps.is_empty() {
+                match cli.provider_config.provider_type.as_ref() {
+                    Some(ProviderType::Bsp) => {}
+                    _ => {
+                        return Err(
+                            "The --trusted-msps parameter can only be used when running as a BSP provider."
                                 .into(),
                         );
                     }
