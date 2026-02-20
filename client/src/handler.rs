@@ -100,8 +100,6 @@ pub struct FishermanConfig {
     pub filtering: FileFiltering,
     /// Ordering strategy for pending deletions.
     pub ordering: FileOrdering,
-    /// Tip added to deletion extrinsics to prioritize them over BSP confirm extrinsics.
-    pub deletion_tip: u128,
 }
 
 /// Represents the handler for the Storage Hub service.
@@ -468,7 +466,6 @@ where
         let strategy = FileDeletionStrategy {
             filtering: config.filtering,
             ordering: config.ordering,
-            deletion_tip: config.deletion_tip,
         };
 
         // Create the task with explicit strategy configuration

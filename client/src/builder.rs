@@ -270,7 +270,6 @@ where
         self.fisherman_config = Some(FishermanConfig {
             filtering: fisherman_options.filtering,
             ordering: fisherman_options.ordering,
-            deletion_tip: fisherman_options.deletion_tip,
         });
 
         self
@@ -1005,9 +1004,6 @@ pub struct FishermanOptions {
     /// Ordering strategy for pending deletions.
     #[serde(default)]
     pub ordering: FileOrdering,
-    /// Tip added to deletion extrinsics to prioritize them over BSP confirm extrinsics.
-    #[serde(default = "default_deletion_tip")]
-    pub deletion_tip: u128,
     /// Configuration options for blockchain service.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blockchain_service: Option<BlockchainServiceOptions>,
@@ -1026,9 +1022,4 @@ fn default_consecutive_no_work_batches_threshold() -> u8 {
 /// Default value for batch cooldown (in seconds).
 fn default_batch_cooldown_seconds() -> u64 {
     1
-}
-
-/// Default tip for deletion extrinsics.
-fn default_deletion_tip() -> u128 {
-    10
 }
