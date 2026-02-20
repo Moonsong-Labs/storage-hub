@@ -13,7 +13,8 @@ use shc_common::{
 };
 
 use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest, MinimalBlockInfo, StopStoringForInsolventUserRequest,
+    ConfirmStoringRequest, FileDeletionRequest, MinimalBlockInfo,
+    StopStoringForInsolventUserRequest,
 };
 
 /// Last processed block (both number and hash).
@@ -551,4 +552,3 @@ impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
     type RightIndexCF = FileDeletionRequestRightIndexCf;
     type DataCF = FileDeletionRequestCf<Runtime>;
 }
-
