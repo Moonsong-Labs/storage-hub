@@ -354,6 +354,9 @@ where
     }
 
     fn get_all_files(&self) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>> {
+        if self.deleting {
+            return Err(ForestStorageError::ForestDeleted.into());
+        }
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
         let mut files = Vec::new();
