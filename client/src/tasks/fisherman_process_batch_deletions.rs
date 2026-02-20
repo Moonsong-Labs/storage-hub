@@ -53,7 +53,8 @@ use futures::future::join_all;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceCommandInterface, types::SendExtrinsicOptions,
+    commands::BlockchainServiceCommandInterface,
+    types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::{
     traits::StorageEnableRuntime,
@@ -133,10 +134,10 @@ pub struct FileDeletionStrategy {
     pub ordering: FileOrdering,
 }
 
-/// Tip increment applied per failed deletion attempt for a given target.
-const TIP_INCREMENT: u128 = 10;
-/// Maximum tip that can accumulate for any single target.
-const MAX_TIP: u128 = 50;
+/// Tip escalation parameters for deletion extrinsics, matching BSP confirm defaults.
+const DELETION_TIP_MAX_RETRIES: u32 = 3;
+const DELETION_TIP_MAX: u128 = 500;
+const DELETION_TIP_BASE_MULTIPLIER: f64 = 2.0;
 
 /// Single task that handles [`BatchFileDeletions`] events.
 ///
@@ -159,10 +160,10 @@ where
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
     /// Strategy for selecting and ordering files for deletion
     strategy: FileDeletionStrategy,
-    /// Tracks accumulated tips per deletion target. When a deletion extrinsic for a target
-    /// fails (dispatch error or timeout), the tip is incremented so the next attempt gets
-    /// higher transaction priority. Reset to 0 on success.
-    tip_tracker: Arc<Mutex<HashMap<Vec<u8>, u128>>>,
+    /// Tracks the retry count per deletion target. When a deletion extrinsic for a target
+    /// fails, the count is incremented and used with RetryStrategy::compute_tip to derive
+    /// an escalating tip for the next attempt. Reset to 0 on success.
+    tip_tracker: Arc<Mutex<HashMap<Vec<u8>, u32>>>,
 }
 
 impl<NT, Runtime> Clone for FishermanTask<NT, Runtime>
@@ -451,19 +452,26 @@ where
             }
         };
 
-        // Look up the current tip for this target (0 if no prior failures).
+        // Look up the retry count for this target and compute the tip.
         let key = Self::target_key(&target);
-        let tip = {
+        let retry_count = {
             let tracker = self.tip_tracker.lock().expect("tip tracker lock poisoned");
             tracker.get(&key).copied().unwrap_or(0)
         };
+        let tip_strategy = RetryStrategy::new(
+            DELETION_TIP_MAX_RETRIES,
+            DELETION_TIP_MAX,
+            DELETION_TIP_BASE_MULTIPLIER,
+        );
+        let tip = tip_strategy.compute_tip(retry_count);
 
         if tip > 0 {
             info!(
                 target: LOG_TARGET,
-                "🎣 Using tip {} for target {:?} due to previous failures",
+                "🎣 Using tip {} for target {:?} (retry count: {})",
                 tip,
-                target
+                target,
+                retry_count
             );
         }
 
@@ -500,7 +508,6 @@ where
             }
         };
 
-        // Update tip tracker based on submit outcome.
         match &submit_result {
             Ok(()) => {
                 let mut tracker = self.tip_tracker.lock().expect("tip tracker lock poisoned");
@@ -508,8 +515,8 @@ where
             }
             Err(_) => {
                 let mut tracker = self.tip_tracker.lock().expect("tip tracker lock poisoned");
-                let current = tracker.entry(key).or_insert(0);
-                *current = (*current + TIP_INCREMENT).min(MAX_TIP);
+                let count = tracker.entry(key).or_insert(0);
+                *count = (*count + 1).min(DELETION_TIP_MAX_RETRIES);
             }
         }
 
