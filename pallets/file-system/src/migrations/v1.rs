@@ -29,9 +29,9 @@
 use crate::{
     pallet::Pallet,
     types::{
-        BalanceOf, BucketIdFor, FileLocation, Fingerprint, MerkleHash,
-        MspStorageRequestStatus, PeerIds, ProviderIdFor, ReplicationTargetType, StorageDataUnit,
-        StorageRequestMetadata, TickNumber,
+        BalanceOf, BucketIdFor, FileLocation, Fingerprint, MerkleHash, MspStorageRequestStatus,
+        PeerIds, ProviderIdFor, ReplicationTargetType, StorageDataUnit, StorageRequestMetadata,
+        TickNumber,
     },
     Config,
 };

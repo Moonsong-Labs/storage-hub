@@ -1326,14 +1326,48 @@ pub mod pallet {
         /// wasn't storing it before.
         #[pallet::call_index(8)]
         #[pallet::weight({
-			let total_weight: Weight = Weight::zero();
+			let max_v = T::MaxBspVolunteers::get();
+			let max_r = T::MaxReplicationTarget::get();
+			let mut total_weight: Weight = Weight::zero();
+			let mut total_reads: u64 = 0;
 			for bucket_response in storage_request_msp_response.iter() {
 				let amount_of_files_to_accept = bucket_response.accept.as_ref().map_or(0, |accept_response| accept_response.file_keys_and_proofs.len());
 				let amount_of_files_to_reject = bucket_response.reject.len();
 
-				total_weight.saturating_add(T::WeightInfo::msp_respond_storage_requests_multiple_buckets(1, amount_of_files_to_accept as u32, amount_of_files_to_reject as u32));
+				let mut worst_v: u32 = 0;
+				let mut worst_r: u32 = 0;
+				if let Some(accept) = &bucket_response.accept {
+					for fkp in accept.file_keys_and_proofs.iter() {
+						total_reads += 1;
+						if let Some(meta) = StorageRequests::<T>::get(&fkp.file_key) {
+							let v: u64 = meta.bsps_volunteered.into();
+							let r: u64 = meta.bsps_required.into();
+							worst_v = worst_v.max(v as u32);
+							worst_r = worst_r.max(r as u32);
+						} else {
+							worst_v = max_v;
+							worst_r = max_r;
+						}
+					}
+				}
+				for rejected in bucket_response.reject.iter() {
+					total_reads += 1;
+					if let Some(meta) = StorageRequests::<T>::get(&rejected.file_key) {
+						let v: u64 = meta.bsps_volunteered.into();
+						let r: u64 = meta.bsps_required.into();
+						worst_v = worst_v.max(v as u32);
+						worst_r = worst_r.max(r as u32);
+					} else {
+						worst_v = max_v;
+						worst_r = max_r;
+					}
+				}
+
+				total_weight = total_weight.saturating_add(
+					T::WeightInfo::msp_respond_storage_requests_multiple_buckets(1, amount_of_files_to_accept as u32, amount_of_files_to_reject as u32, worst_v, worst_r)
+				);
 			}
-			total_weight
+			total_weight.saturating_add(T::DbWeight::get().reads(total_reads))
 		})]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
@@ -1398,7 +1432,25 @@ pub mod pallet {
 
         /// Used by a BSP to confirm they are storing data of a storage request.
         #[pallet::call_index(11)]
-        #[pallet::weight(T::WeightInfo::bsp_confirm_storing(file_keys_and_proofs.len() as u32))]
+        #[pallet::weight({
+            let n = file_keys_and_proofs.len() as u32;
+            let max_v = T::MaxBspVolunteers::get();
+            let max_r = T::MaxReplicationTarget::get();
+            let (mut worst_v, mut worst_r): (u32, u32) = (0, 0);
+            for fkp in file_keys_and_proofs.iter() {
+                if let Some(meta) = StorageRequests::<T>::get(&fkp.file_key) {
+                    let v: u64 = meta.bsps_volunteered.into();
+                    let r: u64 = meta.bsps_required.into();
+                    worst_v = worst_v.max(v as u32);
+                    worst_r = worst_r.max(r as u32);
+                } else {
+                    worst_v = max_v;
+                    worst_r = max_r;
+                }
+            }
+            T::WeightInfo::bsp_confirm_storing(n, worst_v, worst_r)
+                .saturating_add(T::DbWeight::get().reads(n as u64))
+        })]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
             non_inclusion_forest_proof: ForestProof<T>,
@@ -1676,11 +1728,26 @@ pub mod pallet {
         #[pallet::call_index(17)]
         #[pallet::weight({
             let n = file_deletions.len() as u32;
-            if bsp_id.is_none() {
-                T::WeightInfo::delete_files_bucket(n)
-            } else {
-                T::WeightInfo::delete_files_bsp(n)
+            let max_v = T::MaxBspVolunteers::get();
+            let max_r = T::MaxReplicationTarget::get();
+            let (mut worst_v, mut worst_r): (u32, u32) = (0, 0);
+            for deletion in file_deletions.iter() {
+                if let Some(meta) = StorageRequests::<T>::get(&deletion.signed_intention.file_key) {
+                    let v: u64 = meta.bsps_volunteered.into();
+                    let r: u64 = meta.bsps_required.into();
+                    worst_v = worst_v.max(v as u32);
+                    worst_r = worst_r.max(r as u32);
+                } else {
+                    worst_v = max_v;
+                    worst_r = max_r;
+                }
             }
+            let base = if bsp_id.is_none() {
+                T::WeightInfo::delete_files_bucket(n, worst_v, worst_r)
+            } else {
+                T::WeightInfo::delete_files_bsp(n, worst_v, worst_r)
+            };
+            base.saturating_add(T::DbWeight::get().reads(n as u64))
         })]
         pub fn delete_files(
             origin: OriginFor<T>,

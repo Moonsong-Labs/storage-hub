@@ -117,10 +117,8 @@ impl<T: Config> StorageRequestMetadata<T> {
         // this means the file is new and we should mark it for bucket removal.
         // If the MSP accepted the storage request with an inclusion forest proof, the file already
         // existed in the bucket from a previous storage request, so we should not mark it for bucket removal.
-        let pending_bucket_removal = matches!(
-            self.msp_status,
-            MspStorageRequestStatus::AcceptedNewFile(_)
-        );
+        let pending_bucket_removal =
+            matches!(self.msp_status, MspStorageRequestStatus::AcceptedNewFile(_));
 
         let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
 
@@ -300,6 +298,7 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMspAcceptedFileKeys<T: Config> {
+    // TODO: Turn this into a BoundedVec
     pub file_keys_and_proofs: Vec<FileKeyWithProof<T>>,
     /// File keys which have already been accepted by the MSP in a previous storage request should be included
     /// in the proof.

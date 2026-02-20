@@ -276,9 +276,6 @@ pub mod dynamic_params {
 
         /// Maximum number of BSPs that can volunteer for a single storage request.
         ///
-        /// This bounds the per-file BSP volunteer map independently from `MaxReplicationTarget`,
-        /// allowing a healthy race of volunteers before confirming.
-        ///
         /// ## Theoretical PoV maximum
         ///
         /// Derived from `bsp_confirm_storing(n=10)` worst-case PoV formula:

@@ -19,7 +19,6 @@
 //!
 //! This migration moves the `StorageRequestBsps` double map into a single-entry
 //! `StorageMap<MerkleHash, BoundedBTreeMap<ProviderIdFor, bool, MaxBspVolunteers>>`.
-//! The `StorageRequestMetadata` encoding is unchanged (both v1 and v2 lack a `bsps` field).
 
 use crate::{
     pallet::Pallet,
@@ -183,11 +182,9 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
 
         // Write grouped BSP maps into the new StorageRequestBsps StorageMap.
         for (file_key, bsp_map) in grouped {
-            let mut bounded_bsps = frame_support::BoundedBTreeMap::<
-                ProviderIdFor<T>,
-                bool,
-                MaxBspVolunteers<T>,
-            >::new();
+            let mut bounded_bsps =
+                frame_support::BoundedBTreeMap::<ProviderIdFor<T>, bool, MaxBspVolunteers<T>>::new(
+                );
             for (bsp_id, confirmed) in bsp_map {
                 if bounded_bsps.try_insert(bsp_id, confirmed).is_err() {
                     log::warn!(
@@ -247,7 +244,9 @@ impl<T: Config> UncheckedOnRuntimeUpgrade for InnerMigrateV1ToV2<T> {
         // Verify no BSP entries were lost during migration.
         ensure!(
             old_bsp_count == new_bsp_total,
-            TryRuntimeError::Other("Migration failed: BSP entry count mismatch (entries were lost)")
+            TryRuntimeError::Other(
+                "Migration failed: BSP entry count mismatch (entries were lost)"
+            )
         );
 
         log::info!(
@@ -341,12 +340,18 @@ mod tests {
             v1::StorageRequestBsps::<Test>::insert(
                 file_key,
                 bsp1,
-                v1::StorageRequestBspsMetadataV1 { confirmed: false, _phantom: Default::default() },
+                v1::StorageRequestBspsMetadataV1 {
+                    confirmed: false,
+                    _phantom: Default::default(),
+                },
             );
             v1::StorageRequestBsps::<Test>::insert(
                 file_key,
                 bsp2,
-                v1::StorageRequestBspsMetadataV1 { confirmed: true, _phantom: Default::default() },
+                v1::StorageRequestBspsMetadataV1 {
+                    confirmed: true,
+                    _phantom: Default::default(),
+                },
             );
 
             let weight = InnerMigrateV1ToV2::<Test>::on_runtime_upgrade();
@@ -373,12 +378,17 @@ mod tests {
             v1::StorageRequestBsps::<Test>::insert(
                 file_key,
                 bsp_id,
-                v1::StorageRequestBspsMetadataV1 { confirmed: true, _phantom: Default::default() },
+                v1::StorageRequestBspsMetadataV1 {
+                    confirmed: true,
+                    _phantom: Default::default(),
+                },
             );
 
             InnerMigrateV1ToV2::<Test>::on_runtime_upgrade();
 
-            assert!(v1::StorageRequestBsps::<Test>::iter_prefix(&file_key).next().is_none());
+            assert!(v1::StorageRequestBsps::<Test>::iter_prefix(&file_key)
+                .next()
+                .is_none());
         });
     }
 
@@ -405,7 +415,9 @@ mod tests {
             InnerMigrateV1ToV2::<Test>::on_runtime_upgrade();
 
             // Old double-map must be fully drained.
-            assert!(v1::StorageRequestBsps::<Test>::iter_prefix(&file_key).next().is_none());
+            assert!(v1::StorageRequestBsps::<Test>::iter_prefix(&file_key)
+                .next()
+                .is_none());
 
             // New map is capped at MaxBspVolunteers.
             let bsps = crate::StorageRequestBsps::<Test>::get(file_key).unwrap();

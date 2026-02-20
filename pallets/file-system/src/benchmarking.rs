@@ -493,8 +493,6 @@ mod benchmarks {
             },
         >,
     ) -> Result<(), BenchmarkError> {
-        // `n` = total BSP volunteers (drives BSP map size / proof cost).
-        // `m` = replication target (how many BSPs must confirm; bounds `bsps_confirmed`).
         let num_volunteers: u32 = n.into();
         let replication_target: u32 = m.into();
         let num_confirmed = num_volunteers.min(replication_target);
@@ -610,12 +608,30 @@ mod benchmarks {
         n: Linear<1, 10>,
         m: Linear<1, 10>,
         l: Linear<1, 10>,
+        v: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxBspVolunteers::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+        r: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxReplicationTarget::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
     ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
-        // Get from the linear variables the amount of buckets to accept, the amount of file keys to accept per bucket and the amount to reject.
+        // n = buckets, m = file keys accept per bucket, l = file keys reject per bucket, v = volunteers, r = replication target
         let amount_of_buckets_to_accept: u32 = n.into();
         let amount_of_file_keys_to_accept_per_bucket: u32 = m.into();
         let amount_of_file_keys_to_reject_per_bucket: u32 = l.into();
+        let volunteer_count: u32 = v.into();
+        let replication_target: u32 = r.into();
 
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
@@ -683,9 +699,9 @@ mod benchmarks {
                     size,
                     msp_status: MspStorageRequestStatus::Pending(msp_id),
                     user_peer_ids: Default::default(),
-                    bsps_required: T::StandardReplicationTarget::get(),
-                    bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
-                    bsps_volunteered: ReplicationTargetType::<T>::zero(),
+                    bsps_required: replication_target.into(),
+                    bsps_confirmed: 1u32.into(), // One BSP confirmed so reject path enqueues priority challenge
+                    bsps_volunteered: volunteer_count.into(),
 					deposit_paid: Default::default(),
                 };
                 let file_key = Pallet::<T>::compute_file_key(
@@ -698,6 +714,17 @@ mod benchmarks {
                 .unwrap();
 
                 <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
+
+                // Reject branch cleans up StorageRequestBsps: populate with v volunteers for weight accuracy
+                let mut reject_bsps_map = BoundedBTreeMap::new();
+                for i in 0u64..(volunteer_count as u64) {
+                    let bsp_user: T::AccountId =
+                        account("bsp_reject", i as u32 + (j * 1000), i as u32);
+                    mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+                    let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
+                    let _ = reject_bsps_map.try_insert(bsp_id, i < (replication_target as u64).min(1));
+                }
+                <StorageRequestBsps<T>>::insert(&file_key, reject_bsps_map);
 
                 <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
@@ -759,17 +786,18 @@ mod benchmarks {
                     size,
                     msp_status: MspStorageRequestStatus::Pending(msp_id),
                     user_peer_ids: Default::default(),
-                    bsps_required: T::StandardReplicationTarget::get(),
-                    bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
-                    bsps_volunteered: T::MaxBspVolunteers::get().into(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+                    bsps_required: replication_target.into(),
+                    bsps_confirmed: replication_target.into(), // All confirmed so accept path drains BSP map
+                    bsps_volunteered: volunteer_count.into(), // Accept path drains volunteer map
 					deposit_paid: Default::default(),
                 };
                 let mut bsps_map = BoundedBTreeMap::new();
-                for i in 0u64..T::MaxBspVolunteers::get().into() {
-                    let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
+                for i in 0u64..(volunteer_count as u64) {
+                    let bsp_user: T::AccountId =
+                        account("bsp_volunteered", i as u32 + (j as u32 * 1000), i as u32);
                     mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                     let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
-                    let _ = bsps_map.try_insert(bsp_id, false);
+                    let _ = bsps_map.try_insert(bsp_id, true);
                 }
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
                 <StorageRequestBsps<T>>::insert(&file_keys_to_accept[j], bsps_map);
@@ -951,10 +979,31 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn bsp_confirm_storing(n: Linear<1, 10>) -> Result<(), BenchmarkError> {
+    fn bsp_confirm_storing(
+        n: Linear<1, 10>,
+        v: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxBspVolunteers::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+        r: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxReplicationTarget::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+    ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
-        // Get from the linear variable the amount of files to confirm storing
+        // Get from the linear variables: file count n, volunteer count v, replication target r
         let amount_of_files_to_confirm_storing: u32 = n.into();
+        let volunteer_count: u32 = v.into();
+        let replication_target: u32 = r.into();
+        let confirmed_count = volunteer_count.min(replication_target);
 
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
@@ -1084,8 +1133,6 @@ mod benchmarks {
                 <T as frame_system::Config>::Hash::decode(&mut fingerprint_hash.as_ref())
                     .expect("Fingerprint should be decodable as it is a hash");
             let size = file_key_proof.file_metadata.file_size();
-            let max_bsp_volunteers: ReplicationTargetType<T> =
-                T::MaxBspVolunteers::get().into();
             let storage_request_metadata = StorageRequestMetadata::<T> {
 				requested_at:
 					<<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
@@ -1097,17 +1144,19 @@ mod benchmarks {
 				size,
 				msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted means the logic to delete the storage request is executed
 				user_peer_ids: Default::default(),
-				bsps_required: T::StandardReplicationTarget::get(),
-				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
-				bsps_volunteered: max_bsp_volunteers.saturating_sub(ReplicationTargetType::<T>::one()), // Maximize the BSPs volunteered minus one (leave room for the actual BSP to volunteer)
+				bsps_required: replication_target.into(),
+				bsps_confirmed: replication_target.saturating_sub(1).into(), // One confirm left so this BSP's confirm completes
+				bsps_volunteered: volunteer_count.saturating_sub(1).into(), // v - 1 already in map, this BSP is the v-th
 				deposit_paid: Default::default(),
 			};
             let mut bsps_map = BoundedBTreeMap::new();
-            for i in 0u64..(max_bsp_volunteers.saturating_sub(ReplicationTargetType::<T>::one())).into() {
+            let num_in_map = (volunteer_count as u64).saturating_sub(1);
+            let num_confirmed_in_map = (replication_target as u64).saturating_sub(1).min(num_in_map);
+            for i in 0u64..num_in_map {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
-                let _ = bsps_map.try_insert(bsp_id, false);
+                let _ = bsps_map.try_insert(bsp_id, i < num_confirmed_in_map);
             }
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
             <StorageRequestBsps<T>>::insert(&file_key, bsps_map);
@@ -2244,7 +2293,8 @@ mod benchmarks {
             }
             bsps_map = new_bsps;
             StorageRequests::<T>::mutate(file_key, |storage_request| {
-                storage_request.as_mut().unwrap().bsps_confirmed = ReplicationTargetType::<T>::one();
+                storage_request.as_mut().unwrap().bsps_confirmed =
+                    ReplicationTargetType::<T>::one();
             });
         }
         StorageRequestBsps::<T>::insert(&file_key, bsps_map);
@@ -2482,10 +2532,29 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn delete_files_bucket(n: Linear<1, 10>) -> Result<(), BenchmarkError> {
+    fn delete_files_bucket(
+        n: Linear<1, 10>,
+        v: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxBspVolunteers::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+        r: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxReplicationTarget::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+    ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
-        // Get the number of file keys to delete from the linear parameter
         let number_of_file_keys: u32 = n.into();
+        let volunteer_count: u32 = v.into();
+        let replication_target: u32 = r.into();
 
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
@@ -2584,13 +2653,9 @@ mod benchmarks {
                 fingerprint: fingerprint.into(),
             });
 
-            // Set up storage request for this file with active storage request (worst-case scenario).
-            // This ensures the benchmark captures the cost of cleanup_storage_request and add_incomplete_storage_request.
-            // We maximize BSPs volunteered/confirmed since cleanup_storage_request drains all BSPs from storage.
+            // Set up storage request for this file (v volunteers, r replication) for cleanup_storage_request weight.
             let expiration_tick = frame_system::Pallet::<T>::block_number() + 100u32.into();
             let deposit: BalanceOf<T> = T::BaseStorageRequestCreationDeposit::get();
-            let max_bsp_volunteers: ReplicationTargetType<T> =
-                T::MaxBspVolunteers::get().into();
 
             let storage_request_metadata = StorageRequestMetadata::<T> {
                 requested_at: frame_system::Pallet::<T>::block_number(),
@@ -2600,36 +2665,32 @@ mod benchmarks {
                 location: location.clone(),
                 fingerprint: fingerprint.into(),
                 size,
-                msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted triggers incomplete storage request creation
+                msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id),
                 user_peer_ids: Default::default(),
-                bsps_required: max_bsp_volunteers,
-                bsps_confirmed: max_bsp_volunteers,
-                bsps_volunteered: max_bsp_volunteers,
+                bsps_required: replication_target.into(),
+                bsps_confirmed: replication_target.into(),
+                bsps_volunteered: volunteer_count.into(),
                 deposit_paid: deposit,
             };
             let mut bsps_map = BoundedBTreeMap::new();
-            for i in 0u64..T::MaxBspVolunteers::get().into() {
+            for i in 0u64..(volunteer_count as u64) {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
                 let _ = bsps_map.try_insert(volunteered_bsp_id, true);
             }
 
-            // Hold the deposit so cleanup_storage_request can release it (triggers Currency::release).
             <T as pallet::Config>::Currency::hold(
                 &HoldReason::StorageRequestCreationHold.into(),
                 &user_account,
                 deposit,
             )?;
 
-            // Insert storage request and BSP map so they get cleaned up during file deletion.
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
             <StorageRequestBsps<T>>::insert(&file_key, bsps_map);
 
-            // Associate file with bucket so cleanup_storage_request removes this entry.
             <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
-            // Add to expiration queue so cleanup_storage_request removes from it.
             <StorageRequestExpirations<T>>::mutate(expiration_tick, |items| {
                 let _ = items.try_push(file_key);
             });
@@ -2811,10 +2872,29 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn delete_files_bsp(n: Linear<1, 10>) -> Result<(), BenchmarkError> {
+    fn delete_files_bsp(
+        n: Linear<1, 10>,
+        v: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxBspVolunteers::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+        r: Linear<
+            1,
+            {
+                Into::<u64>::into(T::MaxReplicationTarget::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+    ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
-        // Get the number of file keys to delete from the linear parameter
         let number_of_file_keys: u32 = n.into();
+        let volunteer_count: u32 = v.into();
+        let replication_target: u32 = r.into();
 
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
@@ -2929,8 +3009,6 @@ mod benchmarks {
             // We maximize BSPs volunteered/confirmed since cleanup_storage_request drains all BSPs from storage.
             let expiration_tick = frame_system::Pallet::<T>::block_number() + 100u32.into();
             let deposit: BalanceOf<T> = T::BaseStorageRequestCreationDeposit::get();
-            let max_bsp_volunteers: ReplicationTargetType<T> =
-                T::MaxBspVolunteers::get().into();
 
             let storage_request_metadata = StorageRequestMetadata::<T> {
                 requested_at: frame_system::Pallet::<T>::block_number(),
@@ -2940,36 +3018,32 @@ mod benchmarks {
                 location: location.clone(),
                 fingerprint: fingerprint.into(),
                 size,
-                msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted triggers incomplete storage request creation
+                msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id),
                 user_peer_ids: Default::default(),
-                bsps_required: max_bsp_volunteers,
-                bsps_confirmed: max_bsp_volunteers,
-                bsps_volunteered: max_bsp_volunteers,
+                bsps_required: replication_target.into(),
+                bsps_confirmed: replication_target.into(),
+                bsps_volunteered: volunteer_count.into(),
                 deposit_paid: deposit,
             };
             let mut bsps_map = BoundedBTreeMap::new();
-            for i in 0u64..T::MaxBspVolunteers::get().into() {
+            for i in 0u64..(volunteer_count as u64) {
                 let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, j);
                 mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
                 let volunteered_bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user, None);
                 let _ = bsps_map.try_insert(volunteered_bsp_id, true);
             }
 
-            // Hold the deposit so cleanup_storage_request can release it (triggers Currency::release).
             <T as pallet::Config>::Currency::hold(
                 &HoldReason::StorageRequestCreationHold.into(),
                 &user_account,
                 deposit,
             )?;
 
-            // Insert storage request and BSP map so they get cleaned up during file deletion.
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
             <StorageRequestBsps<T>>::insert(&file_key, bsps_map);
 
-            // Associate file with bucket so cleanup_storage_request removes this entry.
             <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
-            // Add to expiration queue so cleanup_storage_request removes from it.
             <StorageRequestExpirations<T>>::mutate(expiration_tick, |items| {
                 let _ = items.try_push(file_key);
             });
