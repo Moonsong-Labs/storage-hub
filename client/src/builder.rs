@@ -941,6 +941,9 @@ pub struct BlockchainServiceOptions {
     pub bsp_confirm_file_batch_size: Option<u32>,
     /// Maximum number of MSP respond storage requests to batch together.
     pub msp_respond_storage_batch_size: Option<u32>,
+    /// On blocks that are multiples of this number, check the local BSP stop-storing requests
+    /// against the on-chain state to ensure no stop-storing requests are missed.
+    pub check_stop_storing_requests_period: Option<u32>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
@@ -953,6 +956,19 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
         });
 
         let default_config = BlockchainServiceConfig::<Runtime>::default();
+        let check_stop_storing_requests_period = match self.check_stop_storing_requests_period {
+            Some(0) => {
+                warn!(
+                    "Invalid check_stop_storing_requests_period=0 provided; using default value {}",
+                    default_config
+                        .check_stop_storing_requests_period
+                        .saturated_into::<u32>()
+                );
+                default_config.check_stop_storing_requests_period
+            }
+            Some(v) => v.saturated_into(),
+            None => default_config.check_stop_storing_requests_period,
+        };
 
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
@@ -972,6 +988,7 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
             msp_respond_storage_batch_size: self
                 .msp_respond_storage_batch_size
                 .unwrap_or(default_config.msp_respond_storage_batch_size),
+            check_stop_storing_requests_period,
         }
     }
 }

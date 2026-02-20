@@ -473,6 +473,13 @@ where
         PendingStopStoringRequests::<T>::contains_key(&bsp_id, &file_key)
     }
 
+    /// Return all pending stop storing requests for a given BSP.
+    pub fn pending_stop_storing_requests_by_bsp(
+        bsp_id: ProviderIdFor<T>,
+    ) -> sp_std::collections::btree_map::BTreeMap<MerkleHash<T>, PendingStopStoringRequest<T>> {
+        PendingStopStoringRequests::<T>::iter_prefix(&bsp_id).collect()
+    }
+
     fn query_confirm_chunks_to_prove_for_file(
         provider_id: ProviderIdFor<T>,
         storage_request_metadata: StorageRequestMetadata<T>,

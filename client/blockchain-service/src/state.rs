@@ -13,8 +13,7 @@ use shc_common::{
 };
 
 use crate::types::{
-    ConfirmBspStopStoringRequest, ConfirmStoringRequest, FileDeletionRequest, MinimalBlockInfo,
-    RequestBspStopStoringRequest, StopStoringForInsolventUserRequest,
+    ConfirmStoringRequest, FileDeletionRequest, MinimalBlockInfo, StopStoringForInsolventUserRequest,
 };
 
 /// Last processed block (both number and hash).
@@ -206,124 +205,6 @@ impl PendingStopStoringForInsolventUserRequestRightIndexName {
     pub const NAME: &'static str = "pending_stop_storing_for_insolvent_user_request_right_index";
 }
 
-/// Pending request stop storing requests (phase 1 of BSP stop storing).
-pub struct PendingRequestBspStopStoringRequestCf<Runtime: StorageEnableRuntime> {
-    pub(crate) phantom: std::marker::PhantomData<Runtime>,
-}
-impl<Runtime: StorageEnableRuntime> ScaleEncodedCf
-    for PendingRequestBspStopStoringRequestCf<Runtime>
-{
-    type Key = u64;
-    type Value = RequestBspStopStoringRequest<Runtime>;
-
-    const SCALE_ENCODED_NAME: &'static str = PendingRequestBspStopStoringRequestName::NAME;
-}
-
-impl<Runtime: StorageEnableRuntime> Default for PendingRequestBspStopStoringRequestCf<Runtime> {
-    fn default() -> Self {
-        Self {
-            phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-/// Non-generic name holder for the `PendingRequestBspStopStoringRequest` column family
-pub struct PendingRequestBspStopStoringRequestName;
-impl PendingRequestBspStopStoringRequestName {
-    pub const NAME: &'static str = "pending_request_bsp_stop_storing_request";
-}
-
-/// Pending request stop storing requests left side (inclusive) index.
-#[derive(Default)]
-pub struct PendingRequestBspStopStoringRequestLeftIndexCf;
-impl SingleScaleEncodedValueCf for PendingRequestBspStopStoringRequestLeftIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-        PendingRequestBspStopStoringRequestLeftIndexName::NAME;
-}
-
-/// Non-generic name holder for the `PendingRequestStopStoringRequestLeftIndex` column family
-pub struct PendingRequestBspStopStoringRequestLeftIndexName;
-impl PendingRequestBspStopStoringRequestLeftIndexName {
-    pub const NAME: &'static str = "pending_request_stop_storing_request_left_index";
-}
-
-/// Pending request stop storing requests right side (exclusive) index.
-#[derive(Default)]
-pub struct PendingRequestBspStopStoringRequestRightIndexCf;
-impl SingleScaleEncodedValueCf for PendingRequestBspStopStoringRequestRightIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-        PendingRequestBspStopStoringRequestRightIndexName::NAME;
-}
-
-/// Non-generic name holder for the `PendingRequestStopStoringRequestRightIndex` column family
-pub struct PendingRequestBspStopStoringRequestRightIndexName;
-impl PendingRequestBspStopStoringRequestRightIndexName {
-    pub const NAME: &'static str = "pending_request_bsp_stop_storing_request_right_index";
-}
-
-/// Pending confirm stop storing requests (phase 2 of BSP stop storing).
-pub struct PendingConfirmBspStopStoringRequestCf<Runtime: StorageEnableRuntime> {
-    pub(crate) phantom: std::marker::PhantomData<Runtime>,
-}
-impl<Runtime: StorageEnableRuntime> ScaleEncodedCf
-    for PendingConfirmBspStopStoringRequestCf<Runtime>
-{
-    type Key = u64;
-    type Value = ConfirmBspStopStoringRequest<Runtime>;
-
-    const SCALE_ENCODED_NAME: &'static str = PendingConfirmBspStopStoringRequestName::NAME;
-}
-
-impl<Runtime: StorageEnableRuntime> Default for PendingConfirmBspStopStoringRequestCf<Runtime> {
-    fn default() -> Self {
-        Self {
-            phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-/// Non-generic name holder for the `PendingConfirmStopStoringRequest` column family
-pub struct PendingConfirmBspStopStoringRequestName;
-impl PendingConfirmBspStopStoringRequestName {
-    pub const NAME: &'static str = "pending_confirm_bsp_stop_storing_request";
-}
-
-/// Pending confirm stop storing requests left side (inclusive) index.
-#[derive(Default)]
-pub struct PendingConfirmBspStopStoringRequestLeftIndexCf;
-impl SingleScaleEncodedValueCf for PendingConfirmBspStopStoringRequestLeftIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-        PendingConfirmBspStopStoringRequestLeftIndexName::NAME;
-}
-
-/// Non-generic name holder for the `PendingConfirmStopStoringRequestLeftIndex` column family
-pub struct PendingConfirmBspStopStoringRequestLeftIndexName;
-impl PendingConfirmBspStopStoringRequestLeftIndexName {
-    pub const NAME: &'static str = "pending_confirm_stop_storing_request_left_index";
-}
-
-/// Pending confirm stop storing requests right side (exclusive) index.
-#[derive(Default)]
-pub struct PendingConfirmBspStopStoringRequestRightIndexCf;
-impl SingleScaleEncodedValueCf for PendingConfirmBspStopStoringRequestRightIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-        PendingConfirmBspStopStoringRequestRightIndexName::NAME;
-}
-
-/// Non-generic name holder for the `PendingConfirmStopStoringRequestRightIndex` column family
-pub struct PendingConfirmBspStopStoringRequestRightIndexName;
-impl PendingConfirmBspStopStoringRequestRightIndexName {
-    pub const NAME: &'static str = "pending_confirm_bsp_stop_storing_request_right_index";
-}
-
 /// Pending file deletion requests.
 pub struct FileDeletionRequestCf<Runtime: StorageEnableRuntime> {
     pub(crate) phantom: std::marker::PhantomData<Runtime>,
@@ -466,7 +347,7 @@ use deprecated_cfs::*;
 
 // Deprecated column families are included for backward compatibility with existing RocksDB databases
 #[allow(deprecated)]
-const ALL_COLUMN_FAMILIES: [&str; 21] = [
+const ALL_COLUMN_FAMILIES: [&str; 15] = [
     LastProcessedBlockName::NAME,
     LastFinalisedBlockName::NAME,
     PendingConfirmStoringRequestLeftIndexName::NAME,
@@ -475,12 +356,6 @@ const ALL_COLUMN_FAMILIES: [&str; 21] = [
     PendingStopStoringForInsolventUserRequestLeftIndexName::NAME,
     PendingStopStoringForInsolventUserRequestRightIndexName::NAME,
     PendingStopStoringForInsolventUserRequestName::NAME,
-    PendingRequestBspStopStoringRequestLeftIndexName::NAME,
-    PendingRequestBspStopStoringRequestRightIndexName::NAME,
-    PendingRequestBspStopStoringRequestName::NAME,
-    PendingConfirmBspStopStoringRequestLeftIndexName::NAME,
-    PendingConfirmBspStopStoringRequestRightIndexName::NAME,
-    PendingConfirmBspStopStoringRequestName::NAME,
     FileDeletionRequestLeftIndexName::NAME,
     FileDeletionRequestRightIndexName::NAME,
     FileDeletionRequestName::NAME,
@@ -565,24 +440,6 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
         &'a self,
     ) -> PendingFileDeletionRequestDequeAPI<'a, Runtime> {
         PendingFileDeletionRequestDequeAPI {
-            phantom: std::marker::PhantomData,
-            db_context: &self.db_context,
-        }
-    }
-
-    pub fn pending_request_bsp_stop_storing_deque<Runtime: StorageEnableRuntime>(
-        &'a self,
-    ) -> PendingRequestBspStopStoringRequestDequeAPI<'a, Runtime> {
-        PendingRequestBspStopStoringRequestDequeAPI {
-            phantom: std::marker::PhantomData,
-            db_context: &self.db_context,
-        }
-    }
-
-    pub fn pending_confirm_bsp_stop_storing_deque<Runtime: StorageEnableRuntime>(
-        &'a self,
-    ) -> PendingConfirmBspStopStoringRequestDequeAPI<'a, Runtime> {
-        PendingConfirmBspStopStoringRequestDequeAPI {
             phantom: std::marker::PhantomData,
             db_context: &self.db_context,
         }
@@ -695,62 +552,3 @@ impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
     type DataCF = FileDeletionRequestCf<Runtime>;
 }
 
-pub struct PendingRequestBspStopStoringRequestDequeAPI<'a, Runtime: StorageEnableRuntime> {
-    pub(crate) phantom: std::marker::PhantomData<Runtime>,
-    pub(crate) db_context:
-        &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
-}
-
-impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
-    for PendingRequestBspStopStoringRequestDequeAPI<'a, Runtime>
-{
-    fn db_context(
-        &self,
-    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
-        &self.db_context
-    }
-}
-
-impl<'a, Runtime: StorageEnableRuntime> ProvidesTypedDbSingleAccess
-    for PendingRequestBspStopStoringRequestDequeAPI<'a, Runtime>
-{
-}
-
-impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
-    for PendingRequestBspStopStoringRequestDequeAPI<'a, Runtime>
-{
-    type Value = RequestBspStopStoringRequest<Runtime>;
-    type LeftIndexCF = PendingRequestBspStopStoringRequestLeftIndexCf;
-    type RightIndexCF = PendingRequestBspStopStoringRequestRightIndexCf;
-    type DataCF = PendingRequestBspStopStoringRequestCf<Runtime>;
-}
-
-pub struct PendingConfirmBspStopStoringRequestDequeAPI<'a, Runtime: StorageEnableRuntime> {
-    pub(crate) phantom: std::marker::PhantomData<Runtime>,
-    pub(crate) db_context:
-        &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
-}
-
-impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
-    for PendingConfirmBspStopStoringRequestDequeAPI<'a, Runtime>
-{
-    fn db_context(
-        &self,
-    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
-        &self.db_context
-    }
-}
-
-impl<'a, Runtime: StorageEnableRuntime> ProvidesTypedDbSingleAccess
-    for PendingConfirmBspStopStoringRequestDequeAPI<'a, Runtime>
-{
-}
-
-impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
-    for PendingConfirmBspStopStoringRequestDequeAPI<'a, Runtime>
-{
-    type Value = ConfirmBspStopStoringRequest<Runtime>;
-    type LeftIndexCF = PendingConfirmBspStopStoringRequestLeftIndexCf;
-    type RightIndexCF = PendingConfirmBspStopStoringRequestRightIndexCf;
-    type DataCF = PendingConfirmBspStopStoringRequestCf<Runtime>;
-}

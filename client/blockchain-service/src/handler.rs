@@ -240,6 +240,11 @@ where
 
     /// Maximum number of MSP respond storage requests to batch together.
     pub msp_respond_storage_batch_size: u32,
+
+    /// On blocks that are multiples of this number, the blockchain service will check
+    /// the local BSP stop-storing requests against the on-chain state to ensure no
+    /// stop-storing requests are missed.
+    pub check_stop_storing_requests_period: BlockNumber<Runtime>,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -256,6 +261,7 @@ where
             pending_db_url: None,
             bsp_confirm_file_batch_size: 20,
             msp_respond_storage_batch_size: 20,
+            check_stop_storing_requests_period: 600u32.into(),
         }
     }
 }
@@ -1746,19 +1752,23 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueueBspRequestStopStoring { request, callback } => {
-                    if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
-                        let state_store_context =
-                            self.persistent_state.open_rw_context_with_overlay();
-                        state_store_context
-                            .pending_request_bsp_stop_storing_deque()
-                            .push_back(request.clone());
-                        state_store_context.commit();
-
-                        info!(
-                            target: LOG_TARGET,
-                            "Queued BSP request stop storing for file key [{:?}]",
-                            request.file_key
-                        );
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let queued = bsp_handler.enqueue_request_bsp_stop_storing(request.clone());
+                        if queued {
+                            info!(
+                                target: LOG_TARGET,
+                                "Queued BSP request stop storing for file key [{:?}]",
+                                request.file_key
+                            );
+                        } else {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Skipping duplicate BSP request stop storing for file key [{:?}]",
+                                request.file_key
+                            );
+                        }
 
                         // We check right away if we can process the request so we don't waste time.
                         self.bsp_assign_forest_root_write_lock();
@@ -1786,20 +1796,24 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueueBspConfirmStopStoring { request, callback } => {
-                    if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
-                        let state_store_context =
-                            self.persistent_state.open_rw_context_with_overlay();
-                        state_store_context
-                            .pending_confirm_bsp_stop_storing_deque()
-                            .push_back(request.clone());
-                        state_store_context.commit();
-
-                        info!(
-                            target: LOG_TARGET,
-                            "Queued BSP confirm stop storing for file key [{:?}], confirm after tick: {:?}",
-                            request.file_key,
-                            request.confirm_after_tick
-                        );
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let queued = bsp_handler.enqueue_confirm_bsp_stop_storing(request.clone());
+                        if queued {
+                            info!(
+                                target: LOG_TARGET,
+                                "Queued BSP confirm stop storing for file key [{:?}], confirm after tick: {:?}",
+                                request.file_key,
+                                request.confirm_after_tick
+                            );
+                        } else {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Skipping duplicate BSP confirm stop storing for file key [{:?}]",
+                                request.file_key
+                            );
+                        }
 
                         // We check right away if we can process the request so we don't waste time.
                         self.bsp_assign_forest_root_write_lock();

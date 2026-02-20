@@ -9,8 +9,8 @@ import {
 
 await describeBspNet(
   "BSPNet: Stop Storing File RPC",
-  { initialised: false },
-  ({ before, createBspApi, it, createUserApi }) => {
+  { initialised: false, networkConfig: "rocksdb" },
+  ({ after, before, createBspApi, it, createUserApi, createApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
 
@@ -23,6 +23,11 @@ await describeBspNet(
     before(async () => {
       userApi = await createUserApi();
       bspApi = await createBspApi();
+    });
+
+    after(async () => {
+      await bspApi.disconnect();
+      await userApi.disconnect();
     });
 
     it("Network launches and can be queried", async () => {
@@ -362,6 +367,130 @@ await describeBspNet(
           );
           return file1Status.isFileNotFound && file2Status.isFileNotFound;
         }
+      });
+    });
+
+    it("BSP syncs pending stop-storing requests after restart", async () => {
+      const sourceRestart = "res/cloud.jpg";
+      const destinationRestart = "test/stop-storing-restart-catchup.jpg";
+      const bucketNameRestart = "restart-catchup-bucket";
+
+      // ================ Step 1: Upload a file and wait for BSP to store it ================
+      const restartFileMeta = await userApi.file.createBucketAndSendNewStorageRequest(
+        sourceRestart,
+        destinationRestart,
+        bucketNameRestart,
+        null,
+        null,
+        null,
+        1
+      );
+
+      await userApi.wait.bspVolunteer(1);
+
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        timeoutMs: 30000,
+        sealBlock: true
+      });
+
+      await waitFor({
+        lambda: async () => {
+          const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            restartFileMeta.fileKey
+          );
+          return isFileInForest.isTrue;
+        }
+      });
+
+      // ================ Step 2: Call stopStoringFile RPC ================
+      const rpcResult = await bspApi.rpc.storagehubclient.bspStopStoringFile(
+        restartFileMeta.fileKey
+      );
+      strictEqual(rpcResult.isSuccess, true, "RPC should return Success");
+
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspRequestStopStoring",
+        timeout: 30000
+      });
+      await userApi.block.seal();
+      await userApi.assert.eventPresent("fileSystem", "BspRequestedToStopStoring");
+
+      // ================ Step 3: Restart the BSP so its local state is lost ================
+      await bspApi.disconnect();
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
+      });
+
+      // Wait for BSP to be idle again
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName,
+        searchString: "💤 Idle",
+        timeout: 30000,
+        tail: 50
+      });
+
+      // Seal a block to trigger the initial sync
+      await userApi.block.seal();
+
+      // Check that the sync log was emitted
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName,
+        searchString: "Sync: replaced confirm stop-storing queue",
+        timeout: 30000,
+        tail: 50
+      });
+
+      // Reconnect BSP API
+      bspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`);
+
+      // Advance past MinWaitForStopStoring
+      const currentBlock = await userApi.rpc.chain.getBlock();
+      const currentBlockNumber = currentBlock.block.header.number.toNumber();
+      const minWaitForStopStoring = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: { MinWaitForStopStoring: null }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
+
+      await userApi.block.skipTo(currentBlockNumber + minWaitForStopStoring + 1);
+
+      // ================ Step 5: BSP should confirm the stop-storing request ================
+      // The BSP should now attempt to confirm since we're past MinWaitForStopStoring.
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspConfirmStopStoring",
+        timeout: 60000
+      });
+      await userApi.block.seal();
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+
+      // ================ Step 6: Verify file is no longer in forest ================
+      await waitFor({
+        lambda: async () => {
+          const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            restartFileMeta.fileKey
+          );
+          return isFileInForest.isFalse;
+        }
+      });
+
+      // Finalize and verify file storage cleanup
+      const { blockReceipt } = await userApi.block.seal({ finaliseBlock: true });
+      const finalisedBlockHash = blockReceipt.blockHash.toString();
+
+      await bspApi.wait.blockImported(finalisedBlockHash);
+      await bspApi.block.finaliseBlock(finalisedBlockHash);
+
+      await waitFor({
+        lambda: async () =>
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(restartFileMeta.fileKey))
+            .isFileNotFound
       });
     });
   }

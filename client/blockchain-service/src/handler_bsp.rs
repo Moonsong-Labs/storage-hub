@@ -111,8 +111,9 @@ where
     /// `process_bsp_sync_mutations`, so we:
     /// 1. Verify the local forest root matches the on-chain root
     /// 2. Catch up on proof submissions
+    /// 3. Catch up on any pending stop-storing confirmations
     pub(crate) async fn bsp_initial_sync(
-        &self,
+        &mut self,
         block_hash: Runtime::Hash,
         bsp_id: BackupStorageProviderId<Runtime>,
     ) {
@@ -121,6 +122,9 @@ where
 
         // Catch up on proof submissions
         self.proof_submission_catch_up(&block_hash);
+
+        // Catch up on any pending stop-storing confirmations missed while offline
+        self.handle_pending_stop_storing_requests(&block_hash, bsp_id);
     }
 
     /// Initialises the block processing flow for a BSP.
@@ -145,12 +149,12 @@ where
 
     /// Processes new block imported events that are only relevant for a BSP.
     pub(crate) fn bsp_process_block_import_events(
-        &self,
+        &mut self,
         block_hash: &Runtime::Hash,
         event: StorageEnableEvents<Runtime>,
     ) {
         let managed_bsp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => &bsp_handler.bsp_id,
+            Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id.clone(),
             _ => {
                 error!(target: LOG_TARGET, "`bsp_process_block_events` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
@@ -210,7 +214,7 @@ where
                 },
             ) => {
                 // Queue the confirm stop storing request if this is for our BSP.
-                if managed_bsp_id == &bsp_id {
+                if managed_bsp_id == bsp_id {
                     // Query MinWaitForStopStoring from runtime
                     let min_wait = match self
                         .client
@@ -259,11 +263,69 @@ where
                     // Queue the confirm stop storing request
                     let request: ConfirmBspStopStoringRequest<Runtime> =
                         ConfirmBspStopStoringRequest::new(file_key.into(), confirm_after_tick);
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .pending_confirm_bsp_stop_storing_deque()
-                        .push_back(request);
-                    state_store_context.commit();
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        bsp_handler.enqueue_confirm_bsp_stop_storing(request);
+                    }
+                }
+            }
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::BspConfirmStoppedStoring {
+                    bsp_id,
+                    file_key,
+                    new_root: _,
+                },
+            ) => {
+                // File key should have been removed from the confirm queue already when it got popped, but just in case.
+                if managed_bsp_id == bsp_id {
+                    let file_key: FileKey = file_key.into();
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let removed = bsp_handler.remove_confirm_bsp_stop_storing_key(&file_key);
+                        if removed {
+                            debug!(
+                                target: LOG_TARGET,
+                                "BspConfirmStoppedStoring detected: removed file [{:x}] from confirm queue",
+                                file_key
+                            );
+                        }
+                    }
+                }
+            }
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::SpStopStoringInsolventUser {
+                    sp_id,
+                    file_key,
+                    owner: _,
+                    location: _,
+                    new_root: _,
+                },
+            ) => {
+                // The BSP has stopped storing the file through the user insolvent route but it could have previously
+                // requested to stop storing it, so we remove it from the local queues.
+                // TODO: We should do the same when the fisherman is the one deleting the file.
+                if managed_bsp_id == sp_id {
+                    let file_key: FileKey = file_key.into();
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let removed_confirm =
+                            bsp_handler.remove_confirm_bsp_stop_storing_key(&file_key);
+                        let removed_request =
+                            bsp_handler.remove_request_bsp_stop_storing_key(&file_key);
+                        if removed_confirm || removed_request {
+                            debug!(
+                                target: LOG_TARGET,
+                                "SpStopStoringInsolventUser detected: cleared file [{:x}] from local queues \
+                                 (confirm={}, request={})",
+                                file_key,
+                                removed_confirm,
+                                removed_request,
+                            );
+                        }
+                    }
                 }
             }
             // Ignore all other events.
@@ -307,7 +369,7 @@ where
                         // Check if the challenges tick is one that this BSP has to submit a proof for.
                         if self.should_provider_submit_proof(
                             &block_hash,
-                            managed_bsp_id,
+                            &managed_bsp_id,
                             &challenges_ticker,
                         ) {
                             self.proof_submission_catch_up(&block_hash);
@@ -327,16 +389,40 @@ where
 
     /// Runs at the end of every block import for a BSP.
     ///
-    /// Steps:
+    /// Periodically syncs the local stop-storing confirm queue with the on-chain state
+    /// to ensure no stop-storing requests are missed. Between syncs, the queue is maintained
+    /// event-driven via block-import handlers for `BspRequestedToStopStoring`,
+    /// `BspConfirmStoppedStoring`, and `SpStopStoringInsolventUser`.
     pub(crate) async fn bsp_end_block_processing<Block>(
-        &self,
-        _block_hash: &Runtime::Hash,
-        _block_number: &BlockNumber<Runtime>,
+        &mut self,
+        block_hash: &Runtime::Hash,
+        block_number: &BlockNumber<Runtime>,
         _tree_route: TreeRoute<Block>,
     ) where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        // Nothing to do here so far.
+        let managed_bsp_id = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id,
+            _ => {
+                error!(target: LOG_TARGET, "`bsp_end_block_processing` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
+            }
+        };
+
+        // Skip the stop storing requests check if the period is set to 0.
+        let check_stop_storing_request_period = self.config.check_stop_storing_requests_period;
+        if check_stop_storing_request_period.is_zero() {
+            warn!(
+                target: LOG_TARGET,
+                "Period to check for stop storing requests is 0, skipping check."
+            );
+            return;
+        }
+
+        // Sync the local stop storing requests with the on-chain state if the period has been reached.
+        if *block_number % check_stop_storing_request_period == Zero::zero() {
+            self.handle_pending_stop_storing_requests(block_hash, managed_bsp_id);
+        }
     }
 
     /// Processes finality events that are only relevant for a BSP.
@@ -670,39 +756,35 @@ where
                     .map(BspForestWriteQueuePop::StopStoringForInsolventUser);
                 (popped.is_some(), popped)
             }
-            Some(BspForestWriteQueue::ConfirmBspStopStoring(current_tick)) => {
-                // Peek first to check if the front item's tick has been reached.
-                // Items are ordered chronologically, so if the first isn't ready, none are.
-                let popped = state
-                    .pending_confirm_bsp_stop_storing_deque::<Runtime>()
-                    .peek_front()
-                    .and_then(|peeked| {
-                        if peeked.confirm_after_tick <= current_tick {
-                            state
-                                .pending_confirm_bsp_stop_storing_deque::<Runtime>()
-                                .pop_front()
-                                .map(BspForestWriteQueuePop::ConfirmBspStopStoring)
-                        } else {
-                            None
-                        }
-                    });
+            Some(BspForestWriteQueue::RequestBspStopStoring) => {
+                let bsp_handler = match maybe_managed_provider {
+                    Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler,
+                    _ => unreachable!("bsp_forest_write_work should only be called for BSPs"),
+                };
+                let popped = bsp_handler
+                    .pop_request_bsp_stop_storing()
+                    .map(BspForestWriteQueuePop::RequestBspStopStoring);
                 (popped.is_some(), popped)
             }
-            Some(BspForestWriteQueue::RequestBspStopStoring) => {
-                let popped = state
-                    .pending_request_bsp_stop_storing_deque::<Runtime>()
-                    .pop_front()
-                    .map(BspForestWriteQueuePop::RequestBspStopStoring);
+            Some(BspForestWriteQueue::ConfirmBspStopStoring(current_tick)) => {
+                let bsp_handler = match maybe_managed_provider {
+                    Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler,
+                    _ => unreachable!("bsp_forest_write_work should only be called for BSPs"),
+                };
+
+                let popped = bsp_handler
+                    .pop_ready_confirm_bsp_stop_storing(current_tick)
+                    .map(BspForestWriteQueuePop::ConfirmBspStopStoring);
                 (popped.is_some(), popped)
             }
             None => {
                 // Check all queues when no pop is requested.
-                let has_pending_submit_proof = match maybe_managed_provider {
-                    Some(ManagedProvider::Bsp(bsp_handler)) => {
-                        !bsp_handler.pending_submit_proof_requests.is_empty()
-                    }
+                let bsp_handler = match maybe_managed_provider {
+                    Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler,
                     _ => unreachable!("bsp_forest_write_work should only be called for BSP"),
                 };
+                let has_pending_submit_proof =
+                    !bsp_handler.pending_submit_proof_requests.is_empty();
                 let has_pending_confirm = state
                     .pending_confirm_storing_request_deque::<Runtime>()
                     .size()
@@ -711,14 +793,10 @@ where
                     .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
                     .size()
                     > 0;
-                let has_pending_confirm_stop = state
-                    .pending_confirm_bsp_stop_storing_deque::<Runtime>()
-                    .size()
-                    > 0;
-                let has_pending_request_stop = state
-                    .pending_request_bsp_stop_storing_deque::<Runtime>()
-                    .size()
-                    > 0;
+                let has_pending_request_stop =
+                    !bsp_handler.pending_request_bsp_stop_storing.is_empty();
+                let has_pending_confirm_stop =
+                    !bsp_handler.pending_confirm_bsp_stop_storing.is_empty();
                 (
                     has_pending_submit_proof
                         || has_pending_confirm
@@ -1103,5 +1181,119 @@ where
             .collect();
 
         Ok((pending_confirmation, pending_volunteer))
+    }
+
+    /// Replaces the local confirm stop-storing queue with the canonical on-chain state.
+    ///
+    /// Called on boot and periodically as a safety net to correct
+    /// any drift caused by reorgs, external submissions, or event processing failures.
+    /// Between syncs, the local stop-storing confirm queue is maintained event-driven via
+    /// `BspRequestedToStopStoring`, `BspConfirmStoppedStoring`, and
+    /// `SpStopStoringInsolventUser` block-import handlers.
+    ///
+    /// The on-chain `PendingStopStoringRequests` map is the source of truth. This method:
+    /// 1. Clears the local confirm queue entirely.
+    /// 2. Rebuilds it from on-chain pending requests.
+    /// 3. Removes any keys that were in the request queue but are now in the confirm queue.
+    pub(crate) fn handle_pending_stop_storing_requests(
+        &mut self,
+        current_block_hash: &Runtime::Hash,
+        bsp_id: BackupStorageProviderId<Runtime>,
+    ) {
+        let bsp_handler = match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(h)) => h,
+            _ => {
+                error!(
+                        target: LOG_TARGET,
+                        "`handle_pending_stop_storing_requests` called but node is not managing a BSP"
+                );
+                return;
+            }
+        };
+
+        // Get all pending stop storing requests from the on-chain state.
+        let pending = match self
+            .client
+            .runtime_api()
+            .pending_stop_storing_requests_by_bsp(*current_block_hash, bsp_id)
+        {
+            Ok(requests) => requests,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to query pending_stop_storing_requests_by_bsp: {:?}", e
+                );
+                return;
+            }
+        };
+
+        let min_wait = match self
+            .client
+            .runtime_api()
+            .query_min_wait_for_stop_storing(*current_block_hash)
+        {
+            Ok(v) => v,
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "CRITICAL ❗❗ Failed to query MinWaitForStopStoring: {:?}", e
+                );
+                return;
+            }
+        };
+
+        // Clear the existing confirm queue and rebuild it from the on-chain state.
+        let old_count = bsp_handler.pending_confirm_bsp_stop_storing.len();
+        bsp_handler.clear_confirm_bsp_stop_storing();
+
+        // Track the keys that were in the request queue but are now in the confirm queue.
+        let mut keys_to_remove_from_request_queue: HashSet<FileKey> = HashSet::new();
+
+        // For each pending stop storing request on-chain...
+        for (file_key_h256, on_chain_req) in &pending {
+            let file_key: FileKey = (*file_key_h256).into();
+            let confirm_after_tick = on_chain_req.tick_when_requested + min_wait + 1u32.into();
+
+            // Check if the file key is in the request queue and schedule its deletion from it.
+            if bsp_handler
+                .pending_request_bsp_stop_storing_file_keys
+                .contains(&file_key)
+            {
+                debug!(
+                    target: LOG_TARGET,
+                    "Syncing: file [{:x}] found on-chain but was in request queue \
+                     (Phase 1 completed externally). Promoting to confirm queue at tick {:?}.",
+                    file_key,
+                    confirm_after_tick
+                );
+                keys_to_remove_from_request_queue.insert(file_key);
+            }
+
+            // Add the file key to the confirm queue.
+            bsp_handler.enqueue_confirm_bsp_stop_storing(ConfirmBspStopStoringRequest::new(
+                (*file_key_h256).into(),
+                confirm_after_tick,
+            ));
+        }
+
+        // Remove the file keys from the request queue.
+        if !keys_to_remove_from_request_queue.is_empty() {
+            bsp_handler.remove_request_bsp_stop_storing_keys(&keys_to_remove_from_request_queue);
+        }
+
+        let new_count = bsp_handler.pending_confirm_bsp_stop_storing.len();
+        if new_count > 0 || old_count > 0 {
+            info!(
+                target: LOG_TARGET,
+                "Sync: replaced confirm stop-storing queue (was {}, now {} entries from on-chain state)",
+                old_count,
+                new_count,
+            );
+        }
+
+        // If there are any new confirm stop storing requests, try to assign the forest root write lock.
+        if new_count > 0 {
+            self.bsp_assign_forest_root_write_lock();
+        }
     }
 }
