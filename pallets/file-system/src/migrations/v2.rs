@@ -221,10 +221,11 @@ mod tests {
     use sp_runtime::traits::Zero;
 
     fn create_test_metadata() -> StorageRequestMetadata<Test> {
+        use sp_keyring::sr25519::Keyring;
         StorageRequestMetadata {
             requested_at: 1,
             expires_at: 100,
-            owner: Default::default(),
+            owner: Keyring::Alice.to_account_id(),
             bucket_id: Default::default(),
             location: BoundedVec::try_from(b"test/file.txt".to_vec()).unwrap(),
             fingerprint: Default::default(),
@@ -244,6 +245,14 @@ mod tests {
 
     fn bsp_id(seed: u8) -> ProviderIdFor<Test> {
         ProviderIdFor::<Test>::from([seed; 32])
+    }
+
+    /// Produces a unique `ProviderIdFor<Test>` for any `usize` index by encoding
+    /// the index as little-endian bytes in the first 8 bytes of the 32-byte array.
+    fn bsp_id_n(index: usize) -> ProviderIdFor<Test> {
+        let mut bytes = [0u8; 32];
+        bytes[..8].copy_from_slice(&(index as u64).to_le_bytes());
+        ProviderIdFor::<Test>::from(bytes)
     }
 
     #[test]
@@ -353,7 +362,7 @@ mod tests {
             for i in 0..=max {
                 v1::StorageRequestBsps::<Test>::insert(
                     key,
-                    bsp_id(i as u8),
+                    bsp_id_n(i),
                     v1::StorageRequestBspsMetadataV1 {
                         confirmed: false,
                         _phantom: Default::default(),
