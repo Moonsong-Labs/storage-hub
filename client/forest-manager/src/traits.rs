@@ -64,6 +64,12 @@ pub trait ForestStorageHandler<Runtime: StorageEnableRuntime> {
     /// Remove forest storage instance.
     async fn remove_forest_storage(&mut self, key: &Self::Key);
 
+    /// Check if a forest storage instance is present for the given key.
+    ///
+    /// For in-memory implementations, this checks the in-memory registry.
+    /// For RocksDB implementations, this checks if the directory exists on disk.
+    async fn is_forest_storage_present(&self, key: &Self::Key) -> bool;
+
     /// Create a copy (snapshot) of the forest storage instance.
     ///
     /// Returns `Some` with the copied forest storage instance for `key` if it exists,

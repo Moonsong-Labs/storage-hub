@@ -1169,6 +1169,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       isFileKeyExpected: AugmentedRpc<(file_key: H256 | string | Uint8Array) => Observable<bool>>;
       /**
+       * Check if a forest storage is present for the given forest key.
+       **/
+      isForestStoragePresent: AugmentedRpc<
+        (forest_key: Option<H256> | null | Uint8Array | H256 | string) => Observable<bool>
+      >;
+      /**
        * Load a file in the local storage. This is the first step when uploading a file.
        **/
       loadFileInStorage: AugmentedRpc<
