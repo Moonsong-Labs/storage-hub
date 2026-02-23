@@ -16783,7 +16783,7 @@ dependencies = [
  "shc-common",
  "shp-file-key-verifier",
  "shp-file-metadata",
- "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-api 36.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "thiserror 1.0.69",
  "tokio",
 ]
