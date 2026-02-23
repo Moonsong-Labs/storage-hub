@@ -404,7 +404,7 @@ export async function launchNetworkFromTopology(
       );
     }
 
-    await startMspContainersPhase(identities.msps, composeFile, cwd, reporter, bootnodeInfo);
+    await startMspContainersPhase(identities.msps, composeFile, cwd, reporter, runtimeType, bootnodeInfo);
     await startUsersPhase(identities.users, composeFile, cwd, reporter, runtimeType, bootnodeInfo);
 
     // bsp0Api was only needed for BSP-1..N registration — disconnect it now
@@ -718,6 +718,7 @@ async function startMspContainersPhase(
   composeFile: string,
   cwd: string,
   reporter: ProgressReporter,
+  runtimeType: "parachain" | "solochain",
   bootnodeInfo?: BootnodeInfo
 ): Promise<void> {
   if (msps.length === 0) return;
@@ -747,7 +748,7 @@ async function startMspContainersPhase(
 
       const mspApi = await BspNetTestApi.create(
         `ws://127.0.0.1:${nodeInfo.ports.rpc}`,
-        "parachain"
+        runtimeType
       );
 
       await injectKeys(mspApi, nodeInfo.identity);
