@@ -632,9 +632,6 @@ where
             let mut fs = fs_arc.write().await;
             fs.deleting = true;
             drop(fs);
-        } else {
-            warn!(target: LOG_TARGET, "Attempted to remove forest storage [{}], but it was not found", key);
-            return;
         }
 
         // Delete directory from disk.
