@@ -1553,6 +1553,34 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryMaxMspRespondFileKeys { callback } => {
+                    let current_block_hash = self.client.info().best_hash;
+                    let max_keys = match self
+                        .client
+                        .runtime_api()
+                        .get_max_msp_respond_file_keys(current_block_hash)
+                    {
+                        Ok(max) => max,
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to query max MSP respond file keys: {:?}", e);
+                            match callback
+                                .send(Err(anyhow!("Failed to query max MSP respond file keys")))
+                            {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+                    match callback.send(Ok(max_keys)) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send max MSP respond file keys: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::AddPendingVolunteerFileKey { file_key } => {
                     if let Some(ManagedProvider::Bsp(bsp_handler)) =
                         &mut self.maybe_managed_provider

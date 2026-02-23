@@ -926,6 +926,9 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget;
     type MaxReplicationTarget =
         runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
+    type MaxBspVolunteers = runtime_params::dynamic_params::runtime_config::MaxBspVolunteers;
+    type MaxMspRespondFileKeys =
+        runtime_params::dynamic_params::runtime_config::MaxMspRespondFileKeys;
     type TickRangeToMaximumThreshold =
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type OffchainSignature = Signature;
@@ -1104,5 +1107,29 @@ impl shp_traits::CommitRevealRandomnessInterface for MockCrRandomness {
     fn stop_randomness_cycle(_who: &Self::ProviderId) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }
+}
+/****** ****** ****** ******/
+
+/****** Multi-Block Migrations pallet ******/
+parameter_types! {
+    /// Service weight allocated to MBM steps per block (10% of max block weight).
+    pub MbmServiceWeight: Weight =
+        Perbill::from_percent(10) * RuntimeBlockWeights::get().max_block;
+}
+
+impl pallet_migrations::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    #[cfg(not(any(feature = "try-runtime", feature = "runtime-benchmarks")))]
+    type Migrations = (pallet_file_system::migrations::v2::MigrateV1ToV2Stepped<Runtime>,);
+    #[cfg(feature = "try-runtime")]
+    type Migrations = ();
+    #[cfg(feature = "runtime-benchmarks")]
+    type Migrations = pallet_migrations::mock_helpers::MockedMigrations;
+    type CursorMaxLen = ConstU32<65536>;
+    type IdentifierMaxLen = ConstU32<256>;
+    type MigrationStatusHandler = ();
+    type FailedMigrationHandler = frame_support::migrations::FreezeChainOnFailedMigration;
+    type MaxServiceWeight = MbmServiceWeight;
+    type WeightInfo = ();
 }
 /****** ****** ****** ******/

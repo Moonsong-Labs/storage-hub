@@ -429,6 +429,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ThresholdArithmeticError: AugmentedError<ApiType>;
       /**
+       * Too many BSPs have already volunteered for the storage request.
+       **/
+      TooManyBspVolunteers: AugmentedError<ApiType>;
+      /**
        * Too many storage request responses.
        **/
       TooManyStorageRequestResponses: AugmentedError<ApiType>;

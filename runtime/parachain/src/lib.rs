@@ -80,8 +80,21 @@ pub type SignedExtra = (
 pub type UncheckedExtrinsic =
     generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
 
-/// Migrations to run on runtime upgrade.
+/// Single-block runtime upgrade migrations (run synchronously on the first block after upgrade).
+/// The V1→V2 `StorageRequestBsps` migration is handled by `pallet_migrations` (MBM) instead.
+#[cfg(not(feature = "try-runtime"))]
 pub type Migrations = (pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,);
+
+/// In try-runtime, run the V1→V2 migration synchronously via `TryRuntimeMigrate` so that
+/// `pallet_migrations` (set to `Migrations = ()` for try-runtime) never sets a cursor and
+/// try-runtime skips Phase 2 block production (which panics on Cumulus parachains because
+/// `cumulus_pallet_parachain_system::create_inherent` requires relay-chain validation data
+/// that is unavailable in try-runtime's mock block environment).
+#[cfg(feature = "try-runtime")]
+pub type Migrations = (
+    pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,
+    pallet_file_system::migrations::v2::TryRuntimeMigrate<Runtime>,
+);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -131,7 +144,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     spec_name: alloc::borrow::Cow::Borrowed("sh-parachain-runtime"),
     impl_name: alloc::borrow::Cow::Borrowed("sh-parachain-runtime"),
     authoring_version: 1,
-    spec_version: 1,
+    spec_version: 1201,
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 1,
@@ -266,6 +279,8 @@ mod runtime {
     pub type Nfts = pallet_nfts;
     #[runtime::pallet_index(51)]
     pub type Parameters = pallet_parameters;
+    #[runtime::pallet_index(52)]
+    pub type MultiBlockMigrations = pallet_migrations;
 }
 
 #[cfg(feature = "runtime-benchmarks")]

@@ -103,6 +103,7 @@ cumulus-primitives-core = { workspace = true }
 cumulus-primitives-utility = { workspace = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true }
 pallet-collator-selection = { workspace = true }
+pallet-migrations = { workspace = true }
 parachains-common = { workspace = true }
 parachain-info = { workspace = true }
 polkadot-core-primitives = { workspace = true }
@@ -134,6 +135,7 @@ std = [
 	"pallet-balances/std",
 	"pallet-collator-selection/std",
 	"pallet-cr-randomness/std",
+	"pallet-migrations/std",
 	"pallet-file-system/std",
 	"pallet-message-queue/std",
 	"pallet-nfts/std",
@@ -196,6 +198,7 @@ runtime-benchmarks = [
 	"pallet-collator-selection/runtime-benchmarks",
 	"pallet-cr-randomness/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
+	"pallet-migrations/runtime-benchmarks",
 	"pallet-message-queue/runtime-benchmarks",
 	"pallet-nfts/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
@@ -231,6 +234,7 @@ try-runtime = [
 	"pallet-collator-selection/try-runtime",
 	"pallet-cr-randomness/try-runtime",
 	"pallet-file-system/try-runtime",
+	"pallet-migrations/try-runtime",
 	"pallet-message-queue/try-runtime",
 	"pallet-nfts/try-runtime",
 	"pallet-proofs-dealer/try-runtime",

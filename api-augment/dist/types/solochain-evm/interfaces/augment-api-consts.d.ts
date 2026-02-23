@@ -111,6 +111,13 @@ declare module '@polkadot/api-base/types/consts' {
              **/
             maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;
             /**
+             * Maximum number of BSPs that can volunteer for a single storage request.
+             *
+             * This bounds the per-file BSP volunteer map independently from `MaxReplicationTarget`.
+             * Must be >= MaxReplicationTarget to allow enough BSPs to fill any storage request.
+             **/
+            maxBspVolunteers: u32 & AugmentedConst<ApiType>;
+            /**
              * Maximum number of multiaddresses for a storage request.
              **/
             maxDataServerMultiAddresses: u32 & AugmentedConst<ApiType>;
@@ -126,6 +133,14 @@ declare module '@polkadot/api-base/types/consts' {
              * Maximum byte size of a file path.
              **/
             maxFilePathSize: u32 & AugmentedConst<ApiType>;
+            /**
+             * Maximum number of file keys an MSP can accept per bucket in a single
+             * `msp_respond_storage_requests_multiple_buckets` call.
+             *
+             * Bounds `StorageRequestMspAcceptedFileKeys.file_keys_and_proofs`.
+             * Clients should also respect this via the `get_max_msp_respond_file_keys` runtime API.
+             **/
+            maxMspRespondFileKeys: u32 & AugmentedConst<ApiType>;
             /**
              * Maximum number of peer ids for a storage request.
              **/
