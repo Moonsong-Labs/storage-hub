@@ -93,8 +93,8 @@ async function runWasmBuildIfNeeded(packageRoot, { withWasm }) {
     // Read current glue and apply a targeted replacement of the URL fallback
     const before = readFileSync(gluePath, "utf8");
     const after = before.replace(
-      /if\s*\(\s*typeof\s+module_or_path\s*===\s*['"]undefined['"]\s*\)\s*\{\s*module_or_path\s*=\s*new\s+URL\([^)]*\);\s*\}/,
-      "if (typeof module_or_path === 'undefined') { throw new Error('Embedded WASM required: URL fallback disabled'); }"
+      /if\s*\(\s*(?:typeof\s+)?module_or_path\s*===\s*(?:['"]undefined['"]|undefined)\s*\)\s*\{\s*module_or_path\s*=\s*new\s+URL\([^)]*\);\s*\}/,
+      "if (module_or_path === undefined) { throw new Error('Embedded WASM required: URL fallback disabled'); }"
     );
     // Strict: if nothing changed, fail to avoid shipping an unpatched glue
     if (after === before) {
