@@ -121,6 +121,8 @@ where
     /// Spawn the File Transfer Service.
     pub async fn with_file_transfer(
         &mut self,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
+        trusted_msps: Vec<shc_common::types::ProviderId<Runtime>>,
         file_transfer_request_receiver: Receiver<IncomingRequest>,
         file_transfer_request_protocol_name: ProtocolName,
         network: Arc<dyn NetworkService>,
@@ -132,6 +134,8 @@ where
             file_transfer_request_receiver,
             file_transfer_request_protocol_name,
             network,
+            client,
+            trusted_msps,
         )
         .await;
 
