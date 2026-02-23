@@ -1,4 +1,9 @@
-use std::{collections::HashSet, io, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
@@ -64,6 +69,8 @@ impl Into<u32> for Column {
 
 // Replace NUMBER_OF_COLUMNS definition
 const NUMBER_OF_COLUMNS: u32 = Column::COUNT as u32;
+const TRUSTED_BATCH_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+const TRUSTED_BATCH_CACHE_MAX_ENTRIES: usize = 4096;
 
 // Helper function to map ExcludeType enum to their matching rocksdb column.
 fn get_exclude_type_db_column(exclude_type: ExcludeType) -> u32 {
@@ -538,6 +545,20 @@ impl<T: TrieLayout> TrustedBatchWriteCacheState<T> {
     }
 }
 
+struct TrustedBatchCacheEntry<T: TrieLayout> {
+    state: TrustedBatchWriteCacheState<T>,
+    last_touched: Instant,
+}
+
+impl<T: TrieLayout> TrustedBatchCacheEntry<T> {
+    fn new(now: Instant) -> Self {
+        Self {
+            state: Default::default(),
+            last_touched: now,
+        }
+    }
+}
+
 pub struct RocksDbFileStorage<T, DB>
 where
     T: TrieLayout + 'static,
@@ -545,8 +566,9 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     storage: StorageDb<T, DB>,
-    trusted_batch_file_key: Option<Vec<u8>>,
-    trusted_batch_state: TrustedBatchWriteCacheState<T>,
+    trusted_batch_states: HashMap<Vec<u8>, TrustedBatchCacheEntry<T>>,
+    trusted_batch_cache_ttl: Duration,
+    trusted_batch_cache_max_entries: usize,
 }
 
 impl<T: TrieLayout, DB> RocksDbFileStorage<T, DB>
@@ -631,8 +653,36 @@ where
     pub fn new(storage: StorageDb<T, DB>) -> Self {
         Self {
             storage,
-            trusted_batch_file_key: None,
-            trusted_batch_state: Default::default(),
+            trusted_batch_states: HashMap::new(),
+            trusted_batch_cache_ttl: TRUSTED_BATCH_CACHE_TTL,
+            trusted_batch_cache_max_entries: TRUSTED_BATCH_CACHE_MAX_ENTRIES,
+        }
+    }
+
+    fn prune_trusted_batch_cache(&mut self, now: Instant) {
+        // Drop stale upload states to avoid unbounded growth when uploads stall.
+        self.trusted_batch_states.retain(|_, entry| {
+            now.saturating_duration_since(entry.last_touched) <= self.trusted_batch_cache_ttl
+        });
+
+        // Hard cap as backstop for many concurrent long-lived uploads.
+        if self.trusted_batch_states.len() <= self.trusted_batch_cache_max_entries {
+            return;
+        }
+
+        let mut by_age: Vec<(Vec<u8>, Instant)> = self
+            .trusted_batch_states
+            .iter()
+            .map(|(key, entry)| (key.clone(), entry.last_touched))
+            .collect();
+        by_age.sort_unstable_by_key(|(_, last_touched)| *last_touched);
+
+        let to_remove = self
+            .trusted_batch_states
+            .len()
+            .saturating_sub(self.trusted_batch_cache_max_entries);
+        for (key, _) in by_age.into_iter().take(to_remove) {
+            let _ = self.trusted_batch_states.remove(&key);
         }
     }
 
@@ -772,6 +822,18 @@ where
         let new_count = current_count
             .checked_add(delta)
             .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
+
+        // Prevent never-ending uploads from writing more chunks than declared in metadata.
+        if new_count > metadata.chunks_count() {
+            warn!(
+                target: LOG_TARGET,
+                "Trusted batch write exceeded metadata chunk count for file {:?}: new_count={}, declared={}",
+                file_key,
+                new_count,
+                metadata.chunks_count()
+            );
+            return Err(FileStorageWriteError::ChunkCountOverflow);
+        }
 
         // Persist trie node mutations + root + chunk count in a single RocksDB transaction.
         let mut transaction = DBTransaction::new();
@@ -1335,30 +1397,35 @@ where
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
-        // Reset cache when switching file keys so state is never mixed across uploads.
-        if self.trusted_batch_file_key.as_deref() != Some(file_key.as_ref()) {
-            self.trusted_batch_file_key = Some(file_key.as_ref().to_vec());
-            self.trusted_batch_state.clear_cache();
-        }
+        let now = Instant::now();
+        self.prune_trusted_batch_cache(now);
 
-        // Temporarily move out cache state to avoid borrow conflicts while mutating `self`.
-        let mut state = std::mem::take(&mut self.trusted_batch_state);
-        let result = self.write_chunks_batched_trusted_inner(file_key, chunks, &mut state);
-        self.trusted_batch_state = state;
+        let cache_key = file_key.as_ref().to_vec();
+        let mut cache_entry = self
+            .trusted_batch_states
+            .remove(&cache_key)
+            .unwrap_or_else(|| TrustedBatchCacheEntry::new(now));
+        cache_entry.last_touched = now;
+
+        let result =
+            self.write_chunks_batched_trusted_inner(file_key, chunks, &mut cache_entry.state);
 
         match result {
             Ok(FileStorageWriteOutcome::FileComplete) => {
-                self.trusted_batch_state.clear_cache();
-                self.trusted_batch_file_key = None;
+                // Cache entry was removed before the write and is intentionally not reinserted
+                // when the upload completes.
                 Ok(FileStorageWriteOutcome::FileComplete)
             }
             Ok(FileStorageWriteOutcome::FileIncomplete) => {
+                // Upload is still in progress; reinsert updated per-file state so the next batch
+                // can continue without reloading metadata/root/chunk_count from DB.
+                cache_entry.last_touched = Instant::now();
+                self.trusted_batch_states.insert(cache_key, cache_entry);
+                self.prune_trusted_batch_cache(Instant::now());
                 Ok(FileStorageWriteOutcome::FileIncomplete)
             }
             Err(e) => {
-                // On errors, drop cache to avoid stale state on retries.
-                self.trusted_batch_state.clear_cache();
-                self.trusted_batch_file_key = None;
+                // On errors, drop this file cache to avoid stale state on retries.
                 Err(e)
             }
         }
