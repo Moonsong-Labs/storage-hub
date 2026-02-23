@@ -47,13 +47,14 @@
 //! 7. Release global lock via fisherman service
 
 use anyhow::anyhow;
-use codec::Decode;
+use codec::{Decode, Encode};
 use frame_support::BoundedVec;
 use futures::future::join_all;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceCommandInterface, types::SendExtrinsicOptions,
+    commands::BlockchainServiceCommandInterface,
+    types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::{
     traits::StorageEnableRuntime,
@@ -71,7 +72,8 @@ use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage
 use shc_indexer_db::models::{FileFiltering, FileOrdering};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
-use std::time::Duration;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::sync::RwLock;
 
 use crate::{
     handler::StorageHubHandler,
@@ -79,6 +81,11 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "fisherman-batch-deletions-task";
+
+/// Tip escalation parameters for deletion extrinsics, matching BSP confirm defaults.
+const DELETION_TIP_MAX_RETRIES: u32 = 3;
+const DELETION_TIP_MAX: u128 = 500;
+const DELETION_TIP_BASE_MULTIPLIER: f64 = 2.0;
 
 /// Grouped pending deletions ready for batch processing.
 ///
@@ -152,6 +159,10 @@ where
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
     /// Strategy for selecting and ordering files for deletion
     strategy: FileDeletionStrategy,
+    /// Tracks the retry count per deletion target. When a deletion extrinsic for a target
+    /// fails, the count is incremented and used with RetryStrategy::compute_tip to derive
+    /// an escalating tip for the next attempt. Reset to 0 on success.
+    tip_tracker: Arc<RwLock<HashMap<Vec<u8>, u32>>>,
 }
 
 impl<NT, Runtime> Clone for FishermanTask<NT, Runtime>
@@ -164,6 +175,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             strategy: self.strategy,
+            tip_tracker: self.tip_tracker.clone(),
         }
     }
 }
@@ -328,6 +340,23 @@ where
         Self {
             storage_hub_handler,
             strategy,
+            tip_tracker: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Produces a unique byte key for a deletion target, used to track per-target tip state.
+    fn target_key(target: &FileDeletionTarget<Runtime>) -> Vec<u8> {
+        match target {
+            FileDeletionTarget::BspId(id) => {
+                let mut key = vec![0u8];
+                key.extend(id.encode());
+                key
+            }
+            FileDeletionTarget::BucketId(id) => {
+                let mut key = vec![1u8];
+                key.extend(id.encode());
+                key
+            }
         }
     }
 
@@ -422,10 +451,36 @@ where
             }
         };
 
+        // Look up the retry count for this target and compute the tip.
+        let key = Self::target_key(&target);
+        let retry_count = self
+            .tip_tracker
+            .read()
+            .await
+            .get(&key)
+            .copied()
+            .unwrap_or(0);
+        let tip_strategy = RetryStrategy::new(
+            DELETION_TIP_MAX_RETRIES,
+            DELETION_TIP_MAX,
+            DELETION_TIP_BASE_MULTIPLIER,
+        );
+        let tip = tip_strategy.compute_tip(retry_count);
+
+        if tip > 0 {
+            info!(
+                target: LOG_TARGET,
+                "🎣 Using tip {} for target {:?} (retry count: {})",
+                tip,
+                target,
+                retry_count
+            );
+        }
+
         // Submit extrinsic for the deletion type with only valid files
-        match deletion_type {
+        let submit_result = match deletion_type {
             shc_indexer_db::models::FileDeletionType::User => {
-                self.submit_user_deletion_extrinsic(&remaining_files, provider_id, forest_proof)
+                self.submit_user_deletion_extrinsic(&remaining_files, provider_id, forest_proof, tip)
                     .await
                     .map_err(|e|
                         anyhow!(
@@ -434,13 +489,14 @@ where
                             target,
                             remaining_file_keys.display_hex_list(),
                             e
-                        ))?;
+                        ))
             }
             shc_indexer_db::models::FileDeletionType::Incomplete => {
                 self.submit_incomplete_deletion_extrinsic(
                     &remaining_file_keys,
                     provider_id,
-                    forest_proof
+                    forest_proof,
+                    tip,
                 )
                 .await
                 .map_err(|e|
@@ -450,9 +506,22 @@ where
                         target,
                         remaining_file_keys.display_hex_list(),
                         e
-                    ))?;
+                    ))
+            }
+        };
+
+        match &submit_result {
+            Ok(()) => {
+                self.tip_tracker.write().await.remove(&key);
+            }
+            Err(_) => {
+                let mut tracker = self.tip_tracker.write().await;
+                let count = tracker.entry(key).or_insert(0);
+                *count = (*count + 1).min(DELETION_TIP_MAX_RETRIES);
             }
         }
+
+        submit_result?;
 
         info!(
             target: LOG_TARGET,
@@ -793,6 +862,7 @@ where
         files: &[BatchFileDeletionData<Runtime>],
         provider_id: Option<StorageProviderId<Runtime>>,
         forest_proof: CommonForestProof<StorageProofsMerkleTrieLayout>,
+        tip: u128,
     ) -> anyhow::Result<()> {
         debug!(
             target: LOG_TARGET,
@@ -875,7 +945,8 @@ where
                     Duration::from_secs(120),
                     Some("fileSystem".to_string()),
                     Some("deleteFiles".to_string()),
-                ),
+                )
+                .with_tip(tip),
             )
             .await
             .map_err(|e| {
@@ -908,6 +979,7 @@ where
         file_keys: &[Runtime::Hash],
         provider_id: Option<StorageProviderId<Runtime>>,
         forest_proof: CommonForestProof<StorageProofsMerkleTrieLayout>,
+        tip: u128,
     ) -> anyhow::Result<()> {
         debug!(
             target: LOG_TARGET,
@@ -953,7 +1025,8 @@ where
                     Duration::from_secs(120),
                     Some("fileSystem".to_string()),
                     Some("deleteFilesForIncompleteStorageRequest".to_string()),
-                ),
+                )
+                .with_tip(tip),
             )
             .await
             .map_err(|e| {
