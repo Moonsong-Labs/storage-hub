@@ -62,12 +62,14 @@ export const SHARED_TYPES = {
     ReputationWeightType: "u32",
     ValuePropId: "H256",
     ValueProposition: {
-        price_per_giga_unit_of_data_per_block: "u64",
-        bucket_data_limit: "StorageDataUnit"
+        pricePerGigaUnitOfDataPerBlock: "u128",
+        commitment: "Vec<u8>",
+        bucketDataLimit: "StorageDataUnit",
+        available: "bool"
     },
     ValuePropositionWithId: {
         id: "ValuePropId",
-        value_prop: "ValueProposition"
+        valueProp: "ValueProposition"
     },
     BackupStorageProvider: {
         capacity: "StorageDataUnit",

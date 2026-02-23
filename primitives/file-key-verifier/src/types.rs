@@ -1,14 +1,16 @@
-use codec::{Decode, Encode};
+extern crate alloc;
+
+use alloc::vec::Vec;
+use codec::{Decode, DecodeWithMemTracking, Encode};
 use core::fmt::Debug;
 use scale_info::TypeInfo;
 use shp_file_metadata::{
     Chunk, ChunkId, ChunkIdError, ChunkWithId, FileMetadata, Fingerprint, Leaf,
 };
-use sp_std::vec::Vec;
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
 
-#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode, DecodeWithMemTracking)]
 pub struct FileKeyProof<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
     pub file_metadata: FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>,

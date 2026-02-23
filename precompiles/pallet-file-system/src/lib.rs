@@ -2,6 +2,10 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::vec::Vec;
+use core::marker::PhantomData;
 use fp_account::{AccountId20, EthereumSignature};
 use fp_evm::{Log, PrecompileHandle};
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
@@ -17,7 +21,6 @@ use precompile_utils::prelude::*;
 use shp_traits::ReadBucketsInterface;
 use sp_core::{ConstU32, H160, H256, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
-use sp_std::{marker::PhantomData, vec::Vec};
 
 #[cfg(test)]
 mod mock;
@@ -182,10 +185,10 @@ where
     Runtime: pallet_file_system::Config
         + pallet_evm::Config
         + frame_system::Config<AccountId = AccountId20>,
-    Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
-    Runtime::RuntimeCall: From<FileSystemCall<Runtime>>,
-    <Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
-    <Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
+    <Runtime as frame_system::Config>::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
+    <Runtime as frame_system::Config>::RuntimeCall: From<FileSystemCall<Runtime>>,
+    <Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<<Runtime as frame_system::Config>::AccountId>,
+    <<Runtime as frame_system::Config>::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<<Runtime as frame_system::Config>::AccountId>>,
     // Runtime types:
     ProviderIdFor<Runtime>: From<H256> + Into<H256>,
     ValuePropId<Runtime>: From<H256> + Into<H256>,
@@ -218,7 +221,7 @@ where
         let bucket_id_h256: H256 = H256::from_slice(bucket_id.as_ref());
 
         let call = FileSystemCall::<Runtime>::create_bucket {
-            msp_id: msp_id.clone().into(),
+            msp_id: msp_id.into(),
             name,
             private,
             value_prop_id,
@@ -253,8 +256,8 @@ where
 		let new_value_prop_id = new_value_prop_id.into();
 
         let call = FileSystemCall::<Runtime>::request_move_bucket {
-            bucket_id: bucket_id.clone().into(),
-            new_msp_id: new_msp_id.clone().into(),
+            bucket_id: bucket_id.into(),
+            new_msp_id: new_msp_id.into(),
             new_value_prop_id,
         };
 
@@ -264,8 +267,8 @@ where
         let log = log_bucket_move_requested(
             handle.context().address,
             handle.context().caller,
-            bucket_id.into(),
-            new_msp_id.into(),
+            bucket_id,
+            new_msp_id,
         );
         handle.record_log_costs(&[&log])?;
         log.record(handle)?;
@@ -285,7 +288,7 @@ where
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
-        let call = FileSystemCall::<Runtime>::update_bucket_privacy { bucket_id: bucket_id.clone().into(), private };
+        let call = FileSystemCall::<Runtime>::update_bucket_privacy { bucket_id: bucket_id.into(), private };
 
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
@@ -313,13 +316,13 @@ where
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
         let call =
-            FileSystemCall::<Runtime>::create_and_associate_collection_with_bucket { bucket_id: bucket_id.clone().into() };
+            FileSystemCall::<Runtime>::create_and_associate_collection_with_bucket { bucket_id: bucket_id.into() };
 
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
         // Get the collection_id that was just created and associated with the bucket
-        let collection_id = <Runtime as pallet_file_system::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id.clone().into())
+        let collection_id = <Runtime as pallet_file_system::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id.into())
             .map_err(|_| RevertReason::custom("Failed to get collection ID"))?
             .ok_or(RevertReason::custom("Collection ID not found"))?; // Should exist after successful dispatch
 
@@ -342,7 +345,7 @@ where
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
-        let call = FileSystemCall::<Runtime>::delete_bucket { bucket_id: bucket_id.clone().into() };
+        let call = FileSystemCall::<Runtime>::delete_bucket { bucket_id: bucket_id.into() };
 
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
@@ -376,7 +379,7 @@ where
         handle.record_cost(RuntimeHelper::<Runtime>::db_write_gas_cost())?;
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-        let bucket_id_runtime = bucket_id.clone().into();
+        let bucket_id_runtime = bucket_id.into();
         let location: FileLocation<Runtime> =
             BoundedVec::try_from(location.as_bytes().to_vec()).map_err(|_| RevertReason::custom("Location path too long"))?;
         let fingerprint = fingerprint.into();
@@ -405,7 +408,7 @@ where
 
 		// Calculate the file_key (same logic as pallet)
         let file_key = pallet_file_system::Pallet::<Runtime>::compute_file_key(
-            origin.clone(),
+            origin,
             bucket_id_runtime,
             location.clone(),
             size,
@@ -445,7 +448,7 @@ where
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
-        let call = FileSystemCall::<Runtime>::revoke_storage_request { file_key: file_key.clone().into() };
+        let call = FileSystemCall::<Runtime>::revoke_storage_request { file_key: file_key.into() };
 
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
@@ -544,7 +547,7 @@ where
 
         let user_account = Runtime::AddressMapping::into_account_id(user_address.0);
 
-        let pending_requests = pallet_file_system::PendingFileDeletionRequests::<Runtime>::get(&user_account);
+        let pending_requests = pallet_file_system::PendingFileDeletionRequests::<Runtime>::get(user_account);
         let count = pending_requests.len() as u32;
 
         Ok(count)

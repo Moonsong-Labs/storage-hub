@@ -1,10 +1,12 @@
-use codec::{Decode, Encode};
+use codec::{Decode, DecodeWithMemTracking, Encode};
 use frame_support::RuntimeDebugNoBound;
 use scale_info::TypeInfo;
 use shp_traits::ReadChallengeableProvidersInterface;
 
 /// Type that encapsulates the commitment a Provider submitted before with the seed that verifies it.
-#[derive(Encode, Decode, TypeInfo, PartialEq, Eq, Clone, RuntimeDebugNoBound)]
+#[derive(
+    Encode, Decode, DecodeWithMemTracking, TypeInfo, PartialEq, Eq, Clone, RuntimeDebugNoBound,
+)]
 #[scale_info(skip_type_params(T))]
 pub struct CommitmentWithSeed<T: crate::Config> {
     /// The commitment for the seed.

@@ -1,7 +1,14 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { describeMspNet, type EnrichedBspApi, shUser, sleep, waitFor } from "../../../util";
+import {
+  describeMspNet,
+  type EnrichedBspApi,
+  shUser,
+  sleep,
+  waitFor,
+  waitForTxInPool
+} from "../../../util";
 
 await describeMspNet(
   "MSP catching up with chain and volunteering for storage request",
@@ -84,7 +91,9 @@ await describeMspNet(
       await mspApi.disconnect();
 
       // Restarting the MSP container. This will start the Substrate node from scratch.
-      await userApi.docker.restartContainer({ containerName: "storage-hub-sh-msp-1" });
+      await userApi.docker.restartContainer({
+        containerName: "storage-hub-sh-msp-1"
+      });
 
       // TODO: Wait for the container logs of starting up
       await userApi.docker.waitForLog({
@@ -108,21 +117,21 @@ await describeMspNet(
         containerName: "storage-hub-sh-msp-1"
       });
 
-      await userApi.block.skip(4); // user retry every 5 blocks. The one we created before and this one
-
-      await userApi.docker.waitForLog({
-        searchString:
-          'File upload complete. Peer PeerId("12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV") has the entire file',
-        containerName: "storage-hub-sh-user-1"
+      // The user node retries the P2P file upload to the MSP every ~1 second (time-based,
+      // not block-based). Once the MSP is ready after catching up, it accepts the file and
+      // submits an extrinsic to respond. Wait for that extrinsic to land in the tx pool.
+      await waitForTxInPool(userApi, {
+        module: "fileSystem",
+        method: "mspRespondStorageRequestsMultipleBuckets",
+        shouldSeal: true,
+        expectedEvent: "MspAcceptedStorageRequest",
+        timeout: 30000
       });
 
       await waitFor({
         lambda: async () =>
           (await newMspApi.rpc.storagehubclient.isFileInFileStorage(event.data.fileKey)).isFileFound
       });
-
-      await userApi.block.seal();
-      await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
 
       // IMPORTANT!! Without this the test suite never finish
       newMspApi.disconnect();

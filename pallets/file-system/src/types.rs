@@ -1,6 +1,9 @@
-use core::cmp::max;
+extern crate alloc;
 
-use codec::{Decode, Encode, MaxEncodedLen};
+use alloc::vec::Vec;
+use core::{cmp::max, fmt::Debug};
+
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::{
     traits::{fungible::Inspect, nonfungibles_v2::Inspect as NonFungiblesInspect, Get},
     BoundedVec,
@@ -10,7 +13,6 @@ use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 use shp_traits::{MutateBucketsInterface, ReadProvidersInterface};
 use sp_runtime::{traits::CheckedAdd, DispatchError, SaturatedConversion};
-use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
     Config, Error, MoveBucketRequestExpirations, NextAvailableMoveBucketRequestExpirationTick,
@@ -204,7 +206,7 @@ impl<T: Config> MspStorageRequestStatus<T> {
 /// actor can hold the file hostage by controlling all its BSPs is ~0.0001%.
 /// - Custom: the user can select the number of BSPs that will store the data. This allows the user to
 /// select the security level of the data manually.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub enum ReplicationTarget<T: Config> {
     Basic,
@@ -238,7 +240,7 @@ impl<T: Config> Debug for ReplicationTarget<T> {
     }
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct FileKeyWithProof<T: Config> {
     pub file_key: MerkleHash<T>,
@@ -262,7 +264,7 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
 /// proofs for the file chunks) and a non-inclusion forest proof. The latter is required to
 /// verify that the file keys were not part of the bucket's Merkle Patricia Forest before,
 /// and add them now. One single non-inclusion forest proof for all the file keys is sufficient.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMspAcceptedFileKeys<T: Config> {
     pub file_keys_and_proofs: Vec<FileKeyWithProof<T>>,
@@ -281,7 +283,9 @@ impl<T: Config> Debug for StorageRequestMspAcceptedFileKeys<T> {
     }
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[derive(
+    Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone,
+)]
 pub enum RejectedStorageRequestReason {
     ReachedMaximumCapacity,
     ReceivedInvalidProof,
@@ -290,7 +294,7 @@ pub enum RejectedStorageRequestReason {
     InternalError,
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct RejectedStorageRequest<T: Config> {
     pub file_key: MerkleHash<T>,
@@ -307,7 +311,7 @@ impl<T: Config> Debug for RejectedStorageRequest<T> {
     }
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMspBucketResponse<T: Config> {
     pub bucket_id: BucketIdFor<T>,
@@ -356,7 +360,19 @@ pub enum BucketPrivacy {
 /// This uses a 32-bit mask to allow for future expansion without requiring a storage migration.
 /// When a specific bit is set, the corresponding user operation is considered paused and any
 /// attempt to execute it should fail with `Error::UserOperationPaused`.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    MaxEncodedLen,
+    TypeInfo,
+    Debug,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    Default,
+)]
 pub struct UserOperationPauseFlags(u32);
 
 impl UserOperationPauseFlags {
@@ -506,14 +522,18 @@ impl<T: Config> ExpirationItem<T> {
 }
 
 /// Possible responses to a move bucket request.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[derive(
+    Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone,
+)]
 pub enum BucketMoveRequestResponse {
     Accepted,
     Rejected,
 }
 
 /// Move bucket request metadata
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[derive(
+    Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone,
+)]
 #[scale_info(skip_type_params(T))]
 pub struct MoveBucketRequestMetadata<T: Config> {
     /// The user who requested to move the bucket.
@@ -562,7 +582,9 @@ impl<T: Config> EitherAccountIdOrMspId<T> {
 }
 
 /// Enum representing the different file operations that can be used.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[derive(
+    Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone,
+)]
 pub enum FileOperation {
     /// Delete operation for a file.
     Delete,
@@ -570,7 +592,7 @@ pub enum FileOperation {
 
 /// File operation intention. This, when signed by the file owner,
 /// allows an actor to execute the operation on the file owner's behalf.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct FileOperationIntention<T: Config> {
     /// The file key to act upon.
@@ -590,7 +612,7 @@ impl<T: Config> Debug for FileOperationIntention<T> {
 }
 
 /// A single file deletion request containing all metadata and signatures needed.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct FileDeletionRequest<T: Config> {
     /// Owner account of the file
@@ -671,7 +693,7 @@ impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
 {
     fn from((storage_request, file_key): (&StorageRequestMetadata<T>, &MerkleHash<T>)) -> Self {
         // Collect all confirmed BSPs
-        let mut confirmed_bsps = sp_std::vec::Vec::new();
+        let mut confirmed_bsps = alloc::vec::Vec::new();
         for (bsp_id, metadata) in StorageRequestBsps::<T>::iter_prefix(file_key) {
             if metadata.confirmed {
                 confirmed_bsps.push(bsp_id);

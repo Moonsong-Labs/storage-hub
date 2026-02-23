@@ -1,20 +1,30 @@
 //! Various types to use in the Storage Providers pallet.
 
 use super::*;
-use codec::{Decode, Encode, MaxEncodedLen};
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use core::cmp::max;
 use frame_support::{pallet_prelude::*, traits::fungible::Inspect};
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
 use shp_traits::{PaymentStreamsInterface, StorageHubTickGetter};
 use sp_runtime::{traits::CheckedAdd, ArithmeticError, BoundedVec};
-use sp_std::cmp::max;
 
 pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
 
 pub type ValuePropId<T> = HashId<T>;
 
 /// Awaited top up metadata for a provider.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    MaxEncodedLen,
+    TypeInfo,
+    RuntimeDebugNoBound,
+    PartialEq,
+    Eq,
+    Clone,
+)]
 #[scale_info(skip_type_params(T))]
 pub struct TopUpMetadata<T: Config> {
     /// The payment streams tick number at which the provider started awaiting a top up.
@@ -28,7 +38,9 @@ pub struct TopUpMetadata<T: Config> {
     pub end_tick_grace_period: StorageHubTickNumber<T>,
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[derive(
+    Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone,
+)]
 #[scale_info(skip_type_params(T))]
 pub enum ExpirationItem<T: Config> {
     ProviderTopUp(StorageProviderId<T>),
@@ -89,7 +101,17 @@ impl<T: Config> ExpirationItem<T> {
         }
     }
 }
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    MaxEncodedLen,
+    TypeInfo,
+    RuntimeDebugNoBound,
+    PartialEq,
+    Eq,
+    Clone,
+)]
 #[scale_info(skip_type_params(T))]
 pub struct ValuePropositionWithId<T: Config> {
     pub id: ValuePropIdFor<T>,
@@ -118,7 +140,17 @@ impl<T: Config> ValuePropositionWithId<T> {
     }
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    MaxEncodedLen,
+    TypeInfo,
+    RuntimeDebugNoBound,
+    PartialEq,
+    Eq,
+    Clone,
+)]
 #[scale_info(skip_type_params(T))]
 pub struct ValueProposition<T: Config> {
     pub price_per_giga_unit_of_data_per_block: BalanceOf<T>,
@@ -247,7 +279,16 @@ pub struct MainStorageProviderSignUpRequest<T: Config> {
 /// Enum that represents a Storage Provider ID. It holds either a BackupStorageProviderId or a MainStorageProviderId,
 /// allowing to operate generically with both types.
 #[derive(
-    Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone, Copy,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    MaxEncodedLen,
+    TypeInfo,
+    RuntimeDebugNoBound,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
 )]
 #[scale_info(skip_type_params(T))]
 pub enum StorageProviderId<T: Config> {

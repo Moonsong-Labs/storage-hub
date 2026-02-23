@@ -1601,6 +1601,22 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NewSession: AugmentedEvent<ApiType, [sessionIndex: u32], { sessionIndex: u32 }>;
       /**
+       * Validator has been disabled.
+       **/
+      ValidatorDisabled: AugmentedEvent<
+        ApiType,
+        [validator: AccountId20],
+        { validator: AccountId20 }
+      >;
+      /**
+       * Validator has been re-enabled.
+       **/
+      ValidatorReenabled: AugmentedEvent<
+        ApiType,
+        [validator: AccountId20],
+        { validator: AccountId20 }
+      >;
+      /**
        * Generic event
        **/
       [key: string]: AugmentedEvent<ApiType>;
@@ -1668,6 +1684,14 @@ declare module "@polkadot/api-base/types/events" {
        * A new account was created.
        **/
       NewAccount: AugmentedEvent<ApiType, [account: AccountId20], { account: AccountId20 }>;
+      /**
+       * An invalid authorized upgrade was rejected while trying to apply it.
+       **/
+      RejectedInvalidAuthorizedUpgrade: AugmentedEvent<
+        ApiType,
+        [codeHash: H256, error: SpRuntimeDispatchError],
+        { codeHash: H256; error: SpRuntimeDispatchError }
+      >;
       /**
        * On on-chain remark happened.
        **/

@@ -46,6 +46,8 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+extern crate alloc;
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::{types::*, weights::WeightInfo};

@@ -26,6 +26,7 @@ use frame_benchmarking::v2::*;
         <T as frame_system::Config>::RuntimeEvent: From<pallet::Event<T>>
 )]
 mod benchmarks {
+    use alloc::{vec, vec::Vec};
     use codec::Decode;
     use frame_support::{
         assert_ok,
@@ -46,7 +47,6 @@ mod benchmarks {
         traits::{Hash, One, Zero},
         BoundedBTreeSet, BoundedVec,
     };
-    use sp_std::{vec, vec::Vec};
     use sp_weights::{Weight, WeightMeter};
 
     use super::*;

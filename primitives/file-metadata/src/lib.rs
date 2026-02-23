@@ -1,15 +1,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Compact, Decode, Encode};
-use core::fmt::Debug;
+extern crate alloc;
+
+use alloc::vec::Vec;
+use codec::{Compact, Decode, DecodeWithMemTracking, Encode};
+use core::fmt::{self, Debug};
 use num_bigint::BigUint;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
 use shp_traits::{AsCompact, FileMetadataInterface};
 use sp_arithmetic::traits::SaturatedConversion;
 use sp_core::H256;
-use sp_std::fmt;
-use sp_std::vec::Vec;
 
 /// Maximum number of chunks a Storage Provider would need to prove for a file.
 const MAX_CHUNKS_TO_CHECK: u32 = 10;
@@ -19,7 +20,17 @@ const MAX_CHUNKS_TO_CHECK: u32 = 10;
 /// It also provides utility functions like calculating the number of chunks in a file,
 /// the last chunk ID, and generating a file key for a given file metadata.
 #[derive(
-    Clone, Debug, Default, PartialEq, Eq, TypeInfo, Encode, Decode, Serialize, Deserialize,
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    TypeInfo,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Serialize,
+    Deserialize,
 )]
 pub struct FileMetadata<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
@@ -97,7 +108,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     pub fn chunks_to_check(&self) -> u32 {
         // In here we downcast and saturate to u32, as we're going to saturate to MAX_CHUNKS_TO_CHECK anyway.
         let chunks = (self.file_size / SIZE_TO_CHALLENGES
-            + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64)
+            + (!self.file_size.is_multiple_of(SIZE_TO_CHALLENGES)) as u64)
             .saturated_into::<u32>();
 
         // Cap chunks to check at MAX_CHUNKS_TO_CHECK.
@@ -106,7 +117,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     }
 
     pub fn chunks_count(&self) -> u64 {
-        self.file_size / CHUNK_SIZE + (self.file_size % CHUNK_SIZE != 0) as u64
+        self.file_size / CHUNK_SIZE + (!self.file_size.is_multiple_of(CHUNK_SIZE)) as u64
     }
 
     pub fn last_chunk_id(&self) -> ChunkId {
@@ -272,7 +283,7 @@ impl<const H_LENGTH: usize> fmt::LowerHex for FileKey<H_LENGTH> {
 /// A fingerprint is something that uniquely identifies the content of a file.
 /// In the context of this crate, a fingerprint is the root hash of a Merkle Patricia Trie
 /// of the merklised file.
-#[derive(Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, TypeInfo)]
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, Copy, Debug, PartialEq, Eq, TypeInfo)]
 pub struct Fingerprint<const H_LENGTH: usize>(Hash<H_LENGTH>);
 
 impl<const H_LENGTH: usize> Default for Fingerprint<H_LENGTH> {

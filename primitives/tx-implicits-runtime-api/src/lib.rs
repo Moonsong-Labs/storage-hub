@@ -1,8 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::vec::Vec;
 use sp_api::decl_runtime_apis;
 use sp_runtime::{generic::Era, transaction_validity::TransactionValidityError};
-use sp_std::vec::Vec;
 
 decl_runtime_apis! {
     pub trait TxImplicitsApi {

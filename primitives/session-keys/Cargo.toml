@@ -16,7 +16,6 @@ sp-core = { workspace = true }
 sp-inherents = { workspace = true }
 sp-keystore = { workspace = true, optional = true }
 sp-runtime = { workspace = true }
-sp-std = { workspace = true }
 
 [features]
 default = ["std"]
@@ -27,6 +26,5 @@ std = [
 	"sp-inherents/std",
 	"sp-keystore",
 	"sp-runtime/std",
-	"sp-std/std",
 ]
 runtime-benchmarks = []

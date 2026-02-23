@@ -1,9 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::collections::BTreeSet;
 use frame_support::sp_runtime::DispatchError;
 use shp_file_metadata::ChunkId;
 use shp_traits::CommitmentVerifier;
-use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{Trie, TrieDBBuilder, TrieLayout};
 use types::FileKeyProof;
 

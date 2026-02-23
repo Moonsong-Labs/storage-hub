@@ -25,6 +25,7 @@ impl<T: crate::Config> BenchmarkHelpers<T> for () {
 	T: crate::Config + pallet_randomness::Config
 )]
 mod benchmarks {
+    use alloc::vec;
     use frame_support::{
         assert_ok,
         traits::{
@@ -40,7 +41,6 @@ mod benchmarks {
         CommitRevealRandomnessInterface, ProofsDealerInterface, StorageHubTickGetter,
     };
     use sp_runtime::traits::{Bounded, Hash, One, Zero};
-    use sp_std::vec;
 
     use super::*;
     use crate::{pallet, types::*, Call, Config, Event, Pallet};

@@ -126,7 +126,7 @@ await describeMspNet(
 
       const unitsInGigaUnit = 1024 * 1024 * 1024;
       const expectedPaymentStreamRate = Math.round(
-        (valueProps[0].value_prop.price_per_giga_unit_of_data_per_block.toNumber() * bucketSize) /
+        (valueProps[0].valueProp.pricePerGigaUnitOfDataPerBlock.toNumber() * bucketSize) /
           unitsInGigaUnit +
           zeroSizeBucketFixedRate
       );
@@ -209,7 +209,7 @@ await describeMspNet(
           .unwrap()
           .size_.toNumber();
         const pricePerGigaUnitOfDataPerBlock =
-          valueProps[0].value_prop.price_per_giga_unit_of_data_per_block.toNumber();
+          valueProps[0].valueProp.pricePerGigaUnitOfDataPerBlock.toNumber();
         const unitsInGigaUnit = 1024 * 1024 * 1024;
         const expectedRateOfPaymentStream =
           Math.round((pricePerGigaUnitOfDataPerBlock * bucketSize) / unitsInGigaUnit) +

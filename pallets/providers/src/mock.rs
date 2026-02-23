@@ -545,6 +545,7 @@ impl ExtBuilder {
                 accounts::GEORGE,
                 accounts::TREASURY,
             ],
+            dev_accounts: None,
         }
         .assimilate_storage(&mut t)
         .unwrap();

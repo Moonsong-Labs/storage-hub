@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fmt::{Debug, LowerHex},
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -37,7 +38,6 @@ pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
 use shp_traits::ProofsDealerInterface;
 use sp_core::Hasher;
 use sp_runtime::{generic, KeyTypeId};
-use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 use trie_db::TrieLayout;
 

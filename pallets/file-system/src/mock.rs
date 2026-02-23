@@ -27,9 +27,9 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify, Zero},
     BuildStorage, DispatchError, MultiSignature, Perbill, SaturatedConversion,
 };
-use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_weights::FixedFee;
+use std::collections::{BTreeMap, BTreeSet};
 use std::{
     sync::{RwLock, RwLockReadGuard},
     thread,
@@ -247,6 +247,7 @@ impl pallet_nfts::Config for Test {
     type OffchainSignature = Signature;
     type OffchainPublic = AccountPublic;
     type WeightInfo = ();
+    type BlockNumberProvider = frame_system::Pallet<Self>;
     pallet_nfts::runtime_benchmarks_enabled! {
         type Helper = ();
     }
@@ -794,6 +795,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
             (Keyring::Eve.to_account_id(), 1_000_000_000_000_000),
             (TreasuryAccount::get(), ExistentialDeposit::get()),
         ],
+        dev_accounts: None,
     }
     .assimilate_storage(&mut t)
     .unwrap();

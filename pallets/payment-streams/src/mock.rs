@@ -303,9 +303,9 @@ impl pallet_nfts::Config for Test {
     type OffchainSignature = TestSignature;
     type OffchainPublic = <TestSignature as sp_runtime::traits::Verify>::Signer;
     type WeightInfo = ();
-    pallet_nfts::runtime_benchmarks_enabled! {
-        type Helper = ();
-    }
+    type BlockNumberProvider = frame_system::Pallet<Self>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type Helper = ();
 }
 
 pub struct BlockFullnessHeadroom;
@@ -526,6 +526,7 @@ impl ExtBuilder {
                 (123, 5_000_000 * UNITS), // Alice for `on_poll` testing = 123
                 (TreasuryAccount::get(), ExistentialDeposit::get()),
             ],
+            dev_accounts: None,
         }
         .assimilate_storage(&mut t)
         .unwrap();

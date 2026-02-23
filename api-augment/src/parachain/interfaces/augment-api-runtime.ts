@@ -44,7 +44,6 @@ import type {
   KeyTypeId,
   OriginCaller,
   RuntimeCall,
-  Slot,
   SlotDuration,
   Weight,
   WeightV2
@@ -129,23 +128,6 @@ declare module "@polkadot/api-base/types/calls" {
        * Returns the slot duration for Aura.
        **/
       slotDuration: AugmentedCall<ApiType, () => Observable<SlotDuration>>;
-      /**
-       * Generic call
-       **/
-      [key: string]: DecoratedCallBase<ApiType>;
-    };
-    /** 0xd7bdd8a272ca0d65/1 */
-    auraUnincludedSegmentApi: {
-      /**
-       * Whether it is legal to extend the chain
-       **/
-      canBuildUpon: AugmentedCall<
-        ApiType,
-        (
-          includedHash: BlockHash | string | Uint8Array,
-          slot: Slot | AnyNumber | Uint8Array
-        ) => Observable<bool>
-      >;
       /**
        * Generic call
        **/

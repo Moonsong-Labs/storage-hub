@@ -5,6 +5,7 @@ use crate::{
     SessionKeys, Signature, SudoConfig,
 };
 use alloc::{format, vec, vec::Vec};
+use frame_support::build_struct_json_patch;
 use hex_literal::hex;
 use serde_json::Value;
 use sp_consensus_babe::AuthorityId as BabeId;
@@ -22,21 +23,20 @@ fn testnet_genesis(
     endowed_accounts: Vec<AccountId>,
     evm_chain_id: u64,
 ) -> Value {
-    let config = RuntimeGenesisConfig {
+    build_struct_json_patch!(RuntimeGenesisConfig {
         balances: BalancesConfig {
             balances: endowed_accounts
                 .iter()
                 .cloned()
                 .map(|k| (k, 1u128 << 110))
                 .collect::<Vec<_>>(),
+            dev_accounts: None,
         },
         babe: pallet_babe::GenesisConfig {
             epoch_config: BABE_GENESIS_EPOCH_CONFIG,
-            ..Default::default()
         },
         evm_chain_id: pallet_evm_chain_id::GenesisConfig {
             chain_id: evm_chain_id,
-            ..Default::default()
         },
         session: pallet_session::GenesisConfig {
             keys: initial_authorities
@@ -49,15 +49,11 @@ fn testnet_genesis(
                     )
                 })
                 .collect::<Vec<_>>(),
-            ..Default::default()
         },
         sudo: SudoConfig {
             key: Some(root_key),
         },
-        ..Default::default()
-    };
-
-    serde_json::to_value(config).expect("Could not build genesis config.")
+    })
 }
 
 /// Return the development genesis config.

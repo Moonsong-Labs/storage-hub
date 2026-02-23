@@ -1715,6 +1715,26 @@ declare module '@polkadot/api-base/types/submittable' {
         };
         polkadotXcm: {
             /**
+             * Authorize another `aliaser` location to alias into the local `origin` making this call.
+             * The `aliaser` is only authorized until the provided `expiry` block number.
+             * The call can also be used for a previously authorized alias in order to update its
+             * `expiry` block number.
+             *
+             * Usually useful to allow your local account to be aliased into from a remote location
+             * also under your control (like your account on another chain).
+             *
+             * WARNING: make sure the caller `origin` (you) trusts the `aliaser` location to act in
+             * their/your name. Once authorized using this call, the `aliaser` can freely impersonate
+             * `origin` in XCM programs executed on the local chain.
+             **/
+            addAuthorizedAlias: AugmentedSubmittable<(aliaser: XcmVersionedLocation | {
+                V3: any;
+            } | {
+                V4: any;
+            } | {
+                V5: any;
+            } | string | Uint8Array, expires: Option<u64> | null | Uint8Array | u64 | AnyNumber) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation, Option<u64>]>;
+            /**
              * Claims assets trapped on this pallet because of leftover assets during XCM execution.
              *
              * - `origin`: Anyone can call this extrinsic.
@@ -1908,6 +1928,22 @@ declare module '@polkadot/api-base/types/submittable' {
             } | {
                 Limited: any;
             } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32, XcmV3WeightLimit]>;
+            /**
+             * Remove all previously authorized `aliaser`s that can alias into the local `origin`
+             * making this call.
+             **/
+            removeAllAuthorizedAliases: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+            /**
+             * Remove a previously authorized `aliaser` from the list of locations that can alias into
+             * the local `origin` making this call.
+             **/
+            removeAuthorizedAlias: AugmentedSubmittable<(aliaser: XcmVersionedLocation | {
+                V3: any;
+            } | {
+                V4: any;
+            } | {
+                V5: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [XcmVersionedLocation]>;
             /**
              * Transfer some assets from the local chain to the destination chain through their local,
              * destination or remote reserve.

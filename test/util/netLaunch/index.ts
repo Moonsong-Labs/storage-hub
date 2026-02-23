@@ -16,7 +16,8 @@ import {
   getContainerPeerId,
   ShConsts,
   type ToxicInfo,
-  waitFor
+  waitFor,
+  waitForLog
 } from "../bspNet";
 import { DUMMY_MSP_ID } from "../bspNet/consts";
 import { MILLIUNIT, UNIT } from "../constants";
@@ -398,6 +399,14 @@ export class NetworkLauncher {
       cwd: cwd,
       config: tmpFile,
       log: verbose
+    });
+
+    // Wait for BSP to be fully initialized (including P2P networking) before starting other nodes.
+    // This ensures the bootnode is ready to accept connections from MSPs and user nodes.
+    await waitForLog({
+      containerName: ShConsts.NODE_INFOS.bsp.containerName,
+      searchString: "💤 Idle",
+      timeout: 30000
     });
 
     const bspIp = await getContainerIp(

@@ -1,4 +1,4 @@
-use codec::{Decode, Encode, FullCodec};
+use codec::{Decode, DecodeWithMemTracking, Encode, FullCodec};
 use core::marker::PhantomData;
 use frame_support::traits::{Len, PalletError};
 use frame_support::weights::{RuntimeDbWeight, Weight};
@@ -6,7 +6,7 @@ use frame_support::{BoundedVec, StorageValue};
 use scale_info::TypeInfo;
 use sp_core::Get;
 
-#[derive(Encode, Decode, TypeInfo, Debug)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, Debug)]
 pub enum QueueError {
     IndexOutOfRange,
 }
