@@ -668,7 +668,6 @@ impl MspService {
         mut file_data_stream: Field,
         file_metadata: FileMetadata,
     ) -> Result<FileUploadResponse, Error> {
-        let upload_start = Instant::now();
         debug!(
             target: "msp_service::process_and_upload_file",
             file_key = %file_key,
@@ -798,15 +797,6 @@ impl MspService {
             })?;
         }
 
-        warn!(
-            target: "msp_service::process_and_upload_file",
-            file_key = %file_key,
-            chunks = chunk_index,
-            spooled_bytes = spool.as_ref().map_or(0, UploadSpool::bytes_written),
-            elapsed_ms = upload_start.elapsed().as_millis(),
-            "UPLOAD INGEST + TRIE BUILD DONE (PRE-VERIFY)"
-        );
-
         // Validate that the file fingerprint matches the trie root.
         let computed_root = trie.get_root();
         if computed_root.as_ref() != file_metadata.fingerprint().as_ref() {
@@ -847,15 +837,6 @@ impl MspService {
                 .await
                 .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP: {}", e)))?;
         }
-
-        warn!(
-            target: "msp_service::process_and_upload_file",
-            file_key = %file_key,
-            chunks = total_chunks,
-            spooled_bytes = spool.as_ref().map_or(0, UploadSpool::bytes_written),
-            total_elapsed_ms = upload_start.elapsed().as_millis(),
-            "END-TO-END UPLOAD HANDLER FINISHED"
-        );
 
         // If the complete file was uploaded to the MSP successfully, we can return the response.
         let bytes_location = file_metadata.location();
