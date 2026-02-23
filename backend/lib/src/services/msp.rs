@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use alloy_core::{hex::ToHexExt, primitives::Address};
 use axum_extra::extract::multipart::Field;
@@ -59,6 +59,10 @@ struct StatsCacheEntry {
     last_refreshed: Instant,
 }
 
+const UPLOAD_SPOOL_FILE_PREFIX: &str = "sh-upload-";
+const UPLOAD_SPOOL_FILE_SUFFIX: &str = ".bin";
+const UPLOAD_SPOOL_STARTUP_CLEANUP_MAX_AGE: Duration = Duration::from_secs(60 * 60);
+
 /// Temporary on-disk spool for trusted upload forwarding.
 ///
 /// This stores chunk records in the wire format expected by the trusted transfer server:
@@ -74,7 +78,12 @@ struct UploadSpool {
 impl UploadSpool {
     async fn create() -> Result<Self, Error> {
         let mut path = std::env::temp_dir();
-        path.push(format!("sh-upload-{}.bin", Uuid::now_v7()));
+        path.push(format!(
+            "{}{}{}",
+            UPLOAD_SPOOL_FILE_PREFIX,
+            Uuid::now_v7(),
+            UPLOAD_SPOOL_FILE_SUFFIX
+        ));
 
         let file = tokio::fs::File::create(&path)
             .await
@@ -157,6 +166,7 @@ impl MspService {
         rpc: Arc<StorageHubRpcClient>,
         msp_config: MspConfig,
     ) -> Self {
+        Self::cleanup_stale_upload_spools();
         let msp_id = Self::discover_provider_id(&rpc)
             .await
             .expect("MSP must be available when starting the backend's services");
@@ -167,6 +177,114 @@ impl MspService {
             http_client: reqwest::Client::new(),
             msp_config,
             stats_cache: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Best-effort startup cleanup for stale trusted-upload spool temp files.
+    ///
+    /// Files are deleted only if their filename matches this service's spool naming pattern
+    /// and they are older than `UPLOAD_SPOOL_STARTUP_CLEANUP_MAX_AGE`.
+    fn cleanup_stale_upload_spools() {
+        let temp_dir = std::env::temp_dir();
+        let now = std::time::SystemTime::now();
+        let entries = match std::fs::read_dir(&temp_dir) {
+            Ok(entries) => entries,
+            Err(e) => {
+                debug!(
+                    target: "msp_service::cleanup_stale_upload_spools",
+                    temp_dir = %temp_dir.display(),
+                    error = %e,
+                    "Failed to read temp directory while cleaning startup upload spools"
+                );
+                return;
+            }
+        };
+
+        let mut removed = 0u64;
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    debug!(
+                        target: "msp_service::cleanup_stale_upload_spools",
+                        error = %e,
+                        "Failed to read a temp directory entry while cleaning startup upload spools"
+                    );
+                    continue;
+                }
+            };
+
+            let file_name = match entry.file_name().to_str() {
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+            if !file_name.starts_with(UPLOAD_SPOOL_FILE_PREFIX)
+                || !file_name.ends_with(UPLOAD_SPOOL_FILE_SUFFIX)
+            {
+                continue;
+            }
+
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let metadata = match entry.metadata() {
+                Ok(metadata) => metadata,
+                Err(e) => {
+                    debug!(
+                        target: "msp_service::cleanup_stale_upload_spools",
+                        path = %path.display(),
+                        error = %e,
+                        "Failed to read metadata for startup upload spool candidate"
+                    );
+                    continue;
+                }
+            };
+
+            let modified = match metadata.modified() {
+                Ok(modified) => modified,
+                Err(e) => {
+                    debug!(
+                        target: "msp_service::cleanup_stale_upload_spools",
+                        path = %path.display(),
+                        error = %e,
+                        "Failed to read modified timestamp for startup upload spool candidate"
+                    );
+                    continue;
+                }
+            };
+
+            let age = match now.duration_since(modified) {
+                Ok(age) => age,
+                Err(_) => continue,
+            };
+            if age < UPLOAD_SPOOL_STARTUP_CLEANUP_MAX_AGE {
+                continue;
+            }
+
+            match std::fs::remove_file(&path) {
+                Ok(()) => {
+                    removed = removed.saturating_add(1);
+                }
+                Err(e) => {
+                    debug!(
+                        target: "msp_service::cleanup_stale_upload_spools",
+                        path = %path.display(),
+                        error = %e,
+                        "Failed to delete stale startup upload spool"
+                    );
+                }
+            }
+        }
+
+        if removed > 0 {
+            debug!(
+                target: "msp_service::cleanup_stale_upload_spools",
+                removed = removed,
+                "Removed stale trusted upload spool files at startup"
+            );
         }
     }
 
