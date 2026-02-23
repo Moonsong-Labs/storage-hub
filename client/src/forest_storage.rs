@@ -658,7 +658,8 @@ where
 
         // Remove from open_forests (LRU cache).
         // If another thread passed the known_forests check and is waiting on this lock,
-        // it will see the forest is gone from the LRU, try to open from disk, and fail.
+        // after this thread releases this lock, the other thread will see the forest is
+        // gone from the LRU, try to open from disk, and fail.
         self.open_forests.write().await.pop(key);
 
         // Remove from known_forests.
