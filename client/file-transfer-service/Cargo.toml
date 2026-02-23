@@ -34,6 +34,7 @@ sc-network = { workspace = true }
 sc-network-types = { workspace = true }
 sc-utils = { workspace = true }
 sc-tracing = { workspace = true }
+sp-api = { workspace = true }
 
 # Local
 shc-actors-framework = { workspace = true }
@@ -41,6 +42,7 @@ shc-actors-derive = { workspace = true }
 shc-common = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
+pallet-storage-providers-runtime-api = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }
