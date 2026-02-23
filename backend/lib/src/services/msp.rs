@@ -142,6 +142,7 @@ pub struct MspService {
 
     postgres: Arc<DBClient>,
     rpc: Arc<StorageHubRpcClient>,
+    http_client: reqwest::Client,
     msp_config: MspConfig,
     stats_cache: Arc<RwLock<Option<StatsCacheEntry>>>,
 }
@@ -163,6 +164,7 @@ impl MspService {
             msp_id,
             postgres,
             rpc,
+            http_client: reqwest::Client::new(),
             msp_config,
             stats_cache: Arc::new(RwLock::new(None)),
         }
@@ -884,9 +886,9 @@ impl MspService {
             .map_err(|e| Error::Storage(Box::new(e)))?;
         let body = reqwest::Body::wrap_stream(ReaderStream::new(file));
 
-        // Send the POST request
-        let client = reqwest::Client::new();
-        let response = client
+        // Send the POST request using the shared client for connection pooling.
+        let response = self
+            .http_client
             .post(&url)
             .body(body)
             .send()
