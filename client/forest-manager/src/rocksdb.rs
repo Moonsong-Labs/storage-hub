@@ -39,7 +39,8 @@ where
         return Err(ForestStorageError::FailedToReadStorage.into());
     }
 
-    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(1).create_if_missing(false);
+    let mut db_config = kvdb_rocksdb::DatabaseConfig::with_columns(1);
+    db_config.create_if_missing = false;
     let db = kvdb_rocksdb::Database::open(&db_config, &db_path).map_err(|e| {
         warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
         ForestStorageError::FailedToReadStorage
