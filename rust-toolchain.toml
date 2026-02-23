@@ -1,5 +1,12 @@
 [toolchain]
+# Rust 1.90 is required due to polkadot-sdk stable2503 compatibility.
+# Rust 1.91+ breaks pallet-revive-fixtures compilation with error:
+#   "target-pointer-width: invalid type: string '64', expected u16"
+# This is because polkavm-linker generates target specs with "target-pointer-width": "64" (string),
+# but Rust 1.91 (PR #144443) changed this to require an integer: "target-pointer-width": 64.
+# polkadot-sdk stable2503 was tested with Rust 1.84.1; 1.90 is the latest compatible version.
 channel = "1.90"
+
 components = [
 	"cargo",
 	"clippy",
