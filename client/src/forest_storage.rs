@@ -498,13 +498,8 @@ where
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
-        // Acquire known_forests lock first to maintain lock ordering
-        // (known_forests before open_forests) and prevent races where
-        // another thread passes the known_forests check before we remove.
-        let mut known = self.known_forests.write().await;
-        let mut cache = self.open_forests.write().await;
-        cache.pop(key);
-        known.remove(key);
+        self.known_forests.write().await.remove(key);
+        self.open_forests.write().await.pop(key);
     }
 
     async fn is_forest_storage_present(&self, key: &Self::Key) -> bool {
@@ -658,15 +653,14 @@ where
             }
         }
 
-        // Acquire known_forests lock first to maintain lock ordering
-        // (known_forests before open_forests) and prevent races where
-        // another thread passes the known_forests check before we remove.
-        // Both locks are held until the end so no thread can see an
-        // inconsistent state between the two maps.
-        let mut known = self.known_forests.write().await;
-        let mut cache = self.open_forests.write().await;
-        cache.pop(key);
-        known.remove(key);
+        // Remove from open_forests (LRU cache).
+        // If another thread passed the known_forests check and is waiting on this lock,
+        // after this thread releases this lock, the other thread will see the forest is
+        // gone from the LRU, try to open from disk, and fail.
+        self.open_forests.write().await.pop(key);
+
+        // Remove from known_forests.
+        self.known_forests.write().await.remove(key);
     }
 
     async fn is_forest_storage_present(&self, key: &Self::Key) -> bool {
