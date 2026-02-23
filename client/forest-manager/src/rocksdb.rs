@@ -156,7 +156,9 @@ where
     /// Flag set when this forest is being deleted.
     /// All `Arc<RwLock<RocksDBForestStorage>>` clones pointing to the same
     /// instance share this flag since they share the same `RwLock`-protected struct.
-    /// Once set, all operations will return an error.
+    /// Once set, all [`ForestStorage`] operations return an error.
+    /// Internal `HashDB` methods are low-level trie plumbing and are not guarded by this flag,
+    /// but that's fine since they do not perform any operations on the storage.
     pub deleting: bool,
 }
 
