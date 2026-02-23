@@ -16913,6 +16913,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "futures",
+ "pallet-storage-providers-runtime-api",
  "parity-scale-codec",
  "prost 0.12.6",
  "prost-build 0.12.6",
@@ -16927,6 +16928,7 @@ dependencies = [
  "shc-common",
  "shp-file-key-verifier",
  "shp-file-metadata",
+ "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "thiserror 1.0.69",
  "tokio",
 ]

@@ -25,7 +25,36 @@ mod well_known_keys {
     pub const ROOT: &[u8] = b":root";
 }
 
-/// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+/// Open an existing RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+///
+/// Returns an error if `db_path` does not exist on disk.
+pub fn open_db<T>(db_path: String) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>>
+where
+    T: TrieLayout,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    let path = Path::new(&db_path);
+    if !path.exists() {
+        warn!(target: LOG_TARGET, "RocksDB path does not exist: {}", db_path);
+        return Err(ForestStorageError::FailedToReadStorage.into());
+    }
+
+    let mut db_config = kvdb_rocksdb::DatabaseConfig::with_columns(1);
+    db_config.create_if_missing = false;
+    let db = kvdb_rocksdb::Database::open(&db_config, &db_path).map_err(|e| {
+        warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
+        ForestStorageError::FailedToReadStorage
+    })?;
+
+    Ok(StorageDb {
+        db: Arc::new(db),
+        _phantom: Default::default(),
+    })
+}
+
+/// Create or open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+///
+/// Creates the database directory if it does not exist.
 pub fn create_db<T>(db_path: String) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>>
 where
     T: TrieLayout,
@@ -337,6 +366,23 @@ where
         }
     }
 
+    fn get_all_files(&self) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>> {
+        let db = self.as_hash_db();
+        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
+        let mut files = Vec::new();
+        let mut trie_iter = trie
+            .iter()
+            .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
+
+        while let Some((_, value)) = trie_iter.next().transpose()? {
+            let metadata = FileMetadata::decode(&mut &value[..])?;
+            let file_key = metadata.file_key::<T::Hash>();
+            files.push((file_key, metadata));
+        }
+
+        Ok(files)
+    }
+
     fn generate_proof(
         &self,
         challenged_file_keys: Vec<HasherOutT<T>>,
@@ -626,6 +672,53 @@ mod tests {
         assert_eq!(file_metadata.location(), "location".as_bytes());
         assert_eq!(file_metadata.owner(), "Alice".as_bytes());
         assert_eq!(file_metadata.fingerprint(), &Fingerprint::default());
+    }
+
+    #[test]
+    fn test_get_all_files() {
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
+
+        let metadata_1 = FileMetadata::new(
+            "Alice".as_bytes().to_vec(),
+            "bucket".as_bytes().to_vec(),
+            "location_1".as_bytes().to_vec(),
+            100,
+            Fingerprint::default(),
+        )
+        .unwrap();
+        let metadata_2 = FileMetadata::new(
+            "Bob".as_bytes().to_vec(),
+            "bucket".as_bytes().to_vec(),
+            "location_2".as_bytes().to_vec(),
+            200,
+            Fingerprint::default(),
+        )
+        .unwrap();
+
+        ForestStorage::<StorageProofsMerkleTrieLayout, sh_parachain_runtime::Runtime>::insert_files_metadata(
+            &mut forest_storage,
+            &[metadata_1, metadata_2],
+        )
+        .unwrap();
+
+        let all_files =
+            ForestStorage::<StorageProofsMerkleTrieLayout, sh_parachain_runtime::Runtime>::get_all_files(
+                &forest_storage,
+            )
+            .unwrap();
+
+        assert_eq!(all_files.len(), 2);
+
+        let mut sizes = all_files
+            .iter()
+            .map(|(_, m)| m.file_size())
+            .collect::<Vec<_>>();
+        sizes.sort_unstable();
+        assert_eq!(sizes, vec![100, 200]);
+
+        for (_, metadata) in all_files {
+            assert_eq!(metadata.bucket_id(), "bucket".as_bytes());
+        }
     }
 
     #[test]
