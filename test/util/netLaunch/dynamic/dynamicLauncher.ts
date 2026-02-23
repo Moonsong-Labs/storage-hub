@@ -404,7 +404,14 @@ export async function launchNetworkFromTopology(
       );
     }
 
-    await startMspContainersPhase(identities.msps, composeFile, cwd, reporter, runtimeType, bootnodeInfo);
+    await startMspContainersPhase(
+      identities.msps,
+      composeFile,
+      cwd,
+      reporter,
+      runtimeType,
+      bootnodeInfo
+    );
     await startUsersPhase(identities.users, composeFile, cwd, reporter, runtimeType, bootnodeInfo);
 
     // bsp0Api was only needed for BSP-1..N registration — disconnect it now
