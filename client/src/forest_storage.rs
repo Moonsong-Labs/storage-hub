@@ -387,7 +387,7 @@ where
         let db_path_str = db_path.to_string_lossy().to_string();
         debug!(target: LOG_TARGET, "Lazy-loading forest from disk: {}", db_path_str);
 
-        let storage_db = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(db_path_str)
+        let storage_db = rocksdb::open_db::<StorageProofsMerkleTrieLayout>(db_path_str)
             .map_err(|e| anyhow::anyhow!("Failed to open RocksDB for forest [{}]: {:?}", key, e))?;
 
         let fs = RocksDBForestStorage::new(storage_db)

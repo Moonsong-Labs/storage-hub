@@ -25,7 +25,36 @@ mod well_known_keys {
     pub const ROOT: &[u8] = b":root";
 }
 
-/// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+/// Open an existing RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+///
+/// Returns an error if `db_path` does not exist on disk.
+pub fn open_db<T>(db_path: String) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>>
+where
+    T: TrieLayout,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    let path = Path::new(&db_path);
+    if !path.exists() {
+        warn!(target: LOG_TARGET, "RocksDB path does not exist: {}", db_path);
+        return Err(ForestStorageError::FailedToReadStorage.into());
+    }
+
+    let mut db_config = kvdb_rocksdb::DatabaseConfig::with_columns(1);
+    db_config.create_if_missing = false;
+    let db = kvdb_rocksdb::Database::open(&db_config, &db_path).map_err(|e| {
+        warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
+        ForestStorageError::FailedToReadStorage
+    })?;
+
+    Ok(StorageDb {
+        db: Arc::new(db),
+        _phantom: Default::default(),
+    })
+}
+
+/// Create or open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+///
+/// Creates the database directory if it does not exist.
 pub fn create_db<T>(db_path: String) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>>
 where
     T: TrieLayout,
