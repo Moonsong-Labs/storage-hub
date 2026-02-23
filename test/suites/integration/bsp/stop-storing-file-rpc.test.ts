@@ -457,7 +457,7 @@ await describeBspNet(
         .unwrap()
         .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
 
-      await userApi.block.skipTo(currentBlockNumber + minWaitForStopStoring + 1);
+      await userApi.block.skipTo(currentBlockNumber + minWaitForStopStoring);
 
       // ================ Step 5: BSP should confirm the stop-storing request ================
       // The BSP should now attempt to confirm since we're past MinWaitForStopStoring.
