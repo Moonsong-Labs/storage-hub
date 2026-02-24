@@ -101,8 +101,8 @@ pub trait IndexerOps: Send + Sync {
     /// Count all of the account's buckets with the given MSP
     ///
     /// # Arguments
-    /// * `msp` - the MSP (database) ID where the bucket is held
-    /// * `account` - the User account that owns the bucket
+    /// * `msp` - the MSP (database) ID where the buckets are held
+    /// * `account` - the User account that owns the buckets
     async fn get_buckets_count_by_user_and_msp(
         &self,
         msp: i64,
