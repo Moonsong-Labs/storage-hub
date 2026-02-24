@@ -16890,6 +16890,7 @@ dependencies = [
  "kvdb-memorydb",
  "kvdb-rocksdb",
  "log",
+ "lru 0.16.3",
  "parity-scale-codec",
  "serde_json",
  "shc-common",
