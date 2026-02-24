@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     io,
     num::NonZeroUsize,
     sync::Arc,
@@ -562,6 +562,11 @@ where
 {
     storage: StorageDb<T, DB>,
     batch_states: LruCache<Vec<u8>, BatchCacheEntry<T>>,
+    /// Auxiliary index mapping `last_touched` timestamps to cache keys, ordered
+    /// chronologically. This allows [`Self::prune_batch_cache`] to iterate from
+    /// the oldest entry and stop as soon as it finds a non-expired one, instead
+    /// of scanning every entry in the LRU.
+    batch_expiry_order: BTreeMap<Instant, Vec<u8>>,
     batch_cache_ttl: Duration,
 }
 
@@ -651,23 +656,26 @@ where
                 NonZeroUsize::new(BATCH_CACHE_MAX_ENTRIES)
                     .expect("BATCH_CACHE_MAX_ENTRIES must be greater than zero"),
             ),
+            batch_expiry_order: BTreeMap::new(),
             batch_cache_ttl: BATCH_CACHE_TTL,
         }
     }
 
     fn prune_batch_cache(&mut self, now: Instant) {
         // Drop stale upload states to avoid unbounded growth when uploads stall.
-        let stale_keys: Vec<Vec<u8>> = self
-            .batch_states
+        // The expiry-order BTreeMap is sorted chronologically, so we iterate
+        // from the oldest entry and stop as soon as we find one that hasn't
+        // expired yet. This way there's no need to scan the entire cache.
+        let stale_keys: Vec<(Instant, Vec<u8>)> = self
+            .batch_expiry_order
             .iter()
-            .filter_map(|(key, entry)| {
-                (now.saturating_duration_since(entry.last_touched) > self.batch_cache_ttl)
-                    .then(|| key.clone())
-            })
+            .take_while(|(&ts, _)| now.saturating_duration_since(ts) > self.batch_cache_ttl)
+            .map(|(&ts, key)| (ts, key.clone()))
             .collect();
 
-        for key in stale_keys {
+        for (ts, key) in stale_keys {
             let _ = self.batch_states.pop(&key);
+            self.batch_expiry_order.remove(&ts);
         }
     }
 
@@ -1003,6 +1011,7 @@ where
             .batch_states
             .pop(&cache_key)
             .unwrap_or_else(|| BatchCacheEntry::new(now));
+        self.batch_expiry_order.remove(&cache_entry.last_touched);
         cache_entry.last_touched = now;
         self.ensure_batch_state_initialized(file_key, &mut cache_entry)?;
 
@@ -1019,8 +1028,10 @@ where
             Ok(FileStorageWriteOutcome::FileComplete)
         } else {
             // Upload is still in progress; keep updated state for next batch.
-            cache_entry.last_touched = Instant::now();
-            self.batch_states.put(cache_key, cache_entry);
+            let touched = Instant::now();
+            cache_entry.last_touched = touched;
+            self.batch_states.put(cache_key.clone(), cache_entry);
+            self.batch_expiry_order.insert(touched, cache_key);
             Ok(FileStorageWriteOutcome::FileIncomplete)
         }
     }
@@ -1233,7 +1244,9 @@ where
     fn delete_file(&mut self, file_key: &HasherOutT<T>) -> Result<(), FileStorageError> {
         // Invalidate any live batch cache entry for this file key so that a
         // subsequent `write_chunks_batched` call does not use stale state.
-        let _ = self.batch_states.pop(file_key.as_ref());
+        if let Some(entry) = self.batch_states.pop(file_key.as_ref()) {
+            self.batch_expiry_order.remove(&entry.last_touched);
+        }
 
         let Some(metadata) = self.get_metadata(file_key)? else {
             // Idempotent: if already deleted, nothing to do
