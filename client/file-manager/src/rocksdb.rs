@@ -519,7 +519,7 @@ where
     }
 }
 
-/// Manages file metadata, chunks, and proofs using RocksDB as backend.
+/// Cached per-file state reused across batched writes.
 struct BatchWriteCacheState<T: TrieLayout> {
     metadata: FileMetadata,
     partial_root: HasherOutT<T>,
@@ -774,6 +774,10 @@ where
     /// - commits trie changes + root + chunk count in one DB transaction
     /// - updates the cached root/chunk-count
     /// - returns whether the file is complete after this batch
+    ///
+    /// Unlike `write_chunk`, this path does not perform a per-chunk "already exists" check before
+    /// insertion. Duplicate `ChunkId`s in a batch are still counted in `delta` and therefore advance
+    /// `chunk_count`; trie insertion follows overwrite semantics (last write wins for that key).
     fn apply_chunks_batch_with_state(
         &mut self,
         file_key: &HasherOutT<T>,
@@ -795,6 +799,7 @@ where
             .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
 
         // Prevent never-ending uploads from writing more chunks than declared in metadata.
+        // This can happen, for example, when duplicate chunk IDs are sent and counted as progress.
         if new_count > state.metadata.chunks_count() {
             warn!(
                 target: LOG_TARGET,
@@ -963,12 +968,20 @@ where
         }
     }
 
+    /// Batched upload fast-path.
+    ///
+    /// Differences vs [`Self::write_chunk`]:
+    /// - Processes multiple chunks in one transaction using cached metadata/root/chunk_count.
+    /// - Skips per-chunk existence checks; duplicate chunk IDs are not rejected.
+    /// - Progress tracking increments by input batch length (including duplicates), and may return
+    ///   [`FileStorageWriteError::ChunkCountOverflow`] when that count exceeds declared metadata.
     fn write_chunks_batched(
         &mut self,
         file_key: &HasherOutT<T>,
         chunks: Vec<(ChunkId, Chunk)>,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
         if chunks.is_empty() {
+            // No-op batch: keep trait-level behavior consistent across backends.
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
@@ -976,6 +989,7 @@ where
         self.prune_batch_cache(now);
 
         let cache_key = file_key.as_ref().to_vec();
+        // Take ownership while processing this batch; if incomplete, reinserting refreshes LRU.
         let mut cache_entry = self
             .batch_states
             .pop(&cache_key)
