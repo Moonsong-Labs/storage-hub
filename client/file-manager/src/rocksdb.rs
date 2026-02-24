@@ -816,7 +816,7 @@ where
             .checked_add(delta)
             .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
 
-        // Prevent never-ending uploads from writing more chunks than declared in metadata.
+        // Prevent uploads from writing more chunks than declared in metadata.
         if new_count > state.metadata.chunks_count() {
             warn!(
                 target: LOG_TARGET,
