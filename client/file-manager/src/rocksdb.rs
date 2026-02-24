@@ -1830,6 +1830,58 @@ mod tests {
     }
 
     #[test]
+    fn file_storage_write_chunks_batched_works() {
+        let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let fingerprint_storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+        let mut expected_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(fingerprint_storage);
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            expected_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "batched-write".to_string().into_bytes(),
+            1024u64 * chunks.len() as u64,
+            Fingerprint::from(expected_trie.get_root().as_ref()),
+        )
+        .unwrap();
+        let key = file_metadata.file_key::<BlakeTwo256>();
+
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+        file_storage.insert_file(key, file_metadata).unwrap();
+
+        let empty = file_storage.write_chunks_batched(&key, Vec::new()).unwrap();
+        assert!(matches!(empty, FileStorageWriteOutcome::FileIncomplete));
+
+        let first = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[0], chunks[0].clone())])
+            .unwrap();
+        assert!(matches!(first, FileStorageWriteOutcome::FileIncomplete));
+
+        let second = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[1], chunks[1].clone())])
+            .unwrap();
+        assert!(matches!(second, FileStorageWriteOutcome::FileComplete));
+
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 2);
+    }
+
+    #[test]
     fn same_chunk_id_with_different_data_produces_different_roots() {
         use sp_trie::MemoryDB;
 
@@ -2103,7 +2155,7 @@ mod tests {
     }
 
     const MIB: u64 = 1024 * 1024;
-    const TRUSTED_BATCH_SIZE_BYTES: usize = 2 * 1024 * 1024;
+    const BATCH_SIZE_BYTES: usize = 2 * 1024 * 1024;
 
     fn unique_temp_rocksdb_path(label: &str) -> PathBuf {
         let nanos = SystemTime::UNIX_EPOCH
@@ -2167,8 +2219,7 @@ mod tests {
     fn run_disk_write_benchmark(size_mb: u64) {
         let (db_path, mut file_storage, file_key, chunk_count) =
             setup_disk_backed_storage_for_size(size_mb);
-        let batch_size_chunks =
-            usize::max(1, TRUSTED_BATCH_SIZE_BYTES / (FILE_CHUNK_SIZE as usize));
+        let batch_size_chunks = usize::max(1, BATCH_SIZE_BYTES / (FILE_CHUNK_SIZE as usize));
 
         let mut next_chunk_id: u64 = 0;
         let mut total_batches: u64 = 0;
@@ -2189,8 +2240,8 @@ mod tests {
 
             let write_start = Instant::now();
             let _ = file_storage
-                .write_chunks_batched_trusted(&file_key, batch)
-                .expect("Trusted batch write should succeed");
+                .write_chunks_batched(&file_key, batch)
+                .expect("Batch write should succeed");
             write_only_time = write_only_time.saturating_add(write_start.elapsed());
             total_batches = total_batches.saturating_add(1);
         }
@@ -2253,8 +2304,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Disk benchmark for RocksDB write path. Run with: cargo test -p shc-file-manager rocksdb_write_benchmark_trusted_batch_sizes -- --ignored --nocapture"]
-    fn rocksdb_write_benchmark_trusted_batch_sizes() {
+    #[ignore = "Disk benchmark for RocksDB write path. Run with: cargo test -p shc-file-manager rocksdb_write_benchmark_batch_sizes -- --ignored --nocapture"]
+    fn rocksdb_write_benchmark_batch_sizes() {
         let _guard = BENCHMARK_TEST_LOCK
             .lock()
             .expect("Benchmark lock should not be poisoned");
