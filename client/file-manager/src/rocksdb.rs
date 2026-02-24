@@ -727,95 +727,94 @@ where
             &partial_root,
         ))
     }
+}
 
-    fn write_chunks_batched_trusted_inner(
+impl<T, DB> RocksDbFileStorage<T, DB>
+where
+    T: TrieLayout + Send + Sync + 'static,
+    DB: KeyValueDB + 'static,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
+    /// Ensure the per-file batch cache entry is fully initialized.
+    ///
+    /// The cache state is all-or-nothing: metadata, partial root, and chunk count are loaded
+    /// together on first use and then reused across subsequent batches for the same file key.
+    fn ensure_batch_state_initialized(
+        &self,
+        file_key: &HasherOutT<T>,
+        cache_entry: &mut BatchCacheEntry<T>,
+    ) -> Result<(), FileStorageWriteError> {
+        if cache_entry.state.is_some() {
+            return Ok(());
+        }
+
+        let metadata = self
+            .get_metadata(file_key)
+            .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?
+            .ok_or(FileStorageWriteError::FileDoesNotExist)?;
+        let file_trie = self.get_file_trie(&metadata).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageWriteError::FailedToConstructFileTrie
+        })?;
+        let partial_root = *file_trie.get_root();
+        let chunk_count = self.stored_chunks_count(file_key).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageWriteError::FailedToGetStoredChunksCount
+        })?;
+
+        cache_entry.state = Some(BatchWriteCacheState {
+            metadata,
+            partial_root,
+            chunk_count,
+        });
+
+        Ok(())
+    }
+
+    /// Apply a chunk batch using an already initialized per-file cache state.
+    ///
+    /// This method:
+    /// - inserts batch chunks into trie overlay
+    /// - commits trie changes + root + chunk count in one DB transaction
+    /// - updates the cached root/chunk-count
+    /// - returns whether the file is complete after this batch
+    fn apply_chunks_batch_with_state(
         &mut self,
         file_key: &HasherOutT<T>,
         chunks: Vec<(ChunkId, Chunk)>,
-        state: &mut TrustedBatchWriteCacheState<T>,
-    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>
-    where
-        T: TrieLayout + Send + Sync + 'static,
-        DB: KeyValueDB + 'static,
-    {
-        if chunks.is_empty() {
-            return Ok(FileStorageWriteOutcome::FileIncomplete);
-        }
-
-        // Lazy-load metadata once per upload request and keep it cached.
-        if state.metadata.is_none() {
-            state.metadata = Some(
-                self.get_metadata(file_key)
-                    .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?
-                    .ok_or(FileStorageWriteError::FileDoesNotExist)?,
-            );
-        }
-
-        // Lazy-load the current partial root once, then carry it forward in-memory.
-        if state.partial_root.is_none() {
-            let metadata = state
-                .metadata
-                .as_ref()
-                .ok_or(FileStorageWriteError::FailedToParseFileMetadata)?;
-            let file_trie = self.get_file_trie(metadata).map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageWriteError::FailedToConstructFileTrie
-            })?;
-            state.partial_root = Some(*file_trie.get_root());
-        }
-
-        // Lazy-load stored chunk count once, then increment locally per batch.
-        if state.chunk_count.is_none() {
-            state.chunk_count = Some(self.stored_chunks_count(file_key).map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageWriteError::FailedToGetStoredChunksCount
-            })?);
-        }
-
-        // Number of chunks in this batch; used to update the cached chunk count.
+        state: &mut BatchWriteCacheState<T>,
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
+        // Number of chunks in this batch; used to update cached chunk count.
         let delta =
             u64::try_from(chunks.len()).map_err(|_| FileStorageWriteError::ChunkCountOverflow)?;
 
-        let metadata = state
-            .metadata
-            .as_ref()
-            .ok_or(FileStorageWriteError::FailedToParseFileMetadata)?;
-        let partial_root = state
-            .partial_root
-            .as_ref()
-            .ok_or(FileStorageWriteError::FailedToParsePartialRoot)?;
         let mut file_trie =
-            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), partial_root);
+            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &state.partial_root);
 
-        // Insert trie nodes into the overlay, but do NOT commit yet; we will merge trie node writes
-        // + root + chunk count into a single RocksDB transaction below.
-        let new_partial_root = file_trie.insert_chunks_batched_trusted_no_commit(chunks)?;
-        let current_count = state
+        // Insert trie nodes into overlay. Persistence happens below in one transaction.
+        let new_partial_root = file_trie.insert_chunks_batched(chunks)?;
+        let new_count = state
             .chunk_count
-            .ok_or(FileStorageWriteError::FailedToGetStoredChunksCount)?;
-
-        let new_count = current_count
             .checked_add(delta)
             .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
 
         // Prevent never-ending uploads from writing more chunks than declared in metadata.
-        if new_count > metadata.chunks_count() {
+        if new_count > state.metadata.chunks_count() {
             warn!(
                 target: LOG_TARGET,
-                "Trusted batch write exceeded metadata chunk count for file {:?}: new_count={}, declared={}",
+                "Batch write exceeded metadata chunk count for file {:?}: new_count={}, declared={}",
                 file_key,
                 new_count,
-                metadata.chunks_count()
+                state.metadata.chunks_count()
             );
             return Err(FileStorageWriteError::ChunkCountOverflow);
         }
 
-        // Persist trie node mutations + root + chunk count in a single RocksDB transaction.
-        let mut transaction = DBTransaction::new();
-        file_trie.drain_overlay_into_transaction(&mut transaction);
+        // Persist trie mutations + root + chunk count in a single RocksDB transaction.
+        let mut transaction = file_trie.changes();
         transaction.put(
             Column::Roots.into(),
-            metadata.fingerprint().as_ref(),
+            state.metadata.fingerprint().as_ref(),
             new_partial_root.as_ref(),
         );
         transaction.put(
@@ -830,17 +829,14 @@ where
         })?;
 
         // Keep cache in sync so the next batch avoids extra DB reads.
-        state.partial_root = Some(new_partial_root);
-        state.chunk_count = Some(new_count);
+        state.partial_root = new_partial_root;
+        state.chunk_count = new_count;
 
-        // Mirror `is_file_complete` semantics without re-reading from DB/trie:
-        // - root must match the expected fingerprint
-        // - stored chunk count must match metadata chunk count
-        let file_complete = metadata.fingerprint() == new_partial_root.as_ref()
-            && metadata.chunks_count() == new_count;
+        // Mirror `is_file_complete` semantics without re-reading from DB/trie.
+        let file_complete = state.metadata.fingerprint() == new_partial_root.as_ref()
+            && state.metadata.chunks_count() == new_count;
 
         if file_complete {
-            state.clear_cache();
             Ok(FileStorageWriteOutcome::FileComplete)
         } else {
             Ok(FileStorageWriteOutcome::FileIncomplete)
@@ -968,6 +964,45 @@ where
                 error!(target: LOG_TARGET, "Failed to check file completion status for file key {:?}: {:?}", file_key, e);
                 Err(FileStorageWriteError::FailedToCheckFileCompletion(e))
             }
+        }
+    }
+
+    fn write_chunks_batched(
+        &mut self,
+        file_key: &HasherOutT<T>,
+        chunks: Vec<(ChunkId, Chunk)>,
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
+        if chunks.is_empty() {
+            return Ok(FileStorageWriteOutcome::FileIncomplete);
+        }
+
+        let now = Instant::now();
+        self.prune_batch_cache(now);
+
+        let cache_key = file_key.as_ref().to_vec();
+        let mut cache_entry = self
+            .batch_states
+            .pop(&cache_key)
+            .unwrap_or_else(|| BatchCacheEntry::new(now));
+        cache_entry.last_touched = now;
+        self.ensure_batch_state_initialized(file_key, &mut cache_entry)?;
+
+        let outcome = {
+            let state = cache_entry
+                .state
+                .as_mut()
+                .ok_or(FileStorageWriteError::FailedToParseFileMetadata)?;
+            self.apply_chunks_batch_with_state(file_key, chunks, state)?
+        };
+
+        if matches!(outcome, FileStorageWriteOutcome::FileComplete) {
+            // Cache entry is intentionally not reinserted when upload completes.
+            Ok(FileStorageWriteOutcome::FileComplete)
+        } else {
+            // Upload is still in progress; keep updated state for next batch.
+            cache_entry.last_touched = Instant::now();
+            self.batch_states.put(cache_key, cache_entry);
+            Ok(FileStorageWriteOutcome::FileIncomplete)
         }
     }
 
