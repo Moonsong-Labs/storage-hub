@@ -227,6 +227,28 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>;
 
+    /// Write a batch of chunks for `key` and return whether the file is complete.
+    ///
+    /// Default implementation writes chunks one-by-one using [`Self::write_chunk`].
+    /// Storage backends can override this to provide a more efficient batched path.
+    fn write_chunks_batched(
+        &mut self,
+        key: &HasherOutT<T>,
+        chunks: Vec<(ChunkId, Chunk)>,
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
+        let mut chunks_iter = chunks.into_iter();
+        let Some((first_chunk_id, first_data)) = chunks_iter.next() else {
+            return Ok(FileStorageWriteOutcome::FileIncomplete);
+        };
+
+        let mut last = self.write_chunk(key, &first_chunk_id, &first_data)?;
+        for (chunk_id, data) in chunks_iter {
+            last = self.write_chunk(key, &chunk_id, &data)?;
+        }
+
+        Ok(last)
+    }
+
     fn is_allowed(
         &self,
         key: &HasherOutT<T>,
@@ -244,22 +266,4 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         key: &HasherOutT<T>,
         exclude_type: ExcludeType,
     ) -> Result<(), FileStorageError>;
-}
-
-/// Trusted file transfer fast-path: batched chunk writes.
-///
-/// This is intended **only** for the MSP trusted file transfer HTTP server ingestion path.
-/// It allows storage implementations (notably RocksDB-backed MPT) to amortize expensive
-/// per-chunk commit/metadata updates by applying many chunks in one operation.
-///
-/// Existing `FileStorage::write_chunk` behavior is unchanged; this is an additive, opt-in API.
-pub trait TrustedTransferBatchWrite<T: TrieLayout>: FileStorage<T> {
-    /// Write a batch of chunks for `file_key` and return whether the file is complete.
-    ///
-    /// `chunks` is a vector of `(ChunkId, Chunk)` pairs.
-    fn write_chunks_batched_trusted(
-        &mut self,
-        file_key: &HasherOutT<T>,
-        chunks: Vec<(ChunkId, Chunk)>,
-    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>;
 }
