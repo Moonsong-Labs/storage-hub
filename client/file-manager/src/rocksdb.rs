@@ -19,7 +19,7 @@ use crate::{
     error::ErrorT,
     traits::{
         ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
-        FileStorageWriteOutcome, TrustedTransferBatchWrite,
+        FileStorageWriteOutcome,
     },
     LOG_TARGET,
 };
@@ -1380,56 +1380,6 @@ where
 
         info!("Key removed to the exclude list : {:?}", file_key);
         Ok(())
-    }
-}
-
-impl<T, DB> TrustedTransferBatchWrite<T> for RocksDbFileStorage<T, DB>
-where
-    T: TrieLayout + Send + Sync + 'static,
-    DB: KeyValueDB + 'static,
-    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
-{
-    fn write_chunks_batched_trusted(
-        &mut self,
-        file_key: &HasherOutT<T>,
-        chunks: Vec<(ChunkId, Chunk)>,
-    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
-        if chunks.is_empty() {
-            return Ok(FileStorageWriteOutcome::FileIncomplete);
-        }
-
-        let now = Instant::now();
-        self.prune_trusted_batch_cache(now);
-
-        let cache_key = file_key.as_ref().to_vec();
-        let mut cache_entry = self
-            .trusted_batch_states
-            .remove(&cache_key)
-            .unwrap_or_else(|| TrustedBatchCacheEntry::new(now));
-        cache_entry.last_touched = now;
-
-        let result =
-            self.write_chunks_batched_trusted_inner(file_key, chunks, &mut cache_entry.state);
-
-        match result {
-            Ok(FileStorageWriteOutcome::FileComplete) => {
-                // Cache entry was removed before the write and is intentionally not reinserted
-                // when the upload completes.
-                Ok(FileStorageWriteOutcome::FileComplete)
-            }
-            Ok(FileStorageWriteOutcome::FileIncomplete) => {
-                // Upload is still in progress; reinsert updated per-file state so the next batch
-                // can continue without reloading metadata/root/chunk_count from DB.
-                cache_entry.last_touched = Instant::now();
-                self.trusted_batch_states.insert(cache_key, cache_entry);
-                self.prune_trusted_batch_cache(Instant::now());
-                Ok(FileStorageWriteOutcome::FileIncomplete)
-            }
-            Err(e) => {
-                // On errors, drop this file cache to avoid stale state on retries.
-                Err(e)
-            }
-        }
     }
 }
 
