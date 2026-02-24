@@ -141,6 +141,20 @@ pub mod retry {
     }
 }
 
+/// Node health monitoring defaults
+pub mod node_health {
+    /// How many seconds the indexer's `updated_at` can lag behind `now`
+    pub const DEFAULT_INDEXER_STALE_THRESHOLD_SECS: u64 = 120;
+    /// Maximum acceptable block lag between indexer and finalized head
+    pub const DEFAULT_INDEXER_LAG_BLOCKS_THRESHOLD: u64 = 10;
+    /// Time window in seconds for counting recent storage requests
+    pub const DEFAULT_REQUEST_WINDOW_SECS: u64 = 600;
+    /// Minimum total requests in the window before acceptance ratio matters
+    pub const DEFAULT_REQUEST_MIN_THRESHOLD: u64 = 10;
+    /// How many seconds the on-chain nonce can remain unchanged
+    pub const DEFAULT_NONCE_STUCK_THRESHOLD_SECS: u64 = 600;
+}
+
 pub mod mocks {
     use alloy_core::primitives::{address, Address};
 

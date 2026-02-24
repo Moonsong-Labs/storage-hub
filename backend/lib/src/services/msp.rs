@@ -93,6 +93,11 @@ impl MspService {
         }
     }
 
+    /// Get the onchain MSP ID discovered at startup
+    pub fn msp_id(&self) -> &OnchainMspId {
+        &self.msp_id
+    }
+
     /// Discover the MSP provider ID from the connected node
     ///
     /// This function tries to discover the MSP's provider ID and, if the node is not yet

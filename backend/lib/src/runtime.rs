@@ -2,6 +2,9 @@
 //!
 //! All runtime-dependant types used in the library should be defined here, along with appropriate wrappers if necessary
 
+use shc_common::types::BlockNumber;
+use shp_types::Hashing;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "solochain")] {
         use sh_solochain_evm_runtime::Runtime;
@@ -12,6 +15,7 @@ cfg_if::cfg_if! {
 
 pub type ProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
+pub type Header = sp_runtime::generic::Header<BlockNumber<Runtime>, Hashing>;
 
 pub type MainStorageProvidersStorageMap = pallet_storage_providers::MainStorageProviders<Runtime>;
 pub type MainStorageProvider = pallet_storage_providers::types::MainStorageProvider<Runtime>;

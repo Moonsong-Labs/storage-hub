@@ -333,6 +333,19 @@ impl RpcConnection for MockConnection {
             methods::RECEIVE_FILE_CHUNKS => {
                 serde_json::json!([])
             }
+            methods::FINALIZED_HEAD => {
+                serde_json::json!("0x0000000000000000000000000000000000000000000000000000000000000064")
+            }
+            methods::GET_HEADER => {
+                serde_json::json!({
+                    "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "number": "0x64",
+                    "stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "extrinsicsRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "digest": { "logs": [] }
+                })
+            }
+            methods::ACCOUNT_NEXT_INDEX => serde_json::json!(42u64),
             methods::API_CALL => self.mock_runtime_apis(params).await,
             methods::STATE_QUERY => self.mock_state_queries(params).await,
             method => {

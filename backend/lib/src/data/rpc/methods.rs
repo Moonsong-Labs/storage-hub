@@ -9,3 +9,8 @@ pub const PEER_IDS: &str = "system_localListenAddresses";
 
 pub const API_CALL: &str = "state_call";
 pub const STATE_QUERY: &str = "state_getStorage";
+
+// Substrate standard RPCs used for node health checks
+pub const FINALIZED_HEAD: &str = "chain_getFinalizedHead";
+pub const GET_HEADER: &str = "chain_getHeader";
+pub const ACCOUNT_NEXT_INDEX: &str = "system_accountNextIndex";

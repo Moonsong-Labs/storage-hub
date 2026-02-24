@@ -13,9 +13,12 @@ use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
 
-use crate::data::rpc::{
-    connection::error::{RpcConnectionError, RpcResult},
-    methods, runtime_apis, state_queries, AnyRpcConnection, RpcConnection,
+use crate::{
+    data::rpc::{
+        connection::error::{RpcConnectionError, RpcResult},
+        methods, runtime_apis, state_queries, AnyRpcConnection, RpcConnection,
+    },
+    runtime::Header,
 };
 
 /// StorageHub RPC client that uses an RpcConnection
@@ -257,6 +260,28 @@ impl StorageHubRpcClient {
         debug!(target: "rpc::client::get_multiaddresses", "RPC call: get_multiaddresses");
 
         self.call_no_params(methods::PEER_IDS).await
+    }
+
+    // ============ Node Health RPC Calls ============
+
+    /// Get the current finalized block number via `chain_getFinalizedHead` + `chain_getHeader`.
+    pub async fn get_finalized_block_number(&self) -> RpcResult<u64> {
+        debug!(target: "rpc::client", "get_finalized_block_number");
+
+        let hash: String = self.call_no_params(methods::FINALIZED_HEAD).await?;
+        let header: Header = self
+            .call(methods::GET_HEADER, jsonrpsee::rpc_params![hash])
+            .await?;
+
+        Ok(header.number.into())
+    }
+
+    /// Get the next expected nonce for an account.
+    pub async fn get_account_nonce(&self, account: &str) -> RpcResult<u64> {
+        debug!(target: "rpc::client", account = %account, "get_account_nonce");
+
+        self.call(methods::ACCOUNT_NEXT_INDEX, jsonrpsee::rpc_params![account])
+            .await
     }
 }
 

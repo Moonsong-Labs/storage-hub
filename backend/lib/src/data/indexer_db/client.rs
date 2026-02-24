@@ -15,14 +15,14 @@ use bigdecimal::BigDecimal;
 #[cfg(test)]
 use shc_indexer_db::OnchainBspId;
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp},
+    models::{Bsp, Bucket, File, Msp, ServiceState},
     OnchainMspId,
 };
 use tracing::debug;
 
 use crate::{
     constants::database::{DEFAULT_PAGE_LIMIT, MSP_CACHE_TTL_SECS},
-    data::indexer_db::repository::{PaymentStreamData, StorageOperations},
+    data::indexer_db::repository::{PaymentStreamData, RequestAcceptanceStats, StorageOperations},
     error::Result,
 };
 
@@ -250,6 +250,35 @@ impl DBClient {
 
         self.repository
             .get_number_of_files_stored_by_msp(msp)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Get the indexer service state
+    pub async fn get_service_state(&self) -> Result<ServiceState> {
+        debug!(target: "indexer_db::client::get_service_state", "Fetching indexer service state");
+
+        self.repository
+            .get_service_state()
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Get aggregated request acceptance stats for an MSP within a time window
+    pub async fn get_request_acceptance_stats(
+        &self,
+        msp_db_id: i64,
+        window_secs: u64,
+    ) -> Result<RequestAcceptanceStats> {
+        debug!(
+            target: "indexer_db::client::get_request_acceptance_stats",
+            msp_db_id = msp_db_id,
+            window_secs = window_secs,
+            "Fetching request acceptance stats for MSP"
+        );
+
+        self.repository
+            .get_request_acceptance_stats(msp_db_id, window_secs)
             .await
             .map_err(Into::into)
     }
