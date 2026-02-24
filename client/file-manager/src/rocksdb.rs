@@ -1231,6 +1231,10 @@ where
 
     /// Deletes a file and all its associated data.
     fn delete_file(&mut self, file_key: &HasherOutT<T>) -> Result<(), FileStorageError> {
+        // Invalidate any live batch cache entry for this file key so that a
+        // subsequent `write_chunks_batched` call does not use stale state.
+        let _ = self.batch_states.pop(file_key.as_ref());
+
         let Some(metadata) = self.get_metadata(file_key)? else {
             // Idempotent: if already deleted, nothing to do
             warn!(target: LOG_TARGET, "File key {:?} already deleted", file_key);
