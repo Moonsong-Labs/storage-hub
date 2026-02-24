@@ -84,12 +84,7 @@ pub async fn internal_upload_by_key(
             }
             Err(e) => {
                 tracing::error!("Stream error: {:?}", e);
-                let _ = tx
-                    .send(Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        e.to_string(),
-                    )))
-                    .await;
+                let _ = tx.send(Err(std::io::Error::other(e.to_string()))).await;
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Stream error".to_string(),
@@ -155,7 +150,7 @@ pub async fn download_by_key(
     let file_location = String::from_utf8_lossy(file_metadata.location()).to_string();
     let filename = file_location
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or(&file_key)
         .to_string();
 
@@ -226,7 +221,7 @@ pub async fn upload_file(
     let _upload_guard = services
         .upload_sessions
         .start_upload(file_key.clone())
-        .map_err(|e| Error::BadRequest(e))?;
+        .map_err(Error::BadRequest)?;
 
     // Extract from the request the file data stream and file metadata.
     let mut file_data_stream: Option<Field> = None;
