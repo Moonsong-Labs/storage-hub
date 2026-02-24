@@ -68,11 +68,13 @@ const UPLOAD_SPOOL_STARTUP_CLEANUP_MAX_AGE: Duration = Duration::from_secs(60 * 
 /// This stores chunk records in the wire format expected by the trusted transfer server:
 /// `[ChunkId: 8 bytes (u64, little-endian)][Chunk data: N bytes]...`
 ///
-/// The file is automatically deleted on drop.
+/// In normal flow, callers should run async cleanup explicitly. `Drop` is only a
+/// best-effort fallback for unexpected paths.
 struct UploadSpool {
     path: PathBuf,
     writer: Option<BufWriter<tokio::fs::File>>,
     bytes_written: u64,
+    cleaned_up: bool,
 }
 
 impl UploadSpool {
@@ -93,6 +95,7 @@ impl UploadSpool {
             path,
             writer: Some(BufWriter::with_capacity(1024 * 1024, file)),
             bytes_written: 0,
+            cleaned_up: false,
         })
     }
 
@@ -134,13 +137,52 @@ impl UploadSpool {
     fn bytes_written(&self) -> u64 {
         self.bytes_written
     }
+
+    /// Explicit async cleanup path used by normal upload flow.
+    ///
+    /// This closes the writer (if still open) and removes the temporary spool file
+    /// using Tokio's async filesystem API.
+    async fn cleanup(&mut self) {
+        if self.cleaned_up {
+            return;
+        }
+
+        let _ = self.writer.take();
+        match tokio::fs::remove_file(&self.path).await {
+            Ok(()) => self.cleaned_up = true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.cleaned_up = true,
+            Err(e) => {
+                warn!(
+                    target: "msp_service::upload_spool",
+                    path = %self.path.display(),
+                    error = %e,
+                    "Failed to remove upload spool asynchronously"
+                );
+            }
+        }
+    }
 }
 
 impl Drop for UploadSpool {
     fn drop(&mut self) {
-        // Ensure writer handle is closed before deleting the temp file.
+        if self.cleaned_up {
+            return;
+        }
+
+        // Fallback cleanup for unexpected paths where async cleanup was not called.
         let _ = self.writer.take();
-        let _ = std::fs::remove_file(&self.path);
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => self.cleaned_up = true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.cleaned_up = true,
+            Err(e) => {
+                warn!(
+                    target: "msp_service::upload_spool",
+                    path = %self.path.display(),
+                    error = %e,
+                    "Failed to remove upload spool in Drop fallback"
+                );
+            }
+        }
     }
 }
 
@@ -826,157 +868,164 @@ impl MspService {
             Some(UploadSpool::create().await?)
         };
 
-        // Prepare the overflow buffer that will hold any data that doesn't exactly fit in a chunk.
-        //
-        // Use `BytesMut` so we can consume a prefix in O(1) via `split_to`,
-        // instead of repeatedly `drain(..k)`ing a `Vec` (which shifts remaining bytes and can
-        // become quadratic over large uploads).
-        let mut overflow_buffer = BytesMut::new();
+        let upload_result = async {
+            // Prepare the overflow buffer that will hold any data that doesn't exactly fit in a chunk.
+            //
+            // Use `BytesMut` so we can consume a prefix in O(1) via `split_to`,
+            // instead of repeatedly `drain(..k)`ing a `Vec` (which shifts remaining bytes and can
+            // become quadratic over large uploads).
+            let mut overflow_buffer = BytesMut::new();
 
-        // Accumulate chunks into batches before inserting into the trie, to reduce per-chunk overhead
-        // (allocator pressure + trie-mutator rebuild costs).
-        let chunks_per_batch =
-            (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / FILE_CHUNK_SIZE as usize).max(1);
-        if BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE < FILE_CHUNK_SIZE as usize {
-            warn!(
-                target: "msp_service::process_and_upload_file",
-                batch_max_bytes = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
-                chunk_size_bytes = FILE_CHUNK_SIZE,
-                "BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE is smaller than FILE_CHUNK_SIZE; falling back to 1 chunk per batch"
-            );
-        }
-        let mut pending_chunks: Vec<Vec<u8>> = Vec::with_capacity(chunks_per_batch);
+            // Accumulate chunks into batches before inserting into the trie, to reduce per-chunk overhead
+            // (allocator pressure + trie-mutator rebuild costs).
+            let chunks_per_batch =
+                (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / FILE_CHUNK_SIZE as usize).max(1);
+            if BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE < FILE_CHUNK_SIZE as usize {
+                warn!(
+                    target: "msp_service::process_and_upload_file",
+                    batch_max_bytes = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+                    chunk_size_bytes = FILE_CHUNK_SIZE,
+                    "BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE is smaller than FILE_CHUNK_SIZE; falling back to 1 chunk per batch"
+                );
+            }
+            let mut pending_chunks: Vec<Vec<u8>> = Vec::with_capacity(chunks_per_batch);
 
-        // Initialize the chunk index.
-        let mut chunk_index: u64 = 0;
+            // Initialize the chunk index.
+            let mut chunk_index: u64 = 0;
 
-        // Start streaming the file data into the trie, chunking it into FILE_CHUNK_SIZE chunks in the process.
-        while let Some(bytes_read) = file_data_stream.chunk().await.map_err(|e| {
-            Error::BadRequest(format!("Failed to read multipart stream chunk: {}", e))
-        })? {
-            // Load the bytes read from the file into the overflow buffer.
-            overflow_buffer.extend_from_slice(&bytes_read);
+            // Start streaming the file data into the trie, chunking it into FILE_CHUNK_SIZE chunks in the process.
+            while let Some(bytes_read) = file_data_stream.chunk().await.map_err(|e| {
+                Error::BadRequest(format!("Failed to read multipart stream chunk: {}", e))
+            })? {
+                // Load the bytes read from the file into the overflow buffer.
+                overflow_buffer.extend_from_slice(&bytes_read);
 
-            // While the overflow buffer is larger than FILE_CHUNK_SIZE, process a chunk.
-            while overflow_buffer.len() >= FILE_CHUNK_SIZE as usize {
-                // Consume the next FILE_CHUNK_SIZE bytes without shifting the remaining buffer.
-                let chunk = overflow_buffer
-                    .split_to(FILE_CHUNK_SIZE as usize)
-                    .as_ref()
-                    .to_vec();
+                // While the overflow buffer is larger than FILE_CHUNK_SIZE, process a chunk.
+                while overflow_buffer.len() >= FILE_CHUNK_SIZE as usize {
+                    // Consume the next FILE_CHUNK_SIZE bytes without shifting the remaining buffer.
+                    let chunk = overflow_buffer
+                        .split_to(FILE_CHUNK_SIZE as usize)
+                        .as_ref()
+                        .to_vec();
+
+                    if let Some(spool) = spool.as_mut() {
+                        spool.write_chunk_record(chunk_index, &chunk).await?;
+                    }
+                    pending_chunks.push(chunk);
+
+                    // Increment the chunk index.
+                    chunk_index += 1;
+
+                    if pending_chunks.len() == chunks_per_batch {
+                        let start_index = chunk_index - pending_chunks.len() as u64;
+                        let batch = std::mem::take(&mut pending_chunks);
+
+                        trie.write_chunks_batched(start_index, batch).map_err(|e| {
+                            Error::BadRequest(format!(
+                                "Failed to write chunk batch (start={}, count={}) to trie: {}",
+                                start_index, chunks_per_batch, e
+                            ))
+                        })?;
+                    }
+                }
+            }
+
+            // Check the overflow buffer to see if the file didn't fit exactly in an integer number of chunks.
+            if !overflow_buffer.is_empty() {
+                let overflow_bytes = overflow_buffer.as_ref().to_vec();
 
                 if let Some(spool) = spool.as_mut() {
-                    spool.write_chunk_record(chunk_index, &chunk).await?;
+                    spool.write_chunk_record(chunk_index, &overflow_bytes).await?;
                 }
-                pending_chunks.push(chunk);
+                pending_chunks.push(overflow_bytes);
 
-                // Increment the chunk index.
+                // Increment the chunk index to get the total amount of chunks.
                 chunk_index += 1;
-
-                if pending_chunks.len() == chunks_per_batch {
-                    let start_index = chunk_index - pending_chunks.len() as u64;
-                    let batch = std::mem::take(&mut pending_chunks);
-
-                    trie.write_chunks_batched(start_index, batch).map_err(|e| {
-                        Error::BadRequest(format!(
-                            "Failed to write chunk batch (start={}, count={}) to trie: {}",
-                            start_index, chunks_per_batch, e
-                        ))
-                    })?;
-                }
             }
-        }
 
-        // Check the overflow buffer to see if the file didn't fit exactly in an integer number of chunks.
-        if !overflow_buffer.is_empty() {
-            let overflow_bytes = overflow_buffer.as_ref().to_vec();
+            // Flush any remaining pending chunks into the trie.
+            if !pending_chunks.is_empty() {
+                let start_index = chunk_index - pending_chunks.len() as u64;
+                let batch = std::mem::take(&mut pending_chunks);
 
-            if let Some(spool) = spool.as_mut() {
-                spool
-                    .write_chunk_record(chunk_index, &overflow_bytes)
-                    .await?;
-            }
-            pending_chunks.push(overflow_bytes);
-
-            // Increment the chunk index to get the total amount of chunks.
-            chunk_index += 1;
-        }
-
-        // Flush any remaining pending chunks into the trie.
-        if !pending_chunks.is_empty() {
-            let start_index = chunk_index - pending_chunks.len() as u64;
-            let batch = std::mem::take(&mut pending_chunks);
-
-            trie.write_chunks_batched(start_index, batch).map_err(|e| {
-                Error::BadRequest(format!(
-                    "Failed to write final chunk batch (start={}, count={}) to trie: {}",
-                    start_index,
-                    chunk_index - start_index,
-                    e
-                ))
-            })?;
-        }
-
-        // Validate that the file fingerprint matches the trie root.
-        let computed_root = trie.get_root();
-        if computed_root.as_ref() != file_metadata.fingerprint().as_ref() {
-            return Err(Error::BadRequest(format!(
-                "File fingerprint mismatch. Expected: {}, Computed: {}",
-                hex::encode(file_metadata.fingerprint().as_ref()),
-                hex::encode(computed_root)
-            )));
-        }
-
-        // Validate that the received amount of chunks matches the amount of chunks corresponding to the file size in the metadata.
-        let total_chunks = file_metadata.chunks_count();
-        if chunk_index != total_chunks {
-            return Err(Error::BadRequest(format!(
-            "Received amount of chunks {} does not match the amount of chunks {} corresponding to the file size in the metadata",
-            chunk_index, total_chunks
-        )));
-        }
-
-        debug!(target: "msp_service::process_and_upload_file", total_chunks = total_chunks, "File chunking completed");
-
-        // Choose upload method based on configuration
-        if self.msp_config.use_legacy_upload_method {
-            debug!(target: "msp_service::process_and_upload_file", "Using legacy RPC-based upload method (receiveBackendFileChunks)");
-            self.legacy_upload_file_in_batches(&trie, &file_metadata, total_chunks)
-                .await
-                .map_err(|e| {
+                trie.write_chunks_batched(start_index, batch).map_err(|e| {
                     Error::BadRequest(format!(
-                        "Failed to send chunks to MSP via legacy method: {}",
+                        "Failed to write final chunk batch (start={}, count={}) to trie: {}",
+                        start_index,
+                        chunk_index - start_index,
                         e
                     ))
                 })?;
-        } else {
-            debug!(target: "msp_service::process_and_upload_file", "Using new trusted file transfer server upload method");
-            let spool = spool.as_mut().ok_or(Error::Internal)?;
-            spool.finish_for_reading().await?;
-            self.send_spooled_chunks_to_msp(spool.path(), file_key, spool.bytes_written())
-                .await
-                .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP: {}", e)))?;
+            }
+
+            // Validate that the file fingerprint matches the trie root.
+            let computed_root = trie.get_root();
+            if computed_root.as_ref() != file_metadata.fingerprint().as_ref() {
+                return Err(Error::BadRequest(format!(
+                    "File fingerprint mismatch. Expected: {}, Computed: {}",
+                    hex::encode(file_metadata.fingerprint().as_ref()),
+                    hex::encode(computed_root)
+                )));
+            }
+
+            // Validate that the received amount of chunks matches the amount of chunks corresponding to the file size in the metadata.
+            let total_chunks = file_metadata.chunks_count();
+            if chunk_index != total_chunks {
+                return Err(Error::BadRequest(format!(
+                "Received amount of chunks {} does not match the amount of chunks {} corresponding to the file size in the metadata",
+                chunk_index, total_chunks
+            )));
+            }
+
+            debug!(target: "msp_service::process_and_upload_file", total_chunks = total_chunks, "File chunking completed");
+
+            // Choose upload method based on configuration
+            if self.msp_config.use_legacy_upload_method {
+                debug!(target: "msp_service::process_and_upload_file", "Using legacy RPC-based upload method (receiveBackendFileChunks)");
+                self.legacy_upload_file_in_batches(&trie, &file_metadata, total_chunks)
+                    .await
+                    .map_err(|e| {
+                        Error::BadRequest(format!(
+                            "Failed to send chunks to MSP via legacy method: {}",
+                            e
+                        ))
+                    })?;
+            } else {
+                debug!(target: "msp_service::process_and_upload_file", "Using new trusted file transfer server upload method");
+                let spool = spool.as_mut().ok_or(Error::Internal)?;
+                spool.finish_for_reading().await?;
+                self.send_spooled_chunks_to_msp(spool.path(), file_key, spool.bytes_written())
+                    .await
+                    .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP: {}", e)))?;
+            }
+
+            // If the complete file was uploaded to the MSP successfully, we can return the response.
+            let bytes_location = file_metadata.location();
+            let location = str::from_utf8(bytes_location)
+                .unwrap_or(file_key)
+                .to_string();
+
+            debug!(
+                file_key = %file_key,
+                chunks = total_chunks,
+                "File upload completed"
+            );
+
+            Ok(FileUploadResponse {
+                status: "upload_successful".to_string(),
+                fingerprint: file_metadata.fingerprint().encode_hex_with_prefix(),
+                file_key: file_key.to_string(),
+                bucket_id,
+                location,
+            })
+        }
+        .await;
+
+        if let Some(spool) = spool.as_mut() {
+            spool.cleanup().await;
         }
 
-        // If the complete file was uploaded to the MSP successfully, we can return the response.
-        let bytes_location = file_metadata.location();
-        let location = str::from_utf8(bytes_location)
-            .unwrap_or(file_key)
-            .to_string();
-
-        debug!(
-            file_key = %file_key,
-            chunks = total_chunks,
-            "File upload completed"
-        );
-
-        Ok(FileUploadResponse {
-            status: "upload_successful".to_string(),
-            fingerprint: file_metadata.fingerprint().encode_hex_with_prefix(),
-            file_key: file_key.to_string(),
-            bucket_id,
-            location,
-        })
+        upload_result
     }
 }
 
@@ -1328,6 +1377,48 @@ mod tests {
 
             MspService::new(self.postgres, self.rpc, cfg.msp).await
         }
+    }
+
+    #[tokio::test]
+    async fn test_upload_spool_async_cleanup_removes_file() {
+        let mut spool = UploadSpool::create()
+            .await
+            .expect("should create upload spool");
+        let spool_path = spool.path().to_path_buf();
+
+        assert!(
+            spool_path.exists(),
+            "spool file should exist immediately after creation"
+        );
+
+        spool.cleanup().await;
+
+        assert!(
+            !spool_path.exists(),
+            "spool file should be removed by explicit async cleanup"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upload_spool_drop_fallback_removes_file() {
+        let spool_path = {
+            let spool = UploadSpool::create()
+                .await
+                .expect("should create upload spool");
+            let spool_path = spool.path().to_path_buf();
+
+            assert!(
+                spool_path.exists(),
+                "spool file should exist immediately after creation"
+            );
+
+            spool_path
+        };
+
+        assert!(
+            !spool_path.exists(),
+            "spool file should be removed by drop fallback when explicit cleanup is not called"
+        );
     }
 
     #[tokio::test]
