@@ -374,7 +374,7 @@ where
             }
         }
 
-        if confirm_storing_requests_with_chunks_to_prove.iter().count() == 0 {
+        if confirm_storing_requests_with_chunks_to_prove.len() == 0 {
             return Ok(
                 "Skipped ProcessConfirmStoringRequest: no keys to confirm after querying chunks"
                     .to_string(),
@@ -801,8 +801,8 @@ where
 
         // Clone necessary data for the retry check.
         let cloned_sh_handler = Arc::new(self.storage_hub_handler.clone());
-        let cloned_own_bsp_id = Arc::new(own_bsp_id.clone());
-        let cloned_file_key: Arc<Runtime::Hash> = Arc::new(file_key.clone().into());
+        let cloned_own_bsp_id = Arc::new(own_bsp_id);
+        let cloned_file_key: Arc<Runtime::Hash> = Arc::new(file_key.into());
 
         let should_retry = move |error| {
             let cloned_sh_handler = Arc::clone(&cloned_sh_handler);

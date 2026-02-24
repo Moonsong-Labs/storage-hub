@@ -116,6 +116,7 @@ pub mod pallet {
 			T::WeightInfo::set_babe_randomness(),
 			DispatchClass::Mandatory
 		))]
+        #[allow(clippy::useless_conversion)]
         pub fn set_babe_randomness(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Make sure this is included in the block as an inherent, unsigned
             ensure_none(origin)?;
