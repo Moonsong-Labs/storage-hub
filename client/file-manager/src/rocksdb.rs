@@ -1,6 +1,7 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     io,
+    num::NonZeroUsize,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -8,6 +9,7 @@ use std::{
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::{debug, error, info};
+use lru::LruCache;
 use shc_common::types::{
     Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
@@ -69,8 +71,8 @@ impl Into<u32> for Column {
 
 // Replace NUMBER_OF_COLUMNS definition
 const NUMBER_OF_COLUMNS: u32 = Column::COUNT as u32;
-const TRUSTED_BATCH_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
-const TRUSTED_BATCH_CACHE_MAX_ENTRIES: usize = 4096;
+const BATCH_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+const BATCH_CACHE_MAX_ENTRIES: usize = 4096;
 
 // Helper function to map ExcludeType enum to their matching rocksdb column.
 fn get_exclude_type_db_column(exclude_type: ExcludeType) -> u32 {
@@ -268,7 +270,7 @@ where
     /// Drains overlay changes into the provided transaction.
     ///
     /// This is useful for composing a single RocksDB write that includes both trie node updates
-    /// and other metadata updates (e.g. roots + chunk counters) for trusted-transfer batching.
+    /// and other metadata updates (e.g. roots + chunk counters) for batch writes.
     fn drain_overlay_into_transaction(&mut self, transaction: &mut DBTransaction) {
         for (key, (value, rc)) in self.overlay.drain() {
             if rc <= 0 {
@@ -523,38 +525,20 @@ where
 
 /// Manages file metadata, chunks, and proofs using RocksDB as backend.
 struct BatchWriteCacheState<T: TrieLayout> {
-    metadata: Option<FileMetadata>,
-    partial_root: Option<HasherOutT<T>>,
-    chunk_count: Option<u64>,
-}
-
-impl<T: TrieLayout> Default for BatchWriteCacheState<T> {
-    fn default() -> Self {
-        Self {
-            metadata: None,
-            partial_root: None,
-            chunk_count: None,
-        }
-    }
-}
-
-impl<T: TrieLayout> BatchWriteCacheState<T> {
-    fn clear_cache(&mut self) {
-        self.metadata = None;
-        self.partial_root = None;
-        self.chunk_count = None;
-    }
+    metadata: FileMetadata,
+    partial_root: HasherOutT<T>,
+    chunk_count: u64,
 }
 
 struct BatchCacheEntry<T: TrieLayout> {
-    state: BatchWriteCacheState<T>,
+    state: Option<BatchWriteCacheState<T>>,
     last_touched: Instant,
 }
 
 impl<T: TrieLayout> BatchCacheEntry<T> {
     fn new(now: Instant) -> Self {
         Self {
-            state: Default::default(),
+            state: None,
             last_touched: now,
         }
     }
@@ -567,9 +551,8 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     storage: StorageDb<T, DB>,
-    trusted_batch_states: HashMap<Vec<u8>, TrustedBatchCacheEntry<T>>,
-    trusted_batch_cache_ttl: Duration,
-    trusted_batch_cache_max_entries: usize,
+    batch_states: LruCache<Vec<u8>, BatchCacheEntry<T>>,
+    batch_cache_ttl: Duration,
 }
 
 impl<T: TrieLayout, DB> RocksDbFileStorage<T, DB>
@@ -654,36 +637,27 @@ where
     pub fn new(storage: StorageDb<T, DB>) -> Self {
         Self {
             storage,
-            trusted_batch_states: HashMap::new(),
-            trusted_batch_cache_ttl: TRUSTED_BATCH_CACHE_TTL,
-            trusted_batch_cache_max_entries: TRUSTED_BATCH_CACHE_MAX_ENTRIES,
+            batch_states: LruCache::new(
+                NonZeroUsize::new(BATCH_CACHE_MAX_ENTRIES)
+                    .expect("BATCH_CACHE_MAX_ENTRIES must be greater than zero"),
+            ),
+            batch_cache_ttl: BATCH_CACHE_TTL,
         }
     }
 
-    fn prune_trusted_batch_cache(&mut self, now: Instant) {
+    fn prune_batch_cache(&mut self, now: Instant) {
         // Drop stale upload states to avoid unbounded growth when uploads stall.
-        self.trusted_batch_states.retain(|_, entry| {
-            now.saturating_duration_since(entry.last_touched) <= self.trusted_batch_cache_ttl
-        });
-
-        // Hard cap as backstop for many concurrent long-lived uploads.
-        if self.trusted_batch_states.len() <= self.trusted_batch_cache_max_entries {
-            return;
-        }
-
-        let mut by_age: Vec<(Vec<u8>, Instant)> = self
-            .trusted_batch_states
+        let stale_keys: Vec<Vec<u8>> = self
+            .batch_states
             .iter()
-            .map(|(key, entry)| (key.clone(), entry.last_touched))
+            .filter_map(|(key, entry)| {
+                (now.saturating_duration_since(entry.last_touched) > self.batch_cache_ttl)
+                    .then(|| key.clone())
+            })
             .collect();
-        by_age.sort_unstable_by_key(|(_, last_touched)| *last_touched);
 
-        let to_remove = self
-            .trusted_batch_states
-            .len()
-            .saturating_sub(self.trusted_batch_cache_max_entries);
-        for (key, _) in by_age.into_iter().take(to_remove) {
-            let _ = self.trusted_batch_states.remove(&key);
+        for key in stale_keys {
+            let _ = self.batch_states.pop(&key);
         }
     }
 
