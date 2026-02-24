@@ -522,13 +522,13 @@ where
 }
 
 /// Manages file metadata, chunks, and proofs using RocksDB as backend.
-struct TrustedBatchWriteCacheState<T: TrieLayout> {
+struct BatchWriteCacheState<T: TrieLayout> {
     metadata: Option<FileMetadata>,
     partial_root: Option<HasherOutT<T>>,
     chunk_count: Option<u64>,
 }
 
-impl<T: TrieLayout> Default for TrustedBatchWriteCacheState<T> {
+impl<T: TrieLayout> Default for BatchWriteCacheState<T> {
     fn default() -> Self {
         Self {
             metadata: None,
@@ -538,7 +538,7 @@ impl<T: TrieLayout> Default for TrustedBatchWriteCacheState<T> {
     }
 }
 
-impl<T: TrieLayout> TrustedBatchWriteCacheState<T> {
+impl<T: TrieLayout> BatchWriteCacheState<T> {
     fn clear_cache(&mut self) {
         self.metadata = None;
         self.partial_root = None;
@@ -546,12 +546,12 @@ impl<T: TrieLayout> TrustedBatchWriteCacheState<T> {
     }
 }
 
-struct TrustedBatchCacheEntry<T: TrieLayout> {
-    state: TrustedBatchWriteCacheState<T>,
+struct BatchCacheEntry<T: TrieLayout> {
+    state: BatchWriteCacheState<T>,
     last_touched: Instant,
 }
 
-impl<T: TrieLayout> TrustedBatchCacheEntry<T> {
+impl<T: TrieLayout> BatchCacheEntry<T> {
     fn new(now: Instant) -> Self {
         Self {
             state: Default::default(),
