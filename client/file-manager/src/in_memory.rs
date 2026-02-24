@@ -11,7 +11,7 @@ use shc_common::types::{
 use crate::{
     traits::{
         ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
-        FileStorageWriteOutcome, TrustedTransferBatchWrite,
+        FileStorageWriteOutcome,
     },
     LOG_TARGET,
 };
@@ -505,23 +505,6 @@ where
     }
 }
 
-impl<T: TrieLayout + 'static> TrustedTransferBatchWrite<T> for InMemoryFileStorage<T>
-where
-    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
-{
-    fn write_chunks_batched_trusted(
-        &mut self,
-        file_key: &HasherOutT<T>,
-        chunks: Vec<(ChunkId, Chunk)>,
-    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
-        let mut last = FileStorageWriteOutcome::FileIncomplete;
-        for (chunk_id, data) in chunks {
-            last = self.write_chunk(file_key, &chunk_id, &data)?;
-        }
-        Ok(last)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -820,6 +803,49 @@ mod tests {
             assert_eq!(chunk_ids[id], leaf.key);
             assert_eq!(chunks[id], leaf.data);
         }
+    }
+
+    #[test]
+    fn file_storage_write_chunks_batched_works() {
+        let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let mut expected_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            expected_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "batched-write".to_string().into_bytes(),
+            1024u64 * chunks.len() as u64,
+            expected_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+        let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
+        file_storage.insert_file(key, file_metadata).unwrap();
+
+        let empty = file_storage.write_chunks_batched(&key, Vec::new()).unwrap();
+        assert!(matches!(empty, FileStorageWriteOutcome::FileIncomplete));
+
+        let first = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[0], chunks[0].clone())])
+            .unwrap();
+        assert!(matches!(first, FileStorageWriteOutcome::FileIncomplete));
+
+        let second = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[1], chunks[1].clone())])
+            .unwrap();
+        assert!(matches!(second, FileStorageWriteOutcome::FileComplete));
+
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 2);
     }
 
     #[test]

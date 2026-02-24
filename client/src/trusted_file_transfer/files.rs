@@ -93,7 +93,7 @@ where
 {
     let mut storage = file_storage.write().await;
     storage
-        .write_chunks_batched_trusted(file_key, batch)
+        .write_chunks_batched(file_key, batch)
         .map_err(|e| anyhow::anyhow!("Failed to write chunk batch to storage: {}", e))
 }
 
