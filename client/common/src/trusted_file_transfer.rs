@@ -1,4 +1,4 @@
-use crate::types::{ChunkId, FILE_CHUNK_SIZE};
+use crate::types::{Chunk, ChunkId, FILE_CHUNK_SIZE};
 use bytes::BytesMut;
 
 pub const CHUNK_ID_SIZE: usize = 8; // sizeof(u64)
@@ -24,7 +24,7 @@ pub fn encode_chunk_with_id(chunk_id: ChunkId, chunk_data: &[u8]) -> Vec<u8> {
 pub fn read_chunk_with_id_from_buffer(
     buffer: &mut BytesMut,
     cap_at_file_chunk_size: bool,
-) -> anyhow::Result<(ChunkId, Vec<u8>)> {
+) -> anyhow::Result<(ChunkId, Chunk)> {
     let min_data_size: usize = if cap_at_file_chunk_size {
         FILE_CHUNK_SIZE as usize
     } else {

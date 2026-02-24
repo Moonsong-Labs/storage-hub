@@ -5,7 +5,7 @@ use bytes::BytesMut;
 use log::{error, info};
 use shc_common::{
     trusted_file_transfer::{read_chunk_with_id_from_buffer, CHUNK_ID_SIZE},
-    types::ChunkId,
+    types::{Chunk, ChunkId},
 };
 use shc_file_manager::traits::FileStorageWriteOutcome;
 use shp_constants::FILE_CHUNK_SIZE;
@@ -27,7 +27,7 @@ where
     let mut request_stream = request_body.into_data_stream();
     let mut buffer = BytesMut::new();
     let mut last_write_outcome = FileStorageWriteOutcome::FileIncomplete;
-    let mut pending: Vec<(ChunkId, Vec<u8>)> = Vec::new();
+    let mut pending: Vec<(ChunkId, Chunk)> = Vec::new();
     let mut pending_bytes: usize = 0;
 
     // Process request stream, storing chunks as they are received
@@ -86,7 +86,7 @@ where
 async fn write_chunk_batch<FL>(
     file_storage: &RwLock<FL>,
     file_key: &sp_core::H256,
-    batch: Vec<(ChunkId, Vec<u8>)>,
+    batch: Vec<(ChunkId, Chunk)>,
 ) -> anyhow::Result<FileStorageWriteOutcome>
 where
     FL: FileStorageT,
