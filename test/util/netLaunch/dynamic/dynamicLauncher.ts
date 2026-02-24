@@ -410,42 +410,49 @@ export async function launchNetworkFromTopology(
       cwd,
       reporter,
       runtimeType,
-      bootnodeInfo
+      bootnodeInfo,
+      bsp0Api
     );
-    await startUsersPhase(identities.users, composeFile, cwd, reporter, runtimeType, bootnodeInfo);
+    await startUsersPhase(
+      identities.users,
+      composeFile,
+      cwd,
+      reporter,
+      runtimeType,
+      bootnodeInfo,
+      bsp0Api
+    );
 
-    // bsp0Api was only needed for BSP-1..N registration — disconnect it now
+    // Sync user-0 to bsp0Api's chain tip (BSP-0 sealed blocks during BSP-1..N registration),
+    // then use user0Api for remaining chain setup — consistent with tests where user-0
+    // is the block producer via getBlockProducerApi().
+    const user0Api = await BspNetTestApi.create(
+      `ws://127.0.0.1:${identities.users[0].ports.rpc}`,
+      runtimeType
+    );
+    await bsp0Api!.wait.nodeCatchUpToChainTip(user0Api);
+
+    // bsp0Api is no longer needed — user-0 is now the block producer
     if (bsp0Api) {
       await bsp0Api.disconnect();
       bsp0Api = undefined;
     }
 
-    // Use user-0 for chain setup, consistent with bspnet/fullnet where sh-user is the block-sealing node
-    if (identities.users.length > 0) {
-      const user0Api = await BspNetTestApi.create(
-        `ws://127.0.0.1:${identities.users[0].ports.rpc}`,
-        runtimeType
-      );
+    await context.preFundAccounts(user0Api);
+    await context.setupRuntimeParams(user0Api);
+    await user0Api.block.seal();
 
-      await context.preFundAccounts(user0Api);
-      await context.setupRuntimeParams(user0Api);
-      await user0Api.block.seal();
+    for (const mspInfo of identities.msps) {
+      await registerProvider(user0Api, mspInfo);
 
-      for (const mspInfo of identities.msps) {
-        await registerProvider(user0Api, mspInfo);
+      const mspApi = await BspNetTestApi.create(`ws://127.0.0.1:${mspInfo.ports.rpc}`, runtimeType);
 
-        const mspApi = await BspNetTestApi.create(
-          `ws://127.0.0.1:${mspInfo.ports.rpc}`,
-          runtimeType
-        );
-
-        await user0Api.wait.nodeCatchUpToChainTip(mspApi);
-        await fetchProviderId(mspApi, mspInfo.identity);
-        await mspApi.disconnect();
-      }
-
-      await user0Api.disconnect();
+      await user0Api.wait.nodeCatchUpToChainTip(mspApi);
+      await fetchProviderId(mspApi, mspInfo.identity);
+      await mspApi.disconnect();
     }
+
+    await user0Api.disconnect();
 
     await startProvidersPhase(
       "fisherman",
@@ -726,7 +733,8 @@ async function startMspContainersPhase(
   cwd: string,
   reporter: ProgressReporter,
   runtimeType: "parachain" | "solochain",
-  bootnodeInfo?: BootnodeInfo
+  bootnodeInfo?: BootnodeInfo,
+  syncApi?: EnrichedBspApi
 ): Promise<void> {
   if (msps.length === 0) return;
 
@@ -759,6 +767,11 @@ async function startMspContainersPhase(
       );
 
       await injectKeys(mspApi, nodeInfo.identity);
+
+      if (syncApi) {
+        await syncApi.wait.nodeCatchUpToChainTip(mspApi);
+      }
+
       await mspApi.disconnect();
 
       reporter.onNodeReady("msp", index, msps.length);
@@ -777,7 +790,8 @@ async function startUsersPhase(
   cwd: string,
   reporter: ProgressReporter,
   runtimeType: "parachain" | "solochain",
-  bootnode?: BootnodeInfo
+  bootnode?: BootnodeInfo,
+  syncApi?: EnrichedBspApi
 ): Promise<void> {
   if (users.length === 0) return;
 
@@ -807,6 +821,11 @@ async function startUsersPhase(
       const api = await BspNetTestApi.create(`ws://127.0.0.1:${nodeInfo.ports.rpc}`, runtimeType);
 
       await injectKeys(api, nodeInfo.identity);
+
+      if (syncApi) {
+        await syncApi.wait.nodeCatchUpToChainTip(api);
+      }
+
       await api.disconnect();
 
       reporter.onNodeReady("user", index, users.length);
