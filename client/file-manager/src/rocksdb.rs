@@ -227,11 +227,12 @@ where
         Ok(())
     }
 
-    /// Trusted file transfer fast-path: insert many chunks without committing.
+    /// Batched write fast-path: insert many chunks into the trie overlay.
     ///
-    /// Leaves trie node mutations in the overlay so the caller can merge them into a single
-    /// RocksDB write alongside other metadata updates (e.g. roots + chunk counters).
-    fn insert_chunks_batched_trusted_no_commit(
+    /// This method intentionally does not persist to RocksDB on its own.
+    /// The caller is expected to drain overlay changes and commit them together with
+    /// related metadata updates (e.g. roots + chunk counters) in one transaction.
+    fn insert_chunks_batched(
         &mut self,
         chunks: Vec<(ChunkId, Chunk)>,
     ) -> Result<HasherOutT<T>, FileStorageWriteError> {
