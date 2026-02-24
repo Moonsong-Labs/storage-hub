@@ -260,18 +260,12 @@ where
     }
 
     /// Builds a database transaction from the overlay and clears it.
-    fn changes(&mut self) -> DBTransaction {
-        let mut transaction = DBTransaction::new();
-
-        self.drain_overlay_into_transaction(&mut transaction);
-        transaction
-    }
-
-    /// Drains overlay changes into the provided transaction.
     ///
     /// This is useful for composing a single RocksDB write that includes both trie node updates
     /// and other metadata updates (e.g. roots + chunk counters) for batch writes.
-    fn drain_overlay_into_transaction(&mut self, transaction: &mut DBTransaction) {
+    fn changes(&mut self) -> DBTransaction {
+        let mut transaction = DBTransaction::new();
+
         for (key, (value, rc)) in self.overlay.drain() {
             if rc <= 0 {
                 transaction.delete(Column::Chunks.into(), &key);
@@ -279,6 +273,8 @@ where
                 transaction.put_vec(Column::Chunks.into(), &key, value);
             }
         }
+
+        transaction
     }
 
     /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
