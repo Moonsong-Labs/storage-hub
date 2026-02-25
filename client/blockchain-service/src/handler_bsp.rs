@@ -217,6 +217,7 @@ where
                             size,
                             peer_ids,
                             expires_at,
+                            ..
                         },
                     ) => {
                         self.emit(NewStorageRequest {

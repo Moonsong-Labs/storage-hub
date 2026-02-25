@@ -1,0 +1,6 @@
+ALTER TABLE file ADD COLUMN bsps_required INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE file ADD COLUMN desired_replicas INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE bsp_file DROP CONSTRAINT bsp_file_bsp_id_fkey;
+ALTER TABLE bsp_file ADD CONSTRAINT bsp_file_bsp_id_fkey
+    FOREIGN KEY (bsp_id) REFERENCES bsp(id) ON DELETE CASCADE;

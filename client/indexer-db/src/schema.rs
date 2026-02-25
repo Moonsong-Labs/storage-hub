@@ -65,6 +65,8 @@ diesel::table! {
         is_in_bucket -> Bool,
         block_hash -> Bytea,
         tx_hash -> Nullable<Bytea>,
+        bsps_required -> Int4,
+        desired_replicas -> Int4,
     }
 }
 

@@ -1,10 +1,11 @@
+use std::sync::Arc;
+
 use anyhow::anyhow;
 use bigdecimal::BigDecimal;
 use codec::Encode;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
-use std::sync::Arc;
 use thiserror::Error;
 
 use pallet_file_system_runtime_api::FileSystemApi;
@@ -401,6 +402,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 size,
                 peer_ids,
                 expires_at: _,
+                bsps_required,
+                msp_id,
             } => {
                 let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec())
                     .await
@@ -454,6 +457,34 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             .to_string(),
                     })?;
 
+                // Compute desired_replicas using the rolling max formula.
+                // System-initiated SRs (msp_id is None) carry forward the previous desired value.
+                // User-initiated SRs (msp_id is Some) apply: max(prev_desired, current_bsp_count + bsps_required).
+                let is_system_sr = msp_id.is_none();
+                let bsps_required_val: i32 = if is_system_sr {
+                    1i32
+                } else {
+                    let val: u64 = (*bsps_required).into();
+                    i32::try_from(val).unwrap_or(i32::MAX)
+                };
+
+                let prev_desired =
+                    File::get_max_desired_replicas_by_file_key(conn, file_key.as_ref().to_vec())
+                        .await
+                        .unwrap_or(0);
+
+                let new_desired = if is_system_sr {
+                    prev_desired
+                } else {
+                    let current_bsp_count = File::count_bsp_associations_by_file_key(
+                        conn,
+                        file_key.as_ref().to_vec(),
+                    )
+                    .await
+                    .unwrap_or(0) as i32;
+                    std::cmp::max(prev_desired, current_bsp_count + bsps_required_val)
+                };
+
                 File::create(
                     conn,
                     who,
@@ -468,6 +499,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     block_hash_bytes,
                     tx_hash_bytes,
                     is_in_bucket,
+                    bsps_required_val,
+                    new_desired,
                 )
                 .await
                 .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
@@ -547,6 +580,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             block_hash_bytes,
                             tx_hash_bytes,
                             is_in_bucket,
+                            0, // bsps_required not available from acceptance event
+                            0, // desired_replicas not available from acceptance event
                         )
                         .await
                         .map_err(|e| {
@@ -890,6 +925,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                                 block_hash_bytes,
                                 tx_hash_bytes,
                                 is_in_bucket,
+                                0, // bsps_required not available from confirmation event
+                                0, // desired_replicas not available from confirmation event
                             )
                             .await
                             .map_err(|e| {

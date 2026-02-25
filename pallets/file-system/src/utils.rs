@@ -1154,6 +1154,8 @@ where
             size,
             peer_ids: user_peer_ids.unwrap_or_default(),
             expires_at: expiration_tick,
+            bsps_required: replication_target,
+            msp_id,
         });
 
         Ok(file_key)

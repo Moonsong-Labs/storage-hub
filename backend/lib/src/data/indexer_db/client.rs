@@ -4,8 +4,7 @@
 //! to an underlying repository implementation, allowing for both production
 //! PostgreSQL and mock implementations for testing.
 
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{sync::Arc, time::{Duration, Instant}};
 
 use tokio::sync::RwLock;
 
@@ -223,6 +222,24 @@ impl DBClient {
 
         self.repository
             .get_file_by_file_key(&hash)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_desired_replicas(&self, file_key: &[u8]) -> Result<i32> {
+        let hash = shp_types::Hash::from_slice(file_key);
+        debug!(target: "indexer_db::client::get_desired_replicas", file_key = %hash, "Fetching desired replicas");
+        self.repository
+            .get_desired_replicas_for_file_key(&hash)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn count_bsp_associations(&self, file_key: &[u8]) -> Result<i64> {
+        let hash = shp_types::Hash::from_slice(file_key);
+        debug!(target: "indexer_db::client::count_bsp_associations", file_key = %hash, "Counting BSP associations");
+        self.repository
+            .count_bsp_associations_for_file_key(&hash)
             .await
             .map_err(Into::into)
     }

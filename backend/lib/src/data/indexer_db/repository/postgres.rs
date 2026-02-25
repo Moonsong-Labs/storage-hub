@@ -147,6 +147,23 @@ impl IndexerOps for Repository {
             .map_err(Into::into)
     }
 
+    async fn get_desired_replicas_for_file_key(&self, file_key: &Hash) -> RepositoryResult<i32> {
+        let mut conn = self.pool.get().await?;
+        File::get_max_desired_replicas_by_file_key(&mut conn, file_key.as_bytes())
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_bsp_associations_for_file_key(
+        &self,
+        file_key: &Hash,
+    ) -> RepositoryResult<i64> {
+        let mut conn = self.pool.get().await?;
+        File::count_bsp_associations_by_file_key(&mut conn, file_key.as_bytes())
+            .await
+            .map_err(Into::into)
+    }
+
     // ============ Payment Stream Operations ============
     async fn get_payment_streams_for_user(
         &self,
@@ -314,6 +331,8 @@ impl IndexerOpsMut for Repository {
             vec![0u8; 32], // Placeholder block hash for test data
             None,          // No transaction hash for test data
             false,         // Default to not in bucket for test data
+            0,             // Default bsps_required for test data
+            0,             // Default desired_replicas for test data
         )
         .await?;
 
