@@ -926,53 +926,69 @@ where
             FileStorageWriteError::FailedToConstructFileTrie
         })?;
 
-        match file_trie.write_chunk(chunk_id, data) {
+        let chunk_inserted = match file_trie.write_chunk(chunk_id, data) {
             Ok(()) => {
-                // Chunk was successfully inserted into shared trie - need to update root
-                debug!(target: LOG_TARGET, "Chunk {:?} successfully written to shared trie for file key {:?}", chunk_id, file_key);
+                debug!(
+                    target: LOG_TARGET,
+                    "Chunk {:?} successfully written to shared trie for file key {:?}",
+                    chunk_id,
+                    file_key
+                );
+                true
             }
             Err(FileStorageWriteError::FileChunkAlreadyExists) => {
-                // Chunk already exists in shared trie - no need to update root
-                debug!(target: LOG_TARGET, "Chunk {:?} already exists in shared trie for file key {:?}, incrementing count for progress tracking", chunk_id, file_key);
+                debug!(
+                    target: LOG_TARGET,
+                    "Chunk {:?} already exists in shared trie for file key {:?}",
+                    chunk_id,
+                    file_key
+                );
+                false
             }
             Err(other) => {
-                error!(target: LOG_TARGET, "Error while writing chunk {:?} of file key {:?}: {:?}", chunk_id, file_key, other);
+                error!(
+                    target: LOG_TARGET,
+                    "Error while writing chunk {:?} of file key {:?}: {:?}",
+                    chunk_id,
+                    file_key,
+                    other
+                );
                 return Err(FileStorageWriteError::FailedToInsertFileChunk);
             }
         };
 
-        // Update the root of the file trie.
-        let new_partial_root = file_trie.get_root();
-        let mut transaction = DBTransaction::new();
-        transaction.put(
-            Column::Roots.into(),
-            metadata.fingerprint().as_ref(),
-            new_partial_root.as_ref(),
-        );
+        // Persist root + chunk count only when a new chunk was actually inserted.
+        if chunk_inserted {
+            let new_partial_root = file_trie.get_root();
+            let mut transaction = DBTransaction::new();
+            transaction.put(
+                Column::Roots.into(),
+                metadata.fingerprint().as_ref(),
+                new_partial_root.as_ref(),
+            );
 
-        let current_count = self.stored_chunks_count(file_key).map_err(|e| {
-            error!(target: LOG_TARGET, "{:?}", e);
-            FileStorageWriteError::FailedToGetStoredChunksCount
-        })?;
+            let current_count = self.stored_chunks_count(file_key).map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageWriteError::FailedToGetStoredChunksCount
+            })?;
 
-        // Increment chunk count.
-        // This should never overflow unless there is a bug or we support file sizes as large as 16 exabytes.
-        // Since this is executed within the context of a write lock in the layer above, we should not have any chunk count syncing issues.
-        let new_count = current_count
-            .checked_add(1)
-            .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
+            // This should never overflow unless there is a bug or we support file sizes as large as 16 exabytes.
+            // Since this is executed within the context of a write lock in the layer above, we should not have any chunk count syncing issues.
+            let new_count = current_count
+                .checked_add(1)
+                .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
 
-        // Update the chunk count.
-        transaction.put(
-            Column::ChunkCount.into(),
-            file_key.as_ref(),
-            &new_count.to_le_bytes(),
-        );
+            transaction.put(
+                Column::ChunkCount.into(),
+                file_key.as_ref(),
+                &new_count.to_le_bytes(),
+            );
 
-        self.storage.write(transaction).map_err(|e| {
-            error!(target: LOG_TARGET,"{:?}", e);
-            FileStorageWriteError::FailedToUpdatePartialRoot
-        })?;
+            self.storage.write(transaction).map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageWriteError::FailedToUpdatePartialRoot
+            })?;
+        }
 
         // Check if file is complete using the helper method (only once at the end)
         match self.is_file_complete(file_key) {
@@ -1672,6 +1688,68 @@ mod tests {
         assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_ok());
         assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_ok());
         assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_ok());
+    }
+
+    #[test]
+    fn file_storage_duplicate_chunk_does_not_increment_chunk_count() {
+        let chunks = vec![
+            Chunk::from([5u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([6u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([7u8; FILE_CHUNK_SIZE as usize]),
+        ];
+
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let mut file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            file_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            FILE_CHUNK_SIZE * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+        file_storage.insert_file(key, file_metadata).unwrap();
+
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            file_storage.write_chunk(&key, chunk_id, chunk).unwrap();
+        }
+        assert_eq!(
+            file_storage.stored_chunks_count(&key).unwrap(),
+            chunks.len() as u64
+        );
+
+        let duplicate_write_outcome = file_storage
+            .write_chunk(&key, &chunk_ids[0], &chunks[0])
+            .unwrap();
+        assert!(matches!(
+            duplicate_write_outcome,
+            FileStorageWriteOutcome::FileComplete
+        ));
+        assert_eq!(
+            file_storage.stored_chunks_count(&key).unwrap(),
+            chunks.len() as u64
+        );
+
+        let all_chunk_ids: HashSet<ChunkId> = chunk_ids.iter().cloned().collect();
+        assert!(file_storage.generate_proof(&key, &all_chunk_ids).is_ok());
     }
 
     #[test]
