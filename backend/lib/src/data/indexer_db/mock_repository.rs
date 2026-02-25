@@ -337,10 +337,7 @@ impl IndexerOps for MockRepository {
         Ok(max_desired)
     }
 
-    async fn count_bsp_associations_for_file_key(
-        &self,
-        _file_key: &Hash,
-    ) -> RepositoryResult<i64> {
+    async fn count_bsp_associations_for_file_key(&self, _file_key: &Hash) -> RepositoryResult<i64> {
         Ok(0)
     }
 

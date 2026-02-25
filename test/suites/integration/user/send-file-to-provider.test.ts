@@ -57,7 +57,7 @@ await describeMspNet("User: Send file to provider", ({ before, createUserApi, it
       signer: shUser
     });
 
-    await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+    await userApi.assert.eventPresent("fileSystem", "NewStorageRequestV2");
 
     await userApi.docker.waitForLog({
       searchString: "Unable to upload final batch to peer",
@@ -164,7 +164,7 @@ await describeMspNet("User: Send file to provider", ({ before, createUserApi, it
       signer: shUser
     });
 
-    await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+    await userApi.assert.eventPresent("fileSystem", "NewStorageRequestV2");
 
     // It should have failed to connect to the first libp2p address because it is a phony one, but
     // the second libp2p address is the right one so we should successfully send the file through it.

@@ -4,7 +4,10 @@
 //! to an underlying repository implementation, allowing for both production
 //! PostgreSQL and mock implementations for testing.
 
-use std::{sync::Arc, time::{Duration, Instant}};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use tokio::sync::RwLock;
 

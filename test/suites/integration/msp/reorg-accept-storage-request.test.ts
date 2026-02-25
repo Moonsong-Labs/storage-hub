@@ -110,11 +110,11 @@ await describeMspNet(
 
       const { event: storageRequestEvent2 } = await userApi.assert.eventPresent(
         "fileSystem",
-        "NewStorageRequest"
+        "NewStorageRequestV2"
       );
       assert(
-        userApi.events.fileSystem.NewStorageRequest.is(storageRequestEvent2),
-        "Event should be NewStorageRequest"
+        userApi.events.fileSystem.NewStorageRequestV2.is(storageRequestEvent2),
+        "Event should be NewStorageRequestV2"
       );
       const file2Key = storageRequestEvent2.data.fileKey.toString();
 

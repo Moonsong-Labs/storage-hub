@@ -105,10 +105,10 @@ await describeMspNet(
         signer: shUser
       });
 
-      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequestV2");
 
       const newStorageRequestDataBlob =
-        userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+        userApi.events.fileSystem.NewStorageRequestV2.is(event) && event.data;
 
       if (!newStorageRequestDataBlob) {
         throw new Error("Event doesn't match Type");

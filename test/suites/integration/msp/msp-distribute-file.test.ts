@@ -82,16 +82,16 @@ await describeMspNet(
       // Get the new storage request event
       const { event: newStorageRequestEvent } = await userApi.assert.eventPresent(
         "fileSystem",
-        "NewStorageRequest"
+        "NewStorageRequestV2"
       );
 
       const newStorageRequestDataBlob =
-        userApi.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent) &&
+        userApi.events.fileSystem.NewStorageRequestV2.is(newStorageRequestEvent) &&
         newStorageRequestEvent.data;
 
       assert(
         newStorageRequestDataBlob,
-        "NewStorageRequest event data does not match expected type"
+        "NewStorageRequestV2 event data does not match expected type"
       );
 
       // And get the file key from it

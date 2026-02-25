@@ -99,9 +99,9 @@ await describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, i
       signer: shUser
     });
 
-    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequestV2");
 
-    const dataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+    const dataBlob = userApi.events.fileSystem.NewStorageRequestV2.is(event) && event.data;
 
     if (!dataBlob) {
       throw new Error("Event doesn't match Type");
@@ -210,9 +210,9 @@ await describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, i
       signer: shUser
     });
 
-    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequestV2");
 
-    const dataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+    const dataBlob = userApi.events.fileSystem.NewStorageRequestV2.is(event) && event.data;
 
     if (!dataBlob) {
       throw new Error("Event doesn't match Type");

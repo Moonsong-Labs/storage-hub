@@ -100,11 +100,11 @@ export const sendNewStorageRequest = async (
   const newStorageRequestEvent = assertEventPresent(
     api,
     "fileSystem",
-    "NewStorageRequest",
+    "NewStorageRequestV2",
     issueStorageRequestResult.events
   );
   const newStorageRequestEventDataBlob =
-    api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
+    api.events.fileSystem.NewStorageRequestV2.is(newStorageRequestEvent.event) &&
     newStorageRequestEvent.event.data;
 
   assert(newStorageRequestEventDataBlob, "Event doesn't match Type");
@@ -194,11 +194,11 @@ export const createBucketAndSendNewStorageRequest = async (
   const newStorageRequestEvent = assertEventPresent(
     api,
     "fileSystem",
-    "NewStorageRequest",
+    "NewStorageRequestV2",
     issueStorageRequestResult.events
   );
   const newStorageRequestEventDataBlob =
-    api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
+    api.events.fileSystem.NewStorageRequestV2.is(newStorageRequestEvent.event) &&
     newStorageRequestEvent.event.data;
 
   assert(newStorageRequestEventDataBlob, "Event doesn't match Type");

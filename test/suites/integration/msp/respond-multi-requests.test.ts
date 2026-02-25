@@ -76,20 +76,20 @@ await describeMspNet(
     it("MSP receives files from user and accepts them", async () => {
       // Get the events of the storage requests to extract the file keys and check
       // that the MSP received them.
-      const events = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
+      const events = await userApi.assert.eventMany("fileSystem", "NewStorageRequestV2");
       const matchedEvents = events.filter((e) =>
-        userApi.events.fileSystem.NewStorageRequest.is(e.event)
+        userApi.events.fileSystem.NewStorageRequestV2.is(e.event)
       );
       assert(
         matchedEvents.length === source.length,
-        `Expected ${source.length} NewStorageRequest events`
+        `Expected ${source.length} NewStorageRequestV2 events`
       );
 
       // Check if the MSP received the files.
       for (const e of matchedEvents) {
         const newStorageRequestDataBlob =
-          userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
-        assert(newStorageRequestDataBlob, "Event doesn't match NewStorageRequest type");
+          userApi.events.fileSystem.NewStorageRequestV2.is(e.event) && e.event.data;
+        assert(newStorageRequestDataBlob, "Event doesn't match NewStorageRequestV2 type");
 
         await mspApi.wait.fileStorageComplete(newStorageRequestDataBlob.fileKey);
       }

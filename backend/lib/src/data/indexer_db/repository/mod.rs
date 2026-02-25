@@ -124,8 +124,7 @@ pub trait IndexerOps: Send + Sync {
     async fn get_desired_replicas_for_file_key(&self, file_key: &Hash) -> RepositoryResult<i32>;
 
     /// Count the number of BSP-file associations for all file records sharing the given file key.
-    async fn count_bsp_associations_for_file_key(&self, file_key: &Hash)
-        -> RepositoryResult<i64>;
+    async fn count_bsp_associations_for_file_key(&self, file_key: &Hash) -> RepositoryResult<i64>;
 
     /// Get all payment streams for a user account
     ///

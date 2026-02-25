@@ -538,12 +538,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let new_desired = if is_system_sr {
                     prev_desired
                 } else {
-                    let current_bsp_count = File::count_bsp_associations_by_file_key(
-                        conn,
-                        file_key.as_ref().to_vec(),
-                    )
-                    .await
-                    .unwrap_or(0) as i32;
+                    let current_bsp_count =
+                        File::count_bsp_associations_by_file_key(conn, file_key.as_ref().to_vec())
+                            .await
+                            .unwrap_or(0) as i32;
                     std::cmp::max(prev_desired, current_bsp_count + bsps_required_val)
                 };
 

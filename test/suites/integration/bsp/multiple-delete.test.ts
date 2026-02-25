@@ -77,13 +77,13 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
     await userApi.block.seal({ calls: txs, signer: shUser });
 
     // Get the new storage request events, making sure we have 3
-    const storageRequestEvents = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
+    const storageRequestEvents = await userApi.assert.eventMany("fileSystem", "NewStorageRequestV2");
     strictEqual(storageRequestEvents.length, 3);
 
     // Get the file keys from the storage request events
     const fileKeys = storageRequestEvents.map((event) => {
       const dataBlob =
-        userApi.events.fileSystem.NewStorageRequest.is(event.event) && event.event.data;
+        userApi.events.fileSystem.NewStorageRequestV2.is(event.event) && event.event.data;
       assert(dataBlob, "Event doesn't match Type");
       return dataBlob.fileKey;
     });
@@ -230,14 +230,14 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
       // Get the new storage request events, making sure we have 3
       const storageRequestEvents = await userApi.assert.eventMany(
         "fileSystem",
-        "NewStorageRequest"
+        "NewStorageRequestV2"
       );
       strictEqual(storageRequestEvents.length, 3);
 
       // Get the file keys from the storage request events
       const fileKeys = storageRequestEvents.map((event) => {
         const dataBlob =
-          userApi.events.fileSystem.NewStorageRequest.is(event.event) && event.event.data;
+          userApi.events.fileSystem.NewStorageRequestV2.is(event.event) && event.event.data;
         assert(dataBlob, "Event doesn't match Type");
         return dataBlob.fileKey;
       });

@@ -186,7 +186,7 @@ await describeBspNet(
         signer: shUser
       });
 
-      await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+      await userApi.assert.eventPresent("fileSystem", "NewStorageRequestV2");
 
       // The BSP should skip volunteering for the same file it's already storing
       await bspApi.docker.waitForLog({
@@ -440,14 +440,14 @@ await describeBspNet(
       // Verify that all three storage requests were created
       const storageRequestEvents = await userApi.assert.eventMany(
         "fileSystem",
-        "NewStorageRequest"
+        "NewStorageRequestV2"
       );
       strictEqual(storageRequestEvents.length, 3);
 
       // Get the file keys from the storage request events
       const fileKeys = storageRequestEvents.map((event) => {
         const dataBlob =
-          userApi.events.fileSystem.NewStorageRequest.is(event.event) && event.event.data;
+          userApi.events.fileSystem.NewStorageRequestV2.is(event.event) && event.event.data;
         if (!dataBlob) {
           throw new Error("Event doesn't match Type");
         }

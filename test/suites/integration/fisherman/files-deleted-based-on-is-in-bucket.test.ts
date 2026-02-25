@@ -549,14 +549,14 @@ await describeMspNet(
 
       const { event: newStorageRequestEvent } = await userApi.assert.eventPresent(
         "fileSystem",
-        "NewStorageRequest"
+        "NewStorageRequestV2"
       );
 
       const newStorageRequestDataBlob =
-        userApi.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent) &&
+        userApi.events.fileSystem.NewStorageRequestV2.is(newStorageRequestEvent) &&
         newStorageRequestEvent.data;
 
-      assert(newStorageRequestDataBlob, "NewStorageRequest event data not found");
+      assert(newStorageRequestDataBlob, "NewStorageRequestV2 event data not found");
       const secondFileKey = newStorageRequestDataBlob.fileKey.toString();
 
       // Wait for BSP2 to volunteer for second request

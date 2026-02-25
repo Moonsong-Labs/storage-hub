@@ -67,12 +67,12 @@ await describeMspNet(
         signer: shUser
       });
 
-      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequestV2");
       const newStorageRequestDataBlob =
-        userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+        userApi.events.fileSystem.NewStorageRequestV2.is(event) && event.data;
       assert(
         newStorageRequestDataBlob,
-        "NewStorageRequest event data does not match expected type"
+        "NewStorageRequestV2 event data does not match expected type"
       );
 
       // Advancing 10 blocks to see if MSP catchup

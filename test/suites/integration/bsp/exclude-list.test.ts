@@ -52,7 +52,7 @@ await describeBspNet("BSP Exclude list tests", ({ before, createUserApi, it, cre
       signer: shUser
     });
 
-    await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+    await userApi.assert.eventPresent("fileSystem", "NewStorageRequestV2");
 
     await bspApi.assert.log({
       searchString: "Bucket is in the exclude list",

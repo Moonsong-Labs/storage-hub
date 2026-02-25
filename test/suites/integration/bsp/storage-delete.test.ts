@@ -114,7 +114,7 @@ await describeBspNet(
       // to replace the bsp leaving
       // TODO: add rpc to add user to blacklisted users to skip any storage request from them
       // TODO: add rpc to add bucket to blacklisted buckets to skip any storage request from them
-      await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+      await userApi.assert.eventPresent("fileSystem", "NewStorageRequestV2");
 
       // Wait for the right moment to confirm stop storing
       const currentBlock = await userApi.rpc.chain.getBlock();
