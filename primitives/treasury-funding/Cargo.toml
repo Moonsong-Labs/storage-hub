@@ -1,7 +1,7 @@
 [package]
 name = "shp-treasury-funding"
 description = "Function that determines how much of the charges from Providers goes to the treasury."
-version = "0.4.1"
+version = "0.4.2"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }

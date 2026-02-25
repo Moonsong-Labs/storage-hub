@@ -1,6 +1,6 @@
 [package]
 name = "shc-blockchain-service"
-version = "0.4.1"
+version = "0.4.2"
 description = "The blockchain service for StorageHub. Responsible for listening to the blockchain and interacting with the StorageHub runtime."
 homepage = { workspace = true }
 license = { workspace = true }

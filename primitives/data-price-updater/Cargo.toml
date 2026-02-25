@@ -2,7 +2,7 @@
 [package]
 name = "shp-data-price-updater"
 description = "Implementations of UpdateStoragePrice trait for File System pallet. This crate provides updaters with different formulas for updating the price of a unit of stored data."
-version = "0.4.1"
+version = "0.4.2"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }

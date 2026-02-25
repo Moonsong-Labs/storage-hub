@@ -1,7 +1,7 @@
 {
   "families": {
     "core_rust": {
-      "version": "0.4.1",
+      "version": "0.4.2",
       "roots": [
         ".",
         "backend",
@@ -15,16 +15,22 @@
       ]
     },
     "sdk": {
-      "version": "0.4.1",
-      "roots": ["sdk"]
+      "version": "0.4.2",
+      "roots": [
+        "sdk"
+      ]
     },
     "types_bundle": {
-      "version": "0.4.1",
-      "roots": ["types-bundle"]
+      "version": "0.4.2",
+      "roots": [
+        "types-bundle"
+      ]
     },
     "api_augment": {
-      "version": "0.4.1",
-      "roots": ["api-augment"]
+      "version": "0.4.2",
+      "roots": [
+        "api-augment"
+      ]
     }
   }
 }
