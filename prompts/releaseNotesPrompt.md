@@ -1,9 +1,9 @@
 I’m working in the Moonsong-Labs/storage-hub repository.
 
-VERSION: 0.4.1
-BASE: 325c93b684224d3b93024fa0f912e175fe2380ae
-HEAD: 72400309b7fdc659f60a2af486a43a6e94de0aec
-EXAMPLE_RELEASE_NOTES: @/Users/facundofarall/Desktop/Moonsong/storage-hub/.worktrees/release/v0.4/release/StorageHub-release0.4.0.md
+VERSION: 0.4.2
+BASE: b5d6eb2ffa153d97e079d1fda382773b466f4702
+HEAD: dbc8d424b1c0d4eb47b1ac6e4ebb05601efdad12
+EXAMPLE_RELEASE_NOTES: @/Users/tobidemeco/Desktop/Moonsong/storagehub/storage-hub/StorageHub-release0.4.0.md and @/Users/tobidemeco/Desktop/Moonsong/storagehub/storage-hub/StorageHub-release0.4.1.md
 
 Please create **release notes** for **StorageHub VERSION** based on the existing style and structure of:
 
