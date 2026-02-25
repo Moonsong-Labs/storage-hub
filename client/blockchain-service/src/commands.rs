@@ -354,7 +354,7 @@ where
                             // Try to decode module errors to get human-readable error names
                             let error_description = match &dispatch_error {
                                 DispatchError::Module(module_error) => {
-                                    match decode_module_error::<Runtime>(module_error.clone()) {
+                                    match decode_module_error::<Runtime>(*module_error) {
                                         Ok(decoded) => format!("{:?}", decoded),
                                         Err(_) => format!("{:?}", dispatch_error),
                                     }

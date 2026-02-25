@@ -278,8 +278,19 @@ where
         file_transfer_request_protocol
             .expect("FileTransfer request protocol should already be initialised.");
 
+    let trusted_msps = match &role_options {
+        RoleOptions::Provider(ProviderOptions {
+            provider_type: ProviderType::Bsp,
+            trusted_msps,
+            ..
+        }) => trusted_msps.clone(),
+        _ => Vec::new(),
+    };
+
     builder
         .with_file_transfer(
+            client.clone(),
+            trusted_msps,
             file_transfer_request_receiver,
             file_transfer_request_protocol_name,
             network.clone(),
@@ -307,6 +318,7 @@ where
             trusted_file_transfer_server,
             trusted_file_transfer_server_host,
             trusted_file_transfer_server_port,
+            trusted_file_transfer_batch_size_bytes,
             ..
         }) => {
             info!(
@@ -346,11 +358,18 @@ where
             }
 
             if *trusted_file_transfer_server {
+                let batch_target_bytes = (*trusted_file_transfer_batch_size_bytes)
+                    .and_then(|size| usize::try_from(size).ok())
+                    .unwrap_or(
+                        shc_client::trusted_file_transfer::server::DEFAULT_BATCH_TARGET_BYTES,
+                    );
+
                 let file_transfer_config = shc_client::trusted_file_transfer::server::Config {
                     host: trusted_file_transfer_server_host
                         .clone()
                         .unwrap_or_else(|| "127.0.0.1".to_string()),
                     port: trusted_file_transfer_server_port.unwrap_or(7070),
+                    batch_target_bytes,
                 };
                 builder.with_trusted_file_transfer_server(file_transfer_config);
             }

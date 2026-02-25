@@ -160,6 +160,10 @@ export class NetworkLauncher {
       }
     }
 
+    // Always allow the primary BSP to accept download requests from the main MSP in tests.
+    // We only set this for the main BSP ("sh-bsp"), not for bspTwo/bspThree created later via addBsp.
+    composeYaml.services["sh-bsp"].command.push(`--trusted-msps=${DUMMY_MSP_ID}`);
+
     // Configure fisherman service
     if (!this.config.fisherman || this.type !== "fullnet") {
       if (composeYaml.services["sh-fisherman"]) {
@@ -921,6 +925,7 @@ export class NetworkLauncher {
     // One BSP will be down, two more will be up.
     const runtimeTypeArgs =
       this.config.runtimeType === "solochain" ? ["--chain=solochain-evm-dev"] : [];
+    const logLevelArgs = this.config.logLevel ? [`-l${this.config.logLevel}`] : [];
     const { containerName: bspDownContainerName, rpcPort: bspDownRpcPort } = await addBsp(
       api,
       api.accounts.bspDownKey,
@@ -931,7 +936,7 @@ export class NetworkLauncher {
         bspId: ShConsts.BSP_DOWN_ID,
         bspStartingWeight: this.config.capacity,
         extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-        additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs]
+        additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
     const { rpcPort: bspTwoRpcPort } = await addBsp(
@@ -944,7 +949,7 @@ export class NetworkLauncher {
         bspId: ShConsts.BSP_TWO_ID,
         bspStartingWeight: this.config.capacity,
         extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-        additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs]
+        additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
     const { rpcPort: bspThreeRpcPort } = await addBsp(
@@ -957,7 +962,7 @@ export class NetworkLauncher {
         bspId: ShConsts.BSP_THREE_ID,
         bspStartingWeight: this.config.capacity,
         extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-        additionalArgs: ["--keystore-path=/keystore/bsp-three", ...runtimeTypeArgs]
+        additionalArgs: ["--keystore-path=/keystore/bsp-three", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
 
