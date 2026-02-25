@@ -20,4 +20,8 @@ export interface FileInfo {
    * Will be undefined for files created via native Substrate extrinsics.
    */
   txHash?: `0x${string}`;
+  /** Rolling target replication level for this file key. Present in API responses. */
+  desiredReplicas?: number;
+  /** Current number of BSPs storing this file. Present in API responses. */
+  currentReplication?: number;
 }
