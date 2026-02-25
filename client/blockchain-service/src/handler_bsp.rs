@@ -206,9 +206,21 @@ where
         match self.role {
             MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {
-                    // New storage request event coming from pallet-file-system.
+                    // New storage request events coming from pallet-file-system.
                     StorageEnableEvents::FileSystem(
                         pallet_file_system::Event::NewStorageRequest {
+                            who,
+                            file_key,
+                            bucket_id,
+                            location,
+                            fingerprint,
+                            size,
+                            peer_ids,
+                            expires_at,
+                        },
+                    )
+                    | StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::NewStorageRequestV2 {
                             who,
                             file_key,
                             bucket_id,

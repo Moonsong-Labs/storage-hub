@@ -95,6 +95,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::MoveBucketRejected { .. } => true,
             // Storage request lifecycle events
             pallet_file_system::Event::NewStorageRequest { .. } => true,
+            pallet_file_system::Event::NewStorageRequestV2 { .. } => true,
             pallet_file_system::Event::MspAcceptedStorageRequest { .. } => true,
             pallet_file_system::Event::StorageRequestFulfilled { .. } => true,
             pallet_file_system::Event::StorageRequestExpired { .. } => true,

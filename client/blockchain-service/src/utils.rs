@@ -2106,9 +2106,18 @@ where
                 size,
                 peer_ids,
                 expires_at,
+            })
+            | StorageEnableEvents::FileSystem(pallet_file_system::Event::NewStorageRequestV2 {
+                who,
+                file_key,
+                bucket_id,
+                location,
+                fingerprint,
+                size,
+                peer_ids,
+                expires_at,
                 ..
             }) if who == Self::caller_pub_key(self.keystore.clone()).into() => {
-                // This event should only be of any use if a node is run as a user (not BSP/MSP).
                 if self.maybe_managed_provider.is_none() {
                     log::info!(
                         target: LOG_TARGET,

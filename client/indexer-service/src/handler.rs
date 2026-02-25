@@ -393,6 +393,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
 
             // Storage request lifecycle events
+            // Legacy V1 event kept for backward compatibility during the upgrade window.
             pallet_file_system::Event::NewStorageRequest {
                 who,
                 file_key,
@@ -402,8 +403,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 size,
                 peer_ids,
                 expires_at: _,
-                bsps_required,
-                msp_id,
             } => {
                 let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec())
                     .await
@@ -428,11 +427,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let size: i64 = size.saturated_into();
                 let who = who.as_ref().to_vec();
 
-                // Get the runtime-specific block hash from storage.
-                // For a standard Substrate runtime, the Ethereum block hash won't exist in storage,
-                // so we'll fallback to using the Substrate block hash (blake2_256) which is what we want.
-                // For a EVM-compatible runtime, we'll get the EVM block hash (keccak256) from storage,
-                // which is different from the Substrate block hash.
                 let block_number_u32: u32 = block_number.saturated_into();
                 let runtime_block_hash =
                     get_ethereum_block_hash(&self.client, &block_hash, block_number_u32)
@@ -440,14 +434,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         .unwrap_or(block_hash);
                 let block_hash_bytes = runtime_block_hash.as_bytes().to_vec();
 
-                // Convert EVM tx hash to bytes if present
                 let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
 
-                // Check if this file key is already present in the bucket of the MSP
-                // This could happen if there was a previous storage request for this file key that
-                // the MSP accepted, and the new storage request was issued by the user to add redundancy to it.
-                // We do this check because in this scenario,the `MutationsApplied` event won't be emitted for this
-                // file key when the MSP accepts it, as the MSP is already storing it.
                 let is_in_bucket = File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
                     .await
                     .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
@@ -457,9 +445,83 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             .to_string(),
                     })?;
 
-                // Compute desired_replicas using the rolling max formula.
-                // System-initiated SRs (msp_id is None) carry forward the previous desired value.
-                // User-initiated SRs (msp_id is Some) apply: max(prev_desired, current_bsp_count + bsps_required).
+                File::create(
+                    conn,
+                    who,
+                    file_key.as_ref().to_vec(),
+                    bucket.id,
+                    bucket_id.as_ref().to_vec(),
+                    location.to_vec(),
+                    fingerprint.as_ref().to_vec(),
+                    size,
+                    FileStorageRequestStep::Requested,
+                    sql_peer_ids,
+                    block_hash_bytes,
+                    tx_hash_bytes,
+                    is_in_bucket,
+                    0,
+                    0,
+                )
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "NewStorageRequest (create file step)".to_string(),
+                })?;
+            }
+            pallet_file_system::Event::NewStorageRequestV2 {
+                who,
+                file_key,
+                bucket_id,
+                location,
+                fingerprint,
+                size,
+                peer_ids,
+                expires_at: _,
+                bsps_required,
+                msp_id,
+            } => {
+                let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "NewStorageRequestV2 (get bucket)".to_string(),
+                    })?;
+
+                let mut sql_peer_ids = Vec::new();
+                for peer_id in peer_ids {
+                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await.map_err(
+                        |e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "NewStorageRequestV2 (create peer ID)".to_string(),
+                        },
+                    )?);
+                }
+
+                let size: u64 = (*size).saturated_into();
+                let size: i64 = size.saturated_into();
+                let who = who.as_ref().to_vec();
+
+                let block_number_u32: u32 = block_number.saturated_into();
+                let runtime_block_hash =
+                    get_ethereum_block_hash(&self.client, &block_hash, block_number_u32)
+                        .unwrap_or(None)
+                        .unwrap_or(block_hash);
+                let block_hash_bytes = runtime_block_hash.as_bytes().to_vec();
+
+                let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
+                let is_in_bucket = File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "NewStorageRequestV2 (check if file key is in bucket)"
+                            .to_string(),
+                    })?;
+
                 let is_system_sr = msp_id.is_none();
                 let bsps_required_val: i32 = if is_system_sr {
                     1i32
@@ -506,7 +568,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
                     database_error: e,
                     block_number: block_number.saturated_into(),
-                    event_name: "NewStorageRequest (create file step)".to_string(),
+                    event_name: "NewStorageRequestV2 (create file step)".to_string(),
                 })?;
             }
             pallet_file_system::Event::MspAcceptedStorageRequest {

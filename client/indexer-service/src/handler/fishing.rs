@@ -69,7 +69,8 @@ where
                 }
 
                 // Storage request lifecycle events
-                pallet_file_system::Event::NewStorageRequest { .. } => {
+                pallet_file_system::Event::NewStorageRequest { .. }
+                | pallet_file_system::Event::NewStorageRequestV2 { .. } => {
                     trace!(target: LOG_TARGET, "Indexing NewStorageRequest event");
                     self.index_file_system_event(
                         conn,

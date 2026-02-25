@@ -2694,7 +2694,7 @@ mod request_storage {
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
-                    Event::NewStorageRequest {
+                    Event::NewStorageRequestV2 {
                         who: owner_account_id,
                         file_key,
                         bucket_id,
@@ -2868,7 +2868,7 @@ mod request_storage {
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
-                    Event::NewStorageRequest {
+                    Event::NewStorageRequestV2 {
                         who: owner_account_id,
                         file_key,
                         bucket_id,

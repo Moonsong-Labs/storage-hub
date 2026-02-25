@@ -645,8 +645,6 @@ pub mod pallet {
             size: StorageDataUnit<T>,
             peer_ids: PeerIds<T>,
             expires_at: TickNumber<T>,
-            bsps_required: ReplicationTargetType<T>,
-            msp_id: Option<ProviderIdFor<T>>,
         },
         /// Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
         ///
@@ -824,6 +822,20 @@ pub mod pallet {
         UserOperationPauseFlagsUpdated {
             old: UserOperationPauseFlags,
             new: UserOperationPauseFlags,
+        },
+        /// V2 of [`NewStorageRequest`] that includes `bsps_required` and `msp_id`.
+        #[codec(index = 30)]
+        NewStorageRequestV2 {
+            who: T::AccountId,
+            file_key: MerkleHash<T>,
+            bucket_id: BucketIdFor<T>,
+            location: FileLocation<T>,
+            fingerprint: Fingerprint<T>,
+            size: StorageDataUnit<T>,
+            peer_ids: PeerIds<T>,
+            expires_at: TickNumber<T>,
+            bsps_required: ReplicationTargetType<T>,
+            msp_id: Option<ProviderIdFor<T>>,
         },
     }
 

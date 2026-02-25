@@ -1145,7 +1145,7 @@ where
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
         <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
-        Self::deposit_event(Event::NewStorageRequest {
+        Self::deposit_event(Event::NewStorageRequestV2 {
             who: sender,
             file_key,
             bucket_id,
