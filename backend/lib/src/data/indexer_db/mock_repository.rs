@@ -326,6 +326,24 @@ impl IndexerOps for MockRepository {
             .ok_or_else(|| RepositoryError::not_found("File"))
     }
 
+    async fn get_desired_replicas_for_file_key(&self, file_key: &Hash) -> RepositoryResult<i32> {
+        let files = self.files.read().await;
+        let max_desired = files
+            .values()
+            .filter(|f| f.file_key.as_slice() == file_key.as_bytes())
+            .map(|f| f.desired_replicas)
+            .max()
+            .unwrap_or(0);
+        Ok(max_desired)
+    }
+
+    async fn count_bsp_associations_for_file_key(
+        &self,
+        _file_key: &Hash,
+    ) -> RepositoryResult<i64> {
+        Ok(0)
+    }
+
     async fn get_number_of_files_stored_by_msp(
         &self,
         onchain_msp_id: &OnchainMspId,
@@ -529,6 +547,8 @@ impl IndexerOpsMut for MockRepository {
             is_in_bucket: false,
             block_hash: vec![0u8; 32], // Placeholder block hash for test data
             tx_hash: None,             // No transaction hash for test data
+            bsps_required: 0,
+            desired_replicas: 0,
         };
 
         // Update bucket statistics

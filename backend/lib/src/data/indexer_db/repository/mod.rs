@@ -120,6 +120,13 @@ pub trait IndexerOps: Send + Sync {
     /// * `key` - the File Key to search
     async fn get_file_by_file_key(&self, file_key: &Hash) -> RepositoryResult<File>;
 
+    /// Get the maximum `desired_replicas` value across all file records for the given file key.
+    async fn get_desired_replicas_for_file_key(&self, file_key: &Hash) -> RepositoryResult<i32>;
+
+    /// Count the number of BSP-file associations for all file records sharing the given file key.
+    async fn count_bsp_associations_for_file_key(&self, file_key: &Hash)
+        -> RepositoryResult<i64>;
+
     /// Get all payment streams for a user account
     ///
     /// # Arguments
