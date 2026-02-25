@@ -1,6 +1,7 @@
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Deserializer};
 use shp_types::StorageDataUnit;
+use sp_core::H256;
 use std::{path::PathBuf, str::FromStr};
 
 use crate::command::ProviderOptions;
@@ -425,6 +426,29 @@ pub struct ProviderConfigurations {
         default_value = "7070"
     )]
     pub trusted_file_transfer_server_port: Option<u16>,
+
+    /// Batch size in bytes used by MSP trusted upload ingestion (default: 2MB).
+    #[arg(
+        long,
+        value_name = "BYTES",
+        help_heading = "Trusted File Transfer Server Options",
+        default_value = "2097152",
+        value_parser = clap::value_parser!(u64).range(1..)
+    )]
+    pub trusted_file_transfer_batch_size_bytes: Option<u64>,
+
+    /// List of trusted MSP on-chain IDs allowed to request downloads from this BSP.
+    ///
+    /// This flag is only valid when running as a BSP provider.
+    ///
+    /// Format: comma-separated list of hex IDs, e.g. `0x…`.
+    #[arg(
+        long = "trusted-msps",
+        value_delimiter = ',',
+        value_name = "MSP_ID",
+        help_heading = "BSP Download Authorisation"
+    )]
+    pub trusted_msps: Vec<H256>,
 }
 
 impl ProviderConfigurations {
@@ -593,6 +617,8 @@ impl ProviderConfigurations {
             trusted_file_transfer_server: self.trusted_file_transfer_server,
             trusted_file_transfer_server_host: self.trusted_file_transfer_server_host.clone(),
             trusted_file_transfer_server_port: self.trusted_file_transfer_server_port,
+            trusted_file_transfer_batch_size_bytes: self.trusted_file_transfer_batch_size_bytes,
+            trusted_msps: self.trusted_msps.clone(),
         }
     }
 }
@@ -871,10 +897,11 @@ pub struct Cli {
         "check_for_pending_proofs_period",
         "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
         "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", "msp_database_url",
+        "trusted_file_transfer_batch_size_bytes",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
-        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts"
+        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts", "trusted_msps",
     ])]
     pub provider_config_file: Option<String>,
 

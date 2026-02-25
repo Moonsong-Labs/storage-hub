@@ -78,14 +78,14 @@ impl FileInfo {
             size: db.size as u64,
             is_public,
             uploaded_at: db.updated_at.and_utc(),
-            status: Self::status_from_db(&db),
+            status: Self::status_from_db(db),
             block_hash: hex::encode(&db.block_hash),
-            tx_hash: db.tx_hash.as_ref().map(|hash| hex::encode(hash)),
+            tx_hash: db.tx_hash.as_ref().map(hex::encode),
         }
     }
 
     pub fn fingerprint_hexstr(&self) -> String {
-        hex::encode(&self.fingerprint)
+        hex::encode(self.fingerprint)
     }
 }
 
