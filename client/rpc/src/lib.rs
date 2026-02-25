@@ -259,6 +259,16 @@ pub trait StorageHubClientApi {
         forest_key: Option<shp_types::Hash>,
     ) -> RpcResult<Option<shp_types::Hash>>;
 
+    /// Check if a forest storage is present for the given forest key.
+    ///
+    /// In the case of a BSP node, the forest key is empty since it only maintains a single forest.
+    /// In the case of an MSP node, the forest key is a bucket id.
+    #[method(name = "isForestStoragePresent")]
+    async fn is_forest_storage_present(
+        &self,
+        forest_key: Option<shp_types::Hash>,
+    ) -> RpcResult<bool>;
+
     #[method(name = "isFileInForest")]
     async fn is_file_in_forest(
         &self,
@@ -840,6 +850,30 @@ where
         }
 
         Ok(maybe_root)
+    }
+
+    async fn is_forest_storage_present(
+        &self,
+        forest_key: Option<shp_types::Hash>,
+    ) -> RpcResult<bool> {
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
+
+        let result = self
+            .forest_storage_handler
+            .is_forest_storage_present(&forest_key)
+            .await;
+
+        info!(
+            target: LOG_TARGET,
+            "is_forest_storage_present for forest_key=[{}]. Result: {}",
+            hex::encode(forest_key),
+            result
+        );
+
+        Ok(result)
     }
 
     async fn is_file_in_forest(

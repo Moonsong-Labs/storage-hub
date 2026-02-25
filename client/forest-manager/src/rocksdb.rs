@@ -182,6 +182,13 @@ where
     overlay: PrefixedMemoryDB<HashT<T>>,
     /// Root hash of the forest.
     root: HasherOutT<T>,
+    /// Flag set when this forest is being deleted.
+    /// All `Arc<RwLock<RocksDBForestStorage>>` clones pointing to the same
+    /// instance share this flag since they share the same `RwLock`-protected struct.
+    /// Once set, all [`ForestStorage`] operations return an error.
+    /// Internal `HashDB` methods are low-level trie plumbing and are not guarded by this flag,
+    /// but that's fine since they do not perform any operations on the storage.
+    pub deleting: bool,
 }
 
 impl<T, DB> RocksDBForestStorage<T, DB>
@@ -203,6 +210,7 @@ where
                     storage,
                     overlay: Default::default(),
                     root,
+                    deleting: false,
                 }
             }
             None => {
@@ -214,6 +222,7 @@ where
                     storage,
                     overlay: Default::default(),
                     root,
+                    deleting: false,
                 };
 
                 // Create a new trie
@@ -246,6 +255,9 @@ where
     /// This will write the changes applied to the overlay, including the [`root`](`RocksDBForestStorage::root`). If the root has not changed, the commit will be skipped.
     /// The `overlay` will be cleared.
     pub fn commit(&mut self) -> Result<(), ErrorT<T>> {
+        if self.deleting {
+            return Err(ForestStorageError::ForestDeleted.into());
+        }
         let root = &self
             .storage
             .storage_root()?
@@ -345,6 +357,9 @@ where
     }
 
     fn contains_file_key(&self, file_key: &HasherOutT<T>) -> Result<bool, ErrorT<T>> {
+        if self.deleting {
+            return Err(ForestStorageError::ForestDeleted.into());
+        }
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
         Ok(trie.contains(file_key.as_ref())?)
@@ -354,6 +369,9 @@ where
         &self,
         file_key: &HasherOutT<T>,
     ) -> Result<Option<FileMetadata>, ErrorT<T>> {
+        if self.deleting {
+            return Err(ForestStorageError::ForestDeleted.into());
+        }
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
         let encoded_metadata = trie.get(file_key.as_ref())?;
@@ -367,6 +385,9 @@ where
     }
 
     fn get_all_files(&self) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>> {
+        if self.deleting {
+            return Err(ForestStorageError::ForestDeleted.into());
+        }
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
         let mut files = Vec::new();
@@ -387,6 +408,9 @@ where
         &self,
         challenged_file_keys: Vec<HasherOutT<T>>,
     ) -> Result<ForestProof<T>, ErrorT<T>> {
+        if self.deleting {
+            return Err(ForestStorageError::ForestDeleted.into());
+        }
         let recorder: Recorder<T::Hash> = Recorder::default();
 
         // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
@@ -423,6 +447,9 @@ where
         &mut self,
         files_metadata: &[FileMetadata],
     ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>> {
+        if self.deleting {
+            return Err(ForestStorageError::ForestDeleted.into());
+        }
         if files_metadata.is_empty() {
             return Ok(Vec::new());
         }
@@ -467,6 +494,9 @@ where
     }
 
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
+        if self.deleting {
+            return Err(ForestStorageError::ForestDeleted.into());
+        }
         let mut root = self.root;
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
@@ -490,6 +520,9 @@ where
         &self,
         user: &Runtime::AccountId,
     ) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>> {
+        if self.deleting {
+            return Err(ForestStorageError::ForestDeleted.into());
+        }
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
         let mut files = Vec::new();

@@ -94,6 +94,16 @@ export const rpcDefinitions = {
             ],
             type: "Option<H256>"
         },
+        isForestStoragePresent: {
+            description: "Check if a forest storage is present for the given forest key.",
+            params: [
+                {
+                    name: "forest_key",
+                    type: "Option<H256>"
+                }
+            ],
+            type: "bool"
+        },
         isFileInForest: {
             description: "Check if a file is in the forest.",
             params: [
