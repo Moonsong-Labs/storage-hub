@@ -25,9 +25,8 @@ use shp_types::Hash;
 use crate::{
     constants::{mocks::MOCK_ADDRESS, rpc::DUMMY_MSP_ID, test},
     data::indexer_db::repository::{
-        BucketsPage,
         error::{RepositoryError, RepositoryResult},
-        IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
+        BucketsPage, IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
     },
     test_utils::{random_bytes_32, random_hash},
 };

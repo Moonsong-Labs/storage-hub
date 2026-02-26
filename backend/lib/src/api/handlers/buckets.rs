@@ -24,7 +24,10 @@ pub async fn list_buckets(
     Pagination { limit, offset }: Pagination,
 ) -> Result<impl IntoResponse, Error> {
     debug!(user = %address, "GET list buckets");
-    let page = services.msp.list_user_buckets(&address, offset, limit).await?;
+    let page = services
+        .msp
+        .list_user_buckets(&address, offset, limit)
+        .await?;
 
     Ok(Json(ListBucketsResponse {
         buckets: page.buckets,

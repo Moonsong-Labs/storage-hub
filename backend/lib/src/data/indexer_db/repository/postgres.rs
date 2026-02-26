@@ -86,9 +86,9 @@ impl BucketPageRow {
             onchain_bucket_id: self.onchain_bucket_id.ok_or_else(|| {
                 RepositoryError::configuration("missing onchain_bucket_id field in bucket row")
             })?,
-            name: self
-                .name
-                .ok_or_else(|| RepositoryError::configuration("missing name field in bucket row"))?,
+            name: self.name.ok_or_else(|| {
+                RepositoryError::configuration("missing name field in bucket row")
+            })?,
             collection_id: self.collection_id,
             private: self.private.ok_or_else(|| {
                 RepositoryError::configuration("missing private field in bucket row")
@@ -241,7 +241,11 @@ impl IndexerOps for Repository {
         .load::<BucketPageRow>(&mut conn)
         .await?;
 
-        let total_count = rows.as_slice().first().map(|row| row.total_count).unwrap_or(0);
+        let total_count = rows
+            .as_slice()
+            .first()
+            .map(|row| row.total_count)
+            .unwrap_or(0);
         let total = u64::try_from(total_count).map_err(|_| {
             RepositoryError::configuration(format!(
                 "bucket count should be non-negative, got {total_count}"
@@ -884,8 +888,7 @@ mod tests {
             .expect("Failed to get user buckets");
 
         assert_eq!(
-            buckets_page.total,
-            3,
+            buckets_page.total, 3,
             "Should have 3 buckets for BUCKET_ACCOUNT with MSP #2"
         );
         assert_eq!(
@@ -933,7 +936,10 @@ mod tests {
             .await
             .expect("Failed to get limited buckets");
         assert_eq!(limited_buckets.total, 3, "Total should remain unpaginated");
-        assert!(limited_buckets.buckets.len() <= 2, "Should return at most 2 buckets with limit");
+        assert!(
+            limited_buckets.buckets.len() <= 2,
+            "Should return at most 2 buckets with limit"
+        );
 
         // Test with offset
         let offset_buckets = repo
@@ -941,10 +947,12 @@ mod tests {
             .await
             .expect("Failed to get offset buckets");
         assert_eq!(offset_buckets.total, 3, "Total should remain unpaginated");
-        assert!(!offset_buckets.buckets.is_empty(), "Should have buckets after offset");
+        assert!(
+            !offset_buckets.buckets.is_empty(),
+            "Should have buckets after offset"
+        );
         assert_ne!(
-            limited_buckets.buckets[0].name,
-            offset_buckets.buckets[0].name,
+            limited_buckets.buckets[0].name, offset_buckets.buckets[0].name,
             "Should skip first bucket"
         );
 
@@ -953,14 +961,16 @@ mod tests {
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 2, 1)
             .await
             .expect("Failed to get offset buckets");
-        assert_eq!(paginated_buckets.total, 3, "Total should remain unpaginated");
+        assert_eq!(
+            paginated_buckets.total, 3,
+            "Total should remain unpaginated"
+        );
         assert!(
             paginated_buckets.buckets.len() <= 2,
             "Should return at most 2 buckets with limit"
         );
         assert_ne!(
-            limited_buckets.buckets[0].name,
-            paginated_buckets.buckets[0].name,
+            limited_buckets.buckets[0].name, paginated_buckets.buckets[0].name,
             "Should skip first bucket"
         );
     }
@@ -994,8 +1004,7 @@ mod tests {
             .expect("Failed to get target user buckets");
 
         assert_eq!(
-            target_buckets.total,
-            1,
+            target_buckets.total, 1,
             "Should return exactly 1 bucket for BUCKET_ACCOUNT (from snapshot)"
         );
         assert_eq!(target_buckets.buckets.len(), 1);
@@ -1017,11 +1026,13 @@ mod tests {
             .await
             .expect("Failed to get other user buckets");
 
-        assert_eq!(other_user_buckets.total, 1, "Other user should have their own bucket");
+        assert_eq!(
+            other_user_buckets.total, 1,
+            "Other user should have their own bucket"
+        );
         assert_eq!(other_user_buckets.buckets.len(), 1);
         assert_ne!(
-            other_user_buckets.buckets[0].id,
-            target_buckets.buckets[0].id,
+            other_user_buckets.buckets[0].id, target_buckets.buckets[0].id,
             "Should be different buckets"
         );
     }
@@ -1054,8 +1065,7 @@ mod tests {
             .expect("Failed to get MSP #1 buckets");
 
         assert_eq!(
-            msp1_buckets.total,
-            1,
+            msp1_buckets.total, 1,
             "Should return exactly 1 bucket for MSP #1 (from our insert)"
         );
         assert_eq!(msp1_buckets.buckets.len(), 1);
@@ -1067,8 +1077,7 @@ mod tests {
             "Bucket should have MSP #1"
         );
         assert_eq!(
-            msp1_buckets.buckets[0].name,
-            msp1_bucket_name,
+            msp1_buckets.buckets[0].name, msp1_bucket_name,
             "Should be our MSP1 bucket"
         );
 
@@ -1079,8 +1088,7 @@ mod tests {
             .expect("Failed to get MSP #2 buckets");
 
         assert_eq!(
-            msp2_buckets.total,
-            1,
+            msp2_buckets.total, 1,
             "Should return exactly 1 bucket for MSP #2 (from snapshot)"
         );
         assert_eq!(msp2_buckets.buckets.len(), 1);
@@ -1126,8 +1134,7 @@ mod tests {
             .expect("Failed to get MSP #2 buckets");
 
         assert_eq!(
-            msp_buckets.total,
-            1,
+            msp_buckets.total, 1,
             "Should return exactly 1 bucket with MSP #2 (excluding NULL MSP bucket)"
         );
         assert_eq!(msp_buckets.buckets.len(), 1);
@@ -1146,8 +1153,7 @@ mod tests {
 
         // Verify NULL MSP bucket is not included
         assert_ne!(
-            msp_buckets.buckets[0].name,
-            no_msp_bucket_name,
+            msp_buckets.buckets[0].name, no_msp_bucket_name,
             "Should not include the NULL MSP bucket"
         );
     }
