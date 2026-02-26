@@ -10,8 +10,6 @@ import type {
 import { ModuleBase } from "../base.js";
 import { ensure0xPrefix, parseDate } from "@storagehub-sdk/core";
 
-const BACKEND_MAX_BUCKETS_PER_PAGE = 500;
-
 type BucketWire = Omit<Bucket, "bucketId" | "root" | "valuePropId"> & {
   bucketId: `0x${string}`;
   root: `0x${string}`;
@@ -77,36 +75,37 @@ function fixFileTree(item: FileTreeWire): FileTree {
 }
 
 export class BucketsModule extends ModuleBase {
-  /**
-   * List first page of buckets for the current authenticated user
-   *
-   * - `limit` defaults to 100
-   * - `limit` is capped at 500 (backend max)
-   */
+  /** List first page of buckets for the current authenticated user. */
   async listBuckets(options?: ListBucketsInput): Promise<Bucket[]> {
     const res = await this.listBucketsByPage({ ...(options ?? {}), page: 0 });
     return res.buckets;
   }
 
-  /** Fetch a single page of buckets using backend pagination (`page` + `limit`). */
-  async listBucketsByPage(options: ListBucketsInput = {}): Promise<ListBucketsByPage> {
-    const limit = options.limit ?? 100;
-    const page = options.page ?? 0;
+  /**
+   * Fetch a single page of buckets using backend pagination (`page` + `limit`).
+   *
+   * - `limit` defaults to 100
+   * - Backend enforces maximum page size
+   */
+  async listBucketsByPage(options?: ListBucketsInput): Promise<ListBucketsByPage> {
+    const opts = options ?? {};
+    const requestedLimit = opts.limit ?? 100;
+    const requestePage = opts.page ?? 0;
     const headers = await this.withAuth();
-    const cappedLimit = Math.min(Math.max(1, limit), BACKEND_MAX_BUCKETS_PER_PAGE);
-    const safePage = Math.max(0, Math.floor(page));
+    const limit = Math.max(1, Math.floor(requestedLimit));
+    const page = Math.max(0, Math.floor(requestePage));
 
     const wire = await this.ctx.http.get<ListBucketsByPageWire>("/buckets", {
       ...(headers ? { headers } : {}),
-      ...(options.signal ? { signal: options.signal } : {}),
-      query: { page: safePage, limit: cappedLimit }
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      query: { page, limit }
     });
 
     const buckets = wire.buckets.map(fixBucket);
     return {
       buckets,
-      page: safePage,
-      limit: cappedLimit,
+      page,
+      limit,
       totalBuckets: BigInt(wire.totalBuckets)
     };
   }
