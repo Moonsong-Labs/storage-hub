@@ -1,8 +1,15 @@
-use std::{collections::HashSet, io, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashSet},
+    io,
+    num::NonZeroUsize,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::{debug, error, info};
+use lru::LruCache;
 use shc_common::types::{
     Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
@@ -64,6 +71,8 @@ impl Into<u32> for Column {
 
 // Replace NUMBER_OF_COLUMNS definition
 const NUMBER_OF_COLUMNS: u32 = Column::COUNT as u32;
+const BATCH_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+const BATCH_CACHE_MAX_ENTRIES: usize = 4096;
 
 // Helper function to map ExcludeType enum to their matching rocksdb column.
 fn get_exclude_type_db_column(exclude_type: ExcludeType) -> u32 {
@@ -220,15 +229,62 @@ where
         Ok(())
     }
 
+    /// Batched write fast-path: insert many chunks into the trie overlay.
+    ///
+    /// This method intentionally does not persist to RocksDB on its own.
+    /// The caller is expected to drain overlay changes and commit them together with
+    /// related metadata updates (e.g. roots + chunk counters) in one transaction.
+    /// Returns `(new_root, new_insertions)` where `new_insertions` is the number of chunks
+    /// that were genuinely new (i.e. their `ChunkId` was not already present in the trie).
+    fn insert_chunks_batched(
+        &mut self,
+        chunks: Vec<(ChunkId, Chunk)>,
+    ) -> Result<(HasherOutT<T>, u64), FileStorageWriteError> {
+        if chunks.is_empty() {
+            return Ok((self.root, 0));
+        }
+
+        let mut current_root = self.root;
+        let db = self.as_hash_db_mut();
+        let mut trie = TrieDBMutBuilder::<T>::from_existing(db, &mut current_root).build();
+
+        let mut new_insertions: u64 = 0;
+        for (chunk_id, data) in chunks {
+            let decoded_chunk = ChunkWithId { chunk_id, data };
+            let encoded_chunk = decoded_chunk.encode();
+            let old_value = trie
+                .insert(&chunk_id.as_trie_key(), &encoded_chunk)
+                .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
+            if old_value.is_none() {
+                new_insertions += 1;
+            }
+        }
+
+        let new_root = *trie.root();
+        drop(trie);
+
+        Ok((new_root, new_insertions))
+    }
+
     /// Builds a database transaction from the overlay and clears it.
+    ///
+    /// This is useful for composing a single RocksDB write that includes both trie node updates
+    /// and other metadata updates (e.g. roots + chunk counters) for batch writes.
+    ///
+    /// Reference count semantics: the overlay tracks deltas against the persistent DB.
+    /// - `rc > 0`: new data, write to DB.
+    /// - `rc < 0`: removed data, delete from DB.
+    /// - `rc == 0`: net no change (e.g. a node was removed by the trie's death-row and then
+    ///   re-inserted during commit encoding with the same hash). Skipped so that the
+    ///   existing DB entry is preserved.
     fn changes(&mut self) -> DBTransaction {
         let mut transaction = DBTransaction::new();
 
         for (key, (value, rc)) in self.overlay.drain() {
-            if rc <= 0 {
-                transaction.delete(Column::Chunks.into(), &key);
-            } else {
+            if rc > 0 {
                 transaction.put_vec(Column::Chunks.into(), &key, value);
+            } else if rc < 0 {
+                transaction.delete(Column::Chunks.into(), &key);
             }
         }
 
@@ -477,7 +533,27 @@ where
     }
 }
 
-/// Manages file metadata, chunks, and proofs using RocksDB as backend.
+/// Cached per-file state reused across batched writes.
+struct BatchWriteCacheState<T: TrieLayout> {
+    metadata: FileMetadata,
+    partial_root: HasherOutT<T>,
+    chunk_count: u64,
+}
+
+struct BatchCacheEntry<T: TrieLayout> {
+    state: Option<BatchWriteCacheState<T>>,
+    last_touched: Instant,
+}
+
+impl<T: TrieLayout> BatchCacheEntry<T> {
+    fn new(now: Instant) -> Self {
+        Self {
+            state: None,
+            last_touched: now,
+        }
+    }
+}
+
 pub struct RocksDbFileStorage<T, DB>
 where
     T: TrieLayout + 'static,
@@ -485,6 +561,13 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     storage: StorageDb<T, DB>,
+    batch_states: LruCache<Vec<u8>, BatchCacheEntry<T>>,
+    /// Auxiliary index mapping `last_touched` timestamps to cache keys, ordered
+    /// chronologically. This allows [`Self::prune_batch_cache`] to iterate from
+    /// the oldest entry and stop as soon as it finds a non-expired one, instead
+    /// of scanning every entry in the LRU.
+    batch_expiry_order: BTreeMap<Instant, Vec<u8>>,
+    batch_cache_ttl: Duration,
 }
 
 impl<T: TrieLayout, DB> RocksDbFileStorage<T, DB>
@@ -567,7 +650,33 @@ where
 
     /// Creates a new file storage instance with the given storage backend.
     pub fn new(storage: StorageDb<T, DB>) -> Self {
-        Self { storage }
+        Self {
+            storage,
+            batch_states: LruCache::new(
+                NonZeroUsize::new(BATCH_CACHE_MAX_ENTRIES)
+                    .expect("BATCH_CACHE_MAX_ENTRIES must be greater than zero"),
+            ),
+            batch_expiry_order: BTreeMap::new(),
+            batch_cache_ttl: BATCH_CACHE_TTL,
+        }
+    }
+
+    fn prune_batch_cache(&mut self, now: Instant) {
+        // Drop stale upload states to avoid unbounded growth when uploads stall.
+        // The expiry-order BTreeMap is sorted chronologically, so we iterate
+        // from the oldest entry and stop as soon as we find one that hasn't
+        // expired yet. This way there's no need to scan the entire cache.
+        let stale_keys: Vec<(Instant, Vec<u8>)> = self
+            .batch_expiry_order
+            .iter()
+            .take_while(|(&ts, _)| now.saturating_duration_since(ts) > self.batch_cache_ttl)
+            .map(|(&ts, key)| (ts, key.clone()))
+            .collect();
+
+        for (ts, key) in stale_keys {
+            let _ = self.batch_states.pop(&key);
+            self.batch_expiry_order.remove(&ts);
+        }
     }
 
     /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
@@ -620,17 +729,136 @@ where
                 FileStorageError::PartialRootNotFound
             })?;
 
-        let mut partial_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToParsePartialRoot
-            })?;
+        let partial_root = convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageError::FailedToParsePartialRoot
+        })?;
 
-        debug!(target: LOG_TARGET, "Constructing file trie from partial root {:?}", partial_root);
+        debug!(
+            target: LOG_TARGET,
+            "Constructing file trie from partial root {:?}",
+            partial_root
+        );
 
-        let file_trie =
-            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
-        Ok(file_trie)
+        Ok(RocksDbFileDataTrie::<T, DB>::from_existing(
+            self.storage.clone(),
+            &partial_root,
+        ))
+    }
+}
+
+impl<T, DB> RocksDbFileStorage<T, DB>
+where
+    T: TrieLayout + Send + Sync + 'static,
+    DB: KeyValueDB + 'static,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
+    /// Ensure the per-file batch cache entry is fully initialized.
+    ///
+    /// The cache state is all-or-nothing: metadata, partial root, and chunk count are loaded
+    /// together on first use and then reused across subsequent batches for the same file key.
+    fn ensure_batch_state_initialized(
+        &self,
+        file_key: &HasherOutT<T>,
+        cache_entry: &mut BatchCacheEntry<T>,
+    ) -> Result<(), FileStorageWriteError> {
+        if cache_entry.state.is_some() {
+            return Ok(());
+        }
+
+        let metadata = self
+            .get_metadata(file_key)
+            .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?
+            .ok_or(FileStorageWriteError::FileDoesNotExist)?;
+        let file_trie = self.get_file_trie(&metadata).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageWriteError::FailedToConstructFileTrie
+        })?;
+        let partial_root = *file_trie.get_root();
+        let chunk_count = self.stored_chunks_count(file_key).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageWriteError::FailedToGetStoredChunksCount
+        })?;
+
+        cache_entry.state = Some(BatchWriteCacheState {
+            metadata,
+            partial_root,
+            chunk_count,
+        });
+
+        Ok(())
+    }
+
+    /// Apply a chunk batch using an already initialized per-file cache state.
+    ///
+    /// This method:
+    /// - inserts batch chunks into trie overlay
+    /// - commits trie changes + root + chunk count in one DB transaction
+    /// - updates the cached root/chunk-count
+    /// - returns whether the file is complete after this batch
+    ///
+    /// Unlike `write_chunk`, this path does not perform a per-chunk "already exists" check before
+    /// insertion. Duplicate `ChunkId`s in a batch are silently deduplicated by the trie (last write
+    /// wins), and only genuinely new insertions advance `chunk_count`.
+    fn apply_chunks_batch_with_state(
+        &mut self,
+        file_key: &HasherOutT<T>,
+        chunks: Vec<(ChunkId, Chunk)>,
+        state: &mut BatchWriteCacheState<T>,
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
+        let mut file_trie =
+            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &state.partial_root);
+
+        // Insert trie nodes into overlay. `delta` counts only genuinely new chunk insertions.
+        let (new_partial_root, delta) = file_trie.insert_chunks_batched(chunks)?;
+        let new_count = state
+            .chunk_count
+            .checked_add(delta)
+            .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
+
+        // Prevent uploads from writing more chunks than declared in metadata.
+        if new_count > state.metadata.chunks_count() {
+            warn!(
+                target: LOG_TARGET,
+                "Batch write exceeded metadata chunk count for file {:?}: new_count={}, declared={}",
+                file_key,
+                new_count,
+                state.metadata.chunks_count()
+            );
+            return Err(FileStorageWriteError::ChunkCountOverflow);
+        }
+
+        // Persist trie mutations + root + chunk count in a single RocksDB transaction.
+        let mut transaction = file_trie.changes();
+        transaction.put(
+            Column::Roots.into(),
+            state.metadata.fingerprint().as_ref(),
+            new_partial_root.as_ref(),
+        );
+        transaction.put(
+            Column::ChunkCount.into(),
+            file_key.as_ref(),
+            &new_count.to_le_bytes(),
+        );
+
+        self.storage.write(transaction).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageWriteError::FailedToUpdatePartialRoot
+        })?;
+
+        // Keep cache in sync so the next batch avoids extra DB reads.
+        state.partial_root = new_partial_root;
+        state.chunk_count = new_count;
+
+        // Mirror `is_file_complete` semantics without re-reading from DB/trie.
+        let file_complete = state.metadata.fingerprint() == new_partial_root.as_ref()
+            && state.metadata.chunks_count() == new_count;
+
+        if file_complete {
+            Ok(FileStorageWriteOutcome::FileComplete)
+        } else {
+            Ok(FileStorageWriteOutcome::FileIncomplete)
+        }
     }
 }
 
@@ -754,6 +982,57 @@ where
                 error!(target: LOG_TARGET, "Failed to check file completion status for file key {:?}: {:?}", file_key, e);
                 Err(FileStorageWriteError::FailedToCheckFileCompletion(e))
             }
+        }
+    }
+
+    /// Batched upload fast-path.
+    ///
+    /// Differences vs [`Self::write_chunk`]:
+    /// - Processes multiple chunks in one transaction using cached metadata/root/chunk_count.
+    /// - Skips per-chunk existence checks; duplicate chunk IDs are not rejected.
+    /// - Progress tracking increments by input batch length (including duplicates), and may return
+    ///   [`FileStorageWriteError::ChunkCountOverflow`] when that count exceeds declared metadata.
+    fn write_chunks_batched(
+        &mut self,
+        file_key: &HasherOutT<T>,
+        chunks: Vec<(ChunkId, Chunk)>,
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
+        if chunks.is_empty() {
+            // No-op batch: keep trait-level behavior consistent across backends.
+            return Ok(FileStorageWriteOutcome::FileIncomplete);
+        }
+
+        let now = Instant::now();
+        self.prune_batch_cache(now);
+
+        let cache_key = file_key.as_ref().to_vec();
+        // Take ownership while processing this batch; if incomplete, reinserting refreshes LRU.
+        let mut cache_entry = self
+            .batch_states
+            .pop(&cache_key)
+            .unwrap_or_else(|| BatchCacheEntry::new(now));
+        self.batch_expiry_order.remove(&cache_entry.last_touched);
+        cache_entry.last_touched = now;
+        self.ensure_batch_state_initialized(file_key, &mut cache_entry)?;
+
+        let outcome = {
+            let state = cache_entry
+                .state
+                .as_mut()
+                .ok_or(FileStorageWriteError::FailedToParseFileMetadata)?;
+            self.apply_chunks_batch_with_state(file_key, chunks, state)?
+        };
+
+        if matches!(outcome, FileStorageWriteOutcome::FileComplete) {
+            // Cache entry is intentionally not reinserted when upload completes.
+            Ok(FileStorageWriteOutcome::FileComplete)
+        } else {
+            // Upload is still in progress; keep updated state for next batch.
+            let touched = Instant::now();
+            cache_entry.last_touched = touched;
+            self.batch_states.put(cache_key.clone(), cache_entry);
+            self.batch_expiry_order.insert(touched, cache_key);
+            Ok(FileStorageWriteOutcome::FileIncomplete)
         }
     }
 
@@ -963,6 +1242,12 @@ where
 
     /// Deletes a file and all its associated data.
     fn delete_file(&mut self, file_key: &HasherOutT<T>) -> Result<(), FileStorageError> {
+        // Invalidate any live batch cache entry for this file key so that a
+        // subsequent `write_chunks_batched` call does not use stale state.
+        if let Some(entry) = self.batch_states.pop(file_key.as_ref()) {
+            self.batch_expiry_order.remove(&entry.last_touched);
+        }
+
         let Some(metadata) = self.get_metadata(file_key)? else {
             // Idempotent: if already deleted, nothing to do
             warn!(target: LOG_TARGET, "File key {:?} already deleted", file_key);
@@ -980,12 +1265,7 @@ where
         let mut txn1 = DBTransaction::new();
         txn1.delete(Column::Metadata.into(), file_key.as_ref());
         txn1.delete(Column::ChunkCount.into(), file_key.as_ref());
-        let bucket_prefixed_file_key = metadata
-            .bucket_id()
-            .iter()
-            .copied()
-            .chain(file_key.as_ref().iter().copied())
-            .collect::<Vec<_>>();
+        let bucket_prefixed_file_key = Self::build_bucket_prefixed_file_key(&metadata, file_key);
         txn1.delete(
             Column::BucketPrefix.into(),
             bucket_prefixed_file_key.as_ref(),
@@ -1064,7 +1344,6 @@ where
 
         for h_file_key in file_keys_to_delete {
             debug!(target: LOG_TARGET, "Deleting file key {:?}", h_file_key);
-
             let result = self.delete_file(&h_file_key);
             if let Err(e) = result {
                 // If metadata is already gone or partial root is missing, skip as idempotent behaviour
@@ -1153,11 +1432,21 @@ where
 mod tests {
     use super::*;
     use kvdb_memorydb::InMemory;
-    use shc_common::types::{Fingerprint, FILE_CHUNK_SIZE};
+    use kvdb_rocksdb::Database as RocksDbDatabase;
+    use shc_common::types::{Fingerprint, FILE_CHUNK_SIZE, H_LENGTH};
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_runtime::AccountId32;
     use sp_trie::LayoutV1;
+    use std::path::PathBuf;
+    use std::sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    };
+    use std::time::{Instant, SystemTime};
+
+    static BENCHMARK_DB_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
+    static BENCHMARK_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn stored_chunks_count(
         trie: &RocksDbFileDataTrie<LayoutV1<BlakeTwo256>, InMemory>,
@@ -1577,6 +1866,202 @@ mod tests {
     }
 
     #[test]
+    fn file_storage_write_chunks_batched_works() {
+        let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let fingerprint_storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+        let mut expected_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(fingerprint_storage);
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            expected_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "batched-write".to_string().into_bytes(),
+            1024u64 * chunks.len() as u64,
+            Fingerprint::from(expected_trie.get_root().as_ref()),
+        )
+        .unwrap();
+        let key = file_metadata.file_key::<BlakeTwo256>();
+
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+        file_storage.insert_file(key, file_metadata).unwrap();
+
+        let empty = file_storage.write_chunks_batched(&key, Vec::new()).unwrap();
+        assert!(matches!(empty, FileStorageWriteOutcome::FileIncomplete));
+
+        let first = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[0], chunks[0].clone())])
+            .unwrap();
+        assert!(matches!(first, FileStorageWriteOutcome::FileIncomplete));
+
+        let second = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[1], chunks[1].clone())])
+            .unwrap();
+        assert!(matches!(second, FileStorageWriteOutcome::FileComplete));
+
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 2);
+    }
+
+    #[test]
+    fn file_storage_write_chunks_batched_handles_duplicate_chunk_ids() {
+        let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        // Build expected trie with the two unique chunks to get the correct fingerprint.
+        let fingerprint_storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+        let mut expected_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(fingerprint_storage);
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            expected_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "batched-dup".to_string().into_bytes(),
+            1024u64 * chunks.len() as u64,
+            Fingerprint::from(expected_trie.get_root().as_ref()),
+        )
+        .unwrap();
+        let key = file_metadata.file_key::<BlakeTwo256>();
+
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+        file_storage.insert_file(key, file_metadata).unwrap();
+
+        // Send chunk 0 twice in the same batch — should not cause ChunkCountOverflow.
+        let first = file_storage
+            .write_chunks_batched(
+                &key,
+                vec![
+                    (chunk_ids[0], chunks[0].clone()),
+                    (chunk_ids[0], chunks[0].clone()),
+                ],
+            )
+            .unwrap();
+        assert!(matches!(first, FileStorageWriteOutcome::FileIncomplete));
+        // Only 1 unique chunk was inserted.
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 1);
+
+        // Send the remaining chunk to complete the file.
+        let second = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[1], chunks[1].clone())])
+            .unwrap();
+        assert!(matches!(second, FileStorageWriteOutcome::FileComplete));
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 2);
+    }
+
+    #[test]
+    fn file_storage_write_chunks_batched_mixed_and_all_repeated() {
+        // 5 unique chunks.
+        let chunks: Vec<Chunk> = (0u8..5).map(|i| Chunk::from([i; 1024])).collect();
+        let chunk_ids: Vec<ChunkId> = (0..5).map(|i| ChunkId::new(i as u64)).collect();
+
+        // Build expected trie with all 5 unique chunks to get the correct fingerprint.
+        let fingerprint_storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+        let mut expected_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(fingerprint_storage);
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            expected_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "batched-mixed-dup".to_string().into_bytes(),
+            1024u64 * chunks.len() as u64,
+            Fingerprint::from(expected_trie.get_root().as_ref()),
+        )
+        .unwrap();
+        let key = file_metadata.file_key::<BlakeTwo256>();
+
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+        file_storage.insert_file(key, file_metadata).unwrap();
+
+        // Batch 1: send chunks 0 and 1 (both new).
+        let outcome = file_storage
+            .write_chunks_batched(
+                &key,
+                vec![
+                    (chunk_ids[0], chunks[0].clone()),
+                    (chunk_ids[1], chunks[1].clone()),
+                ],
+            )
+            .unwrap();
+        assert!(matches!(outcome, FileStorageWriteOutcome::FileIncomplete));
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 2);
+
+        // Batch 2: mix of cross-batch duplicates (chunks 0, 1) and new chunks (2, 3).
+        // Only the 2 new chunks should advance the count.
+        let outcome = file_storage
+            .write_chunks_batched(
+                &key,
+                vec![
+                    (chunk_ids[0], chunks[0].clone()), // cross-batch dup
+                    (chunk_ids[2], chunks[2].clone()), // new
+                    (chunk_ids[1], chunks[1].clone()), // cross-batch dup
+                    (chunk_ids[3], chunks[3].clone()), // new
+                ],
+            )
+            .unwrap();
+        assert!(matches!(outcome, FileStorageWriteOutcome::FileIncomplete));
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 4);
+
+        // Batch 3: all cross-batch duplicates — count should stay at 4, no error.
+        let outcome = file_storage
+            .write_chunks_batched(
+                &key,
+                vec![
+                    (chunk_ids[0], chunks[0].clone()),
+                    (chunk_ids[1], chunks[1].clone()),
+                    (chunk_ids[2], chunks[2].clone()),
+                ],
+            )
+            .unwrap();
+        assert!(matches!(outcome, FileStorageWriteOutcome::FileIncomplete));
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 4);
+
+        // Batch 4: send the final new chunk to complete the file.
+        let outcome = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[4], chunks[4].clone())])
+            .unwrap();
+        assert!(matches!(outcome, FileStorageWriteOutcome::FileComplete));
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 5);
+    }
+
+    #[test]
     fn same_chunk_id_with_different_data_produces_different_roots() {
         use sp_trie::MemoryDB;
 
@@ -1847,5 +2332,176 @@ mod tests {
 
         // Idempotent: deleting bucket B again does nothing and should not error
         assert!(file_storage.delete_files_with_prefix(&[11u8; 32]).is_ok());
+    }
+
+    const MIB: u64 = 1024 * 1024;
+    const BATCH_SIZE_BYTES: usize = 2 * 1024 * 1024;
+
+    fn unique_temp_rocksdb_path(label: &str) -> PathBuf {
+        let nanos = SystemTime::UNIX_EPOCH
+            .elapsed()
+            .expect("System time should be after UNIX epoch")
+            .as_nanos();
+        let seq = BENCHMARK_DB_PATH_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+        std::env::temp_dir().join(format!(
+            "sh-file-manager-rocksdb-{label}-pid{}-{nanos}-{seq}",
+            std::process::id(),
+        ))
+    }
+
+    fn setup_disk_backed_storage_for_size(
+        size_mb: u64,
+    ) -> (
+        PathBuf,
+        RocksDbFileStorage<LayoutV1<BlakeTwo256>, RocksDbDatabase>,
+        H256,
+        u64,
+    ) {
+        let db_path = unique_temp_rocksdb_path(&format!("{size_mb}mb"));
+        let db_path_str = db_path.to_string_lossy().into_owned();
+
+        let storage =
+            RocksDbFileStorage::<LayoutV1<BlakeTwo256>, RocksDbDatabase>::rocksdb_storage(
+                db_path_str,
+            )
+            .expect("Should create disk-backed RocksDB storage for benchmark");
+
+        let mut file_storage =
+            RocksDbFileStorage::<LayoutV1<BlakeTwo256>, RocksDbDatabase>::new(storage);
+
+        let file_size_bytes = size_mb
+            .checked_mul(MIB)
+            .expect("File size in bytes should not overflow");
+        let chunk_count =
+            file_size_bytes / FILE_CHUNK_SIZE + (file_size_bytes % FILE_CHUNK_SIZE != 0) as u64;
+
+        let mut fingerprint_bytes = [0u8; H_LENGTH];
+        fingerprint_bytes[..8].copy_from_slice(&size_mb.to_le_bytes());
+
+        let metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [size_mb as u8; 32].to_vec(),
+            format!("rocksdb-write-bench-{size_mb}mb").into_bytes(),
+            file_size_bytes,
+            Fingerprint::from(fingerprint_bytes),
+        )
+        .expect("Metadata should be valid for benchmark file");
+
+        let file_key = metadata.file_key::<BlakeTwo256>();
+        file_storage
+            .insert_file(file_key, metadata)
+            .expect("Should insert benchmark file metadata");
+
+        (db_path, file_storage, file_key, chunk_count)
+    }
+
+    fn run_disk_write_benchmark(size_mb: u64) {
+        let (db_path, mut file_storage, file_key, chunk_count) =
+            setup_disk_backed_storage_for_size(size_mb);
+        let batch_size_chunks = usize::max(1, BATCH_SIZE_BYTES / (FILE_CHUNK_SIZE as usize));
+
+        let mut next_chunk_id: u64 = 0;
+        let mut total_batches: u64 = 0;
+        let mut write_only_time = std::time::Duration::ZERO;
+        let benchmark_start = Instant::now();
+
+        while next_chunk_id < chunk_count {
+            let remaining_chunks = chunk_count - next_chunk_id;
+            let chunks_in_batch = usize::min(batch_size_chunks, remaining_chunks as usize);
+
+            let mut batch = Vec::with_capacity(chunks_in_batch);
+            for _ in 0..chunks_in_batch {
+                let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
+                chunk[..8].copy_from_slice(&next_chunk_id.to_le_bytes());
+                batch.push((ChunkId::new(next_chunk_id), chunk));
+                next_chunk_id += 1;
+            }
+
+            let write_start = Instant::now();
+            let _ = file_storage
+                .write_chunks_batched(&file_key, batch)
+                .expect("Batch write should succeed");
+            write_only_time = write_only_time.saturating_add(write_start.elapsed());
+            total_batches = total_batches.saturating_add(1);
+        }
+
+        let total_time = benchmark_start.elapsed();
+        let stored_chunks = file_storage
+            .stored_chunks_count(&file_key)
+            .expect("Should read stored chunk count");
+        assert_eq!(
+            stored_chunks, chunk_count,
+            "Stored chunk count should match the number of written chunks",
+        );
+
+        let throughput_mb_s = size_mb as f64 / total_time.as_secs_f64();
+        eprintln!(
+            "ROCKSDB WRITE BENCH: size_mb={size_mb} chunks={chunk_count} batches={total_batches} total_ms={} write_ms={} throughput_mb_s={throughput_mb_s:.2}",
+            total_time.as_millis(),
+            write_only_time.as_millis(),
+        );
+
+        drop(file_storage);
+        let _ = std::fs::remove_dir_all(db_path);
+    }
+
+    fn run_disk_write_benchmark_regular(size_mb: u64) {
+        let (db_path, mut file_storage, file_key, chunk_count) =
+            setup_disk_backed_storage_for_size(size_mb);
+        let benchmark_start = Instant::now();
+        let mut write_only_time = std::time::Duration::ZERO;
+
+        for chunk_index in 0..chunk_count {
+            let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
+            chunk[..8].copy_from_slice(&chunk_index.to_le_bytes());
+
+            let write_start = Instant::now();
+            let _ = file_storage
+                .write_chunk(&file_key, &ChunkId::new(chunk_index), &chunk)
+                .expect("Regular write_chunk should succeed");
+            write_only_time = write_only_time.saturating_add(write_start.elapsed());
+        }
+
+        let total_time = benchmark_start.elapsed();
+        let stored_chunks = file_storage
+            .stored_chunks_count(&file_key)
+            .expect("Should read stored chunk count");
+        assert_eq!(
+            stored_chunks, chunk_count,
+            "Stored chunk count should match the number of written chunks",
+        );
+
+        let throughput_mb_s = size_mb as f64 / total_time.as_secs_f64();
+        eprintln!(
+            "ROCKSDB WRITE BENCH REGULAR: size_mb={size_mb} chunks={chunk_count} total_ms={} write_ms={} throughput_mb_s={throughput_mb_s:.2}",
+            total_time.as_millis(),
+            write_only_time.as_millis(),
+        );
+
+        drop(file_storage);
+        let _ = std::fs::remove_dir_all(db_path);
+    }
+
+    #[test]
+    #[ignore = "Disk benchmark for RocksDB write path. Run with: cargo test -p shc-file-manager rocksdb_write_benchmark_batch_sizes -- --ignored --nocapture"]
+    fn rocksdb_write_benchmark_batch_sizes() {
+        let _guard = BENCHMARK_TEST_LOCK
+            .lock()
+            .expect("Benchmark lock should not be poisoned");
+        for size_mb in [1u64, 10, 50] {
+            run_disk_write_benchmark(size_mb);
+        }
+    }
+
+    #[test]
+    #[ignore = "Disk benchmark for regular RocksDB write_chunk path. Run with: cargo test -p shc-file-manager rocksdb_write_benchmark_regular_chunk_sizes -- --ignored --nocapture"]
+    fn rocksdb_write_benchmark_regular_chunk_sizes() {
+        let _guard = BENCHMARK_TEST_LOCK
+            .lock()
+            .expect("Benchmark lock should not be poisoned");
+        for size_mb in [1u64, 10, 50] {
+            run_disk_write_benchmark_regular(size_mb);
+        }
     }
 }

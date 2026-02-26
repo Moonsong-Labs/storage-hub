@@ -28,6 +28,7 @@ use tokio::{net::TcpListener, sync::RwLock};
 use crate::{trusted_file_transfer::files::process_chunk_stream, types::FileStorageT};
 
 pub(crate) const LOG_TARGET: &str = "trusted-file-transfer-server";
+pub const DEFAULT_BATCH_TARGET_BYTES: usize = 2 * 1024 * 1024;
 
 /// Configuration for the trusted file transfer HTTP server
 #[derive(Debug, Clone)]
@@ -36,6 +37,8 @@ pub struct Config {
     pub host: String,
     /// Port to bind the server to
     pub port: u16,
+    /// Trusted upload batch size in bytes.
+    pub batch_target_bytes: usize,
 }
 
 impl Default for Config {
@@ -43,6 +46,7 @@ impl Default for Config {
         Self {
             host: "127.0.0.1".to_string(),
             port: 7070,
+            batch_target_bytes: DEFAULT_BATCH_TARGET_BYTES,
         }
     }
 }
@@ -57,6 +61,7 @@ where
     pub file_storage: Arc<RwLock<FL>>,
     pub blockchain: ActorHandle<BlockchainService<FSH, Runtime>>,
     pub file_transfer: ActorHandle<FileTransferService<Runtime>>,
+    pub batch_target_bytes: usize,
 }
 
 impl<FL, FSH, Runtime> Clone for Context<FL, FSH, Runtime>
@@ -70,6 +75,7 @@ where
             file_storage: Arc::clone(&self.file_storage),
             blockchain: self.blockchain.clone(),
             file_transfer: self.file_transfer.clone(),
+            batch_target_bytes: self.batch_target_bytes,
         }
     }
 }
@@ -84,11 +90,13 @@ where
         file_storage: Arc<RwLock<FL>>,
         blockchain: ActorHandle<BlockchainService<FSH, Runtime>>,
         file_transfer: ActorHandle<FileTransferService<Runtime>>,
+        batch_target_bytes: usize,
     ) -> Self {
         Self {
             file_storage,
             blockchain,
             file_transfer,
+            batch_target_bytes,
         }
     }
 }
@@ -105,7 +113,12 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
-    let context = Context::new(file_storage, blockchain, file_transfer);
+    let context = Context::new(
+        file_storage,
+        blockchain,
+        file_transfer,
+        config.batch_target_bytes,
+    );
 
     let app = Router::new()
         .route("/upload/{file_key}", post(upload_file))
@@ -224,7 +237,14 @@ where
     let file_key_hash = sp_core::H256::from_slice(&file_key_bytes);
 
     // Process the streamed chunks
-    match process_chunk_stream(&context.file_storage, &file_key_hash, body).await {
+    match process_chunk_stream(
+        &context.file_storage,
+        &file_key_hash,
+        context.batch_target_bytes,
+        body,
+    )
+    .await
+    {
         Ok(_) => {
             if let Err(e) = handle_file_complete(&context, &file_key_hash).await {
                 return (
