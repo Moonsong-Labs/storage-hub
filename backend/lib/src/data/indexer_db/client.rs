@@ -22,7 +22,7 @@ use tracing::debug;
 
 use crate::{
     constants::database::{DEFAULT_PAGE_LIMIT, MSP_CACHE_TTL_SECS},
-    data::indexer_db::repository::{PaymentStreamData, StorageOperations},
+    data::indexer_db::repository::{BucketsPage, PaymentStreamData, StorageOperations},
     error::Result,
 };
 
@@ -197,7 +197,7 @@ impl DBClient {
         user: &str,
         limit: Option<i64>,
         offset: Option<i64>,
-    ) -> Result<Vec<Bucket>> {
+    ) -> Result<BucketsPage<Bucket>> {
         let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
         let offset = offset.unwrap_or(0);
         debug!(
@@ -213,23 +213,6 @@ impl DBClient {
 
         self.repository
             .get_buckets_by_user_and_msp(msp.id, user, limit, offset)
-            .await
-            .map_err(Into::into)
-    }
-
-    /// Count all of the `user`'s buckets with the given MSP
-    pub async fn get_user_buckets_count(&self, msp: &OnchainMspId, user: &str) -> Result<u64> {
-        debug!(
-            target: "indexer_db::client::get_user_buckets_count",
-            msp = %msp,
-            user = %user,
-            "Counting user buckets"
-        );
-
-        let msp = self.get_msp(msp).await?;
-
-        self.repository
-            .get_buckets_count_by_user_and_msp(msp.id, user)
             .await
             .map_err(Into::into)
     }

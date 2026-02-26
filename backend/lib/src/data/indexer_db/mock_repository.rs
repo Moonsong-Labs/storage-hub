@@ -25,6 +25,7 @@ use shp_types::Hash;
 use crate::{
     constants::{mocks::MOCK_ADDRESS, rpc::DUMMY_MSP_ID, test},
     data::indexer_db::repository::{
+        BucketsPage,
         error::{RepositoryError, RepositoryResult},
         IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
     },
@@ -286,29 +287,21 @@ impl IndexerOps for MockRepository {
         account: &str,
         limit: i64,
         offset: i64,
-    ) -> RepositoryResult<Vec<Bucket>> {
+    ) -> RepositoryResult<BucketsPage<Bucket>> {
         let buckets = self.buckets.read().await;
-
-        Ok(buckets
+        let filtered = buckets
             .values()
             .filter(|b| b.msp_id == Some(msp) && b.account == account)
+            .cloned()
+            .collect::<Vec<_>>();
+        let total = filtered.len() as u64;
+        let buckets = filtered
+            .into_iter()
             .skip(offset as usize)
             .take(limit as usize)
-            .cloned()
-            .collect())
-    }
+            .collect::<Vec<_>>();
 
-    async fn get_buckets_count_by_user_and_msp(
-        &self,
-        msp: i64,
-        account: &str,
-    ) -> RepositoryResult<u64> {
-        let buckets = self.buckets.read().await;
-
-        Ok(buckets
-            .values()
-            .filter(|b| b.msp_id == Some(msp) && b.account == account)
-            .count() as u64)
+        Ok(BucketsPage { buckets, total })
     }
 
     async fn get_files_by_bucket(

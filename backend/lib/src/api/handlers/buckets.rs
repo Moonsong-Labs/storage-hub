@@ -24,17 +24,11 @@ pub async fn list_buckets(
     Pagination { limit, offset }: Pagination,
 ) -> Result<impl IntoResponse, Error> {
     debug!(user = %address, "GET list buckets");
-    let buckets = services
-        .msp
-        .list_user_buckets(&address, offset, limit)
-        .await?
-        .collect::<Vec<_>>();
-
-    let total_buckets = services.msp.count_user_buckets(&address).await?;
+    let page = services.msp.list_user_buckets(&address, offset, limit).await?;
 
     Ok(Json(ListBucketsResponse {
-        buckets,
-        total_buckets: total_buckets.to_string(),
+        buckets: page.buckets,
+        total_buckets: page.total.to_string(),
     }))
 }
 

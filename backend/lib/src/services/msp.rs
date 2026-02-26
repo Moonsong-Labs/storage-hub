@@ -34,7 +34,7 @@ use crate::{
     config::MspConfig,
     constants::{retry::get_retry_delay, stats::STATS_CACHE_TTL_SECS},
     data::{
-        indexer_db::{client::DBClient, repository::PaymentStreamKind},
+        indexer_db::{client::DBClient, repository::BucketsPage, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
     },
     error::Error,
@@ -280,10 +280,10 @@ impl MspService {
         user_address: &Address,
         offset: i64,
         limit: i64,
-    ) -> Result<impl Iterator<Item = Bucket>, Error> {
+    ) -> Result<BucketsPage<Bucket>, Error> {
         debug!(target: "msp_service::list_user_buckets", user = %user_address, %limit, %offset, "Listing user buckets");
 
-        Ok(self
+        let page = self
             .postgres
             .get_user_buckets(
                 &self.msp_id,
@@ -291,7 +291,10 @@ impl MspService {
                 Some(limit),
                 Some(offset),
             )
-            .await?
+            .await?;
+
+        let buckets = page
+            .buckets
             .into_iter()
             .map(|entry| {
                 // Convert BigDecimal to u64 for size (may lose precision)
@@ -299,16 +302,13 @@ impl MspService {
                 let file_count = entry.file_count as u64;
 
                 Bucket::from_db(&entry, size_bytes, file_count)
-            }))
-    }
+            })
+            .collect::<Vec<_>>();
 
-    /// Count buckets for a user.
-    pub async fn count_user_buckets(&self, user_address: &Address) -> Result<u64, Error> {
-        debug!(target: "msp_service::count_user_buckets", user = %user_address, "Counting user buckets");
-
-        self.postgres
-            .get_user_buckets_count(&self.msp_id, &user_address.to_string())
-            .await
+        Ok(BucketsPage {
+            buckets,
+            total: page.total,
+        })
     }
 
     /// Get a specific bucket by its ID
