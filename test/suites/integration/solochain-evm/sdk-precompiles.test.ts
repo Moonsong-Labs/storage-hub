@@ -799,7 +799,11 @@ await describeMspNet(
 
       // Request a far out-of-range page and verify we still get the right total.
       const outOfRangePage = await mspClient.buckets.listBucketsByPage({ limit: 100, page: 1000 });
-      strictEqual(outOfRangePage.buckets.length, 0, "out-of-range page should return empty buckets");
+      strictEqual(
+        outOfRangePage.buckets.length,
+        0,
+        "out-of-range page should return empty buckets"
+      );
       strictEqual(
         outOfRangePage.totalBuckets,
         expectedTotalBuckets,
