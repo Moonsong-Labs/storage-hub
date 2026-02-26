@@ -443,10 +443,11 @@ await describeMspNet(
 
       // Try to upload the file to the MSP through the SDK's MspClient that uses the MSP backend
       const uploadResponse = await mspClient.files.uploadFile(
-        bucketId,
-        fileKey.toHex(),
+        bucketId as `0x${string}`,
+        fileKey.toHex() as `0x${string}`,
         await fileManager.getFileBlob(),
-        account.address,
+        fingerprint.toHex() as `0x${string}`,
+        account.address as `0x${string}`,
         fileLocation
       );
 
