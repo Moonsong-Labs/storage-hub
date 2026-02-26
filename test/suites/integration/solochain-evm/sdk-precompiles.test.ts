@@ -796,6 +796,15 @@ await describeMspNet(
       for (const name of createdBucketNames) {
         assert(allPageNames.includes(name), `Expected to see created bucket name: ${name}`);
       }
+
+      // Request a far out-of-range page and verify we still get the right total.
+      const outOfRangePage = await mspClient.buckets.listBucketsByPage({ limit: 100, page: 1000 });
+      strictEqual(outOfRangePage.buckets.length, 0, "out-of-range page should return empty buckets");
+      strictEqual(
+        outOfRangePage.totalBuckets,
+        expectedTotalBuckets,
+        "out-of-range page should still report the same totalBuckets"
+      );
     });
   }
 );
