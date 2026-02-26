@@ -844,6 +844,8 @@ export default {
                 size_: 'u64',
                 peerIds: 'Vec<Bytes>',
                 expiresAt: 'u32',
+                bspsRequired: 'u32',
+                mspId: 'Option<H256>',
             },
             MspAcceptedStorageRequest: {
                 fileKey: 'H256',
