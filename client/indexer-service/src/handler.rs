@@ -5,7 +5,7 @@ use bigdecimal::BigDecimal;
 use codec::Encode;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
-use log::{error, info};
+use log::{error, info, warn};
 use thiserror::Error;
 
 use pallet_file_system_runtime_api::FileSystemApi;
@@ -523,9 +523,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     })?;
 
                 let is_system_sr = msp_id.is_none();
-                let bsps_required_val: i32 = if is_system_sr {
-                    1i32
-                } else {
+                let bsps_required_val: i32 = {
                     let val: u64 = (*bsps_required).into();
                     i32::try_from(val).unwrap_or(i32::MAX)
                 };
@@ -533,7 +531,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let prev_desired =
                     File::get_max_desired_replicas_by_file_key(conn, file_key.as_ref().to_vec())
                         .await
-                        .unwrap_or(0);
+                        .unwrap_or_else(|e| {
+                            warn!(target: LOG_TARGET, "Failed to query desired_replicas for file_key, defaulting to 0: {:?}", e);
+                            0
+                        });
 
                 let new_desired = if is_system_sr {
                     prev_desired
@@ -541,7 +542,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     let current_bsp_count =
                         File::count_bsp_associations_by_file_key(conn, file_key.as_ref().to_vec())
                             .await
-                            .unwrap_or(0) as i32;
+                            .unwrap_or_else(|e| {
+                                warn!(target: LOG_TARGET, "Failed to count BSP associations for file_key, defaulting to 0: {:?}", e);
+                                0
+                            }) as i32;
                     std::cmp::max(prev_desired, current_bsp_count + bsps_required_val)
                 };
 

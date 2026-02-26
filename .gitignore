@@ -53,6 +53,3 @@ config.toml
 
 # MCP configuration
 .mcp.json
-
-# PR description (local-only)
-PR_DESCRIPTION.md
