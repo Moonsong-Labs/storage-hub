@@ -176,7 +176,7 @@ export interface ListBucketsByPage {
   /** Limit used for the request */
   limit: number;
   /** Total amount of buckets for the current authenticated user */
-  totalBuckets: bigint;
+  totalBuckets: number;
 }
 
 // MSP info

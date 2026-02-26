@@ -759,7 +759,7 @@ await describeMspNet(
       // Wait for the indexer/backend to catch up so /buckets reflects the new buckets
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
-      const expectedTotalBuckets = initialTotalBuckets + BigInt(createdBucketNames.length);
+      const expectedTotalBuckets = initialTotalBuckets + createdBucketNames.length;
       const pageLimit = 4;
 
       // listBucketsByPage(limit=4), fetch all pages and validate count + pagination consistency
@@ -770,7 +770,7 @@ await describeMspNet(
         "totalBuckets should increase by the created bucket amount"
       );
 
-      const totalPages = Math.ceil(Number(p0.totalBuckets) / pageLimit);
+      const totalPages = Math.ceil(p0.totalBuckets / pageLimit);
       const pages = [p0];
       for (let page = 1; page < totalPages; page++) {
         pages.push(await mspClient.buckets.listBucketsByPage({ limit: pageLimit, page }));

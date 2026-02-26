@@ -21,6 +21,14 @@ type ListBucketsByPageWire = {
   totalBuckets: string;
 };
 
+function parseTotalBuckets(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`Invalid totalBuckets value received from backend: ${value}`);
+  }
+  return parsed;
+}
+
 // Wire types received from backend JSON responses
 type FileTreeWireFile = {
   name: string;
@@ -90,10 +98,10 @@ export class BucketsModule extends ModuleBase {
   async listBucketsByPage(options?: ListBucketsInput): Promise<ListBucketsByPage> {
     const opts = options ?? {};
     const requestedLimit = opts.limit ?? 100;
-    const requestePage = opts.page ?? 0;
+    const requestedPage = opts.page ?? 0;
     const headers = await this.withAuth();
     const limit = Math.max(1, Math.floor(requestedLimit));
-    const page = Math.max(0, Math.floor(requestePage));
+    const page = Math.max(0, Math.floor(requestedPage));
 
     const wire = await this.ctx.http.get<ListBucketsByPageWire>("/buckets", {
       ...(headers ? { headers } : {}),
@@ -106,7 +114,7 @@ export class BucketsModule extends ModuleBase {
       buckets,
       page,
       limit,
-      totalBuckets: BigInt(wire.totalBuckets)
+      totalBuckets: parseTotalBuckets(wire.totalBuckets)
     };
   }
 
