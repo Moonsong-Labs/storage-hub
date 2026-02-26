@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use alloy_core::{hex::ToHexExt, primitives::Address};
 use axum_extra::extract::multipart::Field;
 use bigdecimal::{BigDecimal, RoundingMode};
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use sp_core::Blake2Hasher;
