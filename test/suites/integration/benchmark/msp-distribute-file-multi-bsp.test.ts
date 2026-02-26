@@ -17,14 +17,112 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { describeNetwork } from "../../../util/netLaunch/dynamic/testrunner";
 import type { EnrichedBspApi } from "../../../util";
+import { describeNetwork } from "../../../util/netLaunch/dynamic/testrunner";
 
 /**
  * Number of BSPs to run in this benchmark test.
  * All checks and assertions will use this value.
  */
 const BSP_COUNT = 10;
+const PASSIVE_SYNC_TIMEOUT_MS = 120000;
+const PASSIVE_SYNC_POLL_MS = 500;
+const BSP_CONFIRMATION_TIMEOUT_MS = 120000;
+const BSP_CONFIRMATION_TXPOOL_WAIT_MS = 3000;
+
+function bspContainerName(index: number): string {
+  return `storage-hub-sh-bsp-${index}`;
+}
+
+async function pauseAllBspContainers(api: EnrichedBspApi, bspCount: number): Promise<void> {
+  for (let i = 0; i < bspCount; i++) {
+    await api.docker.pauseContainer(bspContainerName(i));
+  }
+}
+
+async function resumeAllBspContainers(api: EnrichedBspApi, bspCount: number): Promise<void> {
+  for (let i = 0; i < bspCount; i++) {
+    await api.docker.resumeContainer({ containerName: bspContainerName(i) });
+  }
+}
+
+async function waitForPassiveTipSync(
+  nodeSyncedApi: EnrichedBspApi,
+  nodeBehindApi: EnrichedBspApi,
+  timeoutMs = PASSIVE_SYNC_TIMEOUT_MS,
+  pollMs = PASSIVE_SYNC_POLL_MS
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const [syncedHeader, behindHeader] = await Promise.all([
+      nodeSyncedApi.rpc.chain.getHeader(),
+      nodeBehindApi.rpc.chain.getHeader()
+    ]);
+
+    if (syncedHeader.hash.eq(behindHeader.hash)) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+
+  const [syncedHeader, behindHeader] = await Promise.all([
+    nodeSyncedApi.rpc.chain.getHeader(),
+    nodeBehindApi.rpc.chain.getHeader()
+  ]);
+
+  throw new Error(
+    `Node did not passively catch up within ${timeoutMs}ms ` +
+      `(synced #${syncedHeader.number.toString()} ${syncedHeader.hash.toString()}, ` +
+      `behind #${behindHeader.number.toString()} ${behindHeader.hash.toString()})`
+  );
+}
+
+async function waitForBspConfirmationsWithSealing(
+  blockProducerApi: EnrichedBspApi,
+  fileKey: string,
+  expectedConfirmations: number,
+  timeoutMs = BSP_CONFIRMATION_TIMEOUT_MS
+): Promise<void> {
+  const startedAt = Date.now();
+  let totalConfirmations = 0;
+  const normalizeHex = (value: string) =>
+    (value.startsWith("0x") ? value : `0x${value}`).toLowerCase();
+  const targetFileKey = normalizeHex(fileKey);
+
+  while (Date.now() - startedAt < timeoutMs && totalConfirmations < expectedConfirmations) {
+    try {
+      // Probe tx-pool briefly; even if none are pending yet, seal a block to advance provider workers.
+      await blockProducerApi.wait.bspStored({
+        timeoutMs: BSP_CONFIRMATION_TXPOOL_WAIT_MS,
+        sealBlock: false
+      });
+    } catch {
+      // No confirm-storing extrinsics pending yet.
+    }
+
+    const { events } = await blockProducerApi.block.seal();
+
+    for (const eventRecord of events ?? []) {
+      if (!blockProducerApi.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
+        continue;
+      }
+
+      const confirmedForTargetFile = eventRecord.event.data.confirmedFileKeys.filter((entry) => {
+        const confirmedFileKey = Array.isArray(entry) ? entry[0] : entry;
+        return normalizeHex(confirmedFileKey.toString()) === targetFileKey;
+      }).length;
+      totalConfirmations += confirmedForTargetFile;
+    }
+  }
+
+  strictEqual(
+    totalConfirmations,
+    expectedConfirmations,
+    `Expected ${expectedConfirmations} BspConfirmedStoring confirmations, got ${totalConfirmations}`
+  );
+}
 
 await describeNetwork(
   `MSP distributes files to ${BSP_COUNT} BSPs`,
@@ -70,149 +168,165 @@ await describeNetwork(
       const source = "res/whatsup.jpg";
       const destination = "test/whatsup.jpg";
       const bucketName = "distribution-benchmark-bucket";
+      let bspsPaused = false;
 
-      // Step 1: Set replication target to BSP_COUNT (all BSPs will volunteer)
-      await blockProducerApi.block.seal({
-        calls: [
-          blockProducerApi.tx.sudo.sudo(
-            blockProducerApi.tx.parameters.setParameter({
-              RuntimeConfig: { MaxReplicationTarget: [null, BSP_COUNT] }
-            })
-          )
-        ]
-      });
+      // Match the stable MSP distribution flow:
+      // keep BSPs paused until user file is deleted, so BSPs can only receive via MSP.
+      await pauseAllBspContainers(userApi, BSP_COUNT);
+      bspsPaused = true;
 
-      // Get identities for later use
-      const userIdentity = ctx.network.getUserIdentity(0);
-      const mspProviderId = ctx.network.getMspProviderId(0);
+      try {
+        // Step 1: Set replication target to BSP_COUNT (all BSPs will volunteer once resumed)
+        await blockProducerApi.block.seal({
+          calls: [
+            blockProducerApi.tx.sudo.sudo(
+              blockProducerApi.tx.parameters.setParameter({
+                RuntimeConfig: { MaxReplicationTarget: [null, BSP_COUNT] }
+              })
+            )
+          ]
+        });
 
-      // Step 2: Create bucket using the file helper API
-      // Note: file.newBucket works with dynamic networks since it uses the provided keyring
-      const newBucketEvent = await blockProducerApi.file.newBucket(
-        bucketName,
-        userIdentity.identity.keyring,
-        undefined, // valuePropId - will be fetched automatically (must be undefined, not null)
-        mspProviderId
-      );
-      const newBucketEventDataBlob =
-        blockProducerApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
-      assert(newBucketEventDataBlob, "NewBucket event doesn't match expected type");
+        // Get identities for later use
+        const userIdentity = ctx.network.getUserIdentity(0);
+        const mspProviderId = ctx.network.getMspProviderId(0);
 
-      // Get user's address for loading file (required for dynamic network context)
-      const ownerHex = u8aToHex(decodeAddress(userIdentity.identity.keyring.address)).slice(2);
+        // Step 2: Create bucket using the file helper API
+        // Note: file.newBucket works with dynamic networks since it uses the provided keyring
+        const newBucketEvent = await blockProducerApi.file.newBucket(
+          bucketName,
+          userIdentity.identity.keyring,
+          undefined, // valuePropId - will be fetched automatically (must be undefined, not null)
+          mspProviderId
+        );
+        const newBucketEventDataBlob =
+          blockProducerApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
+        assert(newBucketEventDataBlob, "NewBucket event doesn't match expected type");
 
-      // Load file into storage
-      const {
-        file_metadata: { location, fingerprint, file_size }
-      } = await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        ownerHex,
-        newBucketEventDataBlob.bucketId
-      );
-      strictEqual(location.toHuman(), destination);
+        // Get user's address for loading file (required for dynamic network context)
+        const ownerHex = u8aToHex(decodeAddress(userIdentity.identity.keyring.address)).slice(2);
 
-      // Get peer IDs for storage request (both user and MSP so file can be fetched from either)
-      const userPeerId = (await userApi.rpc.system.localPeerId()).toString();
-      const mspPeerId = (await mspApi.rpc.system.localPeerId()).toString();
+        // Load file into storage
+        const {
+          file_metadata: { location, fingerprint, file_size }
+        } = await userApi.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          ownerHex,
+          newBucketEventDataBlob.bucketId
+        );
+        strictEqual(location.toHuman(), destination);
 
-      // Step 3: Issue storage request with custom replication target matching BSP_COUNT
-      await blockProducerApi.block.seal({
-        calls: [
-          blockProducerApi.tx.fileSystem.issueStorageRequest(
-            newBucketEventDataBlob.bucketId,
-            destination,
-            fingerprint.toHex(),
-            file_size.toBigInt(),
-            mspProviderId,
-            [userPeerId, mspPeerId],
-            { Custom: BSP_COUNT }
-          )
-        ],
-        signer: userIdentity.identity.keyring
-      });
+        // Get peer IDs for storage request (both user and MSP so file can be fetched from either)
+        const userPeerId = (await userApi.rpc.system.localPeerId()).toString();
+        const mspPeerId = (await mspApi.rpc.system.localPeerId()).toString();
 
-      // Get the file key from the NewStorageRequest event
-      const { event: newStorageRequestEvent } = await blockProducerApi.assert.eventPresent(
-        "fileSystem",
-        "NewStorageRequest"
-      );
-      const newStorageRequestDataBlob =
-        blockProducerApi.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent) &&
-        newStorageRequestEvent.data;
-      assert(
-        newStorageRequestDataBlob,
-        "NewStorageRequest event data does not match expected type"
-      );
-      const fileKey = newStorageRequestDataBlob.fileKey.toString();
+        // Step 3: Issue storage request with custom replication target matching BSP_COUNT
+        await blockProducerApi.block.seal({
+          calls: [
+            blockProducerApi.tx.fileSystem.issueStorageRequest(
+              newBucketEventDataBlob.bucketId,
+              destination,
+              fingerprint.toHex(),
+              file_size.toBigInt(),
+              mspProviderId,
+              [userPeerId, mspPeerId],
+              { Custom: BSP_COUNT }
+            )
+          ],
+          signer: userIdentity.identity.keyring
+        });
 
-      // Wait for MSP to sync with the chain tip before expecting it to process the storage request
-      await blockProducerApi.wait.nodeCatchUpToChainTip(mspApi);
+        // Get the file key from the NewStorageRequest event
+        const { event: newStorageRequestEvent } = await blockProducerApi.assert.eventPresent(
+          "fileSystem",
+          "NewStorageRequest"
+        );
+        const newStorageRequestDataBlob =
+          blockProducerApi.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent) &&
+          newStorageRequestEvent.data;
+        assert(
+          newStorageRequestDataBlob,
+          "NewStorageRequest event data does not match expected type"
+        );
+        const fileKey = newStorageRequestDataBlob.fileKey.toString();
 
-      // Step 4: Wait for MSP to download file
-      await mspApi.wait.fileStorageComplete(fileKey);
+        // Wait for MSP to sync with the chain tip before expecting it to process the storage request
+        await waitForPassiveTipSync(blockProducerApi, mspApi);
 
-      // Wait for BSP volunteers and MSP response in tx pool (60 second timeout for large networks)
-      await blockProducerApi.wait.bspVolunteerInTxPool(BSP_COUNT, 60000);
-      await blockProducerApi.wait.mspResponseInTxPool(1, 60000);
-      await blockProducerApi.block.seal();
+        // Step 4: Wait for MSP to download and accept before any BSP can volunteer.
+        await mspApi.wait.fileStorageComplete(fileKey);
+        await blockProducerApi.wait.mspResponseInTxPool(1, 60000);
+        await blockProducerApi.block.seal();
 
-      // Verify MSP accepted - use blockProducerApi since it produced the block
-      const { event: mspAcceptedEvent } = await blockProducerApi.assert.eventPresent(
-        "fileSystem",
-        "MspAcceptedStorageRequest"
-      );
-      const mspAcceptedDataBlob =
-        blockProducerApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedEvent) &&
-        mspAcceptedEvent.data;
-      assert(mspAcceptedDataBlob, "MspAcceptedStorageRequest event data does not match type");
-      strictEqual(mspAcceptedDataBlob.fileKey.toString(), fileKey);
+        // Verify MSP accepted - use blockProducerApi since it produced the block
+        const { event: mspAcceptedEvent } = await blockProducerApi.assert.eventPresent(
+          "fileSystem",
+          "MspAcceptedStorageRequest"
+        );
+        const mspAcceptedDataBlob =
+          blockProducerApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedEvent) &&
+          mspAcceptedEvent.data;
+        assert(mspAcceptedDataBlob, "MspAcceptedStorageRequest event data does not match type");
+        strictEqual(mspAcceptedDataBlob.fileKey.toString(), fileKey);
 
-      // Step 5: Delete file from user node (so BSPs must get it from MSP)
-      await userApi.rpc.storagehubclient.removeFilesFromFileStorage([fileKey]);
+        // Step 5: Delete file from user node before BSPs can volunteer.
+        // This ensures BSPs must receive the file from MSP only.
+        await userApi.rpc.storagehubclient.removeFilesFromFileStorage([fileKey]);
+        await userApi.wait.fileDeletionFromFileStorage(fileKey);
 
-      // Verify file was deleted
-      await userApi.wait.fileDeletionFromFileStorage(fileKey);
+        // Step 6: Resume BSPs now that user no longer has the file.
+        await resumeAllBspContainers(userApi, BSP_COUNT);
+        bspsPaused = false;
 
-      // Step 6: Verify BSPs volunteered and wait for them to confirm storing
-      const volunteerEvents = await blockProducerApi.assert.eventMany(
-        "fileSystem",
-        "AcceptedBspVolunteer"
-      );
-      strictEqual(
-        volunteerEvents.length,
-        BSP_COUNT,
-        `Expected ${BSP_COUNT} AcceptedBspVolunteer events`
-      );
+        // Ensure all BSPs catch up before expecting volunteer/confirm flows.
+        await ctx.network.forEachBsp(async (bspApi) => {
+          await waitForPassiveTipSync(blockProducerApi, bspApi);
+        });
 
-      // Wait for all BSPs to confirm storing (60 second timeout for large networks)
-      await blockProducerApi.wait.bspStored({
-        expectedExts: BSP_COUNT,
-        timeoutMs: 60000,
-        sealBlock: true
-      });
+        // Step 7: Verify BSPs volunteered and wait for them to confirm storing
+        await blockProducerApi.wait.bspVolunteerInTxPool(BSP_COUNT, 60000);
+        await blockProducerApi.block.seal();
 
-      // Verify all BSPs confirmed - use blockProducerApi since it produced the block
-      const confirmEvents = await blockProducerApi.assert.eventMany(
-        "fileSystem",
-        "BspConfirmedStoring"
-      );
-      strictEqual(
-        confirmEvents.length,
-        BSP_COUNT,
-        `Expected ${BSP_COUNT} BspConfirmedStoring events`
-      );
+        const volunteerEvents = await blockProducerApi.assert.eventMany(
+          "fileSystem",
+          "AcceptedBspVolunteer"
+        );
+        strictEqual(
+          volunteerEvents.length,
+          BSP_COUNT,
+          `Expected ${BSP_COUNT} AcceptedBspVolunteer events`
+        );
 
-      // Step 7: Verify all BSPs have the file in their storage
-      for (let i = 0; i < BSP_COUNT; i++) {
-        const bspApi = await ctx.network.getBspApi(i);
+        // Wait for all BSPs to confirm storing.
+        // We seal progressively to avoid deadlock when only a subset of confirmations
+        // is initially in the tx pool.
+        await waitForBspConfirmationsWithSealing(
+          blockProducerApi,
+          fileKey,
+          BSP_COUNT,
+          BSP_CONFIRMATION_TIMEOUT_MS
+        );
 
-        // Verify file is in BSP's file storage
-        await bspApi.wait.fileStorageComplete(fileKey);
+        // Step 8: Verify all BSPs have the file in their storage
+        for (let i = 0; i < BSP_COUNT; i++) {
+          const bspApi = await ctx.network.getBspApi(i);
 
-        // Verify file is in BSP's forest (direct check since there's no "waitForFileInForest" helper)
-        const isInForest = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
-        assert(isInForest.isTrue, `File not found in BSP ${i} forest`);
+          // Verify file is in BSP's file storage
+          await bspApi.wait.fileStorageComplete(fileKey);
+
+          // Verify file is in BSP's forest (direct check since there's no "waitForFileInForest" helper)
+          const isInForest = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+          assert(isInForest.isTrue, `File not found in BSP ${i} forest`);
+        }
+      } finally {
+        if (bspsPaused) {
+          try {
+            await resumeAllBspContainers(userApi, BSP_COUNT);
+          } catch {
+            // best-effort cleanup; network teardown will still remove containers
+          }
+        }
       }
     });
   }

@@ -700,20 +700,33 @@ where
 
         match file_trie.write_chunk(chunk_id, data) {
             Ok(()) => {
-                // Chunk was successfully inserted into shared trie - need to update root
-                debug!(target: LOG_TARGET, "Chunk {:?} successfully written to shared trie for file key {:?}", chunk_id, file_key);
+                debug!(
+                    target: LOG_TARGET,
+                    "Chunk {:?} successfully written to shared trie for file key {:?}",
+                    chunk_id,
+                    file_key
+                );
             }
             Err(FileStorageWriteError::FileChunkAlreadyExists) => {
-                // Chunk already exists in shared trie - no need to update root
-                debug!(target: LOG_TARGET, "Chunk {:?} already exists in shared trie for file key {:?}, incrementing count for progress tracking", chunk_id, file_key);
+                debug!(
+                    target: LOG_TARGET,
+                    "Chunk {:?} already exists in shared trie for file key {:?}",
+                    chunk_id,
+                    file_key
+                );
             }
             Err(other) => {
-                error!(target: LOG_TARGET, "Error while writing chunk {:?} of file key {:?}: {:?}", chunk_id, file_key, other);
+                error!(
+                    target: LOG_TARGET,
+                    "Error while writing chunk {:?} of file key {:?}: {:?}",
+                    chunk_id,
+                    file_key,
+                    other
+                );
                 return Err(FileStorageWriteError::FailedToInsertFileChunk);
             }
-        };
+        }
 
-        // Update the root of the file trie.
         let new_partial_root = file_trie.get_root();
         let mut transaction = DBTransaction::new();
         transaction.put(
@@ -727,14 +740,12 @@ where
             FileStorageWriteError::FailedToGetStoredChunksCount
         })?;
 
-        // Increment chunk count.
         // This should never overflow unless there is a bug or we support file sizes as large as 16 exabytes.
         // Since this is executed within the context of a write lock in the layer above, we should not have any chunk count syncing issues.
         let new_count = current_count
             .checked_add(1)
             .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
 
-        // Update the chunk count.
         transaction.put(
             Column::ChunkCount.into(),
             file_key.as_ref(),

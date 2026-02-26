@@ -393,21 +393,33 @@ where
 
         match file_data.write_chunk(chunk_id, data) {
             Ok(()) => {
-                // Chunk was successfully inserted into shared trie
-                debug!(target: LOG_TARGET, "Chunk {:?} successfully written to shared trie for file key {:?}", chunk_id, file_key);
+                debug!(
+                    target: LOG_TARGET,
+                    "Chunk {:?} successfully written to shared trie for file key {:?}",
+                    chunk_id,
+                    file_key
+                );
             }
             Err(FileStorageWriteError::FileChunkAlreadyExists) => {
-                // Chunk already exists in shared trie - no need to update trie, just track progress
-                debug!(target: LOG_TARGET, "Chunk {:?} already exists in shared trie for file key {:?}, incrementing count for progress tracking", chunk_id, file_key);
+                debug!(
+                    target: LOG_TARGET,
+                    "Chunk {:?} already exists in shared trie for file key {:?}",
+                    chunk_id,
+                    file_key
+                );
             }
             Err(other) => {
-                error!(target: LOG_TARGET, "Error while writing chunk {:?} of file key {:?}: {:?}", chunk_id, file_key, other);
+                error!(
+                    target: LOG_TARGET,
+                    "Error while writing chunk {:?} of file key {:?}: {:?}",
+                    chunk_id,
+                    file_key,
+                    other
+                );
                 return Err(FileStorageWriteError::FailedToInsertFileChunk);
             }
         }
 
-        // Always increment chunk count for this file_key's progress tracking
-        // This happens regardless of whether the chunk was newly inserted or already existed
         let current_count = self
             .chunk_counts
             .get(file_key)

@@ -7,7 +7,8 @@ use sp_core::H256;
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+        BucketId, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
+        BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
 use shp_file_metadata::ChunkId;
@@ -51,6 +52,7 @@ where
         &'a self,
         peer_ids: Vec<PeerId>,
         file_metadata: &'a FileMetadata,
+        bucket_id: Option<BucketId<Runtime>>,
     ) -> impl core::future::Future<Output = Result<(), anyhow::Error>> + 'a {
         async move {
             let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
@@ -58,7 +60,13 @@ where
 
             for peer_id in peer_ids {
                 match self
-                    .send_chunks(peer_id, file_metadata, file_key, chunk_count)
+                    .send_chunks(
+                        peer_id,
+                        file_metadata,
+                        file_key,
+                        chunk_count,
+                        bucket_id.clone(),
+                    )
                     .await
                 {
                     Ok(()) => return Ok(()),
@@ -103,6 +111,7 @@ where
         file_metadata: &'a FileMetadata,
         file_key: H256,
         chunk_count: u64,
+        bucket_id: Option<BucketId<Runtime>>,
     ) -> impl core::future::Future<Output = Result<(), anyhow::Error>> + 'a {
         async move {
             let start_time = std::time::Instant::now();
@@ -155,7 +164,12 @@ where
                         let upload_response = self
                             .as_handler()
                             .file_transfer
-                            .upload_request(peer_id, file_key.as_ref().into(), proof.clone(), None)
+                            .upload_request(
+                                peer_id,
+                                file_key.as_ref().into(),
+                                proof.clone(),
+                                bucket_id.clone(),
+                            )
                             .await;
 
                         match upload_response {
@@ -296,7 +310,12 @@ where
                         let upload_response = self
                             .as_handler()
                             .file_transfer
-                            .upload_request(peer_id, file_key.as_ref().into(), proof.clone(), None)
+                            .upload_request(
+                                peer_id,
+                                file_key.as_ref().into(),
+                                proof.clone(),
+                                bucket_id.clone(),
+                            )
                             .await;
 
                         match upload_response.as_ref() {

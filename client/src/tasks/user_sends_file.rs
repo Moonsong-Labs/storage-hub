@@ -147,7 +147,7 @@ where
         }
 
         self.storage_hub_handler
-            .upload_file_to_peer_ids(peer_ids, &file_metadata)
+            .upload_file_to_peer_ids(peer_ids, &file_metadata, None)
             .await?;
 
         Ok(format!(
@@ -207,7 +207,7 @@ where
         }
 
         self.storage_hub_handler
-            .upload_file_to_peer_ids(peer_ids, &file_metadata)
+            .upload_file_to_peer_ids(peer_ids, &file_metadata, None)
             .await?;
 
         Ok(format!(

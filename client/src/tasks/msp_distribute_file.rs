@@ -9,6 +9,7 @@ use shc_common::{
 };
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceCommandInterfaceExt;
+use sp_core::H256;
 
 use crate::{
     handler::StorageHubHandler,
@@ -162,9 +163,11 @@ where
             .extract_peer_ids_and_register_known_addresses(msp_multiaddresses)
             .await;
 
+        let bucket_id = H256::from_slice(file_metadata.bucket_id().as_ref());
+
         // Send chunks to provider using shared uploader.
         self.storage_hub_handler
-            .upload_file_to_peer_ids(peer_ids, &file_metadata)
+            .upload_file_to_peer_ids(peer_ids, &file_metadata, Some(bucket_id))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send chunks to provider: {:?}", e))?;
 

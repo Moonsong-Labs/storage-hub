@@ -6,6 +6,7 @@
  */
 
 import path from "node:path";
+import { createHash } from "node:crypto";
 import type { GeneratedIdentity } from "./keyGenerator";
 import type { NodeConfig, NormalizedTopology } from "./topology";
 import type { Ports } from "./portAllocator";
@@ -36,6 +37,8 @@ export interface NodeIdentityInfo {
   config: NodeConfig;
   nodeType: "bsp" | "msp" | "fisherman" | "user";
   index: number;
+  /** Deterministic on-chain provider ID used for BSP/MSP sign-up. */
+  providerId?: `0x${string}`;
 }
 
 /**
@@ -72,6 +75,25 @@ export interface ServiceGeneratorConfig {
   keystorePath?: string;
   /** Network name for docker-compose */
   networkName?: string;
+  /** Trusted MSP IDs passed to BSP nodes via --trusted-msps. */
+  trustedMspIds?: `0x${string}`[];
+}
+
+/**
+ * Generates a deterministic 32-byte provider ID for a given node kind and index.
+ *
+ * Dynamic launcher uses this ID both for:
+ * - runtime provider registration (forceBspSignUp / forceMspSignUp)
+ * - BSP bootstrap trust list (--trusted-msps)
+ */
+export function generateDeterministicProviderId(
+  nodeType: "bsp" | "msp",
+  index: number
+): `0x${string}` {
+  const digest = createHash("sha256")
+    .update(`storage-hub-${nodeType}-provider-${index}`)
+    .digest("hex");
+  return `0x${digest}`;
 }
 
 /**
@@ -131,6 +153,10 @@ export function generateNodeService(
     args.push(`--provider-type=${nodeType}`);
     args.push("--max-storage-capacity=4294967295");
     args.push("--jump-capacity=1073741824");
+  }
+
+  if (nodeType === "bsp" && (baseConfig.trustedMspIds?.length ?? 0) > 0) {
+    args.push(`--trusted-msps=${baseConfig.trustedMspIds!.join(",")}`);
   }
 
   // Add fisherman-specific flags (fishermen always need a database)
@@ -427,11 +453,19 @@ export function generateComposeServices(
     users: []
   };
   const portAllocator = new PortAllocator();
+  const trustedMspIds = topology.msps.map((_, index) =>
+    generateDeterministicProviderId("msp", index)
+  );
+  const providerConfig: ServiceGeneratorConfig = {
+    ...baseConfig,
+    trustedMspIds
+  };
 
   // Generate BSP services (no Postgres, no Indexer)
   for (const [index, config] of topology.bsps.entries()) {
     const identity = generateNodeIdentity("bsp", index);
     const ports = portAllocator.allocate("bsp", index);
+    const providerId = generateDeterministicProviderId("bsp", index);
 
     services[`sh-bsp-${index}`] = generateNodeService(
       "bsp",
@@ -439,7 +473,7 @@ export function generateComposeServices(
       ports,
       config,
       index,
-      baseConfig
+      providerConfig
     );
 
     identities.bsps.push({
@@ -447,7 +481,8 @@ export function generateComposeServices(
       ports,
       config,
       nodeType: "bsp",
-      index
+      index,
+      providerId
     });
   }
 
@@ -455,6 +490,7 @@ export function generateComposeServices(
   for (const [index, config] of topology.msps.entries()) {
     const identity = generateNodeIdentity("msp", index);
     const ports = portAllocator.allocate("msp", index);
+    const providerId = trustedMspIds[index];
     // Allocate separate ports for the indexer
     const indexerPorts = portAllocator.allocate("msp-indexer", index);
     // Generate a separate node key for the indexer
@@ -479,7 +515,7 @@ export function generateComposeServices(
       ports,
       config,
       index,
-      baseConfig
+      providerConfig
     );
 
     identities.msps.push({
@@ -487,7 +523,8 @@ export function generateComposeServices(
       ports,
       config,
       nodeType: "msp",
-      index
+      index,
+      providerId
     });
   }
 
@@ -524,7 +561,7 @@ export function generateComposeServices(
       ports,
       config,
       index,
-      baseConfig
+      providerConfig
     );
 
     identities.fishermen.push({

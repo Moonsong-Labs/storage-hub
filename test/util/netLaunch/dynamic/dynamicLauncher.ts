@@ -48,8 +48,161 @@ import { sendCustomRpc } from "../../rpc";
 import { sleep } from "../../timer";
 import { CAPACITY_512 } from "../../bspNet/consts";
 import { injectKeys } from "./keyGenerator";
-import { BaseNetworkContext, DEFAULT_FUND_AMOUNT } from "../baseContext";
+import { cleanupEnvironment } from "../../helpers";
+import { BaseNetworkContext } from "../baseContext";
 import yaml from "yaml";
+
+const WORLD_WRITABLE_MODE = 0o777;
+const AURA_SEAL_RETRY_DELAY_MS = 6500;
+const AURA_SEAL_MAX_RETRIES = 3;
+const NODE_IDLE_TIMEOUT_MS = 30000;
+
+function ensureWorldWritableDirectory(dirPath: string): void {
+  fs.mkdirSync(dirPath, {
+    recursive: true,
+    mode: WORLD_WRITABLE_MODE
+  });
+  // mkdir mode is affected by process umask (e.g. 0022 => 0755), so chmod explicitly.
+  fs.chmodSync(dirPath, WORLD_WRITABLE_MODE);
+}
+
+function stringifyError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function isAuraCreateBlockTrap(error: unknown): boolean {
+  const message = stringifyError(error);
+  return (
+    message.includes("pallet_aura") ||
+    message.includes("Slot must") ||
+    message.includes("Execution aborted due to trap") ||
+    message.includes("wasm `unreachable` instruction executed")
+  );
+}
+
+async function waitForNodeTipSyncWithoutSealing(
+  nodeSyncedApi: EnrichedBspApi,
+  nodeBehindApi: EnrichedBspApi,
+  timeoutMs = 60000,
+  pollMs = 500
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const [syncedHeader, behindHeader] = await Promise.all([
+      nodeSyncedApi.rpc.chain.getHeader(),
+      nodeBehindApi.rpc.chain.getHeader()
+    ]);
+
+    if (syncedHeader.hash.eq(behindHeader.hash)) {
+      return;
+    }
+
+    await sleep(pollMs);
+  }
+
+  const [syncedHeader, behindHeader] = await Promise.all([
+    nodeSyncedApi.rpc.chain.getHeader(),
+    nodeBehindApi.rpc.chain.getHeader()
+  ]);
+
+  throw new Error(
+    `Node did not passively catch up to chain tip within ${timeoutMs}ms ` +
+      `(synced #${syncedHeader.number.toString()} ${syncedHeader.hash.toString()}, ` +
+      `behind #${behindHeader.number.toString()} ${behindHeader.hash.toString()})`
+  );
+}
+
+async function syncNodeTip(
+  nodeSyncedApi: EnrichedBspApi,
+  nodeBehindApi: EnrichedBspApi,
+  timeoutMs = 120000
+): Promise<void> {
+  await waitForNodeTipSyncWithoutSealing(nodeSyncedApi, nodeBehindApi, timeoutMs);
+}
+
+async function runWithAuraRecovery<T>(
+  initialApi: EnrichedBspApi,
+  runtimeType: "parachain" | "solochain",
+  rpcPort: number,
+  operationName: string,
+  operation: (api: EnrichedBspApi) => Promise<T>,
+  maxRetries = AURA_SEAL_MAX_RETRIES
+): Promise<{ api: EnrichedBspApi; result: T }> {
+  let api = initialApi;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await operation(api);
+      return { api, result };
+    } catch (error) {
+      if (!isAuraCreateBlockTrap(error) || attempt === maxRetries) {
+        throw error;
+      }
+
+      const compactReason = stringifyError(error).split("\n")[0];
+      console.warn(
+        `[DynamicLauncher] ${operationName} hit Aura trap on ws://127.0.0.1:${rpcPort} ` +
+          `(attempt ${attempt}/${maxRetries}): ${compactReason}`
+      );
+
+      try {
+        await api.disconnect();
+      } catch {
+        // Ignore disconnect errors when recovering from a failed seal attempt.
+      }
+
+      await sleep(AURA_SEAL_RETRY_DELAY_MS * attempt);
+      api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`, runtimeType);
+    }
+  }
+
+  throw new Error(`Unreachable: failed to execute ${operationName} after recovery attempts`);
+}
+
+async function waitForNodeIdle(
+  nodeType: NodeIdentityInfo["nodeType"],
+  index: number,
+  timeout = NODE_IDLE_TIMEOUT_MS
+): Promise<void> {
+  await waitForLog({
+    containerName: `storage-hub-sh-${nodeType}-${index}`,
+    searchString: "💤 Idle",
+    timeout
+  });
+}
+
+async function registerProvidersWithSetupProducer(
+  producerApi: EnrichedBspApi,
+  providerNodes: NodeIdentityInfo[],
+  runtimeType: "parachain" | "solochain",
+  producerRpcPort: number
+): Promise<EnrichedBspApi> {
+  let currentProducerApi = producerApi;
+
+  for (const nodeInfo of providerNodes) {
+    ({ api: currentProducerApi } = await runWithAuraRecovery(
+      currentProducerApi,
+      runtimeType,
+      producerRpcPort,
+      `register-${nodeInfo.nodeType}-${nodeInfo.index}`,
+      (api) => registerProvider(api, nodeInfo)
+    ));
+
+    const nodeApi = await BspNetTestApi.create(`ws://127.0.0.1:${nodeInfo.ports.rpc}`, runtimeType);
+    try {
+      await syncNodeTip(currentProducerApi, nodeApi);
+      await fetchProviderId(nodeApi, nodeInfo.identity);
+    } finally {
+      await nodeApi.disconnect();
+    }
+  }
+
+  return currentProducerApi;
+}
 
 export interface DynamicNetworkConfig {
   runtimeType?: "parachain" | "solochain";
@@ -167,6 +320,14 @@ export class DynamicNetworkContext extends BaseNetworkContext {
    */
   async cleanup(): Promise<void> {
     await this.connectionPool.cleanup();
+
+    // Align dynamic-network cleanup with other integration suites:
+    // export container logs into /tmp/bsp-logs-* before teardown.
+    try {
+      await cleanupEnvironment();
+    } catch {
+      // Cleanup errors are non-critical
+    }
 
     try {
       await compose.down({
@@ -296,30 +457,28 @@ export async function launchNetworkFromTopology(
   const reporter = config.progressReporter ?? new SilentProgressReporter();
   const runtimeType = config.runtimeType ?? "parachain";
 
+  // Keystore directories must be world-writable because the Docker container
+  // runs as uid 1337 (storage-hub user) while the host creates these as the runner user.
+  // On Linux CI, native bind mounts enforce host permissions strictly.
+  // Mirrors: chmod -R 777 docker/dev-keystores in .github/workflows/network.yml
   const keystoreTempDir = tmp.dirSync({
     prefix: "storagehub-test-keystores-",
-    unsafeCleanup: true
+    unsafeCleanup: true,
+    mode: WORLD_WRITABLE_MODE
   });
+  fs.chmodSync(keystoreTempDir.name, WORLD_WRITABLE_MODE);
 
   for (let i = 0; i < normalized.bsps.length; i++) {
-    fs.mkdirSync(path.join(keystoreTempDir.name, `bsp-${i}`), {
-      recursive: true
-    });
+    ensureWorldWritableDirectory(path.join(keystoreTempDir.name, `bsp-${i}`));
   }
   for (let i = 0; i < normalized.msps.length; i++) {
-    fs.mkdirSync(path.join(keystoreTempDir.name, `msp-${i}`), {
-      recursive: true
-    });
+    ensureWorldWritableDirectory(path.join(keystoreTempDir.name, `msp-${i}`));
   }
   for (let i = 0; i < normalized.fishermen.length; i++) {
-    fs.mkdirSync(path.join(keystoreTempDir.name, `fisherman-${i}`), {
-      recursive: true
-    });
+    ensureWorldWritableDirectory(path.join(keystoreTempDir.name, `fisherman-${i}`));
   }
   for (let i = 0; i < normalized.users.length; i++) {
-    fs.mkdirSync(path.join(keystoreTempDir.name, `user-${i}`), {
-      recursive: true
-    });
+    ensureWorldWritableDirectory(path.join(keystoreTempDir.name, `user-${i}`));
   }
 
   const { services, identities } = generateComposeServices(normalized, {
@@ -369,11 +528,6 @@ export async function launchNetworkFromTopology(
         runtimeType
       );
 
-      await waitForLog({
-        containerName: "storage-hub-sh-bsp-0",
-        searchString: "💤 Idle",
-        timeout: 15000
-      });
       bootnodeInfo = await getBootnodeInfo(identities.bsps[0]);
     }
 
@@ -423,34 +577,64 @@ export async function launchNetworkFromTopology(
       bsp0Api
     );
 
-    // Sync user-0 to bsp0Api's chain tip (BSP-0 sealed blocks during BSP-1..N registration),
-    // then use user0Api for remaining chain setup — consistent with tests where user-0
-    // is the block producer via getBlockProducerApi().
-    const user0Api = await BspNetTestApi.create(
-      `ws://127.0.0.1:${identities.users[0].ports.rpc}`,
-      runtimeType
-    );
-    await bsp0Api!.wait.nodeCatchUpToChainTip(user0Api);
+    // Dynamic topologies require at least one user node; user-0 is the setup producer.
+    const user0Info = identities.users[0];
+    let user0Api = await BspNetTestApi.create(`ws://127.0.0.1:${user0Info.ports.rpc}`, runtimeType);
+    await syncNodeTip(bsp0Api!, user0Api);
+    await waitForNodeIdle("user", user0Info.index);
 
-    // bsp0Api is no longer needed — user-0 is now the block producer
+    // bsp0Api is no longer needed once user-0 is synced and healthy.
     if (bsp0Api) {
       await bsp0Api.disconnect();
       bsp0Api = undefined;
     }
 
-    await context.preFundAccounts(user0Api);
-    await context.setupRuntimeParams(user0Api);
-    await user0Api.block.seal();
+    ({ api: user0Api } = await runWithAuraRecovery(
+      user0Api,
+      runtimeType,
+      user0Info.ports.rpc,
+      "preFundAccounts",
+      (api) => context.preFundAccounts(api)
+    ));
+    ({ api: user0Api } = await runWithAuraRecovery(
+      user0Api,
+      runtimeType,
+      user0Info.ports.rpc,
+      "setupRuntimeParams",
+      (api) => context.setupRuntimeParams(api)
+    ));
 
-    for (const mspInfo of identities.msps) {
-      await registerProvider(user0Api, mspInfo);
+    user0Api = await registerProvidersWithSetupProducer(
+      user0Api,
+      identities.bsps,
+      runtimeType,
+      user0Info.ports.rpc
+    );
+    user0Api = await registerProvidersWithSetupProducer(
+      user0Api,
+      identities.msps,
+      runtimeType,
+      user0Info.ports.rpc
+    );
 
-      const mspApi = await BspNetTestApi.create(`ws://127.0.0.1:${mspInfo.ports.rpc}`, runtimeType);
+    ({ api: user0Api } = await runWithAuraRecovery(
+      user0Api,
+      runtimeType,
+      user0Info.ports.rpc,
+      "finalSetupSeal",
+      (api) => api.block.seal()
+    ));
 
-      await user0Api.wait.nodeCatchUpToChainTip(mspApi);
-      await fetchProviderId(mspApi, mspInfo.identity);
-      await mspApi.disconnect();
-    }
+    // Trusted MSP peer IDs are resolved by BSPs on startup.
+    // MSP registration is complete now, so restart BSPs to refresh trusted MSP peer mapping.
+    await restartBspsAfterMspRegistration(
+      identities.bsps,
+      composeFile,
+      cwd,
+      reporter,
+      runtimeType,
+      user0Api
+    );
 
     await user0Api.disconnect();
 
@@ -533,8 +717,10 @@ async function registerProvider(api: EnrichedBspApi, nodeInfo: NodeIdentityInfo)
   const multiaddress = `/ip4/${containerIp}/tcp/30350/p2p/${peerId}`;
 
   if (nodeInfo.nodeType === "bsp") {
-    const crypto = await import("node:crypto");
-    const bspId = `0x${crypto.randomBytes(32).toString("hex")}`;
+    const bspId = nodeInfo.providerId;
+    if (!bspId) {
+      throw new Error(`Missing deterministic BSP providerId for bsp-${nodeInfo.index}`);
+    }
     const capacity = nodeInfo.config.capacity ?? CAPACITY_512;
     await api.block.seal({
       calls: [
@@ -551,8 +737,10 @@ async function registerProvider(api: EnrichedBspApi, nodeInfo: NodeIdentityInfo)
       ]
     });
   } else if (nodeInfo.nodeType === "msp") {
-    const crypto = await import("node:crypto");
-    const mspId = `0x${crypto.randomBytes(32).toString("hex")}`;
+    const mspId = nodeInfo.providerId;
+    if (!mspId) {
+      throw new Error(`Missing deterministic MSP providerId for msp-${nodeInfo.index}`);
+    }
     const capacity = nodeInfo.config.capacity ?? CAPACITY_512;
     await api.block.seal({
       calls: [
@@ -654,7 +842,7 @@ async function startProvidersPhase(
   reporter: ProgressReporter,
   runtimeType: "parachain" | "solochain",
   bootnodeInfo?: BootnodeInfo,
-  registrationApi?: EnrichedBspApi
+  syncApi?: EnrichedBspApi
 ): Promise<void> {
   if (nodes.length === 0) return;
 
@@ -669,52 +857,29 @@ async function startProvidersPhase(
     env.BSP_PEER_ID = bootnodeInfo.peerId;
   }
 
-  const nodeServices = nodes.map((nodeInfo) => `sh-${type}-${nodeInfo.index}`);
-  await compose.upMany(nodeServices, {
-    cwd,
-    config: composeFile,
-    log: false,
-    env
-  });
-
   for (const nodeInfo of nodes) {
     try {
+      const serviceName = `sh-${type}-${nodeInfo.index}`;
+      await compose.upOne(serviceName, {
+        cwd,
+        config: composeFile,
+        log: false,
+        env
+      });
+
       await waitForRpcReady(nodeInfo.ports.rpc);
+      await waitForNodeIdle(type, nodeInfo.index);
 
       const nodeApi = await BspNetTestApi.create(
         `ws://127.0.0.1:${nodeInfo.ports.rpc}`,
         runtimeType
       );
 
-      if (registrationApi) {
-        await registrationApi.wait.nodeCatchUpToChainTip(nodeApi);
+      if (syncApi) {
+        await syncNodeTip(syncApi, nodeApi);
       }
 
       await injectKeys(nodeApi, nodeInfo.identity);
-
-      if (type === "bsp") {
-        const apiForRegistration = registrationApi ?? nodeApi;
-
-        const fundAmount = DEFAULT_FUND_AMOUNT;
-        await apiForRegistration.block.seal({
-          calls: [
-            apiForRegistration.tx.sudo.sudo(
-              apiForRegistration.tx.balances.forceSetBalance(
-                nodeInfo.identity.keyring.address,
-                fundAmount
-              )
-            )
-          ]
-        });
-
-        await registerProvider(apiForRegistration, nodeInfo);
-
-        if (registrationApi) {
-          await registrationApi.wait.nodeCatchUpToChainTip(nodeApi);
-        }
-
-        await fetchProviderId(nodeApi, nodeInfo.identity);
-      }
 
       await nodeApi.disconnect();
       reporter.onNodeReady(type, nodeInfo.index, nodes.length);
@@ -760,6 +925,7 @@ async function startMspContainersPhase(
   for (const [index, nodeInfo] of msps.entries()) {
     try {
       await waitForRpcReady(nodeInfo.ports.rpc);
+      await waitForNodeIdle("msp", nodeInfo.index);
 
       const mspApi = await BspNetTestApi.create(
         `ws://127.0.0.1:${nodeInfo.ports.rpc}`,
@@ -769,7 +935,7 @@ async function startMspContainersPhase(
       await injectKeys(mspApi, nodeInfo.identity);
 
       if (syncApi) {
-        await syncApi.wait.nodeCatchUpToChainTip(mspApi);
+        await syncNodeTip(syncApi, mspApi);
       }
 
       await mspApi.disconnect();
@@ -782,6 +948,49 @@ async function startMspContainersPhase(
   }
 
   reporter.onPhaseComplete("MSP", timer.elapsed());
+}
+
+async function restartBspsAfterMspRegistration(
+  bsps: NodeIdentityInfo[],
+  composeFile: string,
+  cwd: string,
+  reporter: ProgressReporter,
+  runtimeType: "parachain" | "solochain",
+  syncApi: EnrichedBspApi
+): Promise<void> {
+  if (bsps.length === 0) return;
+
+  const timer = new PhaseTimer();
+  reporter.onPhaseStart("BSP-RESTART", bsps.length);
+
+  for (const [index, nodeInfo] of bsps.entries()) {
+    try {
+      await compose.restartOne(`sh-bsp-${nodeInfo.index}`, {
+        cwd,
+        config: composeFile,
+        log: false
+      });
+
+      await waitForRpcReady(nodeInfo.ports.rpc);
+      await waitForNodeIdle("bsp", nodeInfo.index);
+
+      const bspApi = await BspNetTestApi.create(
+        `ws://127.0.0.1:${nodeInfo.ports.rpc}`,
+        runtimeType
+      );
+
+      await syncNodeTip(syncApi, bspApi);
+      await fetchProviderId(bspApi, nodeInfo.identity);
+
+      await bspApi.disconnect();
+      reporter.onNodeReady("bsp", index, bsps.length);
+    } catch (error) {
+      reporter.onError("bsp", index, error as Error);
+      throw error;
+    }
+  }
+
+  reporter.onPhaseComplete("BSP-RESTART", timer.elapsed());
 }
 
 async function startUsersPhase(
@@ -817,13 +1026,14 @@ async function startUsersPhase(
   for (const [index, nodeInfo] of users.entries()) {
     try {
       await waitForRpcReady(nodeInfo.ports.rpc);
+      await waitForNodeIdle("user", nodeInfo.index);
 
       const api = await BspNetTestApi.create(`ws://127.0.0.1:${nodeInfo.ports.rpc}`, runtimeType);
 
       await injectKeys(api, nodeInfo.identity);
 
       if (syncApi) {
-        await syncApi.wait.nodeCatchUpToChainTip(api);
+        await syncNodeTip(syncApi, api);
       }
 
       await api.disconnect();
