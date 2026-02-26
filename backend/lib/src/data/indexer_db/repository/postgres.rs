@@ -13,15 +13,18 @@
 //! - Comprehensive error handling
 
 use async_trait::async_trait;
-#[cfg(test)]
 use bigdecimal::BigDecimal;
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
+use diesel::sql_query;
+use diesel::sql_types::{BigInt, Bool, Bytea, Nullable, Numeric, Timestamp, Varchar};
+use diesel::QueryableByName;
 use diesel_async::RunQueryDsl;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
     models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp, MspFile},
-    schema::{bsp, bucket, file},
+    schema::{bsp, file},
     OnchainMspId,
 };
 use shp_types::Hash;
@@ -33,8 +36,84 @@ use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
     pool::SmartPool,
-    IndexerOps, PaymentStreamData, PaymentStreamKind,
+    BucketsPage, IndexerOps, PaymentStreamData, PaymentStreamKind,
 };
+
+#[derive(QueryableByName)]
+struct BucketPageRow {
+    #[diesel(sql_type = BigInt)]
+    total_count: i64,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    id: Option<i64>,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    msp_id: Option<i64>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    account: Option<String>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    onchain_bucket_id: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    name: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    collection_id: Option<String>,
+    #[diesel(sql_type = Nullable<Bool>)]
+    private: Option<bool>,
+    #[diesel(sql_type = Nullable<Timestamp>)]
+    created_at: Option<NaiveDateTime>,
+    #[diesel(sql_type = Nullable<Timestamp>)]
+    updated_at: Option<NaiveDateTime>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    merkle_root: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    value_prop_id: Option<String>,
+    #[diesel(sql_type = Nullable<Numeric>)]
+    total_size: Option<BigDecimal>,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    file_count: Option<i64>,
+}
+
+impl BucketPageRow {
+    fn into_bucket(self) -> RepositoryResult<Option<Bucket>> {
+        let Some(id) = self.id else {
+            return Ok(None);
+        };
+
+        Ok(Some(Bucket {
+            id,
+            msp_id: self.msp_id,
+            account: self.account.ok_or_else(|| {
+                RepositoryError::configuration("missing account field in bucket row")
+            })?,
+            onchain_bucket_id: self.onchain_bucket_id.ok_or_else(|| {
+                RepositoryError::configuration("missing onchain_bucket_id field in bucket row")
+            })?,
+            name: self
+                .name
+                .ok_or_else(|| RepositoryError::configuration("missing name field in bucket row"))?,
+            collection_id: self.collection_id,
+            private: self.private.ok_or_else(|| {
+                RepositoryError::configuration("missing private field in bucket row")
+            })?,
+            created_at: self.created_at.ok_or_else(|| {
+                RepositoryError::configuration("missing created_at field in bucket row")
+            })?,
+            updated_at: self.updated_at.ok_or_else(|| {
+                RepositoryError::configuration("missing updated_at field in bucket row")
+            })?,
+            merkle_root: self.merkle_root.ok_or_else(|| {
+                RepositoryError::configuration("missing merkle_root field in bucket row")
+            })?,
+            value_prop_id: self.value_prop_id.ok_or_else(|| {
+                RepositoryError::configuration("missing value_prop_id field in bucket row")
+            })?,
+            total_size: self.total_size.ok_or_else(|| {
+                RepositoryError::configuration("missing total_size field in bucket row")
+            })?,
+            file_count: self.file_count.ok_or_else(|| {
+                RepositoryError::configuration("missing file_count field in bucket row")
+            })?,
+        }))
+    }
+}
 
 /// PostgreSQL repository implementation.
 ///
@@ -99,41 +178,87 @@ impl IndexerOps for Repository {
         account: &str,
         limit: i64,
         offset: i64,
-    ) -> RepositoryResult<Vec<Bucket>> {
+    ) -> RepositoryResult<BucketsPage<Bucket>> {
         let mut conn = self.pool.get().await?;
 
-        // Same as Bucket::get_user_buckets_by_msp but with pagination
-        let buckets = bucket::table
-            .order(bucket::id.asc())
-            .filter(bucket::account.eq(account))
-            .filter(bucket::msp_id.eq(msp))
-            .limit(limit)
-            .offset(offset)
-            .load(&mut conn)
-            .await?;
+        // Why raw SQL instead of Diesel's query builder chain (`filter/order/limit/offset`)?
+        //
+        // We need both:
+        // 1) the paginated rows, and
+        // 2) the total amount of matching rows (before pagination)
+        //
+        // in a *single DB roundtrip*.
+        //
+        // The previous Diesel chain naturally returned only page rows and required an extra
+        // `.count()` query for the total. This SQL packs both concerns into one statement and
+        // keeps the "empty page but non-zero total" case correct.
+        let rows = sql_query(
+            r#"
+            -- 1) filtered: constrain to user + MSP once, so both page and count use exactly
+            --    the same predicate and cannot drift.
+            WITH filtered AS (
+                SELECT *
+                FROM bucket
+                WHERE account = $1
+                  AND msp_id = $2
+            ),
+            -- 2) total: count all matches before pagination.
+            total AS (
+                SELECT COUNT(*)::bigint AS total_count FROM filtered
+            ),
+            -- 3) page: apply ordering and pagination on top of the same filtered set.
+            page AS (
+                SELECT *
+                FROM filtered
+                ORDER BY id ASC
+                LIMIT $3 OFFSET $4
+            )
+            -- 4) left-join total with page so we always keep total_count even when page has
+            --    zero rows (e.g. very high offset). In that case page columns are NULL.
+            SELECT
+                total.total_count,
+                page.id,
+                page.msp_id,
+                page.account,
+                page.onchain_bucket_id,
+                page.name,
+                page.collection_id,
+                page.private,
+                page.created_at,
+                page.updated_at,
+                page.merkle_root,
+                page.value_prop_id,
+                page.total_size,
+                page.file_count
+            FROM total
+            LEFT JOIN page ON true
+            "#,
+        )
+        .bind::<Varchar, _>(account)
+        .bind::<BigInt, _>(msp)
+        .bind::<BigInt, _>(limit)
+        .bind::<BigInt, _>(offset)
+        .load::<BucketPageRow>(&mut conn)
+        .await?;
 
-        Ok(buckets)
-    }
-
-    async fn get_buckets_count_by_user_and_msp(
-        &self,
-        msp: i64,
-        account: &str,
-    ) -> RepositoryResult<u64> {
-        let mut conn = self.pool.get().await?;
-
-        let count: i64 = bucket::table
-            .filter(bucket::account.eq(account))
-            .filter(bucket::msp_id.eq(msp))
-            .count()
-            .get_result(&mut conn)
-            .await?;
-
-        u64::try_from(count).map_err(|_| {
+        let total_count = rows.as_slice().first().map(|row| row.total_count).unwrap_or(0);
+        let total = u64::try_from(total_count).map_err(|_| {
             RepositoryError::configuration(format!(
-                "bucket count should be non-negative, got {count}"
+                "bucket count should be non-negative, got {total_count}"
             ))
-        })
+        })?;
+
+        // When `page` is empty, LEFT JOIN still returns one row with NULL page columns.
+        // `into_bucket` turns those NULL-page rows into `None`, and we drop them here.
+        let buckets = rows
+            .into_iter()
+            .map(BucketPageRow::into_bucket)
+            .collect::<RepositoryResult<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+        Ok(BucketsPage { buckets, total })
     }
 
     async fn get_files_by_bucket(
