@@ -1326,13 +1326,122 @@ mod tests {
             .build()
             .await;
 
-        let buckets = service
+        let page = service
             .list_user_buckets(&MOCK_ADDRESS, 0, DEFAULT_PAGE_LIMIT)
             .await
-            .unwrap()
-            .collect::<Vec<_>>();
+            .unwrap();
 
-        assert!(!buckets.is_empty());
+        assert_eq!(page.total, 1);
+        assert_eq!(page.buckets.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_list_user_buckets_respects_pagination_and_keeps_total() {
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                Box::pin(async move {
+                    let msp = client
+                        .create_msp(
+                            &MOCK_ADDRESS.to_string(),
+                            OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
+                        )
+                        .await
+                        .expect("should create MSP");
+
+                    client
+                        .create_bucket(
+                            &MOCK_ADDRESS.to_string(),
+                            Some(msp.id),
+                            b"bucket-a",
+                            random_bytes_32().as_slice(),
+                            false,
+                        )
+                        .await
+                        .expect("should create first bucket");
+
+                    client
+                        .create_bucket(
+                            &MOCK_ADDRESS.to_string(),
+                            Some(msp.id),
+                            b"bucket-b",
+                            random_bytes_32().as_slice(),
+                            true,
+                        )
+                        .await
+                        .expect("should create second bucket");
+
+                    client
+                        .create_bucket(
+                            &MOCK_ADDRESS.to_string(),
+                            Some(msp.id),
+                            b"bucket-c",
+                            random_bytes_32().as_slice(),
+                            false,
+                        )
+                        .await
+                        .expect("should create third bucket");
+                })
+            })
+            .await
+            .build()
+            .await;
+
+        let page = service
+            .list_user_buckets(&MOCK_ADDRESS, 1, 1)
+            .await
+            .expect("list_user_buckets should succeed");
+
+        assert_eq!(page.total, 3);
+        assert_eq!(page.buckets.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_list_user_buckets_high_offset_returns_empty_page_with_total() {
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                Box::pin(async move {
+                    let msp = client
+                        .create_msp(
+                            &MOCK_ADDRESS.to_string(),
+                            OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
+                        )
+                        .await
+                        .expect("should create MSP");
+
+                    client
+                        .create_bucket(
+                            &MOCK_ADDRESS.to_string(),
+                            Some(msp.id),
+                            b"bucket-a",
+                            random_bytes_32().as_slice(),
+                            false,
+                        )
+                        .await
+                        .expect("should create first bucket");
+
+                    client
+                        .create_bucket(
+                            &MOCK_ADDRESS.to_string(),
+                            Some(msp.id),
+                            b"bucket-b",
+                            random_bytes_32().as_slice(),
+                            false,
+                        )
+                        .await
+                        .expect("should create second bucket");
+                })
+            })
+            .await
+            .build()
+            .await;
+
+        let page = service
+            .list_user_buckets(&MOCK_ADDRESS, 999, 10)
+            .await
+            .expect("list_user_buckets should succeed");
+
+        assert_eq!(page.total, 2);
+        assert!(page.buckets.is_empty());
     }
 
     #[tokio::test]
