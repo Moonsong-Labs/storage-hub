@@ -953,6 +953,21 @@ declare const _default: {
                 old: string;
                 new_: string;
             };
+            NewStorageRequestV2: {
+                _alias: {
+                    size_: string;
+                };
+                who: string;
+                fileKey: string;
+                bucketId: string;
+                location: string;
+                fingerprint: string;
+                size_: string;
+                peerIds: string;
+                expiresAt: string;
+                bspsRequired: string;
+                mspId: string;
+            };
         };
     };
     /**

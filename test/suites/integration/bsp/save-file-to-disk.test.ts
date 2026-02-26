@@ -81,7 +81,10 @@ await describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUs
     const newStorageRequestDataBlob =
       userApi.events.fileSystem.NewStorageRequestV2.is(event) && event.data;
 
-    assert(newStorageRequestDataBlob, "NewStorageRequestV2 event data does not match expected type");
+    assert(
+      newStorageRequestDataBlob,
+      "NewStorageRequestV2 event data does not match expected type"
+    );
 
     await userApi.block.seal();
 

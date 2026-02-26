@@ -56,7 +56,7 @@ export class FilesModule extends ModuleBase {
       blockHash: ensure0xPrefix(wire.blockHash),
       ...(wire.txHash ? { txHash: ensure0xPrefix(wire.txHash) } : {}),
       desiredReplicas: wire.desiredReplicas,
-      currentReplication: wire.currentReplication,
+      currentReplication: wire.currentReplication
     };
   }
 

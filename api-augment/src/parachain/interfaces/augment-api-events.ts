@@ -653,6 +653,36 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * V2 of [`NewStorageRequest`] that includes `bsps_required` and `msp_id`.
+       **/
+      NewStorageRequestV2: AugmentedEvent<
+        ApiType,
+        [
+          who: AccountId32,
+          fileKey: H256,
+          bucketId: H256,
+          location: Bytes,
+          fingerprint: H256,
+          size_: u64,
+          peerIds: Vec<Bytes>,
+          expiresAt: u32,
+          bspsRequired: u32,
+          mspId: Option<H256>
+        ],
+        {
+          who: AccountId32;
+          fileKey: H256;
+          bucketId: H256;
+          location: Bytes;
+          fingerprint: H256;
+          size_: u64;
+          peerIds: Vec<Bytes>;
+          expiresAt: u32;
+          bspsRequired: u32;
+          mspId: Option<H256>;
+        }
+      >;
+      /**
        * Notifies that a SP has stopped storing a file because its owner has become insolvent.
        **/
       SpStopStoringInsolventUser: AugmentedEvent<

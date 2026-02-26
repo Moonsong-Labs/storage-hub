@@ -1657,7 +1657,22 @@ export default {
                     new_: 'new',
                 },
                 old: 'u32',
-                new_: 'u32'
+                new_: 'u32',
+            },
+            NewStorageRequestV2: {
+                _alias: {
+                    size_: 'size',
+                },
+                who: 'AccountId32',
+                fileKey: 'H256',
+                bucketId: 'H256',
+                location: 'Bytes',
+                fingerprint: 'H256',
+                size_: 'u64',
+                peerIds: 'Vec<Bytes>',
+                expiresAt: 'u32',
+                bspsRequired: 'u32',
+                mspId: 'Option<H256>'
             }
         }
     },

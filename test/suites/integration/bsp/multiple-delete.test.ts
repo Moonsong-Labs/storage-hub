@@ -77,7 +77,10 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
     await userApi.block.seal({ calls: txs, signer: shUser });
 
     // Get the new storage request events, making sure we have 3
-    const storageRequestEvents = await userApi.assert.eventMany("fileSystem", "NewStorageRequestV2");
+    const storageRequestEvents = await userApi.assert.eventMany(
+      "fileSystem",
+      "NewStorageRequestV2"
+    );
     strictEqual(storageRequestEvents.length, 3);
 
     // Get the file keys from the storage request events

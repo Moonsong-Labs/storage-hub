@@ -1270,6 +1270,19 @@ declare module "@polkadot/types/lookup" {
       readonly old: u32;
       readonly new_: u32;
     } & Struct;
+    readonly isNewStorageRequestV2: boolean;
+    readonly asNewStorageRequestV2: {
+      readonly who: AccountId20;
+      readonly fileKey: H256;
+      readonly bucketId: H256;
+      readonly location: Bytes;
+      readonly fingerprint: H256;
+      readonly size_: u64;
+      readonly peerIds: Vec<Bytes>;
+      readonly expiresAt: u32;
+      readonly bspsRequired: u32;
+      readonly mspId: Option<H256>;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -1300,7 +1313,8 @@ declare module "@polkadot/types/lookup" {
       | "BspFileDeletionsCompleted"
       | "UsedCapacityShouldBeZero"
       | "FailedToReleaseStorageRequestCreationDeposit"
-      | "UserOperationPauseFlagsUpdated";
+      | "UserOperationPauseFlagsUpdated"
+      | "NewStorageRequestV2";
   }
 
   /** @name ShpFileMetadataFileMetadata (113) */
