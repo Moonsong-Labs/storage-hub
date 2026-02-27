@@ -1556,9 +1556,24 @@ where
         (Runtime::Hash, tokio::sync::mpsc::Receiver<String>),
         SubmitAndWatchError,
     > {
+        // RPC handlers are set during the startup phase (before the main event loop begins),
+        // so they should always be available by the time extrinsics are submitted. The None
+        // check is a defensive guard; see the `rpc_handlers` field doc for details.
+        let rpc_handlers_guard = self.rpc_handlers.read().await;
+        let rpc_handlers = rpc_handlers_guard.as_ref().ok_or_else(|| {
+            error!(
+                target: LOG_TARGET,
+                "RPC handlers not yet available for transaction with nonce {}. \
+                 This should not happen as they are set during startup before block processing begins.",
+                nonce
+            );
+            SubmitAndWatchError::RpcTransport {
+                message: "RPC handlers not yet available".to_string(),
+            }
+        })?;
+
         // Submit the transaction via RPC
-        let (result, rx) = match self
-            .rpc_handlers
+        let (result, rx) = match rpc_handlers
             .rpc_query(&format!(
                 r#"{{
                     "jsonrpc": "2.0",

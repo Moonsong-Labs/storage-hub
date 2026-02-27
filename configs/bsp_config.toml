@@ -49,6 +49,9 @@ extrinsic_retry_timeout = 10
 extrinsic_mortality = 256
 # Maximum number of BSP confirm storing requests to batch together (default: 20)
 bsp_confirm_file_batch_size = 20
+# On blocks that are multiples of this number, check the local BSP stop-storing requests
+# against the on-chain state to ensure no stop-storing requests are missed.
+check_stop_storing_requests_period = 600
 
 # RPC configuration
 [provider.rpc_config]

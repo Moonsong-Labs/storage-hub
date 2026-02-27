@@ -125,7 +125,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP multiple proof submissions for BSP ID: {:x}, with seeds: {:?}",
+            "Initiating BSP multiple proof submissions for BSP ID [0x{:x}], with seeds: {:?}",
             event.provider_id,
             event.seeds
         );
@@ -139,7 +139,7 @@ where
         }
 
         Ok(format!(
-            "Handled MultipleNewChallengeSeeds for provider {:x}",
+            "Handled MultipleNewChallengeSeeds for provider [0x{:x}]",
             event.provider_id
         ))
     }
@@ -346,7 +346,7 @@ where
         trace!(target: LOG_TARGET, "Proof submitted successfully");
 
         Ok(format!(
-            "Handled ProcessSubmitProofRequest for provider {:x}",
+            "Handled ProcessSubmitProofRequest for provider [0x{:x}]",
             event.data.provider_id
         ))
     }

@@ -5,6 +5,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
+use tokio::sync::RwLock;
 
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{
@@ -78,8 +79,15 @@ where
     pub(crate) client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     /// The keystore. Used to sign extrinsics.
     pub(crate) keystore: KeystorePtr,
-    /// The RPC handlers. Used to send extrinsics.
-    pub(crate) rpc_handlers: Arc<RpcHandlers>,
+    /// The RPC handlers. Used to submit and watch extrinsics via the local RPC server.
+    ///
+    /// Wrapped in `RwLock<Option<...>>` because the RPC server is initialized after the
+    /// blockchain service is spawned. The handlers start as `None` and are set via the
+    /// `SetRpcHandlers` command during the startup phase of `run()`, before any block
+    /// processing begins. The `RwLock` is used because the write (from `SetRpcHandlers`)
+    /// and reads (from extrinsic submission) access a shared `Arc`; in practice they are
+    /// sequential within the single-threaded actor loop.
+    pub(crate) rpc_handlers: Arc<RwLock<Option<Arc<RpcHandlers>>>>,
     /// The Forest Storage handler.
     ///
     /// This is used to manage Forest Storage instances and update their roots when there are
@@ -232,6 +240,11 @@ where
 
     /// Maximum number of MSP respond storage requests to batch together.
     pub msp_respond_storage_batch_size: u32,
+
+    /// On blocks that are multiples of this number, the blockchain service will check
+    /// the local BSP stop-storing requests against the on-chain state to ensure no
+    /// stop-storing requests are missed.
+    pub check_stop_storing_requests_period: BlockNumber<Runtime>,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -248,6 +261,7 @@ where
             pending_db_url: None,
             bsp_confirm_file_batch_size: 20,
             msp_respond_storage_batch_size: 20,
+            check_stop_storing_requests_period: 600u32.into(),
         }
     }
 }
@@ -330,7 +344,28 @@ where
 
         // Initialise pending transactions DB store if configured
         self.actor.init_pending_tx_store().await;
-        // Role-specific initialisation based on the result of init_pending_tx_store.
+
+        // Wait for RPC handlers before proceeding with any block processing or transaction
+        // resubscription. The RPC server is initialized after the blockchain service is spawned,
+        // so the SetRpcHandlers command arrives through the command channel shortly after startup.
+        // We drain commands here to avoid processing blocks without the ability to submit extrinsics.
+        info!(target: LOG_TARGET, "⏳ Waiting for RPC handlers to be available...");
+        while let Some(command) = self.receiver.next().await {
+            if let BlockchainServiceCommand::SetRpcHandlers { rpc_handlers } = command {
+                info!(
+                    target: LOG_TARGET,
+                    "✅ RPC handlers set for BlockchainService"
+                );
+                let mut rpc_handlers_guard = self.actor.rpc_handlers.write().await;
+                *rpc_handlers_guard = Some(rpc_handlers);
+                break;
+            }
+            // Handle any other commands that arrive before SetRpcHandlers.
+            self.actor.handle_message(command).await;
+        }
+
+        // Role-specific initialisation. Now that RPC handlers are available, Leader nodes can
+        // immediately resubscribe pending transactions without deferring.
         match self.actor.role {
             MultiInstancesNodeRole::Leader => {
                 info!(
@@ -1353,6 +1388,41 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryMinWaitForStopStoring { callback } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let min_wait = self
+                        .client
+                        .runtime_api()
+                        .query_min_wait_for_stop_storing(current_block_hash);
+
+                    match callback.send(min_wait) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back MinWaitForStopStoring: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::HasPendingStopStoringRequest {
+                    bsp_id,
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let has_request = self.client.runtime_api().has_pending_stop_storing_request(
+                        current_block_hash,
+                        bsp_id.into(),
+                        file_key.into(),
+                    );
+
+                    match callback.send(has_request) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back HasPendingStopStoringRequest: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueryBucketsOfUserStoredByMsp {
                     msp_id,
                     user,
@@ -1644,6 +1714,16 @@ where
                         );
                     }
                 }
+                BlockchainServiceCommand::SetRpcHandlers { rpc_handlers } => {
+                    // This is normally handled during the pre-loop startup phase in `run()`.
+                    // If it arrives here, just set the handlers.
+                    info!(
+                        target: LOG_TARGET,
+                        "Setting RPC handlers for BlockchainService"
+                    );
+                    let mut rpc_handlers_guard = self.rpc_handlers.write().await;
+                    *rpc_handlers_guard = Some(rpc_handlers);
+                }
                 BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
@@ -1699,6 +1779,95 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueueBspRequestStopStoring { request, callback } => {
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let queued = bsp_handler.enqueue_request_bsp_stop_storing(request.clone());
+                        if queued {
+                            info!(
+                                target: LOG_TARGET,
+                                "Queued BSP request stop storing for file key [{:?}]",
+                                request.file_key
+                            );
+                        } else {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Skipping duplicate BSP request stop storing for file key [{:?}]",
+                                request.file_key
+                            );
+                        }
+
+                        // We check right away if we can process the request so we don't waste time.
+                        self.bsp_assign_forest_root_write_lock();
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    } else {
+                        command_succeeded = false;
+                        error!(
+                            target: LOG_TARGET,
+                            "QueueBspRequestBspStopStoring received while not managing a BSP. \
+                             This command is only valid for BSP nodes."
+                        );
+                        match callback.send(Err(anyhow!(
+                            "QueueBspRequestBspStopStoring received while not managing a BSP"
+                        ))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueueBspConfirmStopStoring { request, callback } => {
+                    if let Some(ManagedProvider::Bsp(bsp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let queued = bsp_handler.enqueue_confirm_bsp_stop_storing(request.clone());
+                        if queued {
+                            info!(
+                                target: LOG_TARGET,
+                                "Queued BSP confirm stop storing for file key [{:?}], confirm after tick: {:?}",
+                                request.file_key,
+                                request.confirm_after_tick
+                            );
+                        } else {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Skipping duplicate BSP confirm stop storing for file key [{:?}]",
+                                request.file_key
+                            );
+                        }
+
+                        // We check right away if we can process the request so we don't waste time.
+                        self.bsp_assign_forest_root_write_lock();
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    } else {
+                        command_succeeded = false;
+                        error!(
+                            target: LOG_TARGET,
+                            "QueueBspConfirmBspStopStoring received while not managing a BSP. \
+                             This command is only valid for BSP nodes."
+                        );
+                        match callback.send(Err(anyhow!(
+                            "QueueBspConfirmBspStopStoring received while not managing a BSP"
+                        ))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    }
+                }
             }
 
             // Record command completion
@@ -1726,7 +1895,7 @@ where
         config: BlockchainServiceConfig<Runtime>,
         client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
-        rpc_handlers: Arc<RpcHandlers>,
+        rpc_handlers: Option<Arc<RpcHandlers>>,
         forest_storage_handler: FSH,
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
@@ -1785,7 +1954,7 @@ where
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             client,
             keystore,
-            rpc_handlers,
+            rpc_handlers: Arc::new(RwLock::new(rpc_handlers)),
             forest_storage_handler,
             current_block: MinimalBlockInfo {
                 number: 0u32.into(),

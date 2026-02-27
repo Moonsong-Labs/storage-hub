@@ -102,7 +102,7 @@ pub struct IncompleteStorageRequestMetadataResponse<
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait FileSystemApi<AccountId, BackupStorageProviderId, MainStorageProviderId, FileKey, TickNumber, ChunkId, GenericApplyDeltaEventInfo, StorageRequestMetadata, BucketId, StorageDataUnit, Fingerprint>
+    pub trait FileSystemApi<AccountId, BackupStorageProviderId, MainStorageProviderId, FileKey, TickNumber, ChunkId, GenericApplyDeltaEventInfo, StorageRequestMetadata, BucketId, StorageDataUnit, Fingerprint, PendingStopStoringRequest>
     where
         AccountId: Codec,
         BackupStorageProviderId: Codec,
@@ -115,6 +115,7 @@ sp_api::decl_runtime_apis! {
         BucketId: Codec,
         StorageDataUnit: Codec,
         Fingerprint: Codec,
+        PendingStopStoringRequest: Codec,
     {
         fn is_storage_request_open_to_volunteers(file_key: FileKey) -> Result<bool, IsStorageRequestOpenToVolunteersError>;
         fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<TickNumber, QueryFileEarliestVolunteerTickError>;
@@ -129,5 +130,8 @@ sp_api::decl_runtime_apis! {
         fn query_pending_bsp_confirm_storage_requests(bsp_id: BackupStorageProviderId, file_keys: Vec<FileKey>) -> Vec<FileKey>;
         fn get_max_batch_confirm_storage_requests() -> u32;
         fn get_max_msp_respond_file_keys() -> u32;
+        fn query_min_wait_for_stop_storing() -> TickNumber;
+        fn has_pending_stop_storing_request(bsp_id: BackupStorageProviderId, file_key: FileKey) -> bool;
+        fn pending_stop_storing_requests_by_bsp(bsp_id: BackupStorageProviderId) -> BTreeMap<H256, PendingStopStoringRequest>;
     }
 }

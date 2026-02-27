@@ -465,6 +465,25 @@ where
         keys
     }
 
+    pub fn query_min_wait_for_stop_storing() -> TickNumber<T> {
+        T::MinWaitForStopStoring::get()
+    }
+
+    /// Check if a pending stop storing request exists for a BSP and file key.
+    pub fn has_pending_stop_storing_request(
+        bsp_id: ProviderIdFor<T>,
+        file_key: MerkleHash<T>,
+    ) -> bool {
+        PendingStopStoringRequests::<T>::contains_key(&bsp_id, &file_key)
+    }
+
+    /// Return all pending stop storing requests for a given BSP.
+    pub fn pending_stop_storing_requests_by_bsp(
+        bsp_id: ProviderIdFor<T>,
+    ) -> sp_std::collections::btree_map::BTreeMap<MerkleHash<T>, PendingStopStoringRequest<T>> {
+        PendingStopStoringRequests::<T>::iter_prefix(&bsp_id).collect()
+    }
+
     fn query_confirm_chunks_to_prove_for_file(
         provider_id: ProviderIdFor<T>,
         storage_request_metadata: StorageRequestMetadata<T>,

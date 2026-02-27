@@ -362,7 +362,11 @@ await describeBspNet(
       )
         .unwrap()
         .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
-      const blockToAdvanceTo = currentBlockNumber + minWaitForStopStoring;
+      // Skip to a block BEFORE the confirm becomes valid.
+      // This ensures the BSP won't auto-send the confirm before we do the reorg test.
+      // We need some blocks for: bucket creation, storage request, MSP response + BSP volunteer,
+      // BSP confirm storing, and an extra seal, so we use minWaitForStopStoring - 5.
+      const blockToAdvanceTo = currentBlockNumber + minWaitForStopStoring - 5;
       await userApi.block.skipTo(blockToAdvanceTo, {
         watchForBspProofs: [userApi.shConsts.DUMMY_BSP_ID]
       });

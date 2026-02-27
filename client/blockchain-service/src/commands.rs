@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
+use sc_service::RpcHandlers;
 use shc_common::{
     blockchain_utils::decode_module_error,
     traits::{KeyTypeOperations, StorageEnableRuntime},
@@ -39,10 +42,11 @@ use crate::{
     handler::BlockchainService,
     transaction_manager::wait_for_transaction_status,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest,
-        FileKeyStatusUpdate, MinimalBlockInfo, RespondStorageRequest, RetryStrategy,
-        SendExtrinsicOptions, StatusToWait, StopStoringForInsolventUserRequest, SubmitProofRequest,
-        SubmittedExtrinsicInfo, WatchTransactionError,
+        ConfirmBspStopStoringRequest, ConfirmStoringRequest, Extrinsic, ExtrinsicResult,
+        FileDeletionRequest, FileKeyStatusUpdate, MinimalBlockInfo, RequestBspStopStoringRequest,
+        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
+        StopStoringForInsolventUserRequest, SubmitProofRequest, SubmittedExtrinsicInfo,
+        WatchTransactionError,
     },
 };
 
@@ -165,6 +169,13 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QuerySlashAmountPerMaxFileSize,
     #[command(success_type = Option<MainStorageProviderId<Runtime>>, error_type = QueryMspIdOfBucketIdError)]
     QueryMspIdOfBucketId { bucket_id: BucketId<Runtime> },
+    #[command(success_type = BlockNumber<Runtime>, error_type = ApiError)]
+    QueryMinWaitForStopStoring,
+    #[command(success_type = bool, error_type = ApiError)]
+    HasPendingStopStoringRequest {
+        bsp_id: BackupStorageProviderId<Runtime>,
+        file_key: FileKey,
+    },
     QueueFileDeletionRequest {
         request: FileDeletionRequest<Runtime>,
     },
@@ -229,6 +240,31 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// - After extrinsic submission failures (may be transient)
     #[command(mode = "FireAndForget")]
     RemoveFileKeyStatus { file_key: FileKey },
+    /// Queue a request to stop storing a file for a BSP.
+    ///
+    /// This command is called by the RPC to initiate the BSP stop storing process.
+    /// The request will be queued and processed when the forest root write lock
+    /// is available, ensuring atomic proof generation and submission.
+    #[command(success_type = ())]
+    QueueBspRequestStopStoring {
+        request: RequestBspStopStoringRequest<Runtime>,
+    },
+    /// Queue a confirm stop storing request for a BSP.
+    ///
+    /// This command is called when the on-chain `BspRequestedToStopStoring` event is detected.
+    /// The request will be queued and processed when the confirm_after_tick is reached
+    /// and the forest root write lock is available.
+    #[command(success_type = ())]
+    QueueBspConfirmStopStoring {
+        request: ConfirmBspStopStoringRequest<Runtime>,
+    },
+    /// Set the RPC handlers for the BlockchainService.
+    ///
+    /// This command must be called after the RPC server has been initialized to provide
+    /// the BlockchainService with the RPC handlers needed to submit extrinsics. Otherwise,
+    /// extrinsic submission will fail.
+    #[command(mode = "FireAndForget")]
+    SetRpcHandlers { rpc_handlers: Arc<RpcHandlers> },
     /// Pop up to N storage requests pending confirmation from the pending queue.
     ///
     /// Returns the items without filtering so the task is responsible for filtering stale requests.

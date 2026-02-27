@@ -15,7 +15,8 @@ use shc_common::{
 };
 
 use crate::types::{
-    FileDeletionRequest as FileDeletionRequestType, ForestWritePermitGuard, RespondStorageRequest,
+    ConfirmBspStopStoringRequest, FileDeletionRequest as FileDeletionRequestType,
+    ForestWritePermitGuard, RequestBspStopStoringRequest, RespondStorageRequest,
 };
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
@@ -92,6 +93,8 @@ pub enum ForestWriteLockTaskData<Runtime: StorageEnableRuntime> {
     ConfirmStoringRequest,
     MspRespondStorageRequest(ProcessMspRespondStoringRequestData<Runtime>),
     StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData<Runtime>),
+    BspRequestStopStoring(ProcessBspRequestStopStoringData<Runtime>),
+    BspConfirmStopStoring(ProcessBspConfirmStopStoringData<Runtime>),
 }
 
 impl<Runtime: StorageEnableRuntime> From<ProcessSubmitProofRequestData<Runtime>>
@@ -115,6 +118,22 @@ impl<Runtime: StorageEnableRuntime> From<ProcessStopStoringForInsolventUserReque
 {
     fn from(data: ProcessStopStoringForInsolventUserRequestData<Runtime>) -> Self {
         Self::StopStoringForInsolventUserRequest(data)
+    }
+}
+
+impl<Runtime: StorageEnableRuntime> From<ProcessBspRequestStopStoringData<Runtime>>
+    for ForestWriteLockTaskData<Runtime>
+{
+    fn from(data: ProcessBspRequestStopStoringData<Runtime>) -> Self {
+        Self::BspRequestStopStoring(data)
+    }
+}
+
+impl<Runtime: StorageEnableRuntime> From<ProcessBspConfirmStopStoringData<Runtime>>
+    for ForestWriteLockTaskData<Runtime>
+{
+    fn from(data: ProcessBspConfirmStopStoringData<Runtime>) -> Self {
+        Self::BspConfirmStopStoring(data)
     }
 }
 
@@ -188,6 +207,41 @@ pub struct ProcessStopStoringForInsolventUserRequestData<Runtime: StorageEnableR
 #[actor(actor = "blockchain_service")]
 pub struct ProcessStopStoringForInsolventUserRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessStopStoringForInsolventUserRequestData<Runtime>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
+}
+
+/// Data for processing a BSP request stop storing.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessBspRequestStopStoringData<Runtime: StorageEnableRuntime> {
+    pub request: RequestBspStopStoringRequest<Runtime>,
+}
+
+/// Event to process a BSP request stop storing.
+///
+/// This event is emitted when a BSP is ready to submit the `bsp_request_stop_storing` extrinsic.
+/// The handler should generate the forest inclusion proof and submit the extrinsic.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct ProcessBspRequestStopStoring<Runtime: StorageEnableRuntime> {
+    pub data: ProcessBspRequestStopStoringData<Runtime>,
+    pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
+}
+
+/// Data for processing a BSP confirm stop storing.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessBspConfirmStopStoringData<Runtime: StorageEnableRuntime> {
+    pub request: ConfirmBspStopStoringRequest<Runtime>,
+}
+
+/// Event to process a BSP confirm stop storing.
+///
+/// This event is emitted when a BSP is ready to submit the `bsp_confirm_stop_storing` extrinsic
+/// after the minimum wait period has passed.
+/// The handler should generate the forest inclusion proof and submit the extrinsic.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct ProcessBspConfirmStopStoring<Runtime: StorageEnableRuntime> {
+    pub data: ProcessBspConfirmStopStoringData<Runtime>,
     pub forest_root_write_permit: Arc<ForestWritePermitGuard>,
 }
 
