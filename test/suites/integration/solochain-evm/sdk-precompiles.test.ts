@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
+  ensure0xPrefix,
   type FileInfo,
   FileManager,
   type HttpClientConfig,
@@ -440,13 +441,15 @@ await describeMspNet(
       await waitFor({
         lambda: async () => (await msp1Api.rpc.storagehubclient.isFileKeyExpected(fileKey)).isTrue
       });
+      const fingerprint = await fileManager.getFingerprint();
 
       // Try to upload the file to the MSP through the SDK's MspClient that uses the MSP backend
       const uploadResponse = await mspClient.files.uploadFile(
-        bucketId,
-        fileKey.toHex(),
+        ensure0xPrefix(bucketId),
+        ensure0xPrefix(fileKey.toHex()),
         await fileManager.getFileBlob(),
-        account.address,
+        ensure0xPrefix(fingerprint.toHex()),
+        ensure0xPrefix(account.address),
         fileLocation
       );
 
@@ -464,7 +467,7 @@ await describeMspNet(
       );
       strictEqual(
         uploadResponse.fingerprint,
-        (await fileManager.getFingerprint()).toString(),
+        fingerprint.toString(),
         "Upload should return expected fingerprint"
       );
       strictEqual(uploadResponse.location, fileLocation, "Upload should return expected location");
