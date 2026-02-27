@@ -25,104 +25,6 @@ import { describeNetwork } from "../../../util/netLaunch/dynamic/testrunner";
  * All checks and assertions will use this value.
  */
 const BSP_COUNT = 10;
-const PASSIVE_SYNC_TIMEOUT_MS = 120000;
-const PASSIVE_SYNC_POLL_MS = 500;
-const BSP_CONFIRMATION_TIMEOUT_MS = 120000;
-const BSP_CONFIRMATION_TXPOOL_WAIT_MS = 3000;
-
-function bspContainerName(index: number): string {
-  return `storage-hub-sh-bsp-${index}`;
-}
-
-async function pauseAllBspContainers(api: EnrichedBspApi, bspCount: number): Promise<void> {
-  for (let i = 0; i < bspCount; i++) {
-    await api.docker.pauseContainer(bspContainerName(i));
-  }
-}
-
-async function resumeAllBspContainers(api: EnrichedBspApi, bspCount: number): Promise<void> {
-  for (let i = 0; i < bspCount; i++) {
-    await api.docker.resumeContainer({ containerName: bspContainerName(i) });
-  }
-}
-
-async function waitForPassiveTipSync(
-  nodeSyncedApi: EnrichedBspApi,
-  nodeBehindApi: EnrichedBspApi,
-  timeoutMs = PASSIVE_SYNC_TIMEOUT_MS,
-  pollMs = PASSIVE_SYNC_POLL_MS
-): Promise<void> {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    const [syncedHeader, behindHeader] = await Promise.all([
-      nodeSyncedApi.rpc.chain.getHeader(),
-      nodeBehindApi.rpc.chain.getHeader()
-    ]);
-
-    if (syncedHeader.hash.eq(behindHeader.hash)) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-  }
-
-  const [syncedHeader, behindHeader] = await Promise.all([
-    nodeSyncedApi.rpc.chain.getHeader(),
-    nodeBehindApi.rpc.chain.getHeader()
-  ]);
-
-  throw new Error(
-    `Node did not passively catch up within ${timeoutMs}ms ` +
-      `(synced #${syncedHeader.number.toString()} ${syncedHeader.hash.toString()}, ` +
-      `behind #${behindHeader.number.toString()} ${behindHeader.hash.toString()})`
-  );
-}
-
-async function waitForBspConfirmationsWithSealing(
-  blockProducerApi: EnrichedBspApi,
-  fileKey: string,
-  expectedConfirmations: number,
-  timeoutMs = BSP_CONFIRMATION_TIMEOUT_MS
-): Promise<void> {
-  const startedAt = Date.now();
-  let totalConfirmations = 0;
-  const normalizeHex = (value: string) =>
-    (value.startsWith("0x") ? value : `0x${value}`).toLowerCase();
-  const targetFileKey = normalizeHex(fileKey);
-
-  while (Date.now() - startedAt < timeoutMs && totalConfirmations < expectedConfirmations) {
-    try {
-      // Probe tx-pool briefly; even if none are pending yet, seal a block to advance provider workers.
-      await blockProducerApi.wait.bspStored({
-        timeoutMs: BSP_CONFIRMATION_TXPOOL_WAIT_MS,
-        sealBlock: false
-      });
-    } catch {
-      // No confirm-storing extrinsics pending yet.
-    }
-
-    const { events } = await blockProducerApi.block.seal();
-
-    for (const eventRecord of events ?? []) {
-      if (!blockProducerApi.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
-        continue;
-      }
-
-      const confirmedForTargetFile = eventRecord.event.data.confirmedFileKeys.filter((entry) => {
-        const confirmedFileKey = Array.isArray(entry) ? entry[0] : entry;
-        return normalizeHex(confirmedFileKey.toString()) === targetFileKey;
-      }).length;
-      totalConfirmations += confirmedForTargetFile;
-    }
-  }
-
-  strictEqual(
-    totalConfirmations,
-    expectedConfirmations,
-    `Expected ${expectedConfirmations} BspConfirmedStoring confirmations, got ${totalConfirmations}`
-  );
-}
 
 await describeNetwork(
   `MSP distributes files to ${BSP_COUNT} BSPs`,
@@ -172,7 +74,9 @@ await describeNetwork(
 
       // Match the stable MSP distribution flow:
       // keep BSPs paused until user file is deleted, so BSPs can only receive via MSP.
-      await pauseAllBspContainers(userApi, BSP_COUNT);
+      for (let i = 0; i < BSP_COUNT; i++) {
+        await userApi.docker.pauseContainer(`storage-hub-sh-bsp-${i}`);
+      }
       bspsPaused = true;
 
       try {
@@ -252,7 +156,7 @@ await describeNetwork(
         const fileKey = newStorageRequestDataBlob.fileKey.toString();
 
         // Wait for MSP to sync with the chain tip before expecting it to process the storage request
-        await waitForPassiveTipSync(blockProducerApi, mspApi);
+        await blockProducerApi.wait.nodeCatchUpToChainTip(mspApi);
 
         // Step 4: Wait for MSP to download and accept before any BSP can volunteer.
         await mspApi.wait.fileStorageComplete(fileKey);
@@ -276,12 +180,14 @@ await describeNetwork(
         await userApi.wait.fileDeletionFromFileStorage(fileKey);
 
         // Step 6: Resume BSPs now that user no longer has the file.
-        await resumeAllBspContainers(userApi, BSP_COUNT);
+        for (let i = 0; i < BSP_COUNT; i++) {
+          await userApi.docker.resumeContainer({ containerName: `storage-hub-sh-bsp-${i}` });
+        }
         bspsPaused = false;
 
         // Ensure all BSPs catch up before expecting volunteer/confirm flows.
         await ctx.network.forEachBsp(async (bspApi) => {
-          await waitForPassiveTipSync(blockProducerApi, bspApi);
+          await blockProducerApi.wait.nodeCatchUpToChainTip(bspApi);
         });
 
         // Step 7: Verify BSPs volunteered and wait for them to confirm storing
@@ -299,14 +205,44 @@ await describeNetwork(
         );
 
         // Wait for all BSPs to confirm storing.
-        // We seal progressively to avoid deadlock when only a subset of confirmations
+        // Seal progressively to avoid deadlock when only a subset of confirmations
         // is initially in the tx pool.
-        await waitForBspConfirmationsWithSealing(
-          blockProducerApi,
-          fileKey,
-          BSP_COUNT,
-          BSP_CONFIRMATION_TIMEOUT_MS
-        );
+        {
+          const startedAt = Date.now();
+          let totalConfirmations = 0;
+          const normalizeHex = (value: string) =>
+            (value.startsWith("0x") ? value : `0x${value}`).toLowerCase();
+          const targetFileKey = normalizeHex(fileKey);
+
+          while (Date.now() - startedAt < 120_000 && totalConfirmations < BSP_COUNT) {
+            try {
+              await blockProducerApi.wait.bspStored({ timeoutMs: 3000, sealBlock: false });
+            } catch {
+              // No confirm-storing extrinsics pending yet.
+            }
+
+            const { events } = await blockProducerApi.block.seal();
+
+            for (const eventRecord of events ?? []) {
+              if (!blockProducerApi.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
+                continue;
+              }
+              const confirmedForTargetFile = eventRecord.event.data.confirmedFileKeys.filter(
+                (entry) => {
+                  const confirmedFileKey = Array.isArray(entry) ? entry[0] : entry;
+                  return normalizeHex(confirmedFileKey.toString()) === targetFileKey;
+                }
+              ).length;
+              totalConfirmations += confirmedForTargetFile;
+            }
+          }
+
+          strictEqual(
+            totalConfirmations,
+            BSP_COUNT,
+            `Expected ${BSP_COUNT} BspConfirmedStoring confirmations, got ${totalConfirmations}`
+          );
+        }
 
         // Step 8: Verify all BSPs have the file in their storage
         for (let i = 0; i < BSP_COUNT; i++) {
@@ -322,7 +258,9 @@ await describeNetwork(
       } finally {
         if (bspsPaused) {
           try {
-            await resumeAllBspContainers(userApi, BSP_COUNT);
+            for (let i = 0; i < BSP_COUNT; i++) {
+              await userApi.docker.resumeContainer({ containerName: `storage-hub-sh-bsp-${i}` });
+            }
           } catch {
             // best-effort cleanup; network teardown will still remove containers
           }
