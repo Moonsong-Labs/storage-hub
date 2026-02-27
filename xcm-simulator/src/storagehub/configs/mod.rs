@@ -1121,7 +1121,7 @@ impl pallet_migrations::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     #[cfg(not(any(feature = "try-runtime", feature = "runtime-benchmarks")))]
     type Migrations = (pallet_file_system::migrations::v2::MigrateV1ToV2Stepped<Runtime>,);
-    #[cfg(feature = "try-runtime")]
+    #[cfg(all(feature = "try-runtime", not(feature = "runtime-benchmarks")))]
     type Migrations = ();
     #[cfg(feature = "runtime-benchmarks")]
     type Migrations = pallet_migrations::mock_helpers::MockedMigrations;

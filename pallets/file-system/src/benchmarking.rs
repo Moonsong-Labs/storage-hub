@@ -1018,7 +1018,6 @@ mod benchmarks {
         let amount_of_files_to_confirm_storing: u32 = n.into();
         let volunteer_count: u32 = v.into();
         let replication_target: u32 = r.into();
-        let confirmed_count = volunteer_count.min(replication_target);
 
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
