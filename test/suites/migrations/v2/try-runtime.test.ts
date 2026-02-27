@@ -1,28 +1,20 @@
 import { describe, it } from "node:test";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { strictEqual, ok } from "node:assert";
-
-const WASM_PATH = resolve(
-  process.env.WASM_PATH ??
-    "../target/release/wbuild/sh-parachain-runtime/sh_parachain_runtime.compact.compressed.wasm",
-);
-
-const TESTNET_WS =
-  process.env.TESTNET_WS ?? "wss://services.datahaven-testnet.network/testnet";
+import { strictEqual } from "node:assert";
+import { WS_URI, WASM_PATH, assertWasmExists } from "../config.ts";
 
 describe("Migration v2: try-runtime", () => {
   it("wasm artifact exists", () => {
-    ok(
-      existsSync(WASM_PATH),
-      `Wasm not found at ${WASM_PATH}. Build with: cargo build --release -p sh-parachain-runtime --features try-runtime`,
-    );
+    assertWasmExists("cargo build --release -p sh-parachain-runtime --features try-runtime");
   });
 
   it("try-runtime CLI is installed", () => {
     const result = spawnSync("try-runtime", ["--version"], { encoding: "utf8" });
-    strictEqual(result.status, 0, "try-runtime CLI not found. Install with: cargo install --git https://github.com/paritytech/try-runtime-cli --locked");
+    strictEqual(
+      result.status,
+      0,
+      "try-runtime CLI not found. Install with: cargo install --git https://github.com/paritytech/try-runtime-cli --locked"
+    );
   });
 
   it("migration runs to completion against testnet state", { timeout: 900_000 }, () => {
@@ -43,18 +35,23 @@ describe("Migration v2: try-runtime", () => {
     const result = spawnSync(
       "try-runtime",
       [
-        "--runtime", WASM_PATH,
+        "--runtime",
+        WASM_PATH,
         "--disable-spec-name-check",
         "on-runtime-upgrade",
-        "--blocktime", "6000",
+        "--blocktime",
+        "6000",
         "--disable-spec-version-check",
         "--disable-mbm-checks",
-        "--checks", "none",
+        "--checks",
+        "none",
         "live",
-        "--uri", TESTNET_WS,
-        "--pallet", "FileSystem",
+        "--uri",
+        WS_URI,
+        "--pallet",
+        "FileSystem"
       ],
-      { encoding: "utf8", timeout: 890_000, maxBuffer: 100 * 1024 * 1024 },
+      { encoding: "utf8", timeout: 890_000, maxBuffer: 100 * 1024 * 1024 }
     );
 
     if (result.stdout) process.stdout.write(result.stdout);
@@ -63,7 +60,7 @@ describe("Migration v2: try-runtime", () => {
     strictEqual(
       result.status,
       0,
-      `try-runtime exited with code ${result.status} (signal: ${result.signal}). Check output above for details.`,
+      `try-runtime exited with code ${result.status} (signal: ${result.signal}). Check output above for details.`
     );
   });
 });

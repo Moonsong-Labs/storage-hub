@@ -1,6 +1,4 @@
 import { describe, it, before, after } from "node:test";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { ok, strictEqual } from "node:assert";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import { bnToU8a, hexToU8a, u8aToHex } from "@polkadot/util";
@@ -8,41 +6,32 @@ import { blake2AsHex, xxhashAsHex } from "@polkadot/util-crypto";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import { setupWithServer } from "@acala-network/chopsticks";
 import { BuildBlockMode, setStorage } from "@acala-network/chopsticks-core";
+import { WS_URI, WASM_PATH, assertWasmExists } from "../config.ts";
 
 // Storage key for Aura::CurrentSlot = twox_128("Aura") + twox_128("CurrentSlot")
-const AURA_CURRENT_SLOT_KEY = `${xxhashAsHex("Aura", 128)}${xxhashAsHex("CurrentSlot", 128).slice(2)}` as `0x${string}`;
+const AURA_CURRENT_SLOT_KEY =
+  `${xxhashAsHex("Aura", 128)}${xxhashAsHex("CurrentSlot", 128).slice(2)}` as `0x${string}`;
 // storage-hub parachain uses 6-second Aura slots (SLOT_DURATION = 6000 ms)
 const SLOT_DURATION_MS = 6000n;
-
-const WASM_PATH = resolve(
-  process.env.WASM_PATH ??
-    "../target/release/wbuild/sh-parachain-runtime/sh_parachain_runtime.compact.compressed.wasm",
-);
-
-const TESTNET_WS =
-  process.env.TESTNET_WS ?? "wss://services.datahaven-testnet.network/testnet";
 
 describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
   let api: ApiPromise;
   let chopsticksCtx: Awaited<ReturnType<typeof setupWithServer>>;
 
   before(async () => {
-    ok(
-      existsSync(WASM_PATH),
-      `Wasm not found at ${WASM_PATH}. Build with: cargo build --release -p sh-parachain-runtime`,
-    );
+    assertWasmExists();
 
     chopsticksCtx = await setupWithServer({
-      endpoint: TESTNET_WS,
+      endpoint: WS_URI,
       "wasm-override": WASM_PATH,
       "build-block-mode": BuildBlockMode.Manual,
-      port: 0, // auto-assign port
+      port: 0 // auto-assign port
     });
 
     api = await ApiPromise.create({
       provider: new WsProvider(`ws://${chopsticksCtx.addr}`),
       typesBundle: BundledTypes,
-      noInitWarn: true,
+      noInitWarn: true
     });
   });
 
@@ -68,7 +57,7 @@ describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
   // Loop until pallet_migrations cursor is None (migration fully done).
   async function runUntilMigrationComplete(
     chain: typeof chopsticksCtx.chain,
-    maxBlocks = 200,
+    maxBlocks = 200
   ): Promise<void> {
     for (let i = 0; i < maxBlocks; i++) {
       const cursor = await api.query.multiBlockMigrations.cursor();
@@ -90,7 +79,7 @@ describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
     strictEqual(
       version.specVersion.toNumber(),
       1201,
-      `Expected specVersion 1201 after migration, got ${version.specVersion.toNumber()}`,
+      `Expected specVersion 1201 after migration, got ${version.specVersion.toNumber()}`
     );
   });
 
@@ -104,7 +93,7 @@ describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
     const BSP_FLAGS = (1 << 7) | (1 << 8); // FLAG_BSP_VOLUNTEER | FLAG_BSP_CONFIRM_STORING
     ok(
       (flags & BSP_FLAGS) === BSP_FLAGS,
-      `Expected BSP pause flags to be set during migration, got: ${flags}`,
+      `Expected BSP pause flags to be set during migration, got: ${flags}`
     );
   });
 
@@ -122,7 +111,7 @@ describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
     strictEqual(
       flags & BSP_FLAGS,
       0,
-      `Expected BSP pause flags cleared after migration, got: ${flags}`,
+      `Expected BSP pause flags cleared after migration, got: ${flags}`
     );
 
     if (migrationWasComplete) {
@@ -141,7 +130,8 @@ describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
       const palletHash = xxhashAsHex("FileSystem", 128).slice(2);
       const storageHash = xxhashAsHex("StorageRequestBsps", 128).slice(2);
       const keyHash = blake2AsHex(hexToU8a(testFileKey), 128).slice(2);
-      const v2Key = `0x${palletHash}${storageHash}${keyHash}${testFileKey.slice(2)}` as `0x${string}`;
+      const v2Key =
+        `0x${palletHash}${storageHash}${keyHash}${testFileKey.slice(2)}` as `0x${string}`;
 
       await setStorage(chopsticksCtx.chain, [[v2Key, v2Value]]);
 
@@ -158,7 +148,7 @@ describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
       const json = value.toJSON();
       ok(
         json !== null && typeof json === "object" && Object.keys(json as object).length > 0,
-        `Entry at ${key.toHex()} decoded to empty or null map`,
+        `Entry at ${key.toHex()} decoded to empty or null map`
       );
     }
   });
