@@ -38,3 +38,19 @@ export function assertWasmExists(buildHint?: string): void {
   const hint = buildHint ?? "cargo build --release -p sh-parachain-runtime";
   ok(existsSync(WASM_PATH), `WASM not found at ${WASM_PATH}. Build with: ${hint}`);
 }
+
+/**
+ * Expected spec version after the runtime upgrade.
+ *
+ * Override via EXPECTED_SPEC_VERSION env var for different chains.
+ */
+export const EXPECTED_SPEC_VERSION: number = Number.parseInt(
+  process.env.EXPECTED_SPEC_VERSION ?? "1201"
+);
+
+/**
+ * Block time in milliseconds (Aura slot duration).
+ *
+ * StorageHub parachain default is 6000ms. Override via BLOCK_TIME_MS env var.
+ */
+export const BLOCK_TIME_MS: number = Number.parseInt(process.env.BLOCK_TIME_MS ?? "6000");

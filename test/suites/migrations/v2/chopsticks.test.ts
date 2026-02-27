@@ -6,13 +6,18 @@ import { blake2AsHex, xxhashAsHex } from "@polkadot/util-crypto";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import { setupWithServer } from "@acala-network/chopsticks";
 import { BuildBlockMode, setStorage } from "@acala-network/chopsticks-core";
-import { WS_URI, WASM_PATH, assertWasmExists } from "../config.ts";
+import {
+  WS_URI,
+  WASM_PATH,
+  assertWasmExists,
+  EXPECTED_SPEC_VERSION,
+  BLOCK_TIME_MS
+} from "../config.ts";
 
 // Storage key for Aura::CurrentSlot = twox_128("Aura") + twox_128("CurrentSlot")
 const AURA_CURRENT_SLOT_KEY =
   `${xxhashAsHex("Aura", 128)}${xxhashAsHex("CurrentSlot", 128).slice(2)}` as `0x${string}`;
-// storage-hub parachain uses 6-second Aura slots (SLOT_DURATION = 6000 ms)
-const SLOT_DURATION_MS = 6000n;
+const SLOT_DURATION_MS = BigInt(BLOCK_TIME_MS);
 
 describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
   let api: ApiPromise;
@@ -68,7 +73,7 @@ describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
     ok(cursor.isNone, `Migration did not complete within ${maxBlocks} blocks`);
   }
 
-  it("runtime upgrade builds a block and bumps spec version to 1201", async () => {
+  it(`runtime upgrade builds a block and bumps spec version to ${EXPECTED_SPEC_VERSION}`, async () => {
     // Building a new block applies the wasm override and triggers on_runtime_upgrade.
     // The new runtime is active after this block regardless of remaining migration steps.
     await buildNextBlock(chopsticksCtx.chain);
@@ -78,8 +83,8 @@ describe("Migration v2: chopsticks", { timeout: 300_000 }, () => {
     const version = await api.rpc.state.getRuntimeVersion(block1Hash);
     strictEqual(
       version.specVersion.toNumber(),
-      1201,
-      `Expected specVersion 1201 after migration, got ${version.specVersion.toNumber()}`
+      EXPECTED_SPEC_VERSION,
+      `Expected specVersion ${EXPECTED_SPEC_VERSION} after migration, got ${version.specVersion.toNumber()}`
     );
   });
 

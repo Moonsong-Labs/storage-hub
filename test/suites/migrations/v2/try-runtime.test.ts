@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import { spawnSync } from "node:child_process";
 import { strictEqual } from "node:assert";
-import { WS_URI, WASM_PATH, assertWasmExists } from "../config.ts";
+import { WS_URI, WASM_PATH, assertWasmExists, BLOCK_TIME_MS } from "../config.ts";
 
 describe("Migration v2: try-runtime", () => {
   it("wasm artifact exists", () => {
@@ -40,7 +40,7 @@ describe("Migration v2: try-runtime", () => {
         "--disable-spec-name-check",
         "on-runtime-upgrade",
         "--blocktime",
-        "6000",
+        String(BLOCK_TIME_MS),
         "--disable-spec-version-check",
         "--disable-mbm-checks",
         "--checks",
