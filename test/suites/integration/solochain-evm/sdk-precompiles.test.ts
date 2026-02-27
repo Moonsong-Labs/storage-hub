@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
+  ensure0xPrefix,
   type FileInfo,
   FileManager,
   type HttpClientConfig,
@@ -444,11 +445,11 @@ await describeMspNet(
 
       // Try to upload the file to the MSP through the SDK's MspClient that uses the MSP backend
       const uploadResponse = await mspClient.files.uploadFile(
-        bucketId as `0x${string}`,
-        fileKey.toHex() as `0x${string}`,
+        ensure0xPrefix(bucketId),
+        ensure0xPrefix(fileKey.toHex()),
         await fileManager.getFileBlob(),
-        fingerprint.toHex() as `0x${string}`,
-        account.address as `0x${string}`,
+        ensure0xPrefix(fingerprint.toHex()),
+        ensure0xPrefix(account.address),
         fileLocation
       );
 
