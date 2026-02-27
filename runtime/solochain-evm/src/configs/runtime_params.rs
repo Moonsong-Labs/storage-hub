@@ -273,6 +273,23 @@ pub mod dynamic_params {
         /// cost for the user to issue a storage request for a 1 GB file would be:
         /// 50 NANOUNITs per gigabyte per tick * 12 BSPs * 72k ticks * 1 GB = 0.0432 UNITs
         pub static UpfrontTicksToPay: BlockNumber = 72_000;
+
+        /// Maximum number of BSPs that can volunteer for a single storage request.
+        ///
+        /// ## Theoretical PoV maximum
+        ///
+        /// Derived from `bsp_confirm_storing(n=10)` worst-case PoV formula:
+        ///   added(M) = 33·M + 2,525  (max_size = 33·M + 50; trie overhead = 2,475)
+        ///   PoV(n=10, M) = 13,545 + 10·added(M) = 330·M + 38,795
+        ///   Block PoV limit: 5,242,880 bytes (MAX_POV_SIZE); Normal dispatch budget (75%): 3,932,160 bytes
+        ///   Solving: 330·M + 38,795 ≤ 3,932,160  →  **M_max = 11,798** entries
+        ///   At M=11,798: PoV = 3,932,135 bytes ✓  |  M=11,799: 3,932,465 bytes ✗
+        ///
+        /// Production default: 1,000 entries (~8.5% of theoretical max).
+        /// At M=1,000 `bsp_confirm_storing(10)` uses 368,795 bytes of PoV (9.4% of budget).
+        #[codec(index = 30)]
+        #[allow(non_upper_case_globals)]
+        pub static MaxBspVolunteers: ReplicationTargetType = 1_000;
     }
 }
 

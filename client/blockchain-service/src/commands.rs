@@ -208,6 +208,9 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// Query the maximum amount of storage requests that can be confirmed by a BSP in one batch.
     #[command(success_type = u32)]
     QueryMaxBatchConfirmStorageRequests,
+    /// Query the maximum number of file keys an MSP can respond to per batch call.
+    #[command(success_type = u32)]
+    QueryMaxMspRespondFileKeys,
     /// Add a file key to pending volunteer tracking.
     ///
     /// Called before submitting a volunteer tx to track that the volunteer is pending.

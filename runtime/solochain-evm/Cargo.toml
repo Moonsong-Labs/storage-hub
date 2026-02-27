@@ -68,6 +68,7 @@ pallet-authorship = { workspace = true }
 pallet-babe = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-grandpa = { workspace = true }
+pallet-migrations = { workspace = true }
 pallet-nfts = { workspace = true }
 pallet-offences = { workspace = true }
 pallet-session = { workspace = true }
@@ -163,6 +164,7 @@ std = [
 	"pallet-file-system/std",
 	"pallet-file-system-runtime-api/std",
 	"pallet-grandpa/std",
+	"pallet-migrations/std",
 	"pallet-nfts/std",
 	"pallet-offences/std",
 	"pallet-parameters/std",
@@ -233,6 +235,7 @@ runtime-benchmarks = [
 	"pallet-evm/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-grandpa/runtime-benchmarks",
+	"pallet-migrations/runtime-benchmarks",
 	"pallet-nfts/runtime-benchmarks",
 	"pallet-offences/runtime-benchmarks",
 	"pallet-parameters/runtime-benchmarks",
@@ -275,6 +278,7 @@ try-runtime = [
 	"pallet-evm-chain-id/try-runtime",
 	"pallet-file-system/try-runtime",
 	"pallet-grandpa/try-runtime",
+	"pallet-migrations/try-runtime",
 	"pallet-nfts/try-runtime",
 	"pallet-offences/try-runtime",
 	"pallet-parameters/try-runtime",

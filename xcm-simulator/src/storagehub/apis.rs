@@ -378,6 +378,10 @@ impl_runtime_apis! {
             FileSystem::get_max_batch_confirm_storage_requests()
         }
 
+        fn get_max_msp_respond_file_keys() -> u32 {
+            FileSystem::get_max_msp_respond_file_keys()
+        }
+
         fn query_min_wait_for_stop_storing() -> BlockNumber {
             FileSystem::query_min_wait_for_stop_storing()
         }

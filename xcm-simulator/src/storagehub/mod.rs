@@ -283,6 +283,8 @@ mod runtime {
     pub type Nfts = pallet_nfts;
     #[runtime::pallet_index(51)]
     pub type Parameters = pallet_parameters;
+    #[runtime::pallet_index(52)]
+    pub type MultiBlockMigrations = pallet_migrations;
 }
 
 #[cfg(feature = "runtime-benchmarks")]

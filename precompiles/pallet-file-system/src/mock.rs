@@ -616,6 +616,8 @@ impl pallet_file_system::Config for Test {
     type SuperHighSecurityReplicationTarget = ConstU32<5>;
     type UltraHighSecurityReplicationTarget = ConstU32<6>;
     type MaxReplicationTarget = ConstU32<7>;
+    type MaxBspVolunteers = ConstU32<1000>;
+    type MaxMspRespondFileKeys = ConstU32<10>;
     type TickRangeToMaximumThreshold = ConstU64<30>;
     type OffchainSignature = Signature;
     type OffchainPublicKey = <Signature as Verify>::Signer;

@@ -165,7 +165,8 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
     fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
-/// Migrations to run on runtime upgrade.
+/// Single-block runtime upgrade migrations (run synchronously on the first block after upgrade).
+/// The V1→V2 `StorageRequestBsps` migration is handled by `pallet_migrations` (MBM) instead.
 pub type Migrations = (pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,);
 
 /// Executive: handles dispatch to the various modules.
@@ -210,7 +211,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     spec_name: alloc::borrow::Cow::Borrowed("sh-solochain-evm"),
     impl_name: alloc::borrow::Cow::Borrowed("sh-solochain-evm"),
     authoring_version: 1,
-    spec_version: 1,
+    spec_version: 2,
     impl_version: 0,
     apis: RUNTIME_API_VERSIONS,
     transaction_version: 1,
@@ -317,6 +318,8 @@ mod runtime {
 
     #[runtime::pallet_index(90)]
     pub type Nfts = pallet_nfts;
+    #[runtime::pallet_index(91)]
+    pub type MultiBlockMigrations = pallet_migrations;
     // ╚═════════════════ Polkadot SDK Utility Pallets ══════════════════╝
 
     // ╔════════════════════ Frontier (EVM) Pallets ═════════════════════╗
@@ -758,6 +761,10 @@ impl_runtime_apis! {
 
         fn get_max_batch_confirm_storage_requests() -> u32 {
             FileSystem::get_max_batch_confirm_storage_requests()
+        }
+
+        fn get_max_msp_respond_file_keys() -> u32 {
+            FileSystem::get_max_msp_respond_file_keys()
         }
 
         fn query_min_wait_for_stop_storing() -> BlockNumber {

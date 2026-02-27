@@ -68,7 +68,10 @@
     "test:perf": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/benchmarking/**.test.ts",
     "test:benchmark": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/benchmarking/**.test.ts",
     "test:telemetry": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/telemetry/**.test.ts",
-    "test:telemetry:only": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/telemetry/**.test.ts"
+    "test:telemetry:only": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/telemetry/**.test.ts",
+    "test:migrations": "node --no-deprecation --import tsx --test './suites/migrations/**/*.test.ts'",
+    "test:migrations:try-runtime": "node --no-deprecation --import tsx --test './suites/migrations/**/try-runtime.test.ts'",
+    "test:migrations:chopsticks": "node --no-deprecation --import tsx --test './suites/migrations/**/chopsticks.test.ts'"
   },
   "keywords": [],
   "author": "",
@@ -101,7 +104,9 @@
     "testcontainers": "10.16.0",
     "tmp": "0.2.5",
     "tsx": "4.20.5",
-    "yaml": "2.8.1"
+    "yaml": "2.8.1",
+    "@acala-network/chopsticks": "latest",
+    "@acala-network/chopsticks-core": "latest"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.4",

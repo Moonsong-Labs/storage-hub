@@ -45,10 +45,10 @@ import type {
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemPendingFileDeletionRequest,
   PalletFileSystemPendingStopStoringRequest,
-  PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
   PalletMessageQueuePage,
+  PalletMigrationsMigrationCursor,
   PalletNftsAttributeDeposit,
   PalletNftsAttributeNamespace,
   PalletNftsCollectionConfig,
@@ -428,22 +428,19 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * A double map from file key to the BSP IDs of the BSPs that volunteered to store the file to whether that BSP has confirmed storing it.
+       * BSP volunteer/confirmation state for each active storage request.
        *
-       * Any BSP under a file key prefix is considered to be a volunteer and can be removed at any time.
-       * Once a BSP submits a valid proof via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
-       *
-       * When a storage request is expired or removed, the corresponding file key prefix in this map is removed.
+       * Maps a file key to the set of BSPs that have volunteered or confirmed storing
+       * the file. The value is `false` for volunteered-only and `true` for confirmed.
+       * This map is created when the first BSP volunteers and removed when the storage
+       * request is cleaned up.
        **/
       storageRequestBsps: AugmentedQuery<
         ApiType,
-        (
-          arg1: H256 | string | Uint8Array,
-          arg2: H256 | string | Uint8Array
-        ) => Observable<Option<PalletFileSystemStorageRequestBspsMetadata>>,
-        [H256, H256]
+        (arg: H256 | string | Uint8Array) => Observable<Option<BTreeMap<H256, bool>>>,
+        [H256]
       > &
-        QueryableStorageEntry<ApiType, [H256, H256]>;
+        QueryableStorageEntry<ApiType, [H256]>;
       /**
        * A map of ticks to expired storage requests.
        **/
@@ -523,6 +520,35 @@ declare module "@polkadot/api-base/types/storage" {
         []
       > &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * Generic query
+       **/
+      [key: string]: QueryableStorageEntry<ApiType>;
+    };
+    multiBlockMigrations: {
+      /**
+       * The currently active migration to run and its cursor.
+       *
+       * `None` indicates that no migration is running.
+       **/
+      cursor: AugmentedQuery<
+        ApiType,
+        () => Observable<Option<PalletMigrationsMigrationCursor>>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * Set of all successfully executed migrations.
+       *
+       * This is used as blacklist, to not re-execute migrations that have not been removed from the
+       * codebase yet. Governance can regularly clear this out via `clear_historic`.
+       **/
+      historic: AugmentedQuery<
+        ApiType,
+        (arg: Bytes | string | Uint8Array) => Observable<Option<Null>>,
+        [Bytes]
+      > &
+        QueryableStorageEntry<ApiType, [Bytes]>;
       /**
        * Generic query
        **/

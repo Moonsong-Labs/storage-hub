@@ -495,7 +495,14 @@ where
 
         // Check for pending RespondStorage requests.
         {
-            let max_batch_respond = self.config.msp_respond_storage_batch_size;
+            let best_hash = self.client.info().best_hash;
+            let runtime_max = self
+                .client
+                .runtime_api()
+                .get_max_msp_respond_file_keys(best_hash)
+                .unwrap_or(self.config.msp_respond_storage_batch_size);
+            let max_batch_respond =
+                std::cmp::min(runtime_max, self.config.msp_respond_storage_batch_size);
 
             // Batch multiple RespondStorage requests up to the configured maximum.
             let mut respond_storage_requests = Vec::new();

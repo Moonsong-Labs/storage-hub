@@ -3,7 +3,7 @@ use core::cmp::max;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
     traits::{fungible::Inspect, nonfungibles_v2::Inspect as NonFungiblesInspect, Get},
-    BoundedVec,
+    BoundedBTreeMap, BoundedVec,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
@@ -14,7 +14,7 @@ use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
     Config, Error, MoveBucketRequestExpirations, NextAvailableMoveBucketRequestExpirationTick,
-    NextAvailableStorageRequestExpirationTick, StorageRequestBsps, StorageRequestExpirations,
+    NextAvailableStorageRequestExpirationTick, StorageRequestExpirations,
 };
 
 /// Ephemeral metadata of a storage request.
@@ -98,6 +98,39 @@ impl<T: Config> StorageRequestMetadata<T> {
             self.fingerprint.as_ref().into(),
         )
         .map_err(|_| Error::<T>::FailedToCreateFileMetadata.into())
+    }
+
+    /// Convert this storage request metadata into an [`IncompleteStorageRequestMetadata`],
+    /// using the provided BSP map to determine which BSPs have confirmed storage.
+    pub fn to_incomplete_metadata(
+        &self,
+        bsps: &BoundedBTreeMap<ProviderIdFor<T>, bool, MaxBspVolunteers<T>>,
+    ) -> IncompleteStorageRequestMetadata<T> {
+        // Collect all confirmed BSPs from the provided bsps map
+        let confirmed_bsps: sp_std::vec::Vec<_> = bsps
+            .iter()
+            .filter(|(_, confirmed)| **confirmed)
+            .map(|(bsp_id, _)| *bsp_id)
+            .collect();
+
+        // Check if the MSP has accepted the storage request with a non-inclusion forest proof, as
+        // this means the file is new and we should mark it for bucket removal.
+        // If the MSP accepted the storage request with an inclusion forest proof, the file already
+        // existed in the bucket from a previous storage request, so we should not mark it for bucket removal.
+        let pending_bucket_removal =
+            matches!(self.msp_status, MspStorageRequestStatus::AcceptedNewFile(_));
+
+        let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
+
+        IncompleteStorageRequestMetadata {
+            owner: self.owner.clone(),
+            bucket_id: self.bucket_id,
+            location: self.location.clone(),
+            file_size: self.size,
+            fingerprint: self.fingerprint,
+            pending_bsp_removals: bounded_bsps,
+            pending_bucket_removal,
+        }
     }
 }
 
@@ -265,7 +298,7 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMspAcceptedFileKeys<T: Config> {
-    pub file_keys_and_proofs: Vec<FileKeyWithProof<T>>,
+    pub file_keys_and_proofs: BoundedVec<FileKeyWithProof<T>, MaxMspRespondFileKeys<T>>,
     /// File keys which have already been accepted by the MSP in a previous storage request should be included
     /// in the proof.
     pub forest_proof: ForestProof<T>,
@@ -333,17 +366,6 @@ impl<T: Config> Debug for StorageRequestMspBucketResponse<T> {
 /// - List of rejected file keys and rejection reasons
 pub type StorageRequestMspResponse<T> = Vec<StorageRequestMspBucketResponse<T>>;
 
-/// Ephemeral BSP storage request tracking metadata.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
-#[scale_info(skip_type_params(T))]
-pub struct StorageRequestBspsMetadata<T: Config> {
-    /// Confirmed that the data is being stored.
-    ///
-    /// This is normally when the BSP submits a proof of storage to the `pallet-proofs-dealer-trie`.
-    pub confirmed: bool,
-    pub _phantom: core::marker::PhantomData<T>,
-}
-
 /// Bucket privacy settings.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 pub enum BucketPrivacy {
@@ -377,6 +399,10 @@ impl UserOperationPauseFlags {
     pub const FLAG_REQUEST_DELETE_FILE: u32 = 1 << 5;
     /// Bit flag for executing file deletions.
     pub const FLAG_DELETE_FILES: u32 = 1 << 6;
+    /// Bit flag for BSPs volunteering to store a file.
+    pub const FLAG_BSP_VOLUNTEER: u32 = 1 << 7;
+    /// Bit flag for BSPs confirming they have stored a file.
+    pub const FLAG_BSP_CONFIRM_STORING: u32 = 1 << 8;
 
     /// Convenience flag where all currently defined operations are paused.
     pub const ALL: Self = Self(
@@ -386,7 +412,9 @@ impl UserOperationPauseFlags {
             | Self::FLAG_DELETE_BUCKET
             | Self::FLAG_ISSUE_STORAGE_REQUEST
             | Self::FLAG_REQUEST_DELETE_FILE
-            | Self::FLAG_DELETE_FILES,
+            | Self::FLAG_DELETE_FILES
+            | Self::FLAG_BSP_VOLUNTEER
+            | Self::FLAG_BSP_CONFIRM_STORING,
     );
 
     /// Create a new flags value from the raw bit representation.
@@ -666,41 +694,6 @@ impl<T: Config> IncompleteStorageRequestMetadata<T> {
     }
 }
 
-impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
-    for IncompleteStorageRequestMetadata<T>
-{
-    fn from((storage_request, file_key): (&StorageRequestMetadata<T>, &MerkleHash<T>)) -> Self {
-        // Collect all confirmed BSPs
-        let mut confirmed_bsps = sp_std::vec::Vec::new();
-        for (bsp_id, metadata) in StorageRequestBsps::<T>::iter_prefix(file_key) {
-            if metadata.confirmed {
-                confirmed_bsps.push(bsp_id);
-            }
-        }
-
-        // Check if the MSP has accepted the storage request with a non-inclusion forest proof, as
-        // this means the file is new and we should mark it for bucket removal.
-        // If the MSP accepted the storage request with an inclusion forest proof, the file already
-        // existed in the bucket from a previous storage request, so we should not mark it for bucket removal.
-        let pending_bucket_removal = matches!(
-            storage_request.msp_status,
-            MspStorageRequestStatus::AcceptedNewFile(_)
-        );
-
-        let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
-
-        Self {
-            owner: storage_request.owner.clone(),
-            bucket_id: storage_request.bucket_id,
-            location: storage_request.location.clone(),
-            file_size: storage_request.size,
-            fingerprint: storage_request.fingerprint,
-            pending_bsp_removals: bounded_bsps,
-            pending_bucket_removal,
-        }
-    }
-}
-
 /// Alias for FileMetadata with the concrete constants used in StorageHub.
 pub type FileMetadata = shp_file_metadata::FileMetadata<
     { shp_constants::H_LENGTH },
@@ -742,6 +735,12 @@ pub type ReplicationTargetType<T> = <T as crate::Config>::ReplicationTargetType;
 
 /// Alias for the `MaxReplicationTarget` type used in the FileSystem pallet.
 pub type MaxReplicationTarget<T> = <T as crate::Config>::MaxReplicationTarget;
+
+/// Alias for the `MaxBspVolunteers` type used in the FileSystem pallet.
+pub type MaxBspVolunteers<T> = <T as crate::Config>::MaxBspVolunteers;
+
+/// Alias for the `MaxMspRespondFileKeys` type used in the FileSystem pallet.
+pub type MaxMspRespondFileKeys<T> = <T as crate::Config>::MaxMspRespondFileKeys;
 
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;

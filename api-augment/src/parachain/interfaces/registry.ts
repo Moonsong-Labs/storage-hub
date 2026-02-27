@@ -86,7 +86,6 @@ import type {
   PalletFileSystemRejectedStorageRequest,
   PalletFileSystemRejectedStorageRequestReason,
   PalletFileSystemReplicationTarget,
-  PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletFileSystemStorageRequestMspAcceptedFileKeys,
   PalletFileSystemStorageRequestMspBucketResponse,
@@ -96,6 +95,12 @@ import type {
   PalletMessageQueueEvent,
   PalletMessageQueueNeighbours,
   PalletMessageQueuePage,
+  PalletMigrationsActiveCursor,
+  PalletMigrationsCall,
+  PalletMigrationsError,
+  PalletMigrationsEvent,
+  PalletMigrationsHistoricCleanupSelector,
+  PalletMigrationsMigrationCursor,
   PalletNftsAttributeDeposit,
   PalletNftsAttributeNamespace,
   PalletNftsCall,
@@ -189,6 +194,7 @@ import type {
   ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget,
   ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate,
   ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,
+  ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxBspVolunteers,
   ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice,
   ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget,
   ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut,
@@ -396,7 +402,6 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;
     PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
     PalletFileSystemReplicationTarget: PalletFileSystemReplicationTarget;
-    PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
     PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
     PalletFileSystemStorageRequestMspAcceptedFileKeys: PalletFileSystemStorageRequestMspAcceptedFileKeys;
     PalletFileSystemStorageRequestMspBucketResponse: PalletFileSystemStorageRequestMspBucketResponse;
@@ -406,6 +411,12 @@ declare module "@polkadot/types/types/registry" {
     PalletMessageQueueEvent: PalletMessageQueueEvent;
     PalletMessageQueueNeighbours: PalletMessageQueueNeighbours;
     PalletMessageQueuePage: PalletMessageQueuePage;
+    PalletMigrationsActiveCursor: PalletMigrationsActiveCursor;
+    PalletMigrationsCall: PalletMigrationsCall;
+    PalletMigrationsError: PalletMigrationsError;
+    PalletMigrationsEvent: PalletMigrationsEvent;
+    PalletMigrationsHistoricCleanupSelector: PalletMigrationsHistoricCleanupSelector;
+    PalletMigrationsMigrationCursor: PalletMigrationsMigrationCursor;
     PalletNftsAttributeDeposit: PalletNftsAttributeDeposit;
     PalletNftsAttributeNamespace: PalletNftsAttributeNamespace;
     PalletNftsCall: PalletNftsCall;
@@ -499,6 +510,7 @@ declare module "@polkadot/types/types/registry" {
     ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget;
     ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate;
     ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor;
+    ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxBspVolunteers: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxBspVolunteers;
     ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice;
     ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget;
     ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut;

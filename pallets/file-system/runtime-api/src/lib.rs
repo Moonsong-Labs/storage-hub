@@ -129,6 +129,7 @@ sp_api::decl_runtime_apis! {
         fn list_incomplete_storage_request_keys(start_after: Option<FileKey>, limit: u32) -> Vec<FileKey>;
         fn query_pending_bsp_confirm_storage_requests(bsp_id: BackupStorageProviderId, file_keys: Vec<FileKey>) -> Vec<FileKey>;
         fn get_max_batch_confirm_storage_requests() -> u32;
+        fn get_max_msp_respond_file_keys() -> u32;
         fn query_min_wait_for_stop_storing() -> TickNumber;
         fn has_pending_stop_storing_request(bsp_id: BackupStorageProviderId, file_key: FileKey) -> bool;
         fn pending_stop_storing_requests_by_bsp(bsp_id: BackupStorageProviderId) -> BTreeMap<H256, PendingStopStoringRequest>;

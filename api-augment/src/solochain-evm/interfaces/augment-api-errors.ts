@@ -449,6 +449,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ThresholdArithmeticError: AugmentedError<ApiType>;
       /**
+       * Too many BSPs have already volunteered for the storage request.
+       **/
+      TooManyBspVolunteers: AugmentedError<ApiType>;
+      /**
        * Too many storage request responses.
        **/
       TooManyStorageRequestResponses: AugmentedError<ApiType>;
@@ -500,6 +504,16 @@ declare module "@polkadot/api-base/types/errors" {
        * Cannot signal forced change so soon after last.
        **/
       TooSoon: AugmentedError<ApiType>;
+      /**
+       * Generic error
+       **/
+      [key: string]: AugmentedError<ApiType>;
+    };
+    multiBlockMigrations: {
+      /**
+       * The operation cannot complete since some MBMs are ongoing.
+       **/
+      Ongoing: AugmentedError<ApiType>;
       /**
        * Generic error
        **/

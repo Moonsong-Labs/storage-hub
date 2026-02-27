@@ -8,6 +8,6 @@
       "@storagehub/types-bundle/*": ["../types-bundle/src/*"]
     }
   },
-  "include": ["suites/integration/**/*.ts", "util/**/*.ts"],
+  "include": ["suites/integration/**/*.ts", "suites/migrations/**/*.ts", "util/**/*.ts"],
   "exclude": ["suites/solo-node/**"]
 }

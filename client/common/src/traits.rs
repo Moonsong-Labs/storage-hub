@@ -264,6 +264,7 @@ pub trait StorageEnableRuntime:
             MaxPeerIdSize: Send + Sync,
             MaxReplicationTarget: Send + Sync,
             MaxFileDeletionsPerExtrinsic: Send + Sync,
+            MaxMspRespondFileKeys: Send + Sync,
         >
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance: Into<BigDecimal> + Into<NumberOrHex> + MaybeDisplay>
