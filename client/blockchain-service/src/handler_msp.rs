@@ -734,6 +734,12 @@ where
             ForestWriteLockTaskData::SubmitProofRequest(_) => {
                 unreachable!("MSPs do not submit proofs.")
             }
+            ForestWriteLockTaskData::BspRequestStopStoring(_) => {
+                unreachable!("MSPs do not request stop storing the way BSPs do.")
+            }
+            ForestWriteLockTaskData::BspConfirmStopStoring(_) => {
+                unreachable!("MSPs do not confirm stop storing the way BSPs do.")
+            }
         }
     }
 

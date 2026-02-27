@@ -141,6 +141,8 @@ pub type PeerId<Runtime> = pallet_file_system::types::PeerId<Runtime>;
 pub type OffchainSignature<Runtime> = pallet_file_system::types::OffchainSignatureFor<Runtime>;
 pub type StorageRequestMetadata<Runtime> =
     pallet_file_system::types::StorageRequestMetadata<Runtime>;
+pub type PendingStopStoringRequest<Runtime> =
+    pallet_file_system::types::PendingStopStoringRequest<Runtime>;
 pub type IncompleteStorageRequestMetadata<Runtime> =
     pallet_file_system::types::IncompleteStorageRequestMetadata<Runtime>;
 pub type MaxBatchConfirmStorageRequests<Runtime> =

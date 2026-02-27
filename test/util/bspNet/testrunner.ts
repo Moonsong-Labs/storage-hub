@@ -300,11 +300,13 @@ const pickConfig = (options: TestOptions) => {
         ]
       : options.networkConfig === "noisy"
         ? [{ noisy: true, rocksdb: false }]
-        : typeof options.networkConfig === "object"
-          ? options.networkConfig
-          : // default config is same as "ALL"
-            [
-              { noisy: false, rocksdb: false },
-              { noisy: false, rocksdb: true }
-            ];
+        : options.networkConfig === "rocksdb"
+          ? [{ noisy: false, rocksdb: true }]
+          : typeof options.networkConfig === "object"
+            ? options.networkConfig
+            : // default config is same as "ALL"
+              [
+                { noisy: false, rocksdb: false },
+                { noisy: false, rocksdb: true }
+              ];
 };

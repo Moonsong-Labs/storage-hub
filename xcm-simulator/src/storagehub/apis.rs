@@ -5,7 +5,7 @@ use frame_support::{
     weights::Weight,
 };
 use pallet_aura::Authorities;
-use pallet_file_system::types::StorageRequestMetadata;
+use pallet_file_system::types::{PendingStopStoringRequest, StorageRequestMetadata};
 use pallet_file_system_runtime_api::*;
 use pallet_payment_streams_runtime_api::*;
 use pallet_proofs_dealer::types::{
@@ -329,7 +329,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, AccountId, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId, BucketId<Runtime>, StorageRequestMetadata<Runtime>, BucketId<Runtime>, StorageDataUnit<Runtime>, H256> for Runtime {
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, AccountId, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId, BucketId<Runtime>, StorageRequestMetadata<Runtime>, BucketId<Runtime>, StorageDataUnit<Runtime>, H256, PendingStopStoringRequest<Runtime>> for Runtime {
         fn is_storage_request_open_to_volunteers(file_key: H256) -> Result<bool, IsStorageRequestOpenToVolunteersError> {
             FileSystem::is_storage_request_open_to_volunteers(file_key)
         }
@@ -376,6 +376,18 @@ impl_runtime_apis! {
 
         fn get_max_batch_confirm_storage_requests() -> u32 {
             FileSystem::get_max_batch_confirm_storage_requests()
+        }
+
+        fn query_min_wait_for_stop_storing() -> BlockNumber {
+            FileSystem::query_min_wait_for_stop_storing()
+        }
+
+        fn has_pending_stop_storing_request(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> bool {
+            FileSystem::has_pending_stop_storing_request(bsp_id, file_key)
+        }
+
+        fn pending_stop_storing_requests_by_bsp(bsp_id: BackupStorageProviderId<Runtime>) -> BTreeMap<H256, PendingStopStoringRequest<Runtime>> {
+            FileSystem::pending_stop_storing_requests_by_bsp(bsp_id)
         }
     }
 

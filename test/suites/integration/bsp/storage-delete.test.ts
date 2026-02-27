@@ -128,15 +128,19 @@ await describeBspNet(
       )
         .unwrap()
         .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
-      const cooldown = currentBlockNumber + minWaitForStopStoring;
+      const cooldown = currentBlockNumber + minWaitForStopStoring + 1;
 
-      // Waint until the BSP is allowed to confirm the stop storing
+      // Wait until the BSP is allowed to confirm the stop storing
       await userApi.block.skipTo(cooldown);
 
-      await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, inclusionForestProof)],
-        signer: bspKey
+      // The BSP will automatically submit bspConfirmStopStoring after the cooldown
+      // Wait for it to appear in the tx pool and seal
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspConfirmStopStoring"
       });
+
+      await userApi.block.seal();
 
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
     });

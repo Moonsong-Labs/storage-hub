@@ -23,7 +23,7 @@ import type { AccountId, BlockNumber, H160, H256, H64, Hash, Header, Index, Just
 import type { MigrationStatusResult, ReadProof, RuntimeVersion, TraceBlockResponse } from '@polkadot/types/interfaces/state';
 import type { ApplyExtrinsicResult, ChainProperties, ChainType, Health, NetworkState, NodeRole, PeerInfo, SyncState } from '@polkadot/types/interfaces/system';
 import type { IExtrinsic, Observable } from '@polkadot/types/types';
-import type { AddFilesToForestStorageResult, CheckpointChallenge, FileMetadata, GetFileFromFileStorageResult, GetValuePropositionsResult, LoadFileInStorageResult, RemoveFilesFromForestStorageResult, RpcProviderId, SaveFileToDisk } from '@storagehub/api-augment/solochain-evm/interfaces/storagehubclient';
+import type { AddFilesToForestStorageResult, BspStopStoringFileResult, CheckpointChallenge, FileMetadata, GetFileFromFileStorageResult, GetValuePropositionsResult, LoadFileInStorageResult, RemoveFilesFromForestStorageResult, RpcProviderId, SaveFileToDisk } from '@storagehub/api-augment/solochain-evm/interfaces/storagehubclient';
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 declare module '@polkadot/rpc-core/types/jsonrpc' {
     interface RpcInterface {
@@ -602,6 +602,10 @@ declare module '@polkadot/rpc-core/types/jsonrpc' {
              **/
             addToExcludeList: AugmentedRpc<(key: H256 | string | Uint8Array, exclude_type: Text | string) => Observable<ITuple<[]>>>;
             /**
+             * Request a BSP node to stop storing a file.
+             **/
+            bspStopStoringFile: AugmentedRpc<(file_key: H256 | string | Uint8Array) => Observable<BspStopStoringFileResult>>;
+            /**
              * Generate a SCALE-encoded proof for a file key to allow a BSP to confirm storing it.
              **/
             generateFileKeyProofBspConfirm: AugmentedRpc<(bsp_id: H256 | string | Uint8Array, file_key: H256 | string | Uint8Array) => Observable<Bytes>>;
@@ -620,6 +624,10 @@ declare module '@polkadot/rpc-core/types/jsonrpc' {
                 file_key?: any;
                 should_remove_file?: any;
             } | string | Uint8Array)[]) => Observable<Bytes>>;
+            /**
+             * Get all the file keys stored in the node's forest of the given forest key.
+             **/
+            getAllStoredFileKeys: AugmentedRpc<(forest_key: Option<H256> | null | Uint8Array | H256 | string) => Observable<Vec<H256>>>;
             /**
              * Get the current price per giga unit per tick from the payment streams pallet
              **/

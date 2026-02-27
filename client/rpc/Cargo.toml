@@ -52,6 +52,7 @@ pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 shc-actors-framework = { workspace = true }
+shc-blockchain-service = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-file-transfer-service = { workspace = true }
