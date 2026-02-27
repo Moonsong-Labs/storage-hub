@@ -95,6 +95,12 @@ import type {
   PalletMessageQueueEvent,
   PalletMessageQueueNeighbours,
   PalletMessageQueuePage,
+  PalletMigrationsActiveCursor,
+  PalletMigrationsCall,
+  PalletMigrationsError,
+  PalletMigrationsEvent,
+  PalletMigrationsHistoricCleanupSelector,
+  PalletMigrationsMigrationCursor,
   PalletNftsAttributeDeposit,
   PalletNftsAttributeNamespace,
   PalletNftsCall,
@@ -406,6 +412,12 @@ declare module "@polkadot/types/types/registry" {
     PalletMessageQueueEvent: PalletMessageQueueEvent;
     PalletMessageQueueNeighbours: PalletMessageQueueNeighbours;
     PalletMessageQueuePage: PalletMessageQueuePage;
+    PalletMigrationsActiveCursor: PalletMigrationsActiveCursor;
+    PalletMigrationsCall: PalletMigrationsCall;
+    PalletMigrationsError: PalletMigrationsError;
+    PalletMigrationsEvent: PalletMigrationsEvent;
+    PalletMigrationsHistoricCleanupSelector: PalletMigrationsHistoricCleanupSelector;
+    PalletMigrationsMigrationCursor: PalletMigrationsMigrationCursor;
     PalletNftsAttributeDeposit: PalletNftsAttributeDeposit;
     PalletNftsAttributeNamespace: PalletNftsAttributeNamespace;
     PalletNftsCall: PalletNftsCall;

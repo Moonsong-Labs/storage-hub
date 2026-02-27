@@ -47,6 +47,7 @@ import type {
   PalletFileSystemStorageRequestMetadata,
   PalletGrandpaStoredPendingChange,
   PalletGrandpaStoredState,
+  PalletMigrationsMigrationCursor,
   PalletNftsAttributeDeposit,
   PalletNftsAttributeNamespace,
   PalletNftsCollectionConfig,
@@ -695,6 +696,35 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       storedRange: AugmentedQuery<ApiType, () => Observable<Option<ITuple<[u32, u32]>>>, []> &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * Generic query
+       **/
+      [key: string]: QueryableStorageEntry<ApiType>;
+    };
+    multiBlockMigrations: {
+      /**
+       * The currently active migration to run and its cursor.
+       *
+       * `None` indicates that no migration is running.
+       **/
+      cursor: AugmentedQuery<
+        ApiType,
+        () => Observable<Option<PalletMigrationsMigrationCursor>>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * Set of all successfully executed migrations.
+       *
+       * This is used as blacklist, to not re-execute migrations that have not been removed from the
+       * codebase yet. Governance can regularly clear this out via `clear_historic`.
+       **/
+      historic: AugmentedQuery<
+        ApiType,
+        (arg: Bytes | string | Uint8Array) => Observable<Option<Null>>,
+        [Bytes]
+      > &
+        QueryableStorageEntry<ApiType, [Bytes]>;
       /**
        * Generic query
        **/
