@@ -196,6 +196,7 @@ impl frame_system::Config for Runtime {
     /// This is used as an identifier of the chain. 42 is the generic substrate prefix.
     type SS58Prefix = SS58Prefix;
     type MaxConsumers = ConstU32<16>;
+    type MultiBlockMigrator = pallet_migrations::Pallet<Runtime>;
     type SystemWeightInfo = ();
 }
 
