@@ -1,4 +1,5 @@
 import {
+  assert0xString,
   ensure0xPrefix,
   FileMetadata,
   hexToBytes,
@@ -66,6 +67,10 @@ export class FilesModule extends ModuleBase {
     _options?: UploadOptions
   ): Promise<UploadReceipt> {
     void _options;
+
+    assert0xString(bucketId, 32, "Invalid bucketId: expected 0x-prefixed 32-byte hex");
+    assert0xString(fingerprint, 32, "Invalid fingerprint: expected 0x-prefixed 32-byte hex");
+    assert0xString(owner, 20, "Invalid owner: expected 0x-prefixed 20-byte hex");
 
     await initWasm();
 
