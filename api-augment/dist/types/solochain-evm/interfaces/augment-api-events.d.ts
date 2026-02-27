@@ -459,7 +459,7 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a new file has been requested to be stored.
              **/
-            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId20, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u64, peerIds: Vec<Bytes>, expiresAt: u32], {
+            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId20, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u64, peerIds: Vec<Bytes>, expiresAt: u32, bspsRequired: u32, mspId: Option<H256>], {
                 who: AccountId20;
                 fileKey: H256;
                 bucketId: H256;
@@ -468,6 +468,8 @@ declare module '@polkadot/api-base/types/events' {
                 size_: u64;
                 peerIds: Vec<Bytes>;
                 expiresAt: u32;
+                bspsRequired: u32;
+                mspId: Option<H256>;
             }>;
             /**
              * Notifies that a SP has stopped storing a file because its owner has become insolvent.

@@ -858,6 +858,8 @@ declare module '@polkadot/types/lookup' {
             readonly size_: u64;
             readonly peerIds: Vec<Bytes>;
             readonly expiresAt: u32;
+            readonly bspsRequired: u32;
+            readonly mspId: Option<H256>;
         } & Struct;
         readonly isMspAcceptedStorageRequest: boolean;
         readonly asMspAcceptedStorageRequest: {

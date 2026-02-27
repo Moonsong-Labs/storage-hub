@@ -37,6 +37,8 @@ export class FilesModule extends ModuleBase {
       status: string;
       blockHash: string; // Block hash where file was created
       txHash?: string; // Optional EVM transaction hash
+      desiredReplicas: number;
+      currentReplication: number;
     }>(path, {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
@@ -52,7 +54,9 @@ export class FilesModule extends ModuleBase {
       uploadedAt: parseDate(wire.uploadedAt),
       status: wire.status as FileStatus,
       blockHash: ensure0xPrefix(wire.blockHash),
-      ...(wire.txHash ? { txHash: ensure0xPrefix(wire.txHash) } : {})
+      ...(wire.txHash ? { txHash: ensure0xPrefix(wire.txHash) } : {}),
+      desiredReplicas: wire.desiredReplicas,
+      currentReplication: wire.currentReplication
     };
   }
 

@@ -628,7 +628,15 @@ impl MspService {
             .get_bucket(&hex::encode(&db_file.onchain_bucket_id), user)
             .await?;
 
-        Ok(FileInfo::from_db(&db_file, bucket.is_public))
+        let desired_replicas = self.postgres.get_desired_replicas(&file_key).await?;
+        let current_replication = self.postgres.count_bsp_associations(&file_key).await?;
+
+        Ok(FileInfo::from_db(
+            &db_file,
+            bucket.is_public,
+            desired_replicas,
+            current_replication,
+        ))
     }
 
     /// Check via MSP RPC if this node is expecting to receive the given file key
