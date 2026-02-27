@@ -154,6 +154,7 @@ pub trait IndexerOps: Send + Sync {
 /// - All methods are async and return `RepositoryResult<T>`
 /// - Methods follow consistent naming: `create_*`, `delete_*`
 /// - This trait always exists but implementations are conditional
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait IndexerOpsMut: IndexerOps {
     /// Create a new MSP.

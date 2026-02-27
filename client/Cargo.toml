@@ -21,6 +21,7 @@ async-channel = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }
+bytes = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true, default-features = true }
 kvdb = { workspace = true }
