@@ -19,7 +19,8 @@ use shc_blockchain_service::{
         FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected,
         FinalisedTrieRemoveMutationsAppliedForBsp, LastChargeableInfoUpdated, MoveBucketAccepted,
         MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessBspConfirmStopStoring,
+        ProcessBspRequestStopStoring, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
@@ -48,6 +49,7 @@ use crate::{
         bsp_delete_file::BspDeleteFileTask,
         bsp_download_file::BspDownloadFileTask,
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
+        bsp_stop_storing::BspStopStoringTask,
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
         fisherman_process_batch_deletions::{FileDeletionStrategy, FishermanTask},
@@ -427,6 +429,13 @@ where
                 MoveBucketExpired<Runtime> => BspMoveBucketTask,
                 FinalisedBspConfirmStoppedStoring<Runtime> => BspDeleteFileTask,
                 FinalisedTrieRemoveMutationsAppliedForBsp<Runtime> => BspDeleteFileTask,
+                // BspStopStoringTask handles the two-phase stop storing process for BSPs.
+                // ProcessBspRequestStopStoring is emitted when the blockchain service has acquired
+                // the forest root write lock and is ready to process phase 1 (request stop storing).
+                // ProcessBspConfirmStopStoring is emitted when the confirm tick has been reached and
+                // the forest root write lock is available for phase 2 (confirm stop storing).
+                ProcessBspRequestStopStoring<Runtime> => BspStopStoringTask,
+                ProcessBspConfirmStopStoring<Runtime> => BspStopStoringTask,
             ]
         );
 

@@ -472,6 +472,8 @@ export type NetworkConfig =
   | "all"
   /** Simulates a noisy network environment with added latency and bandwidth limitations */
   | "noisy"
+  /** Uses RocksDB as the storage backend (persistent across restarts) */
+  | "rocksdb"
   /** Custom network configuration */
   | BspNetConfig[];
 

@@ -13,6 +13,7 @@ use crate::{
     error::{ErrorT, ForestStorageError},
     prove::prove,
     traits::ForestStorage,
+    utils::convert_raw_bytes_to_hasher_out,
 };
 
 pub struct InMemoryForestStorage<T: TrieLayout + 'static> {
@@ -179,6 +180,21 @@ where
         }
 
         Ok(files)
+    }
+
+    fn list_all_file_keys(&self) -> Result<Vec<HasherOutT<T>>, ErrorT<T>> {
+        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
+        let mut file_keys = Vec::new();
+        let mut trie_iter = trie
+            .iter()
+            .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
+
+        while let Some((key, _)) = trie_iter.next().transpose()? {
+            let file_key = convert_raw_bytes_to_hasher_out::<T>(key)?;
+            file_keys.push(file_key);
+        }
+
+        Ok(file_keys)
     }
 }
 
