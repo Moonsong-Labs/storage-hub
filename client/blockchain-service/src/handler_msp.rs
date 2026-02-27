@@ -2,7 +2,6 @@ use anyhow::Result;
 use log::{debug, error, info, trace, warn};
 use std::{collections::HashSet, str, sync::Arc};
 
-use frame_support::BoundedVec;
 use sc_client_api::HeaderBackend;
 use sc_network_types::PeerId;
 use sp_api::ProvideRuntimeApi;
@@ -537,9 +536,7 @@ where
                 );
                 next_event_data = Some(
                     ProcessMspRespondStoringRequestData {
-                        respond_storing_requests: BoundedVec::truncate_from(
-                            respond_storage_requests,
-                        ),
+                        respond_storing_requests: respond_storage_requests,
                     }
                     .into(),
                 );

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use codec::{Decode, Encode};
-use frame_support::BoundedVec;
 use sc_network::Multiaddr;
 
 use shc_actors_derive::{ActorEvent, ActorEventBus};
@@ -9,8 +8,8 @@ use shc_common::{
     traits::StorageEnableRuntime,
     types::{
         BackupStorageProviderId, Balance, BlockNumber, BucketId, CustomChallenge, FileKey,
-        FileLocation, Fingerprint, Hash, MaxMspRespondFileKeys, PeerIds, ProofsDealerProviderId,
-        ProviderId, RandomnessOutput, StorageDataUnit, TickNumber, TrieMutation, ValuePropId,
+        FileLocation, Fingerprint, Hash, PeerIds, ProofsDealerProviderId, ProviderId,
+        RandomnessOutput, StorageDataUnit, TickNumber, TrieMutation, ValuePropId,
     },
 };
 
@@ -187,8 +186,7 @@ impl<Runtime: StorageEnableRuntime> ProcessConfirmStoringRequest<Runtime> {
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessMspRespondStoringRequestData<Runtime: StorageEnableRuntime> {
-    pub respond_storing_requests:
-        BoundedVec<RespondStorageRequest<Runtime>, MaxMspRespondFileKeys<Runtime>>,
+    pub respond_storing_requests: Vec<RespondStorageRequest<Runtime>>,
 }
 
 #[derive(Debug, Clone, ActorEvent)]

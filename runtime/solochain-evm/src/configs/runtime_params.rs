@@ -290,15 +290,6 @@ pub mod dynamic_params {
         #[codec(index = 30)]
         #[allow(non_upper_case_globals)]
         pub static MaxBspVolunteers: ReplicationTargetType = 1_000;
-
-        /// Maximum number of file keys an MSP can accept per bucket in a single
-        /// `msp_respond_storage_requests_multiple_buckets` call.
-        ///
-        /// Default: 10.
-        /// Increase alongside benchmark range updates after re-running benchmarks.
-        #[codec(index = 31)]
-        #[allow(non_upper_case_globals)]
-        pub static MaxMspRespondFileKeys: ReplicationTargetType = 10;
     }
 }
 
