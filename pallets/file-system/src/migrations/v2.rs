@@ -89,7 +89,11 @@ impl<T: Config> SteppedMigration for MigrateV1ToV2Stepped<T> {
     type Identifier = MigrationId<18>;
 
     fn id() -> Self::Identifier {
-        MigrationId { pallet_id: *PALLET_MIGRATIONS_ID, version_from: 1, version_to: 2 }
+        MigrationId {
+            pallet_id: *PALLET_MIGRATIONS_ID,
+            version_from: 1,
+            version_to: 2,
+        }
     }
 
     fn step(
@@ -107,8 +111,7 @@ impl<T: Config> SteppedMigration for MigrateV1ToV2Stepped<T> {
         }
 
         // Find any remaining entry in the old DoubleMap.
-        let Some((file_key, bsp_id, bsp_meta)) = v1::StorageRequestBsps::<T>::iter().next()
-        else {
+        let Some((file_key, bsp_id, bsp_meta)) = v1::StorageRequestBsps::<T>::iter().next() else {
             // Old map is empty — migration is complete.
             return Ok(None);
         };
@@ -174,8 +177,8 @@ impl<T: Config> SteppedMigration for MigrateV1ToV2Stepped<T> {
     fn post_upgrade(state: Vec<u8>) -> Result<(), TryRuntimeError> {
         use frame_support::ensure;
 
-        let (old_file_key_count, old_bsp_count) = <(u32, u32)>::decode(&mut &state[..])
-            .map_err(|_| {
+        let (old_file_key_count, old_bsp_count) =
+            <(u32, u32)>::decode(&mut &state[..]).map_err(|_| {
                 TryRuntimeError::Other(
                     "MigrateV1ToV2Stepped post_upgrade: failed to decode pre-upgrade state",
                 )
@@ -206,9 +209,7 @@ impl<T: Config> SteppedMigration for MigrateV1ToV2Stepped<T> {
 
         ensure!(
             new_file_key_count == old_file_key_count,
-            TryRuntimeError::Other(
-                "MigrateV1ToV2Stepped post_upgrade: file_key count mismatch"
-            )
+            TryRuntimeError::Other("MigrateV1ToV2Stepped post_upgrade: file_key count mismatch")
         );
         ensure!(
             new_bsp_total == old_bsp_count,
@@ -300,7 +301,10 @@ mod tests {
     use super::*;
     use crate::{
         mock::{new_test_ext, Test},
-        types::{MaxBspVolunteers, MerkleHash, MspStorageRequestStatus, ProviderIdFor, StorageRequestMetadata},
+        types::{
+            MaxBspVolunteers, MerkleHash, MspStorageRequestStatus, ProviderIdFor,
+            StorageRequestMetadata,
+        },
     };
     use frame_support::BoundedVec;
     use sp_runtime::traits::Zero;
@@ -507,8 +511,7 @@ mod tests {
     #[test]
     fn migration_keeps_all_bsps_when_exactly_at_max() {
         new_test_ext().execute_with(|| {
-            let max =
-                <MaxBspVolunteers<Test> as frame_support::traits::Get<u32>>::get() as usize;
+            let max = <MaxBspVolunteers<Test> as frame_support::traits::Get<u32>>::get() as usize;
             let key = file_key(1);
             crate::StorageRequests::<Test>::insert(key, create_test_metadata());
 

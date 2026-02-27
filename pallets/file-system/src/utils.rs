@@ -126,8 +126,10 @@ where
 
         // This should always be true since the storage request will be deleted from storage if the `bsps_confirmed` is equal to `bsps_required`.
         // Also check that the number of volunteers hasn't reached the maximum allowed.
-        Ok(storage_request.bsps_confirmed < storage_request.bsps_required
-            && storage_request.bsps_volunteered < T::MaxBspVolunteers::get().into())
+        Ok(
+            storage_request.bsps_confirmed < storage_request.bsps_required
+                && storage_request.bsps_volunteered < T::MaxBspVolunteers::get().into(),
+        )
     }
 
     /// Compute the tick number at which the BSP is eligible to volunteer for a storage request.
