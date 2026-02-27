@@ -6,6 +6,12 @@ import * as compose from "docker-compose";
 import tmp from "tmp";
 import yaml from "yaml";
 import { JWT_SECRET } from "../backend/consts";
+
+// Export shared base context
+export * from "./baseContext";
+
+// Export dynamic network launcher (topology-based)
+export * from "./dynamic";
 import {
   addBsp,
   BspNetTestApi,
@@ -19,23 +25,47 @@ import {
   waitFor
 } from "../bspNet";
 import { DUMMY_MSP_ID } from "../bspNet/consts";
-import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
+import { BaseNetworkContext } from "./baseContext";
 
 export type ShEntity = {
   port: number;
   name: string;
 };
 
-export class NetworkLauncher {
+export class NetworkLauncher extends BaseNetworkContext {
   private composeYaml?: any;
   private entities?: ShEntity[];
   private tempFiles: string[] = [];
+  private composeFilePath?: string;
 
   constructor(
     private readonly type: NetworkType,
     private readonly config: NetLaunchConfig
-  ) {}
+  ) {
+    super();
+  }
+
+  /**
+   * Runtime type for this network.
+   */
+  get runtimeType(): "parachain" | "solochain" {
+    return this.config.runtimeType ?? "parachain";
+  }
+
+  /**
+   * Returns the standard test account addresses for pre-funding.
+   */
+  protected getAccountsToFund(api: EnrichedBspApi): string[] {
+    return [
+      api.accounts.bspKey.address,
+      api.accounts.shUser.address,
+      api.accounts.mspKey.address,
+      api.accounts.mspTwoKey.address,
+      api.accounts.mspDownKey.address,
+      api.accounts.fishermanKey.address
+    ];
+  }
 
   private loadComposeFile() {
     assert(this.type, "Network type has not been set yet");
@@ -366,6 +396,7 @@ export class NetworkLauncher {
     fs.mkdirSync(tmpDir, { recursive: true });
     const tmpFile = tmp.fileSync({ postfix: ".yml" });
     fs.writeFileSync(tmpFile.name, updatedCompose);
+    this.composeFilePath = tmpFile.name;
     return tmpFile.name;
   }
 
@@ -546,9 +577,38 @@ export class NetworkLauncher {
     return this;
   }
 
-  public async stopNetwork() {
-    const services = Object.keys(this.composeYaml.services);
-    console.log(services);
+  /**
+   * Cleans up all network resources.
+   *
+   * Stops all docker-compose services and removes containers.
+   * Cleans up any temporary files created during the test.
+   */
+  async cleanup(): Promise<void> {
+    const cwd = path.resolve(process.cwd(), "..", "docker");
+
+    try {
+      if (this.composeFilePath) {
+        await compose.down({
+          cwd,
+          config: this.composeFilePath,
+          log: false
+        });
+      }
+    } catch (error) {
+      console.error("Error stopping docker-compose services:", error);
+    }
+
+    // Clean up temporary files (e.g., large benchmark files)
+    for (const tempFile of this.tempFiles) {
+      try {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+      } catch (error) {
+        console.error(`Error cleaning up temp file ${tempFile}:`, error);
+      }
+    }
+    this.tempFiles = [];
   }
 
   private async runMigrations(verbose = false) {
@@ -640,37 +700,6 @@ export class NetworkLauncher {
     return this;
   }
 
-  public async preFundAccounts(api: EnrichedBspApi) {
-    const amount = 10000n * 10n ** 12n;
-
-    const sudo = api.accounts.sudo;
-    const signedCalls = [
-      api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(api.accounts.bspKey.address, amount))
-        .signAsync(sudo, { nonce: 0 }),
-      api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(api.accounts.shUser.address, amount))
-        .signAsync(sudo, { nonce: 1 }),
-      api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(api.accounts.mspKey.address, amount))
-        .signAsync(sudo, { nonce: 2 }),
-      api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(api.accounts.mspTwoKey.address, amount))
-        .signAsync(sudo, { nonce: 3 }),
-      api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(api.accounts.mspDownKey.address, amount))
-        .signAsync(sudo, { nonce: 4 }),
-      api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(api.accounts.fishermanKey.address, amount))
-        .signAsync(sudo, { nonce: 5 })
-    ];
-
-    const sudoTxns = await Promise.all(signedCalls);
-
-    await api.block.seal({ calls: sudoTxns });
-    return;
-  }
-
   public async setupMsp(api: EnrichedBspApi, who: string, multiAddressMsp: string, mspId?: string) {
     await api.block.seal({
       calls: [
@@ -691,132 +720,6 @@ export class NetworkLauncher {
       ]
     });
     return this;
-  }
-
-  public async setupRuntimeParams(api: EnrichedBspApi) {
-    // Adjusting runtime parameters...
-    // The `set_parameter` extrinsic receives an object like this:
-    // {
-    //   RuntimeConfig: Enum {
-    //     SlashAmountPerMaxFileSize: [null, {VALUE_YOU_WANT}],
-    //     StakeToChallengePeriod: [null, {VALUE_YOU_WANT}],
-    //     CheckpointChallengePeriod: [null, {VALUE_YOU_WANT}],
-    //     MinChallengePeriod: [null, {VALUE_YOU_WANT}],
-    //     SystemUtilisationLowerThresholdPercentage: [null, {VALUE_YOU_WANT}],
-    //     SystemUtilisationUpperThresholdPercentage: [null, {VALUE_YOU_WANT}],
-    //     MostlyStablePrice: [null, {VALUE_YOU_WANT}],
-    //     MaxPrice: [null, {VALUE_YOU_WANT}],
-    //     MinPrice: [null, {VALUE_YOU_WANT}],
-    //     UpperExponentFactor: [null, {VALUE_YOU_WANT}],
-    //     LowerExponentFactor: [null, {VALUE_YOU_WANT}],
-    //     ZeroSizeBucketFixedRate: [null, {VALUE_YOU_WANT}],
-    //     IdealUtilisationRate: [null, {VALUE_YOU_WANT}],
-    //     DecayRate: [null, {VALUE_YOU_WANT}],
-    //     MinimumTreasuryCut: [null, {VALUE_YOU_WANT}],
-    //     MaximumTreasuryCut: [null, {VALUE_YOU_WANT}],
-    //     BspStopStoringFilePenalty: [null, {VALUE_YOU_WANT}],
-    //     ProviderTopUpTtl: [null, {VALUE_YOU_WANT}],
-    //     BasicReplicationTarget: [null, {VALUE_YOU_WANT}],
-    //     StandardReplicationTarget: [null, {VALUE_YOU_WANT}],
-    //     HighSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
-    //     SuperHighSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
-    //     UltraHighSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
-    //     MaxReplicationTarget: [null, {VALUE_YOU_WANT}],
-    //     TickRangeToMaximumThreshold: [null, {VALUE_YOU_WANT}],
-    //     StorageRequestTtl: [null, {VALUE_YOU_WANT}],
-    //     MinWaitForStopStoring: [null, {VALUE_YOU_WANT}],
-    //     MinSeedPeriod: [null, {VALUE_YOU_WANT}],
-    //     StakeToSeedPeriod: [null, {VALUE_YOU_WANT}],
-    //   }
-    // }
-    const slashAmountPerMaxFileSizeRuntimeParameter = {
-      RuntimeConfig: {
-        SlashAmountPerMaxFileSize: [null, 20n * MILLIUNIT]
-      }
-    };
-    await api.block.seal({
-      calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(slashAmountPerMaxFileSizeRuntimeParameter))
-      ]
-    });
-    const stakeToChallengePeriodRuntimeParameter = {
-      RuntimeConfig: {
-        StakeToChallengePeriod: [null, 1000n * UNIT]
-      }
-    };
-    await api.block.seal({
-      calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(stakeToChallengePeriodRuntimeParameter))
-      ]
-    });
-    const checkpointChallengePeriodRuntimeParameter = {
-      RuntimeConfig: {
-        CheckpointChallengePeriod: [null, 10]
-      }
-    };
-    await api.block.seal({
-      calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(checkpointChallengePeriodRuntimeParameter))
-      ]
-    });
-    const minChallengePeriodRuntimeParameter = {
-      RuntimeConfig: {
-        MinChallengePeriod: [null, 5]
-      }
-    };
-    await api.block.seal({
-      calls: [api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))]
-    });
-    const basicReplicationTargetRuntimeParameter = {
-      RuntimeConfig: {
-        BasicReplicationTarget: [null, 3]
-      }
-    };
-    await api.block.seal({
-      calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(basicReplicationTargetRuntimeParameter))
-      ]
-    });
-    const maxReplicationTargetRuntimeParameter = {
-      RuntimeConfig: {
-        MaxReplicationTarget: [null, 9]
-      }
-    };
-    await api.block.seal({
-      calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
-      ]
-    });
-    const tickRangeToMaximumThresholdRuntimeParameter = {
-      RuntimeConfig: {
-        TickRangeToMaximumThreshold: [null, 10]
-      }
-    };
-    await api.block.seal({
-      calls: [
-        api.tx.sudo.sudo(
-          api.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
-        )
-      ]
-    });
-    const minWaitForStopStoringRuntimeParameter = {
-      RuntimeConfig: {
-        MinWaitForStopStoring: [null, 15]
-      }
-    };
-    await api.block.seal({
-      calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(minWaitForStopStoringRuntimeParameter))
-      ]
-    });
-    const storageRequestTtlRuntimeParameter = {
-      RuntimeConfig: {
-        StorageRequestTtl: [null, 20]
-      }
-    };
-    await api.block.seal({
-      calls: [api.tx.sudo.sudo(api.tx.parameters.setParameter(storageRequestTtlRuntimeParameter))]
-    });
   }
 
   public async execDemoStorageRequest() {

@@ -67,8 +67,12 @@
     "test:indexer:only": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/indexer/**.test.ts",
     "test:perf": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/benchmarking/**.test.ts",
     "test:benchmark": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/benchmarking/**.test.ts",
+    "test:integration-benchmark": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/benchmark/**.test.ts",
+    "test:integration-benchmark:only": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/benchmark/**.test.ts",
     "test:telemetry": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/telemetry/**.test.ts",
-    "test:telemetry:only": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/telemetry/**.test.ts"
+    "test:telemetry:only": "cross-env NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/telemetry/**.test.ts",
+    "test:unit": "node --no-deprecation --import tsx --test ./suites/unit/**/**.test.ts",
+    "test:unit:only": "node --no-deprecation --import tsx --test --test-only ./suites/unit/**/**.test.ts"
   },
   "keywords": [],
   "author": "",
