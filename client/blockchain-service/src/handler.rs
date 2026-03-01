@@ -1944,7 +1944,8 @@ where
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
             maybe_managed_provider: None,
-            persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
+            persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into())
+                .expect("Failed to open blockchain service state store"),
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,

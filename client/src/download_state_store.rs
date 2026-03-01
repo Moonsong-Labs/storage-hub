@@ -1,6 +1,5 @@
 use anyhow::Result;
 use log::*;
-use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use std::{marker::PhantomData, path::PathBuf};
 
 use shc_common::{
@@ -135,8 +134,8 @@ impl FileMetadataName {
     pub const NAME: &'static str = "file_metadata";
 }
 
-// List of all column families used by the download state store
-const ALL_COLUMN_FAMILIES: &[&str] = &[
+/// Current column families used by the download state store.
+const CURRENT_COLUMN_FAMILIES: &[&str] = &[
     MissingChunksCompositeName::NAME,
     FileMetadataName::NAME,
     PendingBucketDownloadsName::NAME,
@@ -163,21 +162,12 @@ impl<Runtime: StorageEnableRuntime> DownloadStateStore<Runtime> {
 
         let db_path_str = path.to_str().expect("Failed to convert path to string");
         info!(target: LOG_TARGET, "Download state store path: {}", db_path_str);
-        std::fs::create_dir_all(&db_path_str).expect("Failed to create directory");
+        std::fs::create_dir_all(db_path_str).expect("Failed to create directory");
 
-        let mut db_opts = Options::default();
-        db_opts.create_if_missing(true);
-        db_opts.create_missing_column_families(true);
-
-        let column_families: Vec<ColumnFamilyDescriptor> = ALL_COLUMN_FAMILIES
-            .iter()
-            .map(|cf| ColumnFamilyDescriptor::new(cf.to_string(), Options::default()))
-            .collect();
-
-        let db = DB::open_cf_descriptors(&db_opts, db_path_str, column_families)?;
+        let rocks = TypedRocksDB::open(db_path_str, CURRENT_COLUMN_FAMILIES)?;
 
         Ok(DownloadStateStore {
-            rocks: TypedRocksDB { db },
+            rocks,
             phantom: PhantomData,
         })
     }

@@ -1,8 +1,8 @@
 use log::info;
-use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use std::path::PathBuf;
 
 use shc_common::{
+    rocksdb::DatabaseError,
     traits::StorageEnableRuntime,
     typed_store::{
         BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
@@ -12,9 +12,12 @@ use shc_common::{
     types::BlockNumber,
 };
 
-use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest, MinimalBlockInfo,
-    StopStoringForInsolventUserRequest,
+use crate::{
+    migrations::blockchain_service_migrations,
+    types::{
+        ConfirmStoringRequest, FileDeletionRequest, MinimalBlockInfo,
+        StopStoringForInsolventUserRequest,
+    },
 };
 
 /// Last processed block (both number and hash).
@@ -261,94 +264,9 @@ impl FileDeletionRequestRightIndexName {
     pub const NAME: &'static str = "pending_file_deletion_request_right_index";
 }
 
-// Deprecated column families - kept for backward compatibility with existing RocksDB databases.
-// The functionality has been replaced with in-memory queueing in `MspHandler`.
-#[allow(deprecated, dead_code)]
-mod deprecated_cfs {
-    use super::*;
-
-    /// Pending respond storage requests.
-    ///
-    /// # Deprecated
-    /// This column family is deprecated and no longer used.
-    /// It is kept for backward compatibility with existing RocksDB databases.
-    /// The functionality has been replaced with in-memory queueing in `MspHandler`.
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestCf<Runtime: StorageEnableRuntime> {
-        pub(crate) phantom: std::marker::PhantomData<Runtime>,
-    }
-    impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingMspRespondStorageRequestCf<Runtime> {
-        type Key = u64;
-        type Value = crate::types::RespondStorageRequest<Runtime>;
-
-        const SCALE_ENCODED_NAME: &'static str = PendingMspRespondStorageRequestName::NAME;
-    }
-
-    impl<Runtime: StorageEnableRuntime> Default for PendingMspRespondStorageRequestCf<Runtime> {
-        fn default() -> Self {
-            Self {
-                phantom: std::marker::PhantomData,
-            }
-        }
-    }
-
-    /// Non-generic name holder for the `PendingMspRespondStorageRequest` column family
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestName;
-    impl PendingMspRespondStorageRequestName {
-        pub const NAME: &'static str = "pending_msp_respond_storage_request";
-    }
-
-    /// Pending respond storage requests left side (inclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
-    ///
-    /// # Deprecated
-    /// This column family is deprecated and no longer used.
-    /// It is kept for backward compatibility with existing RocksDB databases.
-    #[derive(Default)]
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestLeftIndexCf;
-    impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestLeftIndexCf {
-        type Value = u64;
-
-        const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-            PendingMspRespondStorageRequestLeftIndexName::NAME;
-    }
-
-    /// Non-generic name holder for the `PendingMspRespondStorageRequestLeftIndex` column family
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestLeftIndexName;
-    impl PendingMspRespondStorageRequestLeftIndexName {
-        pub const NAME: &'static str = "pending_msp_respond_storage_request_left_index";
-    }
-
-    /// Pending respond storage requests right side (exclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
-    ///
-    /// # Deprecated
-    /// This column family is deprecated and no longer used.
-    /// It is kept for backward compatibility with existing RocksDB databases.
-    #[derive(Default)]
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestRightIndexCf;
-    impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestRightIndexCf {
-        type Value = u64;
-
-        const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-            PendingMspRespondStorageRequestRightIndexName::NAME;
-    }
-
-    /// Non-generic name holder for the `PendingMspRespondStorageRequestRightIndex` column family
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestRightIndexName;
-    impl PendingMspRespondStorageRequestRightIndexName {
-        pub const NAME: &'static str = "pending_msp_respond_storage_request_right_index";
-    }
-}
-
-use deprecated_cfs::*;
-
-// Deprecated column families are included for backward compatibility with existing RocksDB databases
+/// Current column families used by the blockchain service state store.
 #[allow(deprecated)]
-const ALL_COLUMN_FAMILIES: [&str; 15] = [
+const CURRENT_COLUMN_FAMILIES: [&str; 12] = [
     LastProcessedBlockName::NAME,
     LastFinalisedBlockName::NAME,
     PendingConfirmStoringRequestLeftIndexName::NAME,
@@ -362,9 +280,6 @@ const ALL_COLUMN_FAMILIES: [&str; 15] = [
     FileDeletionRequestName::NAME,
     // Deprecated column families - kept for backward compatibility with existing RocksDB databases
     LastProcessedBlockNumberName::NAME,
-    PendingMspRespondStorageRequestLeftIndexName::NAME,
-    PendingMspRespondStorageRequestRightIndexName::NAME,
-    PendingMspRespondStorageRequestName::NAME,
 ];
 
 /// A persistent blockchain service state store.
@@ -374,28 +289,22 @@ pub struct BlockchainServiceStateStore {
 }
 
 impl BlockchainServiceStateStore {
-    pub fn new(root_path: PathBuf) -> Self {
+    pub fn new(root_path: PathBuf) -> Result<Self, DatabaseError> {
         let mut path = root_path;
         path.push("storagehub/blockchain_service/");
 
         let db_path_str = path.to_str().expect("Failed to convert path to string");
         info!("Blockchain service state store path: {}", db_path_str);
-        std::fs::create_dir_all(&db_path_str).expect("Failed to create directory");
+        std::fs::create_dir_all(db_path_str)?;
 
-        let mut db_opts = Options::default();
-        db_opts.create_if_missing(true);
-        db_opts.create_missing_column_families(true);
+        // Open database with migrations.
+        let rocks = TypedRocksDB::open_with_migrations(
+            db_path_str,
+            &CURRENT_COLUMN_FAMILIES,
+            blockchain_service_migrations(),
+        )?;
 
-        let column_families: Vec<ColumnFamilyDescriptor> = ALL_COLUMN_FAMILIES
-            .iter()
-            .map(|cf| ColumnFamilyDescriptor::new(cf.to_string(), Options::default()))
-            .collect();
-
-        let db = DB::open_cf_descriptors(&db_opts, db_path_str, column_families).unwrap();
-
-        BlockchainServiceStateStore {
-            rocks: TypedRocksDB { db },
-        }
+        Ok(BlockchainServiceStateStore { rocks })
     }
 
     /// Starts a read/buffered-write interaction with the DB through per-CF type-safe APIs.
