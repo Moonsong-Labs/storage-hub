@@ -118,6 +118,12 @@ export interface DownloadResult {
   contentRange?: string | null;
 }
 
+export type ListBucketsInput = {
+  limit?: number;
+  page?: number;
+  signal?: AbortSignal;
+};
+
 // Buckets and files
 export interface Bucket {
   bucketId: `0x${string}`;
@@ -161,6 +167,16 @@ export interface FileListResponse {
 export interface GetFilesOptions {
   path?: string;
   signal?: AbortSignal;
+}
+
+export interface ListBucketsByPage {
+  buckets: Bucket[];
+  /** Zero-based page index used for the request */
+  page: number;
+  /** Limit used for the request */
+  limit: number;
+  /** Total amount of buckets for the current authenticated user */
+  totalBuckets: number;
 }
 
 // MSP info

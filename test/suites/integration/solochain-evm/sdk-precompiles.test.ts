@@ -724,5 +724,94 @@ await describeMspNet(
       const bucketAfterDeletion = await userApi.query.providers.buckets(testBucketId);
       assert(bucketAfterDeletion.isNone, "Bucket should not exist after deletion");
     });
+
+    it("Should paginate buckets via the SDK (simple)", async () => {
+      const before = await mspClient.buckets.listBucketsByPage({ limit: 1, page: 0 });
+      const initialTotalBuckets = before.totalBuckets;
+
+      // Create 10 buckets
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+      assert(valueProps.length > 0, "No value propositions found for MSP");
+      const valuePropId = valueProps[0].id.toHex();
+
+      const createdBucketNames: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const name = `sdk-pagination-bucket-${i}`;
+        createdBucketNames.push(name);
+        const id = (await storageHubClient.deriveBucketId(account.address, name)) as string;
+
+        const txHash = await storageHubClient.createBucket(
+          userApi.shConsts.DUMMY_MSP_ID as `0x${string}`,
+          name,
+          false,
+          valuePropId as `0x${string}`
+        );
+
+        await userApi.wait.waitForTxInPool({ module: "ethereum", method: "transact" });
+        await userApi.block.seal();
+
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+        assert(receipt.status === "success", "Create bucket transaction failed");
+
+        const created = await userApi.query.providers.buckets(id);
+        assert(created.isSome, "Bucket should exist after creation");
+      }
+
+      // Wait for the indexer/backend to catch up so /buckets reflects the new buckets
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      const expectedTotalBuckets = initialTotalBuckets + createdBucketNames.length;
+      const pageLimit = 4;
+
+      // listBucketsByPage(limit=4), fetch all pages and validate count + pagination consistency
+      const p0 = await mspClient.buckets.listBucketsByPage({ limit: pageLimit, page: 0 });
+      strictEqual(
+        p0.totalBuckets,
+        expectedTotalBuckets,
+        "totalBuckets should increase by the created bucket amount"
+      );
+
+      const totalPages = Math.ceil(p0.totalBuckets / pageLimit);
+      const pages = [p0];
+      for (let page = 1; page < totalPages; page++) {
+        pages.push(await mspClient.buckets.listBucketsByPage({ limit: pageLimit, page }));
+      }
+
+      // Sanity-check: page limits respected, totals consistent, and pages do not overlap.
+      const seenIds = new Set<string>();
+      for (const page of pages) {
+        assert(page.buckets.length <= pageLimit, "page size should not exceed requested limit");
+        strictEqual(
+          page.totalBuckets,
+          expectedTotalBuckets,
+          "all pages should report the same totalBuckets"
+        );
+        for (const bucket of page.buckets) {
+          assert(!seenIds.has(bucket.bucketId), "pages should not overlap");
+          seenIds.add(bucket.bucketId);
+        }
+      }
+
+      // Expect to see the buckets we just created in the paginated results.
+      const allPageNames = pages.flatMap((page) => page.buckets.map((bucket) => bucket.name));
+      for (const name of createdBucketNames) {
+        assert(allPageNames.includes(name), `Expected to see created bucket name: ${name}`);
+      }
+
+      // Request a far out-of-range page and verify we still get the right total.
+      const outOfRangePage = await mspClient.buckets.listBucketsByPage({ limit: 100, page: 1000 });
+      strictEqual(
+        outOfRangePage.buckets.length,
+        0,
+        "out-of-range page should return empty buckets"
+      );
+      strictEqual(
+        outOfRangePage.totalBuckets,
+        expectedTotalBuckets,
+        "out-of-range page should still report the same totalBuckets"
+      );
+    });
   }
 );

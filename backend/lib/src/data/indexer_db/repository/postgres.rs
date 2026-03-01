@@ -13,15 +13,18 @@
 //! - Comprehensive error handling
 
 use async_trait::async_trait;
-#[cfg(test)]
 use bigdecimal::BigDecimal;
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
+use diesel::sql_query;
+use diesel::sql_types::{BigInt, Bool, Bytea, Nullable, Numeric, Timestamp, Varchar};
+use diesel::QueryableByName;
 use diesel_async::RunQueryDsl;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
     models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp, MspFile},
-    schema::{bsp, bucket, file},
+    schema::{bsp, file},
     OnchainMspId,
 };
 use shp_types::Hash;
@@ -33,8 +36,84 @@ use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
     pool::SmartPool,
-    IndexerOps, PaymentStreamData, PaymentStreamKind,
+    BucketsPage, IndexerOps, PaymentStreamData, PaymentStreamKind,
 };
+
+#[derive(QueryableByName)]
+struct BucketPageRow {
+    #[diesel(sql_type = BigInt)]
+    total_count: i64,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    id: Option<i64>,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    msp_id: Option<i64>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    account: Option<String>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    onchain_bucket_id: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    name: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    collection_id: Option<String>,
+    #[diesel(sql_type = Nullable<Bool>)]
+    private: Option<bool>,
+    #[diesel(sql_type = Nullable<Timestamp>)]
+    created_at: Option<NaiveDateTime>,
+    #[diesel(sql_type = Nullable<Timestamp>)]
+    updated_at: Option<NaiveDateTime>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    merkle_root: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    value_prop_id: Option<String>,
+    #[diesel(sql_type = Nullable<Numeric>)]
+    total_size: Option<BigDecimal>,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    file_count: Option<i64>,
+}
+
+impl BucketPageRow {
+    fn into_bucket(self) -> RepositoryResult<Option<Bucket>> {
+        let Some(id) = self.id else {
+            return Ok(None);
+        };
+
+        Ok(Some(Bucket {
+            id,
+            msp_id: self.msp_id,
+            account: self.account.ok_or_else(|| {
+                RepositoryError::configuration("missing account field in bucket row")
+            })?,
+            onchain_bucket_id: self.onchain_bucket_id.ok_or_else(|| {
+                RepositoryError::configuration("missing onchain_bucket_id field in bucket row")
+            })?,
+            name: self.name.ok_or_else(|| {
+                RepositoryError::configuration("missing name field in bucket row")
+            })?,
+            collection_id: self.collection_id,
+            private: self.private.ok_or_else(|| {
+                RepositoryError::configuration("missing private field in bucket row")
+            })?,
+            created_at: self.created_at.ok_or_else(|| {
+                RepositoryError::configuration("missing created_at field in bucket row")
+            })?,
+            updated_at: self.updated_at.ok_or_else(|| {
+                RepositoryError::configuration("missing updated_at field in bucket row")
+            })?,
+            merkle_root: self.merkle_root.ok_or_else(|| {
+                RepositoryError::configuration("missing merkle_root field in bucket row")
+            })?,
+            value_prop_id: self.value_prop_id.ok_or_else(|| {
+                RepositoryError::configuration("missing value_prop_id field in bucket row")
+            })?,
+            total_size: self.total_size.ok_or_else(|| {
+                RepositoryError::configuration("missing total_size field in bucket row")
+            })?,
+            file_count: self.file_count.ok_or_else(|| {
+                RepositoryError::configuration("missing file_count field in bucket row")
+            })?,
+        }))
+    }
+}
 
 /// PostgreSQL repository implementation.
 ///
@@ -99,20 +178,91 @@ impl IndexerOps for Repository {
         account: &str,
         limit: i64,
         offset: i64,
-    ) -> RepositoryResult<Vec<Bucket>> {
+    ) -> RepositoryResult<BucketsPage<Bucket>> {
         let mut conn = self.pool.get().await?;
 
-        // Same as Bucket::get_user_buckets_by_msp but with pagination
-        let buckets = bucket::table
-            .order(bucket::id.asc())
-            .filter(bucket::account.eq(account))
-            .filter(bucket::msp_id.eq(msp))
-            .limit(limit)
-            .offset(offset)
-            .load(&mut conn)
-            .await?;
+        // Why raw SQL instead of Diesel's query builder chain (`filter/order/limit/offset`)?
+        //
+        // We need both:
+        // 1) the paginated rows, and
+        // 2) the total amount of matching rows (before pagination)
+        //
+        // in a *single DB roundtrip*.
+        //
+        // The previous Diesel chain naturally returned only page rows and required an extra
+        // `.count()` query for the total. This SQL packs both concerns into one statement and
+        // keeps the "empty page but non-zero total" case correct.
+        let rows = sql_query(
+            r#"
+            -- 1) filtered: constrain to user + MSP once, so both page and count use exactly
+            --    the same predicate and cannot drift.
+            WITH filtered AS (
+                SELECT *
+                FROM bucket
+                WHERE account = $1
+                  AND msp_id = $2
+            ),
+            -- 2) total: count all matches before pagination.
+            total AS (
+                SELECT COUNT(*)::bigint AS total_count FROM filtered
+            ),
+            -- 3) page: apply ordering and pagination on top of the same filtered set.
+            page AS (
+                SELECT *
+                FROM filtered
+                ORDER BY id ASC
+                LIMIT $3 OFFSET $4
+            )
+            -- 4) left-join total with page so we always keep total_count even when page has
+            --    zero rows (e.g. very high offset). In that case page columns are NULL.
+            SELECT
+                total.total_count,
+                page.id,
+                page.msp_id,
+                page.account,
+                page.onchain_bucket_id,
+                page.name,
+                page.collection_id,
+                page.private,
+                page.created_at,
+                page.updated_at,
+                page.merkle_root,
+                page.value_prop_id,
+                page.total_size,
+                page.file_count
+            FROM total
+            LEFT JOIN page ON true
+            "#,
+        )
+        .bind::<Varchar, _>(account)
+        .bind::<BigInt, _>(msp)
+        .bind::<BigInt, _>(limit)
+        .bind::<BigInt, _>(offset)
+        .load::<BucketPageRow>(&mut conn)
+        .await?;
 
-        Ok(buckets)
+        let total_count = rows
+            .as_slice()
+            .first()
+            .map(|row| row.total_count)
+            .unwrap_or(0);
+        let total = u64::try_from(total_count).map_err(|_| {
+            RepositoryError::configuration(format!(
+                "bucket count should be non-negative, got {total_count}"
+            ))
+        })?;
+
+        // When `page` is empty, LEFT JOIN still returns one row with NULL page columns.
+        // `into_bucket` turns those NULL-page rows into `None`, and we drop them here.
+        let buckets = rows
+            .into_iter()
+            .map(BucketPageRow::into_bucket)
+            .collect::<RepositoryResult<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+        Ok(BucketsPage { buckets, total })
     }
 
     async fn get_files_by_bucket(
@@ -732,13 +882,17 @@ mod tests {
         .expect("Failed to create bucket 3");
 
         // We added 2 more, so should have 3 total
-        let buckets = repo
+        let buckets_page = repo
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 0)
             .await
             .expect("Failed to get user buckets");
 
         assert_eq!(
-            buckets.len(),
+            buckets_page.total, 3,
+            "Should have 3 buckets for BUCKET_ACCOUNT with MSP #2"
+        );
+        assert_eq!(
+            buckets_page.buckets.len(),
             3,
             "Should have 3 buckets for BUCKET_ACCOUNT with MSP #2"
         );
@@ -781,8 +935,9 @@ mod tests {
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 2, 0)
             .await
             .expect("Failed to get limited buckets");
+        assert_eq!(limited_buckets.total, 3, "Total should remain unpaginated");
         assert!(
-            limited_buckets.len() <= 2,
+            limited_buckets.buckets.len() <= 2,
             "Should return at most 2 buckets with limit"
         );
 
@@ -791,12 +946,13 @@ mod tests {
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 1)
             .await
             .expect("Failed to get offset buckets");
+        assert_eq!(offset_buckets.total, 3, "Total should remain unpaginated");
         assert!(
-            !offset_buckets.is_empty(),
+            !offset_buckets.buckets.is_empty(),
             "Should have buckets after offset"
         );
         assert_ne!(
-            limited_buckets[0].name, offset_buckets[0].name,
+            limited_buckets.buckets[0].name, offset_buckets.buckets[0].name,
             "Should skip first bucket"
         );
 
@@ -805,12 +961,16 @@ mod tests {
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 2, 1)
             .await
             .expect("Failed to get offset buckets");
+        assert_eq!(
+            paginated_buckets.total, 3,
+            "Total should remain unpaginated"
+        );
         assert!(
-            paginated_buckets.len() <= 2,
+            paginated_buckets.buckets.len() <= 2,
             "Should return at most 2 buckets with limit"
         );
         assert_ne!(
-            limited_buckets[0].name, paginated_buckets[0].name,
+            limited_buckets.buckets[0].name, paginated_buckets.buckets[0].name,
             "Should skip first bucket"
         );
     }
@@ -844,18 +1004,18 @@ mod tests {
             .expect("Failed to get target user buckets");
 
         assert_eq!(
-            target_buckets.len(),
-            1,
+            target_buckets.total, 1,
             "Should return exactly 1 bucket for BUCKET_ACCOUNT (from snapshot)"
         );
+        assert_eq!(target_buckets.buckets.len(), 1);
 
         // Verify the returned bucket belongs to BUCKET_ACCOUNT
         assert_eq!(
-            target_buckets[0].account, BUCKET_ACCOUNT,
+            target_buckets.buckets[0].account, BUCKET_ACCOUNT,
             "Bucket should belong to BUCKET_ACCOUNT"
         );
         assert_eq!(
-            target_buckets[0].msp_id,
+            target_buckets.buckets[0].msp_id,
             Some(MSP_TWO_ID),
             "Bucket should have MSP #2"
         );
@@ -867,12 +1027,12 @@ mod tests {
             .expect("Failed to get other user buckets");
 
         assert_eq!(
-            other_user_buckets.len(),
-            1,
+            other_user_buckets.total, 1,
             "Other user should have their own bucket"
         );
+        assert_eq!(other_user_buckets.buckets.len(), 1);
         assert_ne!(
-            other_user_buckets[0].id, target_buckets[0].id,
+            other_user_buckets.buckets[0].id, target_buckets.buckets[0].id,
             "Should be different buckets"
         );
     }
@@ -905,19 +1065,19 @@ mod tests {
             .expect("Failed to get MSP #1 buckets");
 
         assert_eq!(
-            msp1_buckets.len(),
-            1,
+            msp1_buckets.total, 1,
             "Should return exactly 1 bucket for MSP #1 (from our insert)"
         );
+        assert_eq!(msp1_buckets.buckets.len(), 1);
 
         // Verify the returned bucket has MSP #1
         assert_eq!(
-            msp1_buckets[0].msp_id,
+            msp1_buckets.buckets[0].msp_id,
             Some(MSP_ONE_ID),
             "Bucket should have MSP #1"
         );
         assert_eq!(
-            msp1_buckets[0].name, msp1_bucket_name,
+            msp1_buckets.buckets[0].name, msp1_bucket_name,
             "Should be our MSP1 bucket"
         );
 
@@ -928,19 +1088,19 @@ mod tests {
             .expect("Failed to get MSP #2 buckets");
 
         assert_eq!(
-            msp2_buckets.len(),
-            1,
+            msp2_buckets.total, 1,
             "Should return exactly 1 bucket for MSP #2 (from snapshot)"
         );
+        assert_eq!(msp2_buckets.buckets.len(), 1);
 
         // Verify the returned bucket has MSP #2
         assert_eq!(
-            msp2_buckets[0].msp_id,
+            msp2_buckets.buckets[0].msp_id,
             Some(MSP_TWO_ID),
             "Bucket should have MSP #2"
         );
         assert_eq!(
-            msp2_buckets[0].name,
+            msp2_buckets.buckets[0].name,
             BUCKET_NAME.as_bytes(),
             "Should be the snapshot bucket"
         );
@@ -974,27 +1134,69 @@ mod tests {
             .expect("Failed to get MSP #2 buckets");
 
         assert_eq!(
-            msp_buckets.len(),
-            1,
+            msp_buckets.total, 1,
             "Should return exactly 1 bucket with MSP #2 (excluding NULL MSP bucket)"
         );
+        assert_eq!(msp_buckets.buckets.len(), 1);
 
         // Verify the returned bucket has MSP #2, not NULL
         assert_eq!(
-            msp_buckets[0].msp_id,
+            msp_buckets.buckets[0].msp_id,
             Some(MSP_TWO_ID),
             "Bucket should have MSP #2"
         );
         assert_eq!(
-            msp_buckets[0].name,
+            msp_buckets.buckets[0].name,
             BUCKET_NAME.as_bytes(),
             "Should be the snapshot bucket with MSP"
         );
 
         // Verify NULL MSP bucket is not included
         assert_ne!(
-            msp_buckets[0].name, no_msp_bucket_name,
+            msp_buckets.buckets[0].name, no_msp_bucket_name,
             "Should not include the NULL MSP bucket"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_buckets_by_user_and_msp_high_offset_returns_empty_page_with_total() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Add two more buckets to the existing one in snapshot, total should be 3.
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            Some(MSP_TWO_ID),
+            b"offset-test-bucket-2",
+            &random_hash(),
+            false,
+        )
+        .await
+        .expect("Failed to create offset test bucket 2");
+
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            Some(MSP_TWO_ID),
+            b"offset-test-bucket-3",
+            &random_hash(),
+            false,
+        )
+        .await
+        .expect("Failed to create offset test bucket 3");
+
+        let page = repo
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 50, 500)
+            .await
+            .expect("Failed to query high-offset buckets page");
+
+        assert_eq!(page.total, 3, "Total should still report all matching rows");
+        assert!(
+            page.buckets.is_empty(),
+            "High offset should return empty page content"
         );
     }
 

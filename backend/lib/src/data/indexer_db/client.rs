@@ -22,7 +22,7 @@ use tracing::debug;
 
 use crate::{
     constants::database::{DEFAULT_PAGE_LIMIT, MSP_CACHE_TTL_SECS},
-    data::indexer_db::repository::{PaymentStreamData, StorageOperations},
+    data::indexer_db::repository::{BucketsPage, PaymentStreamData, StorageOperations},
     error::Result,
 };
 
@@ -197,7 +197,7 @@ impl DBClient {
         user: &str,
         limit: Option<i64>,
         offset: Option<i64>,
-    ) -> Result<Vec<Bucket>> {
+    ) -> Result<BucketsPage<Bucket>> {
         let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
         let offset = offset.unwrap_or(0);
         debug!(

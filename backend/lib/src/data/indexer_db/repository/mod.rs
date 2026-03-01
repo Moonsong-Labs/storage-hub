@@ -54,6 +54,13 @@ pub struct PaymentStreamData {
     pub kind: PaymentStreamKind,
 }
 
+/// Paginated buckets plus the total number of matches before pagination.
+#[derive(Debug, Clone)]
+pub struct BucketsPage<T> {
+    pub buckets: Vec<T>,
+    pub total: u64,
+}
+
 /// Read-only operations for indexer data access.
 ///
 /// This trait provides read-only access to database entities,
@@ -96,7 +103,7 @@ pub trait IndexerOps: Send + Sync {
         account: &str,
         limit: i64,
         offset: i64,
-    ) -> RepositoryResult<Vec<Bucket>>;
+    ) -> RepositoryResult<BucketsPage<Bucket>>;
 
     /// Retrieve all the files belonging to the given bucket
     ///
