@@ -669,12 +669,15 @@ where
         };
 
         // Check if file is incomplete.
-        let stored_chunks = read_file_storage
-            .stored_chunks_count(&file_key)
+        let is_complete = read_file_storage
+            .is_file_complete(&file_key)
             .map_err(into_rpc_error)?;
         let total_chunks = file_metadata.chunks_count();
 
-        if stored_chunks < total_chunks {
+        if !is_complete {
+            let stored_chunks = read_file_storage
+                .stored_chunks_count(&file_key)
+                .map_err(into_rpc_error)?;
             return Ok(SaveFileToDisk::IncompleteFile(IncompleteFileStatus {
                 file_metadata,
                 stored_chunks,
@@ -935,20 +938,21 @@ where
         {
             None => GetFileFromFileStorageResult::FileNotFound,
             Some(file_metadata) => {
-                let stored_chunks = read_file_storage
-                    .stored_chunks_count(&file_key)
+                let is_complete = read_file_storage
+                    .is_file_complete(&file_key)
                     .map_err(into_rpc_error)?;
-                let total_chunks = file_metadata.chunks_count();
-                if stored_chunks < total_chunks {
+                if is_complete {
+                    GetFileFromFileStorageResult::FileFound(file_metadata)
+                } else {
+                    let stored_chunks = read_file_storage
+                        .stored_chunks_count(&file_key)
+                        .map_err(into_rpc_error)?;
+                    let total_chunks = file_metadata.chunks_count();
                     GetFileFromFileStorageResult::IncompleteFile(IncompleteFileStatus {
                         file_metadata,
                         stored_chunks,
                         total_chunks,
                     })
-                } else if stored_chunks > total_chunks {
-                    GetFileFromFileStorageResult::FileFoundWithInconsistency(file_metadata)
-                } else {
-                    GetFileFromFileStorageResult::FileFound(file_metadata)
                 }
             }
         };

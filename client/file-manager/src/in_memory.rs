@@ -252,11 +252,6 @@ where
             .as_str(),
         );
 
-        let stored_chunks = self.stored_chunks_count(file_key)?;
-        if metadata.chunks_count() != stored_chunks {
-            return Err(FileStorageError::IncompleteFile);
-        }
-
         if metadata.fingerprint() != file_data.get_root().as_ref() {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
@@ -292,6 +287,8 @@ where
         Ok(self.metadata.get(file_key).cloned())
     }
 
+    /// Completeness is determined solely by whether the trie root matches the file's
+    /// fingerprint (a Merkle-hash proof that all chunk data is present and correct).
     fn is_file_complete(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
         let metadata = self
             .metadata
@@ -306,11 +303,7 @@ where
             .as_str(),
         );
 
-        if metadata.fingerprint() != file_data.get_root().as_ref() {
-            return Ok(false);
-        }
-
-        Ok(metadata.chunks_count() == self.stored_chunks_count(key)?)
+        Ok(metadata.fingerprint() == file_data.get_root().as_ref())
     }
 
     fn insert_file(
