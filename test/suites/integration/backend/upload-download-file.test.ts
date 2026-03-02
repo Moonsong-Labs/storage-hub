@@ -22,7 +22,10 @@ await describeMspNet(
     initialised: false,
     runtimeType: "solochain",
     indexer: true,
-    backend: true
+    backend: true,
+    only: true,
+    networkConfig: "rocksdb",
+    keepAlive: true
   },
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
@@ -365,6 +368,110 @@ await describeMspNet(
         expectedExts: 1,
         bspAccount: bspAddress
       });
+    });
+
+    it("Should successfully upload a second file with the same fingerprint (duplicate content, different file key)", async () => {
+      // This test verifies the fix for the shared-trie bug: when a file with an identical
+      // fingerprint is already stored by the MSP, the trie data is shared. Before the fix,
+      // the trusted file transfer would fail with "File incomplete after processing all data
+      // streamed" because the batch write path used delta-based counting (delta=0 when all
+      // chunks already exist in the shared trie) as a completion criterion.
+
+      assert(bucketId, "Bucket should have been created");
+      assert(originalFileBuffer, "Original file buffer must be available");
+      assert(userJWT, "User should be authenticated");
+
+      // Load the same file content but with a different location, producing a different file_key
+      // but the same fingerprint (since the content is identical).
+      const fileLocation2 = "test/whatsup-copy.jpg";
+      const userAddress = ETH_SH_USER_ADDRESS.slice(2);
+      const file2 = await userApi.rpc.storagehubclient.loadFileInStorage(
+        source,
+        fileLocation2,
+        userAddress,
+        bucketId
+      );
+      const fileKey2 = file2.file_key;
+      const fileMetadata2 = file2.file_metadata;
+
+      // Verify the fingerprints are the same but the file keys differ
+      strictEqual(
+        fileMetadata2.fingerprint.toHex(),
+        fileMetadata.fingerprint.toHex(),
+        "Fingerprints should be identical (same file content)"
+      );
+      assert(
+        fileKey2.toString() !== fileKey.toString(),
+        "File keys should be different (different location)"
+      );
+
+      // Remove from user's local storage so it doesn't auto-send via P2P
+      await userApi.rpc.storagehubclient.removeFilesFromFileStorage([fileKey2]);
+
+      // Issue a second storage request on-chain
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.issueStorageRequest(
+            bucketId,
+            fileMetadata2.location,
+            fileMetadata2.fingerprint,
+            fileMetadata2.file_size,
+            userApi.shConsts.DUMMY_MSP_ID,
+            [userApi.shConsts.NODE_INFOS.msp1.expectedPeerId],
+            { Custom: 2 }
+          )
+        ],
+        signer: ethShUser
+      });
+
+      // Wait for MSP to expect the new file key
+      await waitFor({
+        lambda: async () => (await msp1Api.rpc.storagehubclient.isFileKeyExpected(fileKey2)).isTrue
+      });
+
+      // Build the upload form with the second file's metadata
+      const FileMetadataCodec2 = $.object(
+        $.field("owner", $.uint8Array),
+        $.field("bucket_id", $.uint8Array),
+        $.field("location", $.uint8Array),
+        $.field("file_size", $.compact($.u64)),
+        $.field("fingerprint", $.sizedArray($.u8, 32))
+      );
+      const form2 = new FormData();
+      const encoded2 = FileMetadataCodec2.encode(fileMetadata2);
+      form2.append(
+        "file_metadata",
+        new Blob([Buffer.from(encoded2)], { type: "application/octet-stream" }),
+        "file_metadata"
+      );
+      form2.append(
+        "file",
+        new Blob([originalFileBuffer], { type: "image/jpeg" }),
+        path.basename(fileLocation2)
+      );
+
+      // Upload via the backend — this would have returned 500 before the fix
+      const uploadResponse2 = await fetch(`${BACKEND_URI}/buckets/${bucketId}/upload/${fileKey2}`, {
+        method: "PUT",
+        body: form2,
+        headers: {
+          Authorization: `Bearer ${userJWT}`
+        }
+      });
+      strictEqual(
+        uploadResponse2.status,
+        201,
+        "Upload of duplicate-fingerprint file should return CREATED status"
+      );
+
+      // Wait until the MSP has received and stored the second file
+      await msp1Api.wait.fileStorageComplete(fileKey2);
+
+      // Make sure the MSP accepts the second storage request
+      await userApi.wait.mspResponseInTxPool(1);
+      await userApi.block.seal();
+
+      await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
     });
 
     it("Should successfully download a file via the backend API", async () => {
