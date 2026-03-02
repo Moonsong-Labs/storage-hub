@@ -546,6 +546,92 @@ await describeMspNet(
       );
     });
 
+    it("Repeated fingerprint upload bug", async () => {
+      // Upload the same file (adolphus) once again on a different location
+      const secondFileLocation = "/test-second/adolphus.jpg";
+      const fingerprint = await fileManager.getFingerprint();
+      const fileSize = BigInt(fileManager.getFileSize());
+
+      // Rely on the MSP to distribute the file to BSPs
+      const peerIds = [
+        userApi.shConsts.NODE_INFOS.msp1.expectedPeerId // MSP peer ID
+      ];
+
+      const secondStorageRequestTxHash = await storageHubClient.issueStorageRequest(
+        bucketId as `0x${string}`,
+        secondFileLocation,
+        ensure0xPrefix(fingerprint.toHex()),
+        fileSize,
+        ensure0xPrefix(userApi.shConsts.DUMMY_MSP_ID),
+        peerIds,
+        ReplicationLevel.Custom,
+        1
+      );
+
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const secondReceipt = await publicClient.waitForTransactionReceipt({
+        hash: secondStorageRequestTxHash
+      });
+      assert(secondReceipt.status === "success", "Second storage request transaction failed");
+
+      const secondRegistry = new TypeRegistry();
+      const secondOwner = secondRegistry.createType("AccountId20", account.address) as AccountId20;
+      const secondBucketIdH256 = secondRegistry.createType("H256", bucketId) as H256;
+      const sourceFileBlob = await fileManager.getFileBlob();
+      const secondFileManager = new FileManager({
+        size: sourceFileBlob.size,
+        stream: () => sourceFileBlob.stream() as ReadableStream<Uint8Array>
+      });
+      const secondFileKey = await secondFileManager.computeFileKey(
+        secondOwner,
+        secondBucketIdH256,
+        secondFileLocation
+      );
+
+      assert(
+        secondFileKey.toHex() !== fileKey.toHex(),
+        "Second file key should be different from the first one"
+      );
+
+      await waitFor({
+        lambda: async () =>
+          (await msp1Api.rpc.storagehubclient.isFileKeyExpected(secondFileKey)).isTrue
+      });
+
+      const secondUploadResponse = await mspClient.files.uploadFile(
+        ensure0xPrefix(bucketId),
+        ensure0xPrefix(secondFileKey.toHex()),
+        sourceFileBlob,
+        ensure0xPrefix(fingerprint.toHex()),
+        ensure0xPrefix(account.address),
+        secondFileLocation
+      );
+
+      strictEqual(
+        secondUploadResponse.status,
+        "upload_successful",
+        "Second upload should return success"
+      );
+      strictEqual(
+        secondUploadResponse.fileKey,
+        secondFileKey.toHex(),
+        "Second upload should return expected file key"
+      );
+      strictEqual(
+        secondUploadResponse.location,
+        secondFileLocation,
+        "Second upload should return expected location"
+      );
+
+      // Wait until MSP receives the file
+      await msp1Api.wait.fileStorageComplete(secondFileKey.toHex());
+    });
+
     it("Should fetch payment streams using the SDK's MspClient", async () => {
       // Get on-chain information for payment streams
       const mspId = userApi.shConsts.DUMMY_MSP_ID;
