@@ -546,7 +546,7 @@ await describeMspNet(
       );
     });
 
-    it("Repeated fingerprint upload bug", async () => {
+    it("Works when uploading the same file (same fingerprint) to a different location", async () => {
       // Upload the same file (adolphus) once again on a different location
       const secondFileLocation = "/test-second/adolphus.jpg";
       const fingerprint = await fileManager.getFingerprint();
