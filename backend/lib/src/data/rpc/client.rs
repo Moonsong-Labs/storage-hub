@@ -193,7 +193,6 @@ impl StorageHubRpcClient {
     /// - `FileNotFound`: File does not exist in storage
     /// - `FileFound`: File exists and is complete
     /// - `IncompleteFile`: File exists but is missing chunks
-    /// - `FileFoundWithInconsistency`: File exists but has data integrity issues
     pub async fn is_file_in_file_storage(
         &self,
         file_key: &str,

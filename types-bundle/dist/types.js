@@ -38,8 +38,7 @@ export const SHARED_TYPES = {
         _enum: {
             FileNotFound: null,
             FileFound: "FileMetadata",
-            IncompleteFile: "IncompleteFileStatus",
-            FileFoundWithInconsistency: "FileMetadata"
+            IncompleteFile: "IncompleteFileStatus"
         }
     },
     ProviderId: "H256",
