@@ -714,7 +714,6 @@ impl MspService {
     ///     FileNotFound, // returns Error
     ///     IncompleteFile(IncompleteFileStatus), // returns Error
     ///     FileFound(FileMetadata), // returns Ok
-    ///     FileFoundWithInconsistency(FileMetadata), // returns Error
     /// }
     /// ```
     pub async fn check_file_status(&self, file_key: &str) -> Result<FileMetadata, Error> {
@@ -727,11 +726,6 @@ impl MspService {
         match file_status {
             GetFileFromFileStorageResult::FileNotFound => {
                 Err(Error::NotFound("File not found".to_string()))
-            }
-            GetFileFromFileStorageResult::FileFoundWithInconsistency(_inconsistent_metadata) => {
-                Err(Error::BadRequest(
-                    "File found with inconsistency".to_string(),
-                ))
             }
             GetFileFromFileStorageResult::IncompleteFile(_status) => {
                 Err(Error::BadRequest("File is incomplete".to_string()))
