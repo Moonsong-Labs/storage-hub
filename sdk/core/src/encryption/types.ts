@@ -3,6 +3,7 @@ import { withUnwrap, type ResultWithUnwrap } from "../types";
 import { hexToBytes, utf8ToBytes } from "@noble/ciphers/utils.js";
 import { isHexString, removeHexPrefix } from "../utils.js";
 import { bytesToHex, randomBytes } from "@noble/hashes/utils.js";
+import { NONCE_SIZE } from "../constants.js";
 
 import { hkdf } from "@noble/hashes/hkdf.js";
 
@@ -73,10 +74,10 @@ export const Nonce = {
       });
     }
 
-    if (bytes.length !== 12) {
+    if (bytes.length !== NONCE_SIZE) {
       return withUnwrap({
         ok: false,
-        error: new Error(`Nonce must be 12 bytes (got ${bytes.length})`)
+        error: new Error(`Nonce must be ${NONCE_SIZE} bytes (got ${bytes.length})`)
       });
     }
 
@@ -96,7 +97,7 @@ export type BaseNonce = {
 
 export const BaseNonce = {
   derive(ikm: IKM, salt: Salt): ResultWithUnwrap<BaseNonce, Error> {
-    const nonceBytes = hkdf(sha256, ikm, salt, NONCE_INFO, 12);
+    const nonceBytes = hkdf(sha256, ikm, salt, NONCE_INFO, NONCE_SIZE);
     return BaseNonce.fromBytes(nonceBytes);
   },
 
@@ -108,10 +109,10 @@ export const BaseNonce = {
       });
     }
 
-    if (bytes.length !== 12) {
+    if (bytes.length !== NONCE_SIZE) {
       return withUnwrap({
         ok: false,
-        error: new Error(`BaseNonce must be 12 bytes (got ${bytes.length})`)
+        error: new Error(`BaseNonce must be ${NONCE_SIZE} bytes (got ${bytes.length})`)
       });
     }
 
@@ -127,7 +128,7 @@ export const BaseNonce = {
           });
         }
 
-        const nonce = new Uint8Array(12);
+        const nonce = new Uint8Array(NONCE_SIZE);
         nonce.set(base);
 
         // XOR last 8 bytes with chunk counter (big-endian)
