@@ -1,36 +1,36 @@
 {
-  "families": {
-    "core_rust": {
-      "version": "0.4.2",
-      "roots": [
-        ".",
-        "backend",
-        "client",
-        "node",
-        "pallets",
-        "primitives",
-        "runtime",
-        "precompiles",
-        "xcm-simulator"
-      ]
-    },
-    "sdk": {
-      "version": "0.4.2",
-      "roots": [
-        "sdk"
-      ]
-    },
-    "types_bundle": {
-      "version": "0.4.2",
-      "roots": [
-        "types-bundle"
-      ]
-    },
-    "api_augment": {
-      "version": "0.4.2",
-      "roots": [
-        "api-augment"
-      ]
-    }
-  }
+	"families": {
+		"core_rust": {
+			"version": "0.4.3",
+			"roots": [
+				".",
+				"backend",
+				"client",
+				"node",
+				"pallets",
+				"primitives",
+				"runtime",
+				"precompiles",
+				"xcm-simulator"
+			]
+		},
+		"sdk": {
+			"version": "0.4.3",
+			"roots": [
+				"sdk"
+			]
+		},
+		"types_bundle": {
+			"version": "0.4.3",
+			"roots": [
+				"types-bundle"
+			]
+		},
+		"api_augment": {
+			"version": "0.4.3",
+			"roots": [
+				"api-augment"
+			]
+		}
+	}
 }
