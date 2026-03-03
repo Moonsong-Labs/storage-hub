@@ -154,7 +154,6 @@ pub enum GetFileFromFileStorageResult {
     FileNotFound,
     IncompleteFile(IncompleteFileStatus),
     FileFound(FileMetadata),
-    FileFoundWithInconsistency(FileMetadata),
 }
 
 /// Result of adding files to the forest storage.

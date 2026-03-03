@@ -119,9 +119,7 @@ export interface GetFileFromFileStorageResult extends Enum {
   readonly asFileFound: FileMetadata;
   readonly isIncompleteFile: boolean;
   readonly asIncompleteFile: IncompleteFileStatus;
-  readonly isFileFoundWithInconsistency: boolean;
-  readonly asFileFoundWithInconsistency: FileMetadata;
-  readonly type: "FileNotFound" | "FileFound" | "IncompleteFile" | "FileFoundWithInconsistency";
+  readonly type: "FileNotFound" | "FileFound" | "IncompleteFile";
 }
 
 /** @name GetNextDeadlineTickError */

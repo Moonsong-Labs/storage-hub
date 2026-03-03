@@ -322,7 +322,8 @@ where
             panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
         }
 
-        // Initialize chunk count to 0
+        // Initialize chunk count to 0. Unlike the RocksDB implementation, in-memory tries
+        // are not shared by fingerprint, so there is no dedup case to handle here.
         self.chunk_counts.insert(key, 0);
 
         let full_key = [metadata.bucket_id().as_slice(), key.as_ref()].concat();
