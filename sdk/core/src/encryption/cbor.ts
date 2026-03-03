@@ -1,59 +1,18 @@
 import { decode, encode, rfc8949EncodeOptions } from "cborg";
-
-export const EncryptionHeaderVersion = {
-  V1: 1
-  // V2: 2,
-} as const;
-export type EncryptionHeaderVersion =
-  (typeof EncryptionHeaderVersion)[keyof typeof EncryptionHeaderVersion];
-
-export type IKMType = "password" | "signature";
-
-export type EncryptionHeaderParams = {
-  ikm: IKMType;
-  salt: Uint8Array;
-  // Present only when `ikm === "signature"`.
-  challenge?: Uint8Array;
-};
-
-export type EncryptionHeaderV1 = {
-  // Versioning to keep backward compatibility
-  v: typeof EncryptionHeaderVersion.V1;
-  // Method to generate the IKM
-  ikm: IKMType;
-  salt: Uint8Array;
-  challenge?: Uint8Array;
-};
+import {
+  EncryptionHeaderVersion as HeaderVersion,
+  isEncryptionHeaderV1,
+  type EncryptionHeaderParams,
+  type EncryptionHeaderV1
+} from "./header.js";
+export { EncryptionHeaderVersion } from "./header.js";
+export type {
+  IKMType,
+  EncryptionHeaderParams,
+  EncryptionHeaderV1
+} from "./header.js";
 
 const HEADER_MAGIC = new TextEncoder().encode("SHF"); // StorageHub File
-
-function isIKMType(x: unknown): x is IKMType {
-  return x === "password" || x === "signature";
-}
-
-function isEncryptionHeaderV1(x: unknown): x is EncryptionHeaderV1 {
-  // `decode()` returns `unknown`, so we must validate before using fields.
-  if (typeof x !== "object" || x === null) return false;
-  const obj = x as Record<string, unknown>;
-
-  // V1 header requires v===1 (even if the value is provided externally).
-  if (typeof obj.v !== "number" || obj.v !== EncryptionHeaderVersion.V1) return false;
-  if (!isIKMType(obj.ikm)) return false;
-  if (!(obj.salt instanceof Uint8Array)) return false;
-
-  const challenge = obj.challenge;
-  // Challenge is optional in the format, but required to make signature-based decryption recoverable.
-  // If it exists, it must be exactly 32 bytes.
-  if (challenge !== undefined) {
-    if (!(challenge instanceof Uint8Array)) return false;
-    if (challenge.length !== 32) return false;
-  }
-  if (obj.ikm === "signature" && challenge === undefined) {
-    return false;
-  }
-
-  return true;
-}
 
 /**
  * Create a CBOR-encoded encryption header.
@@ -63,10 +22,10 @@ function isEncryptionHeaderV1(x: unknown): x is EncryptionHeaderV1 {
  */
 export function createEncryptionHeader(params: EncryptionHeaderParams): Uint8Array {
   const header: EncryptionHeaderV1 = {
-    v: EncryptionHeaderVersion.V1,
+    v: HeaderVersion.V1,
     ikm: params.ikm,
-    salt: params.salt,
-    ...(params.challenge ? { challenge: params.challenge } : {})
+    dek_salt: params.dek_salt,
+    ikm_salt: params.ikm_salt
   };
 
   // Deterministic encoding: RFC 8949 "deterministic mode" map sorting.
