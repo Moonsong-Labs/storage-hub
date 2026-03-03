@@ -58,8 +58,25 @@ export class InfoModule extends ModuleBase {
     });
   }
 
-  /** Get payment streams for current authenticated user */
-  async getPaymentStreams(signal?: AbortSignal): Promise<PaymentStreamsResponse> {
+  /**
+   * Get payment streams for a user.
+   *
+   * When `address` is provided the request is unauthenticated and returns
+   * streams for that address. When omitted, the authenticated user's own
+   * streams are returned (requires a session).
+   */
+  async getPaymentStreams(
+    options?: { address?: string; signal?: AbortSignal }
+  ): Promise<PaymentStreamsResponse> {
+    const { address, signal } = options ?? {};
+
+    if (address) {
+      return this.ctx.http.get<PaymentStreamsResponse>("/payment_streams", {
+        query: { address },
+        ...(signal ? { signal } : {})
+      });
+    }
+
     const headers = await this.withAuth();
     return this.ctx.http.get<PaymentStreamsResponse>("/payment_streams", {
       ...(headers ? { headers } : {}),
