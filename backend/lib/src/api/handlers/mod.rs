@@ -62,9 +62,9 @@ pub async fn payment_streams(
     Query(query): Query<PaymentStreamsQuery>,
 ) -> Result<impl IntoResponse, Error> {
     let address = match query.address {
-        Some(addr_str) => addr_str.parse::<Address>().map_err(|_| {
-            Error::BadRequest(format!("Invalid address: {addr_str}"))
-        })?,
+        Some(addr_str) => addr_str
+            .parse::<Address>()
+            .map_err(|_| Error::BadRequest(format!("Invalid address: {addr_str}")))?,
         None => *user.address().map_err(|_| {
             Error::BadRequest(
                 "Either provide an ?address= query parameter or authenticate via JWT".to_owned(),

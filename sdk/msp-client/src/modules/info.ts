@@ -65,9 +65,10 @@ export class InfoModule extends ModuleBase {
    * streams for that address. When omitted, the authenticated user's own
    * streams are returned (requires a session).
    */
-  async getPaymentStreams(
-    options?: { address?: string; signal?: AbortSignal }
-  ): Promise<PaymentStreamsResponse> {
+  async getPaymentStreams(options?: {
+    address?: string;
+    signal?: AbortSignal;
+  }): Promise<PaymentStreamsResponse> {
     const { address, signal } = options ?? {};
 
     if (address) {
