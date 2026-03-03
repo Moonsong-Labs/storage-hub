@@ -3,7 +3,7 @@ import { withUnwrap, type ResultWithUnwrap } from "../types";
 import { hexToBytes, utf8ToBytes } from "@noble/ciphers/utils.js";
 import { isHexString, removeHexPrefix } from "../utils.js";
 import { bytesToHex, randomBytes } from "@noble/hashes/utils.js";
-import { NONCE_SIZE } from "../constants.js";
+import { DEK_SIZE, MIN_PASSWORD_SIZE, NONCE_SIZE, SALT_SIZE } from "../constants.js";
 
 import { hkdf } from "@noble/hashes/hkdf.js";
 
@@ -29,10 +29,10 @@ export const DEK = {
       });
     }
 
-    if (bytes.length !== 32) {
+    if (bytes.length !== DEK_SIZE) {
       return withUnwrap({
         ok: false,
-        error: new Error(`DEK must be 32 bytes (got ${bytes.length})`)
+        error: new Error(`DEK must be ${DEK_SIZE} bytes (got ${bytes.length})`)
       });
     }
 
@@ -54,10 +54,10 @@ export const DEK = {
    * - **info**: Non-secret context string/bytes that identifies *what this derived key is for*.
    *   This is typically a stable label such as `Info.fromBytes(utf8('storagehub-sdk:dek:v1')).unwrap()`.
    *
-   * Returns a Result like type with DEK (32 bytes) if everything was ok.
+   * Returns a Result like type with DEK if everything was ok.
    */
   derive(ikm: IKM, salt: Salt) {
-    const dekBytes = hkdf(sha256, ikm, salt, DEK_INFO, 32);
+    const dekBytes = hkdf(sha256, ikm, salt, DEK_INFO, DEK_SIZE);
     return withUnwrap({
       ok: true,
       value: dekBytes as DEK
@@ -178,7 +178,7 @@ export const IKM = {
   fromPassword(password: string): ResultWithUnwrap<IKM, Error> {
     const raw = utf8ToBytes(password);
 
-    if (raw.length < 8) {
+    if (raw.length < MIN_PASSWORD_SIZE) {
       return withUnwrap({
         ok: false,
         error: new Error("Password too short")

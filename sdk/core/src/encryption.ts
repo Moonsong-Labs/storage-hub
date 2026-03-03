@@ -1,6 +1,6 @@
 import { chacha20poly1305 } from "@noble/ciphers/chacha.js";
 
-import { ENCRYPTION_CHUNK_SIZE } from "./constants.js";
+import { ENCRYPTION_CHUNK_SIZE, SALT_SIZE } from "./constants.js";
 
 import type { WalletClient } from "viem";
 import type { Account } from "viem";
@@ -239,7 +239,7 @@ export type GeneratedEncryptionKey = {
   header: EncryptionHeaderParams;
 };
 
-function randomSaltBytes(length = 32): Uint8Array {
+function randomSaltBytes(length = SALT_SIZE): Uint8Array {
   const cryptoObj = globalThis.crypto as Crypto | undefined;
   if (!cryptoObj?.getRandomValues) {
     throw new Error("crypto.getRandomValues is not available to generate salt");

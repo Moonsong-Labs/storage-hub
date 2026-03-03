@@ -1,3 +1,5 @@
+import { SALT_SIZE } from "../constants.js";
+
 export const EncryptionHeaderVersion = {
   V1: 1
   // V2: 2,
@@ -10,7 +12,7 @@ export type IKMType = "password" | "signature";
 export type EncryptionHeaderParams = {
   ikm: IKMType;
   dek_salt: Uint8Array;
-  // Input key material salt, always required and always 32 bytes.
+  // Input key material salt, always required and always SALT_SIZE bytes.
   ikm_salt: Uint8Array;
 };
 
@@ -36,8 +38,9 @@ export function isEncryptionHeaderV1(x: unknown): x is EncryptionHeaderV1 {
   if (typeof obj.v !== "number" || obj.v !== EncryptionHeaderVersion.V1) return false;
   if (!isIKMType(obj.ikm)) return false;
   if (!(obj.dek_salt instanceof Uint8Array)) return false;
+  if (obj.dek_salt.length !== SALT_SIZE) return false;
   if (!(obj.ikm_salt instanceof Uint8Array)) return false;
-  if (obj.ikm_salt.length !== 32) return false;
+  if (obj.ikm_salt.length !== SALT_SIZE) return false;
 
   return true;
 }
