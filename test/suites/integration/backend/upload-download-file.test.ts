@@ -23,9 +23,7 @@ await describeMspNet(
     runtimeType: "solochain",
     indexer: true,
     backend: true,
-    only: true,
-    networkConfig: "rocksdb",
-    keepAlive: true
+    networkConfig: "rocksdb"
   },
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
