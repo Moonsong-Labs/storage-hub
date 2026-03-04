@@ -3,7 +3,8 @@ import { withUnwrap, type ResultWithUnwrap } from "../types";
 import { hexToBytes, utf8ToBytes } from "@noble/ciphers/utils.js";
 import { isHexString, removeHexPrefix } from "../utils.js";
 import { bytesToHex, randomBytes } from "@noble/hashes/utils.js";
-import { DEK_SIZE, MIN_PASSWORD_SIZE, NONCE_SIZE, SALT_SIZE } from "../constants.js";
+import { argon2id } from "@noble/hashes/argon2.js";
+import { IKM_SIZE, DEK_SIZE, MIN_PASSWORD_SIZE, NONCE_SIZE, SALT_SIZE } from "../constants.js";
 
 import { hkdf } from "@noble/hashes/hkdf.js";
 
@@ -18,6 +19,20 @@ export type Info = Brand<Uint8Array, "Info">;
 
 const DEK_INFO = new TextEncoder().encode("storagehub-sdk:dek:v1");
 const NONCE_INFO = new TextEncoder().encode("storagehub-sdk:nonce:v1");
+// Argon2id parameters for password -> IKM derivation.
+// These values are intentionally fixed for deterministic key recovery.
+const PASSWORD_IKM_ARGON2_PARAMS = Object.freeze({
+  // Iterations (time cost): more rounds increase brute-force cost.
+  t: 4,
+  // Memory cost in KiB (64 MiB).
+  m: 64 * 1024,
+  // Degree of parallelism (lanes/threads).
+  p: 1,
+  // Output length in bytes. Argon expects dkLen as param name
+  dkLen: IKM_SIZE,
+  // Maximum memory noble/argon2 is allowed to allocate (bytes).
+  maxmem: 2 ** 32 - 1
+});
 
 // Data Encryption Key
 export const DEK = {
@@ -175,7 +190,7 @@ function normalize(input: Uint8Array, context: string): Uint8Array {
 }
 
 export const IKM = {
-  fromPassword(password: string): ResultWithUnwrap<IKM, Error> {
+  fromPassword(password: string, ikm_salt: Salt): ResultWithUnwrap<IKM, Error> {
     const raw = utf8ToBytes(password);
 
     if (raw.length < MIN_PASSWORD_SIZE) {
@@ -185,10 +200,11 @@ export const IKM = {
       });
     }
 
-    const normalized = normalize(raw, "ikm:password");
+    // Password-based IKM uses Argon2id and per-file ikm_salt for deterministic recovery.
+    const ikmBytes = argon2id(raw, ikm_salt, PASSWORD_IKM_ARGON2_PARAMS);
     return withUnwrap({
       ok: true,
-      value: normalized as IKM
+      value: ikmBytes as IKM
     });
   },
 
@@ -203,7 +219,6 @@ export const IKM = {
 
     const sigBytes = hexToBytes(removeHexPrefix(signature));
     const normalized = normalize(sigBytes, "ikm:signature");
-
     return withUnwrap({
       ok: true,
       value: normalized as IKM
@@ -218,10 +233,10 @@ export const IKM = {
       });
     }
 
-    if (bytes.length < 32) {
+    if (bytes.length != IKM_SIZE) {
       return withUnwrap({
         ok: false,
-        error: new Error("IKM requires at least 32 bytes")
+        error: new Error(`IKM requires ${IKM_SIZE} bytes`)
       });
     }
 
@@ -237,7 +252,7 @@ export const IKM = {
    *
    * Keep this stable across SDK versions for recoverability.
    *
-   * IMPORTANT: this message is now bound to a *random* per-file challenge (stored in the
+   * IMPORTANT: this message is now bound to a *random* per-file IKM salt (stored in the
    * encryption header), not to the plaintext contents.
    */
   createMessage(
@@ -247,7 +262,7 @@ export const IKM = {
     purpose: string,
     chainId: number,
     address: `0x${string}`,
-    challenge: `0x${string}`
+    ikm_salt: `0x${string}`
   ): string {
     return [
       `${appName} – Encryption Key Derivation`,
@@ -257,7 +272,7 @@ export const IKM = {
       `Domain: ${domain}`,
       `Chain ID: ${chainId}`,
       `Address: ${address}`,
-      `Challenge (32 bytes): ${challenge}`,
+      `IKM Salt (${SALT_SIZE} bytes): ${ikm_salt}`,
       "",
       "⚠️ SECURITY NOTICE",
       "This signature does NOT authorize any blockchain transaction.",
@@ -270,8 +285,8 @@ export const IKM = {
   /**
    * SDK-owned helper: create the signature message.
    *
-   * - If `challenge` is provided: it is used as-is (decryption flow).
-   * - Otherwise: a new random 32-byte challenge is generated (encryption flow).
+   * - If `ikm_salt` is provided: it is used as-is (decryption flow).
+   * - Otherwise: a new random IKM salt is generated (encryption flow).
    */
   createEncryptionKeyMessage(
     appName: string,
@@ -280,11 +295,11 @@ export const IKM = {
     purpose: string,
     chainId: number,
     address: `0x${string}`,
-    salt?: Salt
-  ): { message: string; challenge: Salt } {
-    const challenge = (salt ?? Salt.fromBytes(randomBytes(32)).unwrap()) satisfies Uint8Array;
+    ikmSalt?: Salt
+  ): { message: string; ikm_salt: Salt } {
+    const ikm_salt = (ikmSalt ?? Salt.fromBytes(randomBytes(SALT_SIZE)).unwrap()) satisfies Uint8Array;
     return {
-      challenge: challenge,
+      ikm_salt: ikm_salt,
       message: IKM.createMessage(
         appName,
         domain,
@@ -292,7 +307,7 @@ export const IKM = {
         purpose,
         chainId,
         address,
-        `0x${bytesToHex(challenge)}`
+        `0x${bytesToHex(ikm_salt)}`
       )
     };
   }
@@ -307,7 +322,13 @@ export const Salt = {
       });
     }
 
-    // No fixed length requirement: HKDF salt can be any length (including empty).
+    if (bytes.length !== SALT_SIZE) {
+      return withUnwrap({
+        ok: false,
+        error: new Error(`Salt must be ${SALT_SIZE} bytes (got ${bytes.length})`)
+      });
+    }
+
     return withUnwrap({
       ok: true,
       value: bytes as Salt
