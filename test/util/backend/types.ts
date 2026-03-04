@@ -31,7 +31,7 @@ export interface Bucket {
 
 export interface ListBucketsResponse {
   buckets: Bucket[];
-  totalBuckets: string;
+  totalBuckets: number;
 }
 
 export type FileStatus = "inProgress" | "ready" | "expired" | "deletionInProgress";

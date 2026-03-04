@@ -29,7 +29,7 @@ pub struct Bucket {
 pub struct ListBucketsResponse {
     pub buckets: Vec<Bucket>,
     #[serde(rename = "totalBuckets")]
-    pub total_buckets: String,
+    pub total_buckets: u64,
 }
 
 impl Bucket {

@@ -31,7 +31,7 @@ pub async fn list_buckets(
 
     Ok(Json(ListBucketsResponse {
         buckets: page.buckets,
-        total_buckets: page.total.to_string(),
+        total_buckets: page.total,
     }))
 }
 

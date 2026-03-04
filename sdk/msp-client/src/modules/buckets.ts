@@ -18,16 +18,8 @@ type BucketWire = Omit<Bucket, "bucketId" | "root" | "valuePropId"> & {
 
 type ListBucketsByPageWire = {
   buckets: BucketWire[];
-  totalBuckets: string;
+  totalBuckets: number;
 };
-
-function parseTotalBuckets(value: string): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    throw new Error(`Invalid totalBuckets value received from backend: ${value}`);
-  }
-  return parsed;
-}
 
 // Wire types received from backend JSON responses
 type FileTreeWireFile = {
@@ -114,7 +106,7 @@ export class BucketsModule extends ModuleBase {
       buckets,
       page,
       limit,
-      totalBuckets: parseTotalBuckets(wire.totalBuckets)
+      totalBuckets: wire.totalBuckets
     };
   }
 

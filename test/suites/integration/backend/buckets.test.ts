@@ -86,7 +86,7 @@ await describeMspNet(
 
       const buckets = (await response.json()) as ListBucketsResponse;
 
-      strictEqual(buckets.totalBuckets, "0");
+      strictEqual(buckets.totalBuckets, 0);
       strictEqual(buckets.buckets.length, 0);
     });
 
@@ -175,7 +175,7 @@ await describeMspNet(
       const bucketsResponse = (await response.json()) as ListBucketsResponse;
 
       assert(
-        BigInt(bucketsResponse.totalBuckets) > 0n,
+        bucketsResponse.totalBuckets > 0,
         "should contain at least the bucket added during init"
       );
 
