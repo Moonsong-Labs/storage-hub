@@ -26,7 +26,7 @@ pub async fn list_buckets(
     debug!(user = %address, "GET list buckets");
     let page = services
         .msp
-        .list_user_buckets(&address, offset, limit)
+        .list_user_buckets(&address, limit, offset)
         .await?;
 
     Ok(Json(ListBucketsResponse {
@@ -72,7 +72,7 @@ pub async fn get_files(
 
     let file_tree = services
         .msp
-        .get_file_tree(&bucket_id, user.address().ok(), path, offset, limit)
+        .get_file_tree(&bucket_id, user.address().ok(), path, limit, offset)
         .await?;
 
     let response = FileListResponse {

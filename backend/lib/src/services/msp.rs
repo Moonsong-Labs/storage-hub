@@ -278,8 +278,8 @@ impl MspService {
     pub async fn list_user_buckets(
         &self,
         user_address: &Address,
-        offset: i64,
         limit: i64,
+        offset: i64,
     ) -> Result<BucketsPage<Bucket>, Error> {
         debug!(target: "msp_service::list_user_buckets", user = %user_address, %limit, %offset, "Listing user buckets");
 
@@ -349,8 +349,8 @@ impl MspService {
         bucket_id: &str,
         user: Option<&Address>,
         path: &str,
-        offset: i64,
         limit: i64,
+        offset: i64,
     ) -> Result<FileTree, Error> {
         debug!(target: "msp_service::get_file_tree", bucket_id = %bucket_id, user = ?user, %limit, %offset,  "Getting file tree");
 
@@ -1327,7 +1327,7 @@ mod tests {
             .await;
 
         let page = service
-            .list_user_buckets(&MOCK_ADDRESS, 0, DEFAULT_PAGE_LIMIT)
+            .list_user_buckets(&MOCK_ADDRESS, DEFAULT_PAGE_LIMIT, 0)
             .await
             .unwrap();
 
@@ -1436,7 +1436,7 @@ mod tests {
             .await;
 
         let page = service
-            .list_user_buckets(&MOCK_ADDRESS, 999, 10)
+            .list_user_buckets(&MOCK_ADDRESS, 10, 999)
             .await
             .expect("list_user_buckets should succeed");
 
@@ -1553,8 +1553,8 @@ mod tests {
                 hex::encode(bucket_id).as_ref(),
                 Some(&MOCK_ADDRESS),
                 filter,
-                0,
                 DEFAULT_PAGE_LIMIT,
+                0,
             )
             .await
             .unwrap();
