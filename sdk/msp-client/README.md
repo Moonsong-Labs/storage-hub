@@ -144,7 +144,8 @@ console.log('Folder files:', folderFiles);
   - `getInfo(signal?)` – returns general MSP info (id, version, owner, endpoints)
   - `getStats(signal?)` – returns capacity and usage stats
   - `getValuePropositions(signal?)` – returns available value props/pricing
-  - `getPaymentStreams({ address?, signal? }?)` – returns payment streams for a user. Pass `address` for public (unauthenticated) lookups, or omit it to use the authenticated session.
+  - `getPaymentStreams(signal?)` – returns the authenticated user's payment streams
+  - `getPaymentStreams(address, signal?)` – returns payment streams for any user by `0x` address (no auth required)
 - **`buckets`**: Buckets and file listings
   - `listBuckets(signal?)` – returns all buckets for the current authenticated user
   - `getBucket(bucketId, signal?)` – returns metadata for a specific bucket

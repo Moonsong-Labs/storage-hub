@@ -58,22 +58,20 @@ export class InfoModule extends ModuleBase {
     });
   }
 
-  /**
-   * Get payment streams for a user.
-   *
-   * When `address` is provided the request is unauthenticated and returns
-   * streams for that address. When omitted, the authenticated user's own
-   * streams are returned (requires a session).
-   */
-  async getPaymentStreams(options?: {
-    address?: string;
-    signal?: AbortSignal;
-  }): Promise<PaymentStreamsResponse> {
-    const { address, signal } = options ?? {};
-
-    if (address) {
+  /** Get payment streams for the currently authenticated user */
+  async getPaymentStreams(signal?: AbortSignal): Promise<PaymentStreamsResponse>;
+  /** Get payment streams for any user by address (no auth required) */
+  async getPaymentStreams(
+    address: `0x${string}`,
+    signal?: AbortSignal
+  ): Promise<PaymentStreamsResponse>;
+  async getPaymentStreams(
+    addressOrSignal?: `0x${string}` | AbortSignal,
+    signal?: AbortSignal
+  ): Promise<PaymentStreamsResponse> {
+    if (typeof addressOrSignal === "string") {
       return this.ctx.http.get<PaymentStreamsResponse>("/payment_streams", {
-        query: { address },
+        query: { address: addressOrSignal },
         ...(signal ? { signal } : {})
       });
     }
@@ -81,7 +79,7 @@ export class InfoModule extends ModuleBase {
     const headers = await this.withAuth();
     return this.ctx.http.get<PaymentStreamsResponse>("/payment_streams", {
       ...(headers ? { headers } : {}),
-      ...(signal ? { signal } : {})
+      ...(addressOrSignal ? { signal: addressOrSignal } : {})
     });
   }
 }
