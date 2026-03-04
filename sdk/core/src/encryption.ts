@@ -5,11 +5,8 @@ import { ENCRYPTION_CHUNK_SIZE, SALT_SIZE } from "./constants.js";
 import type { WalletClient } from "viem";
 import type { Account } from "viem";
 import { DEK, BaseNonce, IKM, Salt } from "./encryption/types.js";
-import {
-  createEncryptionHeader,
-  readEncryptionHeader,
-  type EncryptionHeaderParams
-} from "./encryption/cbor.js";
+import { createEncryptionHeader, readEncryptionHeader } from "./encryption/cbor.js";
+import type { EncryptionHeaderParams } from "./encryption/header.js";
 
 const AEAD_TAG_SIZE_BYTES = 16;
 
@@ -229,8 +226,7 @@ type EncryptionKeySource =
       kind: "signature";
       walletClient: WalletClient;
       account: Account | `0x${string}`;
-      message: string;
-      challenge: Uint8Array;
+      createMessage: (ikm_salt: Salt) => string;
     };
 
 export type GeneratedEncryptionKey = {
@@ -252,26 +248,21 @@ function randomSaltBytes(length = SALT_SIZE): Uint8Array {
 export async function generateEncryptionKey(
   source: EncryptionKeySource
 ): Promise<GeneratedEncryptionKey> {
-  // Public, random salt stored in the CBOR header.
-  const saltBytes = randomSaltBytes(32);
-  const salt = Salt.fromBytes(saltBytes).unwrap();
-  const header: EncryptionHeaderParams =
-    source.kind === "signature"
-      ? {
-          ikm: source.kind,
-          salt: saltBytes,
-          challenge: source.challenge
-        }
-      : {
-          ikm: source.kind,
-          salt: saltBytes
-        };
+  // Public, random DEK salt stored in the CBOR header.
+  const dekSaltBytes = randomSaltBytes(SALT_SIZE);
+  const dekSalt = Salt.fromBytes(dekSaltBytes).unwrap();
+  const ikmSalt = Salt.fromBytes(randomSaltBytes(SALT_SIZE)).unwrap();
+  const header: EncryptionHeaderParams = {
+    ikm: source.kind,
+    dek_salt: dekSalt,
+    ikm_salt: ikmSalt
+  };
 
   switch (source.kind) {
     case "password": {
-      const ikm = IKM.fromPassword(source.password).unwrap();
-      const dek = DEK.derive(ikm, salt).unwrap();
-      const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
+      const ikm = IKM.fromPassword(source.password, ikmSalt).unwrap();
+      const dek = DEK.derive(ikm, dekSalt).unwrap();
+      const baseNonce = BaseNonce.derive(ikm, dekSalt).unwrap();
 
       return {
         dek,
@@ -280,14 +271,15 @@ export async function generateEncryptionKey(
       };
     }
     case "signature": {
+      const message = source.createMessage(ikmSalt);
       const signature = await source.walletClient.signMessage({
         account: source.account,
-        message: source.message
+        message
       });
 
       const ikm = IKM.fromSignature(signature).unwrap();
-      const dek = DEK.derive(ikm, salt).unwrap();
-      const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
+      const dek = DEK.derive(ikm, dekSalt).unwrap();
+      const baseNonce = BaseNonce.derive(ikm, dekSalt).unwrap();
 
       return {
         dek,
@@ -296,7 +288,11 @@ export async function generateEncryptionKey(
       };
     }
   }
-  throw new Error("Unknown EncryptionKeySource");
+
+  const _exhaustive: never = source;
+  throw new Error(
+    `Unknown EncryptionKeySource kind: ${(source as { kind?: string }).kind ?? "undefined"}`
+  );
 }
 
 export type DecryptFileProgress = {
@@ -310,8 +306,10 @@ export type DecryptFileParams = {
   /**
    * Provide the Input Key Material based on the header.
    *
-   * - If header.ikm === "password": prompt for password and return `IKM.fromPassword(password).unwrap()`
-   * - If header.ikm === "signature": produce the file-specific signature again and return `IKM.fromSignature(signature).unwrap()`
+   * - If header.ikm === "password": prompt for password and return
+   *   `IKM.fromPassword(password, header.ikm_salt).unwrap()`
+   * - If header.ikm === "signature": produce the file-specific signature again and return
+   *   `IKM.fromSignature(signature).unwrap()`
    */
   getIkm: (header: EncryptionHeaderParams) => Promise<IKM>;
   onProgress?: (p: DecryptFileProgress) => void;
@@ -419,7 +417,7 @@ async function decryptAndWriteChunk({
 /**
  * Decrypt a byte stream produced by `encryptFile()`.
  *
- * This reads and validates the CBOR header, re-derives keys using the header salt
+ * This reads and validates the CBOR header, re-derives keys using `header.dek_salt`
  * and a caller-provided IKM source, then chunk-decrypts the ciphertext stream.
  */
 export async function decryptFile({
@@ -444,9 +442,8 @@ export async function decryptFile({
 
     // -------- derive keys --------
     const ikm = await getIkm(header);
-    const salt = Salt.fromBytes(header.salt).unwrap();
-    const dek = DEK.derive(ikm, salt).unwrap();
-    const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
+    const dek = DEK.derive(ikm, header.dek_salt).unwrap();
+    const baseNonce = BaseNonce.derive(ikm, header.dek_salt).unwrap();
 
     // -------- body (chunked decryption) --------
     const ciphertextBuf = new ByteQueue();
