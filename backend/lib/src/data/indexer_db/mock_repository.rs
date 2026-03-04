@@ -43,6 +43,8 @@ pub struct MockRepository {
     /// Payment streams stored by ID with (user_account, PaymentStreamData) tuple
     payment_streams: Arc<RwLock<HashMap<i64, (String, PaymentStreamData)>>>,
     next_id: Arc<AtomicI64>,
+    /// Configurable service state for node-health mock testing.
+    service_state_override: Arc<RwLock<Option<ServiceState>>>,
 }
 
 impl MockRepository {
@@ -55,7 +57,13 @@ impl MockRepository {
             files: Arc::new(RwLock::new(BTreeMap::new())),
             payment_streams: Arc::new(RwLock::new(HashMap::new())),
             next_id: Arc::new(AtomicI64::new(1)),
+            service_state_override: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Override the service state returned by `get_service_state`.
+    pub async fn set_service_state(&self, state: ServiceState) {
+        *self.service_state_override.write().await = Some(state);
     }
 
     /// Create a new mock repository with some sample data loaded in
@@ -369,6 +377,9 @@ impl IndexerOps for MockRepository {
 
     // ============ Node Health Operations ============
     async fn get_service_state(&self) -> RepositoryResult<ServiceState> {
+        if let Some(state) = self.service_state_override.read().await.clone() {
+            return Ok(state);
+        }
         let now = Utc::now().naive_utc();
         Ok(ServiceState {
             id: 1,

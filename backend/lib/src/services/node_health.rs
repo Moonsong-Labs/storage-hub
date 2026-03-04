@@ -8,7 +8,7 @@ use std::time::Instant;
 use chrono::Utc;
 use tracing::{debug, error};
 
-use shc_indexer_db::OnchainMspId;
+use shc_indexer_db::{models::Msp, OnchainMspId};
 
 use crate::{
     config::NodeHealthConfig,
@@ -53,11 +53,19 @@ impl NodeHealthService {
     pub async fn check_node_health(&self) -> NodeHealthResponse {
         debug!(target: "node_health_service", "Node health check initiated");
 
+        let msp = match self.db.get_msp(&self.msp_id).await {
+            Ok(msp) => Some(msp),
+            Err(e) => {
+                error!(target: "node_health_service", error = %e, "Failed to resolve MSP from DB");
+                None
+            }
+        };
+
         // Run independent signals concurrently
-        let (indexer, tx_nonce) = tokio::join!(self.check_indexer(), self.check_tx_nonce());
+        let (indexer, tx_nonce) = tokio::join!(self.check_indexer(), self.check_tx_nonce(&msp));
 
         // Request acceptance depends on the indexer result
-        let request_acceptance = self.check_request_acceptance(&indexer).await;
+        let request_acceptance = self.check_request_acceptance(&indexer, &msp).await;
 
         let overall = indexer
             .status
@@ -97,7 +105,7 @@ impl NodeHealthService {
 
         let now = Utc::now().naive_utc();
         let updated_secs_ago = (now - service_state.updated_at).num_seconds().max(0) as u64;
-        let last_indexed = service_state.last_indexed_finalized_block as u64;
+        let last_indexed = service_state.last_indexed_finalized_block.max(0) as u64;
         let lag_blocks = finalized_block.saturating_sub(last_indexed);
 
         let is_stale = updated_secs_ago >= self.config.indexer_stale_threshold_secs;
@@ -134,21 +142,21 @@ impl NodeHealthService {
     }
 
     /// If the indexer is unhealthy, marks this signal as unknown (can't trust stale data).
-    async fn check_request_acceptance(&self, indexer: &IndexerSignal) -> RequestAcceptanceSignal {
+    async fn check_request_acceptance(
+        &self,
+        indexer: &IndexerSignal,
+        msp: &Option<Msp>,
+    ) -> RequestAcceptanceSignal {
         if indexer.status == SignalStatus::Unhealthy {
             return RequestAcceptanceSignal::unknown(
                 "Cannot evaluate: indexer is unhealthy, DB data may be stale",
             );
         }
 
-        let msp = match self.db.get_msp(&self.msp_id).await {
-            Ok(msp) => msp,
-            Err(e) => {
-                error!(target: "node_health_service", error = %e, "Failed to resolve MSP from DB");
-                return RequestAcceptanceSignal::unknown(format!(
-                    "MSP not found in indexer DB: {}",
-                    e
-                ));
+        let msp = match msp {
+            Some(msp) => msp,
+            None => {
+                return RequestAcceptanceSignal::unknown("MSP not found in indexer DB");
             }
         };
 
@@ -205,12 +213,11 @@ impl NodeHealthService {
     ///
     /// On the first call after startup there is no baseline, so the signal
     /// reports Healthy with `nonce_unchanged_for_secs: None`.
-    async fn check_tx_nonce(&self) -> TxNonceSignal {
-        let msp_account = match self.db.get_msp(&self.msp_id).await {
-            Ok(msp) => msp.account,
-            Err(e) => {
-                error!(target: "node_health_service", error = %e, "Failed to resolve MSP account");
-                return TxNonceSignal::unknown(format!("MSP not found in indexer DB: {}", e));
+    async fn check_tx_nonce(&self, msp: &Option<Msp>) -> TxNonceSignal {
+        let msp_account = match msp {
+            Some(msp) => &msp.account,
+            None => {
+                return TxNonceSignal::unknown("MSP not found in indexer DB");
             }
         };
 
@@ -276,6 +283,8 @@ impl NodeHealthService {
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
     use super::*;
+    use shc_indexer_db::models::ServiceState;
+
     use crate::{
         config::NodeHealthConfig,
         data::{
@@ -298,6 +307,25 @@ mod tests {
             &crate::constants::rpc::DUMMY_MSP_ID,
         ));
         NodeHealthService::new(db, rpc, msp_id, config)
+    }
+
+    async fn mock_node_health_service_with_repo(
+        repo: MockRepository,
+        config: NodeHealthConfig,
+    ) -> NodeHealthService {
+        let db = Arc::new(DBClient::new(Arc::new(repo)));
+        let mock_conn = MockConnection::new();
+        let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
+        let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
+        let msp_id = OnchainMspId::new(shp_types::Hash::from_slice(
+            &crate::constants::rpc::DUMMY_MSP_ID,
+        ));
+        NodeHealthService::new(db, rpc, msp_id, config)
+    }
+
+    /// Helper: resolve the MSP for use with signal methods that now require it.
+    async fn resolve_msp(service: &NodeHealthService) -> Option<Msp> {
+        service.db.get_msp(&service.msp_id).await.ok()
     }
 
     #[test]
@@ -342,8 +370,9 @@ mod tests {
     #[tokio::test]
     async fn nonce_first_check_has_no_baseline() {
         let service = mock_node_health_service().await;
+        let msp = resolve_msp(&service).await;
 
-        let result = service.check_tx_nonce().await;
+        let result = service.check_tx_nonce(&msp).await;
         assert_eq!(result.current_nonce, 42);
         // First call — no baseline yet
         assert_eq!(result.nonce_unchanged_for_secs, None);
@@ -353,12 +382,13 @@ mod tests {
     #[tokio::test]
     async fn nonce_subsequent_check_tracks_duration() {
         let service = mock_node_health_service().await;
+        let msp = resolve_msp(&service).await;
 
         // First call establishes the baseline
-        let _ = service.check_tx_nonce().await;
+        let _ = service.check_tx_nonce(&msp).await;
 
         // Second call should report the duration since the baseline
-        let result = service.check_tx_nonce().await;
+        let result = service.check_tx_nonce(&msp).await;
         assert_eq!(result.current_nonce, 42);
         assert!(result.nonce_unchanged_for_secs.is_some());
         assert_eq!(result.status, SignalStatus::Healthy);
@@ -372,12 +402,13 @@ mod tests {
             ..NodeHealthConfig::default()
         };
         let service = mock_node_health_service_with_config(config).await;
+        let msp = resolve_msp(&service).await;
 
         // First call should establish the baseline
-        let _ = service.check_tx_nonce().await;
+        let _ = service.check_tx_nonce(&msp).await;
 
         // Second call should report the duration since the baseline
-        let result = service.check_tx_nonce().await;
+        let result = service.check_tx_nonce(&msp).await;
         assert_eq!(result.status, SignalStatus::Unhealthy);
         assert!(result.message.is_some());
     }
@@ -385,6 +416,7 @@ mod tests {
     #[tokio::test]
     async fn acceptance_healthy_when_below_threshold() {
         let service = mock_node_health_service().await;
+        let msp = resolve_msp(&service).await;
 
         let indexer = IndexerSignal {
             status: SignalStatus::Healthy,
@@ -395,7 +427,7 @@ mod tests {
             message: None,
         };
 
-        let result = service.check_request_acceptance(&indexer).await;
+        let result = service.check_request_acceptance(&indexer, &msp).await;
         assert_eq!(result.status, SignalStatus::Healthy);
         assert_eq!(result.recent_requests_total, 0);
     }
@@ -403,6 +435,7 @@ mod tests {
     #[tokio::test]
     async fn acceptance_unknown_when_indexer_unhealthy() {
         let service = mock_node_health_service().await;
+        let msp = resolve_msp(&service).await;
 
         let indexer = IndexerSignal {
             status: SignalStatus::Unhealthy,
@@ -413,7 +446,56 @@ mod tests {
             message: Some("stuck".to_string()),
         };
 
-        let result = service.check_request_acceptance(&indexer).await;
+        let result = service.check_request_acceptance(&indexer, &msp).await;
         assert_eq!(result.status, SignalStatus::Unknown);
+    }
+
+    #[tokio::test]
+    async fn indexer_unhealthy_when_stale() {
+        let repo = MockRepository::sample().await;
+        let stale_time = Utc::now().naive_utc() - chrono::Duration::seconds(300);
+        repo.set_service_state(ServiceState {
+            id: 1,
+            last_indexed_finalized_block: 100,
+            created_at: stale_time,
+            updated_at: stale_time,
+        })
+        .await;
+
+        let config = NodeHealthConfig {
+            indexer_stale_threshold_secs: 120,
+            ..NodeHealthConfig::default()
+        };
+        let service = mock_node_health_service_with_repo(repo, config).await;
+
+        let result = service.check_indexer().await;
+        assert_eq!(result.status, SignalStatus::Unhealthy);
+        assert!(result.message.as_ref().unwrap().contains("stuck"));
+        assert!(result.last_updated_secs_ago >= 300);
+    }
+
+    #[tokio::test]
+    async fn indexer_degraded_when_lagging() {
+        let repo = MockRepository::sample().await;
+        let now = Utc::now().naive_utc();
+        // Indexer at block 80, mock RPC returns finalized block 100 → lag of 20
+        repo.set_service_state(ServiceState {
+            id: 1,
+            last_indexed_finalized_block: 80,
+            created_at: now,
+            updated_at: now,
+        })
+        .await;
+
+        let config = NodeHealthConfig {
+            indexer_lag_blocks_threshold: 10,
+            ..NodeHealthConfig::default()
+        };
+        let service = mock_node_health_service_with_repo(repo, config).await;
+
+        let result = service.check_indexer().await;
+        assert_eq!(result.status, SignalStatus::Degraded);
+        assert!(result.message.as_ref().unwrap().contains("lagging"));
+        assert_eq!(result.lag_blocks, 20);
     }
 }

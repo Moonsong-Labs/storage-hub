@@ -38,7 +38,7 @@ pub struct NodeHealthResponse {
 impl IntoResponse for NodeHealthResponse {
     fn into_response(self) -> Response<Body> {
         let status_code = match self.status {
-            SignalStatus::Healthy => StatusCode::OK,
+            SignalStatus::Healthy | SignalStatus::Degraded => StatusCode::OK,
             _ => StatusCode::SERVICE_UNAVAILABLE,
         };
         (status_code, Json(self)).into_response()

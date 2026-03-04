@@ -222,8 +222,8 @@ impl IndexerOps for Repository {
             .first(&mut *conn)
             .await?;
 
-        let last_accepted_at: Option<NaiveDateTime> = file::table
-            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
+        let last_accepted_at: Option<NaiveDateTime> = msp_file::table
+            .inner_join(file::table.on(msp_file::file_id.eq(file::id)))
             .filter(msp_file::msp_id.eq(msp_db_id))
             .select(diesel::dsl::max(file::created_at))
             .first(&mut *conn)
