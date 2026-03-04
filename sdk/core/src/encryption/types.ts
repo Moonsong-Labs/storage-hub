@@ -297,7 +297,8 @@ export const IKM = {
     address: `0x${string}`,
     ikmSalt?: Salt
   ): { message: string; ikm_salt: Salt } {
-    const ikm_salt = (ikmSalt ?? Salt.fromBytes(randomBytes(SALT_SIZE)).unwrap()) satisfies Uint8Array;
+    const ikm_salt = (ikmSalt ??
+      Salt.fromBytes(randomBytes(SALT_SIZE)).unwrap()) satisfies Uint8Array;
     return {
       ikm_salt: ikm_salt,
       message: IKM.createMessage(
