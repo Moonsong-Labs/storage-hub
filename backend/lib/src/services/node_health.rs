@@ -213,6 +213,13 @@ impl NodeHealthService {
     ///
     /// On the first call after startup there is no baseline, so the signal
     /// reports Healthy with `nonce_unchanged_for_secs: None`.
+    ///
+    // TODO: This can produce false positives when the MSP is idle (no storage requests,
+    // no transactions to submit). Ideally we'd only flag as stuck when there are pending
+    // transactions from this MSP, but the node's tx pool RPC (`author_pendingExtrinsics`)
+    // returns all pooled txs (not filtered by account), and the MSP's internal tx manager
+    // queue is not exposed via RPC. Until that info is available, an idle MSP will be
+    // flagged as unhealthy after `nonce_stuck_threshold_secs`.
     async fn check_tx_nonce(&self, msp: &Option<Msp>) -> TxNonceSignal {
         let msp_account = match msp {
             Some(msp) => &msp.account,
