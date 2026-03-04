@@ -112,16 +112,12 @@ export type EncryptFileParams = {
   /**
    * CBOR header fields written before any ciphertext.
    *
-   * This allows the SDK to later parse the file and know *how* the IKM was obtained
-   * and what salt was used, so it can deterministically re-derive DEK/BaseNonce.
+   * This allows the SDK to later parse the file and know *how* the IKM was obtained,
+   * what salts were used, and what chunk size was used, so it can deterministically
+   * re-derive DEK/BaseNonce and decrypt with the correct framing.
    */
   header: EncryptionHeaderParams;
   onProgress?: (p: EncryptFileProgress) => void;
-  /**
-   * Plaintext chunk size used for encryption framing.
-   * Defaults to `ENCRYPTION_CHUNK_SIZE` (16 MiB).
-   */
-  chunkSizeBytes?: number;
 };
 
 /**
@@ -136,13 +132,11 @@ export async function encryptFile({
   dek,
   baseNonce,
   header,
-  onProgress,
-  chunkSizeBytes
+  onProgress
 }: EncryptFileParams): Promise<void> {
-  // -------- parameters / defaults --------
-  const chunkSize = chunkSizeBytes ?? ENCRYPTION_CHUNK_SIZE;
+  const chunkSize = header.chunk_size;
   if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
-    throw new Error(`encryptFile: invalid chunkSizeBytes=${chunkSize}`);
+    throw new Error(`encryptFile: invalid header chunk_size=${chunkSize}`);
   }
 
   const reader = input.getReader();
@@ -255,7 +249,10 @@ export async function generateEncryptionKey(
   const header: EncryptionHeaderParams = {
     ikm: source.kind,
     dek_salt: dekSalt,
-    ikm_salt: ikmSalt
+    ikm_salt: ikmSalt,
+    // Encryption chunk size is currently fixed to 16 MiB, but because it is encoded
+    // in the file header, this value can change in future versions without a protocol break.
+    chunk_size: ENCRYPTION_CHUNK_SIZE
   };
 
   switch (source.kind) {
@@ -313,11 +310,6 @@ export type DecryptFileParams = {
    */
   getIkm: (header: EncryptionHeaderParams) => Promise<IKM>;
   onProgress?: (p: DecryptFileProgress) => void;
-  /**
-   * Plaintext chunk size used during encryption framing.
-   * Must match the value used during encryption. Defaults to `ENCRYPTION_CHUNK_SIZE` (16 MiB).
-   */
-  chunkSizeBytes?: number;
 };
 
 async function readHeaderFromStream(
@@ -410,14 +402,8 @@ export async function decryptFile({
   input,
   output,
   getIkm,
-  onProgress,
-  chunkSizeBytes
+  onProgress
 }: DecryptFileParams): Promise<void> {
-  const chunkSize = chunkSizeBytes ?? ENCRYPTION_CHUNK_SIZE;
-  if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
-    throw new Error(`decryptFile: invalid chunkSizeBytes=${chunkSize}`);
-  }
-
   const reader = input.getReader();
   const writer = output.getWriter();
 
@@ -425,6 +411,10 @@ export async function decryptFile({
   try {
     // -------- header --------
     const { header, remainder } = await readHeaderFromStream(reader);
+    const chunkSize = header.chunk_size;
+    if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
+      throw new Error(`decryptFile: invalid header chunk_size=${chunkSize}`);
+    }
 
     // -------- derive keys --------
     const ikm = await getIkm(header);

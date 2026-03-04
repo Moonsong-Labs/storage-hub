@@ -25,7 +25,8 @@ export function createEncryptionHeader(params: EncryptionHeaderParams): Uint8Arr
     v: HeaderVersion.V1,
     ikm: params.ikm,
     dek_salt: params.dek_salt,
-    ikm_salt: params.ikm_salt
+    ikm_salt: params.ikm_salt,
+    chunk_size: params.chunk_size
   };
 
   // Deterministic encoding: RFC 8949 "deterministic mode" map sorting.

@@ -15,6 +15,8 @@ export type EncryptionHeaderParams = {
   dek_salt: Salt;
   // Input key material salt, always required and always SALT_SIZE bytes.
   ikm_salt: Salt;
+  // Plaintext chunk size used for encryption framing.
+  chunk_size: number;
 };
 
 export type EncryptionHeaderV1 = {
@@ -24,6 +26,7 @@ export type EncryptionHeaderV1 = {
   ikm: IKMType;
   dek_salt: Salt;
   ikm_salt: Salt;
+  chunk_size: number;
 };
 
 function isIKMType(x: unknown): x is IKMType {
@@ -42,6 +45,8 @@ export function isEncryptionHeaderV1(x: unknown): x is EncryptionHeaderV1 {
   if (obj.dek_salt.length !== SALT_SIZE) return false;
   if (!(obj.ikm_salt instanceof Uint8Array)) return false;
   if (obj.ikm_salt.length !== SALT_SIZE) return false;
+  if (typeof obj.chunk_size !== "number") return false;
+  if (!Number.isSafeInteger(obj.chunk_size) || obj.chunk_size <= 0) return false;
 
   return true;
 }
