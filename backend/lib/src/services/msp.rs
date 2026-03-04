@@ -222,6 +222,11 @@ impl MspService {
         }
     }
 
+    /// Get the onchain MSP ID discovered at startup
+    pub fn msp_id(&self) -> &OnchainMspId {
+        &self.msp_id
+    }
+
     /// Best-effort startup cleanup for stale trusted-upload spool temp files.
     ///
     /// Files are deleted only if their filename matches this service's spool naming pattern
