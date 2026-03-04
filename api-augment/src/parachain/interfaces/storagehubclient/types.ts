@@ -37,6 +37,14 @@ export interface BackupStorageProvider extends Struct {
 /** @name BackupStorageProviderId */
 export interface BackupStorageProviderId extends H256 {}
 
+/** @name BspStopStoringFileResult */
+export interface BspStopStoringFileResult extends Enum {
+  readonly isSuccess: boolean;
+  readonly isNotABsp: boolean;
+  readonly isBlockchainServiceNotAvailable: boolean;
+  readonly type: "Success" | "NotABsp" | "BlockchainServiceNotAvailable";
+}
+
 /** @name BucketId */
 export interface BucketId extends H256 {}
 
@@ -104,9 +112,7 @@ export interface GetFileFromFileStorageResult extends Enum {
   readonly asFileFound: FileMetadata;
   readonly isIncompleteFile: boolean;
   readonly asIncompleteFile: IncompleteFileStatus;
-  readonly isFileFoundWithInconsistency: boolean;
-  readonly asFileFoundWithInconsistency: FileMetadata;
-  readonly type: "FileNotFound" | "FileFound" | "IncompleteFile" | "FileFoundWithInconsistency";
+  readonly type: "FileNotFound" | "FileFound" | "IncompleteFile";
 }
 
 /** @name GetNextDeadlineTickError */
@@ -216,6 +222,13 @@ export interface MspStorageRequestStatus extends Enum {
 
 /** @name Multiaddresses */
 export interface Multiaddresses extends Vec<Bytes> {}
+
+/** @name PendingStopStoringRequest */
+export interface PendingStopStoringRequest extends Struct {
+  readonly tick_when_requested: BlockNumber;
+  readonly file_owner: AccountId;
+  readonly file_size: StorageDataUnit;
+}
 
 /** @name ProviderId */
 export interface ProviderId extends H256 {}

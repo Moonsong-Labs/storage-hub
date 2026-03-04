@@ -974,6 +974,17 @@ pub trait CFDequeAPI: ProvidesTypedDbSingleAccess {
         value
     }
 
+    /// Peek at the front element without removing it from the queue.
+    fn peek_front(&self) -> Option<Self::Value> {
+        if self.size() == 0 {
+            return None;
+        }
+        let left_index = self.left_index();
+        self.db_context()
+            .cf(&Self::DataCF::default())
+            .get(&left_index)
+    }
+
     fn size(&self) -> u64 {
         self.right_index() - self.left_index()
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ensure0xPrefix, removeHexPrefix, hexToBytes } from "../src/utils.js";
+import { ensure0xPrefix, removeHexPrefix, assert0xString, hexToBytes } from "../src/utils.js";
 
 describe("Hex Utility Functions", () => {
   describe("ensure0xPrefix", () => {
@@ -80,6 +80,53 @@ describe("Hex Utility Functions", () => {
     it("should handle special characters that might look like hex", () => {
       expect(() => hexToBytes("0xabco")).toThrow("Hex string contains invalid characters");
       expect(() => hexToBytes("0x123!")).toThrow("Hex string contains invalid characters");
+    });
+  });
+
+  describe("assert0xString", () => {
+    it("should accept valid 0x-prefixed hex with expected byte length", () => {
+      expect(() =>
+        assert0xString(
+          "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          32,
+          "Invalid hex"
+        )
+      ).not.toThrow();
+    });
+
+    it("should throw if input is not 0x-prefixed", () => {
+      expect(() =>
+        assert0xString(
+          "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          32,
+          "Invalid hex"
+        )
+      ).toThrow("Invalid hex");
+    });
+
+    it("should throw if input length does not match expected bytes", () => {
+      expect(() => assert0xString("0x0123456789abcdef", 32, "Invalid hex length")).toThrow(
+        "Invalid hex length"
+      );
+    });
+
+    it("should throw if input contains non-hex characters", () => {
+      expect(() =>
+        assert0xString(
+          "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg",
+          32,
+          "Invalid hex chars"
+        )
+      ).toThrow("Invalid hex chars");
+    });
+
+    it("should throw for invalid expected byte length argument", () => {
+      expect(() => assert0xString("0x12", 0, "Invalid hex")).toThrow(
+        "Expected length must be a positive integer"
+      );
+      expect(() => assert0xString("0x12", -1, "Invalid hex")).toThrow(
+        "Expected length must be a positive integer"
+      );
     });
   });
 });

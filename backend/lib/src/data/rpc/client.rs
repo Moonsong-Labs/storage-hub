@@ -95,7 +95,7 @@ impl StorageHubRpcClient {
         let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
             RpcConnectionError::Serialization(format!(
                 "RPC runtime API did not respond with a valid hex string: {}",
-                e.to_string()
+                e
             ))
         })?;
 
@@ -134,7 +134,7 @@ impl StorageHubRpcClient {
         let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
             RpcConnectionError::Serialization(format!(
                 "RPC runtime API did not respond with a valid hex string: {}",
-                e.to_string()
+                e
             ))
         })?;
 
@@ -193,7 +193,6 @@ impl StorageHubRpcClient {
     /// - `FileNotFound`: File does not exist in storage
     /// - `FileFound`: File exists and is complete
     /// - `IncompleteFile`: File exists but is missing chunks
-    /// - `FileFoundWithInconsistency`: File exists but has data integrity issues
     pub async fn is_file_in_file_storage(
         &self,
         file_key: &str,

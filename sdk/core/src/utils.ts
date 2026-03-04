@@ -21,6 +21,29 @@ export function removeHexPrefix(hex: string): string {
 }
 
 /**
+ * Validates a 0x-prefixed hex string has the expected byte length.
+ * @param value - Hex string to validate
+ * @param expectedLength - Expected byte length (excluding 0x prefix)
+ * @param errorMessage - Error message thrown when validation fails
+ * @throws Error if the input is not 0x-prefixed hex with the expected byte length
+ */
+export function assert0xString(
+  value: string,
+  expectedLength: number,
+  errorMessage: string
+): asserts value is `0x${string}` {
+  if (expectedLength <= 0) {
+    throw new Error("Expected length must be a positive integer");
+  }
+
+  const expectedHexLength = expectedLength * 2;
+  const regex = new RegExp(`^0x[0-9a-fA-F]{${expectedHexLength}}$`);
+  if (!regex.test(value)) {
+    throw new Error(errorMessage);
+  }
+}
+
+/**
  * Converts a hex string to Uint8Array
  * @param hex - The hex string to convert (with or without 0x prefix)
  * @returns Uint8Array representation

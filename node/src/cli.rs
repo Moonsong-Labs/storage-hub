@@ -1,6 +1,7 @@
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Deserializer};
 use shp_types::StorageDataUnit;
+use sp_core::H256;
 use std::{path::PathBuf, str::FromStr};
 
 use crate::command::ProviderOptions;
@@ -183,6 +184,12 @@ pub struct ProviderConfigurations {
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
     #[arg(long, default_value = "4")]
     pub check_for_pending_proofs_period: Option<u32>,
+
+    /// On blocks that are multiples of this number, the blockchain service will
+    /// check the local BSP stop-storing requests against the on-chain state to ensure no
+    /// stop-storing requests are missed.
+    #[arg(long, value_name = "BLOCKS", default_value = "600", value_parser = clap::value_parser!(u32).range(1..))]
+    pub check_stop_storing_requests_period: Option<u32>,
 
     /// Enable MSP file distribution to BSPs (disabled by default unless set via config/CLI).
     /// Only applicable when running as an MSP provider.
@@ -425,6 +432,29 @@ pub struct ProviderConfigurations {
         default_value = "7070"
     )]
     pub trusted_file_transfer_server_port: Option<u16>,
+
+    /// Batch size in bytes used by MSP trusted upload ingestion (default: 2MB).
+    #[arg(
+        long,
+        value_name = "BYTES",
+        help_heading = "Trusted File Transfer Server Options",
+        default_value = "2097152",
+        value_parser = clap::value_parser!(u64).range(1..)
+    )]
+    pub trusted_file_transfer_batch_size_bytes: Option<u64>,
+
+    /// List of trusted MSP on-chain IDs allowed to request downloads from this BSP.
+    ///
+    /// This flag is only valid when running as a BSP provider.
+    ///
+    /// Format: comma-separated list of hex IDs, e.g. `0x…`.
+    #[arg(
+        long = "trusted-msps",
+        value_delimiter = ',',
+        value_name = "MSP_ID",
+        help_heading = "BSP Download Authorisation"
+    )]
+    pub trusted_msps: Vec<H256>,
 }
 
 impl ProviderConfigurations {
@@ -543,6 +573,12 @@ impl ProviderConfigurations {
             bs_changed = true;
         }
 
+        if let Some(check_stop_storing_requests_period) = self.check_stop_storing_requests_period {
+            bs_options.check_stop_storing_requests_period =
+                Some(check_stop_storing_requests_period);
+            bs_changed = true;
+        }
+
         if let Some(bsp_confirm_file_batch_size) = self.bsp_confirm_file_batch_size {
             bs_options.bsp_confirm_file_batch_size = Some(bsp_confirm_file_batch_size);
             bs_changed = true;
@@ -593,6 +629,8 @@ impl ProviderConfigurations {
             trusted_file_transfer_server: self.trusted_file_transfer_server,
             trusted_file_transfer_server_host: self.trusted_file_transfer_server_host.clone(),
             trusted_file_transfer_server_port: self.trusted_file_transfer_server_port,
+            trusted_file_transfer_batch_size_bytes: self.trusted_file_transfer_batch_size_bytes,
+            trusted_msps: self.trusted_msps.clone(),
         }
     }
 }
@@ -868,13 +906,14 @@ pub struct Cli {
     #[arg(long, conflicts_with_all = [
         "provider", "provider_type", "max_storage_capacity", "jump_capacity",
         "storage_layer", "storage_path", "extrinsic_retry_timeout",
-        "check_for_pending_proofs_period",
+        "check_for_pending_proofs_period", "check_stop_storing_requests_period",
         "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
         "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", "msp_database_url",
+        "trusted_file_transfer_batch_size_bytes",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
-        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts"
+        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts", "trusted_msps",
     ])]
     pub provider_config_file: Option<String>,
 
