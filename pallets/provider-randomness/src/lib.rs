@@ -308,6 +308,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[allow(clippy::useless_conversion)]
         pub fn add_randomness(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,

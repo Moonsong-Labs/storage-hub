@@ -107,6 +107,7 @@ pub trait StorageEnableApiCollection<Runtime>:
         BucketId<Runtime>,
         StorageDataUnit<Runtime>,
         Runtime::Hash,
+        PendingStopStoringRequest<Runtime>,
     > + StorageProvidersRuntimeApi<
         Block,
         BlockNumber<Runtime>,
@@ -158,6 +159,7 @@ where
             BucketId<Runtime>,
             StorageDataUnit<Runtime>,
             Runtime::Hash,
+            PendingStopStoringRequest<Runtime>,
         > + StorageProvidersRuntimeApi<
             Block,
             BlockNumber<Runtime>,

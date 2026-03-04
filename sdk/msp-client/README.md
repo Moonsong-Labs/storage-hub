@@ -77,11 +77,19 @@ sessionRef = session;
 // 4. Upload a file
 const bucketId = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'; // StorageHub bucket identifier
 const fileKey = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';   // Unique file identifier
+const fingerprint = '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'; // Precomputed fingerprint
 const filePath = './myfile.txt';
 const owner = walletAddress;      // File owner
 const location = 'myfile.txt';    // File location/path within the bucket
 
-const receipt = await client.files.uploadFile(bucketId, fileKey, createReadStream(filePath), owner, location);
+const receipt = await client.files.uploadFile(
+  bucketId,
+  fileKey,
+  createReadStream(filePath),
+  fingerprint,
+  owner,
+  location
+);
 console.log('File uploaded successfully:', receipt);
 
 // 5. Download the file
@@ -143,7 +151,7 @@ console.log('Folder files:', folderFiles);
   - `getFiles(bucketId, { path?, signal? })` – returns the file tree at root or at a subpath
 - **`files`**: File metadata, upload and download
   - `getFileInfo(bucketId, fileKey, signal?)` – returns metadata for a specific file
-  - `uploadFile(...)` – uploads a file to the MSP
+  - `uploadFile(bucketId, fileKey, file, fingerprint, owner, location, options?)` – uploads a file to the MSP using a precomputed `0x` fingerprint
   - `downloadFile(fileKey, options?)` – downloads a file by key (supports range)
 
 ### Utilities available via `files`
