@@ -327,34 +327,23 @@ async function readHeaderFromStream(
   const MAGIC_PLUS_LEN = 7;
   const MAX_HEADER_LEN_BYTES = 64 * 1024;
 
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+  const queue = new ByteQueue();
 
   const pull = async (minBytes: number) => {
-    while (total < minBytes) {
+    while (queue.length < minBytes) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (!value?.length) continue;
-      chunks.push(value);
-      total += value.length;
+      queue.push(value);
     }
   };
 
+  // Phase 1: read fixed header prefix to obtain CBOR header length.
   await pull(MAGIC_PLUS_LEN);
-  if (total < MAGIC_PLUS_LEN) {
+  if (queue.length < MAGIC_PLUS_LEN) {
     throw new Error("decryptFile: input too short to contain header");
   }
 
-  // Flatten what we have so far to read headerLen (offset 3..6).
-  const prefix = new Uint8Array(total);
-  {
-    let off = 0;
-    for (const c of chunks) {
-      prefix.set(c, off);
-      off += c.length;
-    }
-  }
-
+  const prefix = queue.take(MAGIC_PLUS_LEN);
   const headerLen = new DataView(prefix.buffer, prefix.byteOffset, prefix.byteLength).getUint32(
     3,
     false
@@ -363,23 +352,20 @@ async function readHeaderFromStream(
     throw new Error(`decryptFile: header too large (${headerLen} bytes)`);
   }
 
-  const totalHeaderBytes = MAGIC_PLUS_LEN + headerLen;
-  await pull(totalHeaderBytes);
-  if (total < totalHeaderBytes) {
+  // Phase 2: read exactly the CBOR header payload bytes.
+  await pull(headerLen);
+  if (queue.length < headerLen) {
     throw new Error("decryptFile: input truncated while reading header");
   }
+  const cborHeaderBytes = queue.take(headerLen);
 
-  const buf = new Uint8Array(total);
-  {
-    let off = 0;
-    for (const c of chunks) {
-      buf.set(c, off);
-      off += c.length;
-    }
-  }
+  // Phase 3: decode the full header and preserve already-read body bytes.
+  const fullHeader = new Uint8Array(MAGIC_PLUS_LEN + headerLen);
+  fullHeader.set(prefix, 0);
+  fullHeader.set(cborHeaderBytes, MAGIC_PLUS_LEN);
 
-  const { header, headerLength } = readEncryptionHeader(buf);
-  const remainder = buf.subarray(headerLength);
+  const { header, headerLength } = readEncryptionHeader(fullHeader);
+  const remainder = queue.takeAll();
   return { header, headerLength, remainder };
 }
 
