@@ -1,4 +1,5 @@
 import { SALT_SIZE } from "../constants.js";
+import type { Salt } from "./types.js";
 
 export const EncryptionHeaderVersion = {
   V1: 1
@@ -11,9 +12,9 @@ export type IKMType = "password" | "signature";
 
 export type EncryptionHeaderParams = {
   ikm: IKMType;
-  dek_salt: Uint8Array;
+  dek_salt: Salt;
   // Input key material salt, always required and always SALT_SIZE bytes.
-  ikm_salt: Uint8Array;
+  ikm_salt: Salt;
 };
 
 export type EncryptionHeaderV1 = {
@@ -21,8 +22,8 @@ export type EncryptionHeaderV1 = {
   v: typeof EncryptionHeaderVersion.V1;
   // Method to generate the IKM
   ikm: IKMType;
-  dek_salt: Uint8Array;
-  ikm_salt: Uint8Array;
+  dek_salt: Salt;
+  ikm_salt: Salt;
 };
 
 function isIKMType(x: unknown): x is IKMType {
