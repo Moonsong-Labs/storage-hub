@@ -215,7 +215,7 @@ where
 
         for (file_key, file_metadata) in missing_or_incomplete {
             let indexer_db_pool = indexer_db_pool.clone();
-            let bucket_id = bucket_id.clone();
+            let bucket_id = bucket_id;
             let task = self.clone();
 
             join_set.spawn(async move {
@@ -406,7 +406,7 @@ where
             .file_download_manager
             .download_file(
                 file_metadata.clone(),
-                bucket_id.clone(),
+                bucket_id,
                 self.storage_hub_handler.file_transfer.clone(),
                 self.storage_hub_handler.file_storage.clone(),
             )

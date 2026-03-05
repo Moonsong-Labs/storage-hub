@@ -227,6 +227,28 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>;
 
+    /// Write a batch of chunks for `key` and return whether the file is complete.
+    ///
+    /// Default implementation writes chunks one-by-one using [`Self::write_chunk`].
+    /// Storage backends can override this to provide a more efficient batched path.
+    fn write_chunks_batched(
+        &mut self,
+        key: &HasherOutT<T>,
+        chunks: Vec<(ChunkId, Chunk)>,
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
+        let mut chunks_iter = chunks.into_iter();
+        let Some((first_chunk_id, first_data)) = chunks_iter.next() else {
+            return Ok(FileStorageWriteOutcome::FileIncomplete);
+        };
+
+        let mut last = self.write_chunk(key, &first_chunk_id, &first_data)?;
+        for (chunk_id, data) in chunks_iter {
+            last = self.write_chunk(key, &chunk_id, &data)?;
+        }
+
+        Ok(last)
+    }
+
     fn is_allowed(
         &self,
         key: &HasherOutT<T>,

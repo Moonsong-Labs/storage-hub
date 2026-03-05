@@ -4,6 +4,8 @@ use std::sync::{Arc, RwLock};
 use axum::body::Bytes;
 use tokio::sync::mpsc;
 
+type SessionMap = HashMap<String, mpsc::Sender<Result<Bytes, std::io::Error>>>;
+
 /// Manages active download sessions for streaming files from MSP nodes to clients.
 ///
 /// Each session maps a session ID to a channel sender, allowing the internal upload

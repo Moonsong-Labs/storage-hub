@@ -2,6 +2,7 @@ pub mod bsp_charge_fees;
 pub mod bsp_delete_file;
 pub mod bsp_download_file;
 pub mod bsp_move_bucket;
+pub mod bsp_stop_storing;
 pub mod bsp_submit_proof;
 pub mod bsp_upload_file;
 pub mod fisherman_process_batch_deletions;

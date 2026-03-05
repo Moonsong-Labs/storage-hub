@@ -18,6 +18,7 @@ workspace = true
 anyhow = { workspace = true }
 bigdecimal = { workspace = true }
 bincode = { workspace = true }
+bytes = { workspace = true }
 codec = { workspace = true }
 rocksdb = { workspace = true }
 scale-info = { workspace = true }
