@@ -3174,18 +3174,16 @@ where
         // Keep the GRANDPA notification service alive even when GRANDPA is disabled.
         // litep2p kills all P2P connections if any registered notification protocol's
         // service is dropped.
-        task_manager.spawn_handle().spawn(
-            "grandpa-notification-keepalive",
-            None,
-            async move {
+        task_manager
+            .spawn_handle()
+            .spawn("grandpa-notification-keepalive", None, async move {
                 let mut service = grandpa_notification_service;
                 loop {
                     if service.next_event().await.is_none() {
                         break;
                     }
                 }
-            },
-        );
+            });
     }
 
     if let Some(hwbench) = hwbench {
