@@ -821,6 +821,16 @@ pub type ReplicationTargetType = u32;
 parameter_types! {
     pub const BaseStorageRequestCreationDeposit: Balance = 1 * UNIT;
     pub const FileDeletionRequestCreationDeposit: Balance = 1 * UNIT;
+    /// Static upper bound for per-request BSP volunteers.
+    ///
+    /// Theoretical PoV maximum:
+    /// - `bsp_confirm_storing(n=10)` worst case gives `PoV = 330*M + 38,795`
+    /// - Normal-dispatch PoV budget is 3,932,160 bytes
+    /// - Solving yields `M_max = 11,798`
+    ///
+    /// Production value: `1,000` (~8.5% of the theoretical max). At `M = 1,000`,
+    /// `bsp_confirm_storing(10)` uses 368,795 bytes of PoV.
+    pub const MaxBspVolunteers: u32 = 1_000;
     pub const FileSystemStorageRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
     pub const FileSystemFileDeletionRequestHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::FileDeletionRequestHold);
 }
@@ -882,7 +892,7 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget;
     type MaxReplicationTarget =
         runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
-    type MaxBspVolunteers = runtime_params::dynamic_params::runtime_config::MaxBspVolunteers;
+    type MaxBspVolunteers = MaxBspVolunteers;
     type MaxMspRespondFileKeys = ConstU32<10>;
     type TickRangeToMaximumThreshold =
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
