@@ -52,7 +52,8 @@ describe("encryption types sanity check", () => {
 describe("DEK derivation sanity check", () => {
   it("derives a 32-byte DEK from password (IKM from password)", () => {
     const password = "correct horse battery staple";
-    const ikmRes = IKM.fromPassword(password);
+    const ikmSalt = Salt.fromBytes(hexToBytes("aa".repeat(32))).unwrap();
+    const ikmRes = IKM.fromPassword(password, ikmSalt);
     expect(ikmRes.ok).toBe(true);
     const ikm = ikmRes.unwrap();
 
@@ -68,7 +69,7 @@ describe("DEK derivation sanity check", () => {
     expect(equalBytes(dek1, dek2)).toBe(true);
 
     // Error path: password too short
-    const short = IKM.fromPassword("short");
+    const short = IKM.fromPassword("short", ikmSalt);
     expect(short.ok).toBe(false);
     expect(() => short.unwrap()).toThrow();
   });
@@ -175,7 +176,8 @@ describe("Generate DEK and base Nonce", () => {
 
   it("Generate DEK & Nonce from Password", async () => {
     // Normalize input
-    const ikm = IKM.fromPassword("User sets some really strong password").unwrap();
+    const ikmSalt = Salt.fromBytes(hexToBytes("66".repeat(32))).unwrap();
+    const ikm = IKM.fromPassword("User sets some really strong password", ikmSalt).unwrap();
     const salt = Salt.fromBytes(hexToBytes("44".repeat(32))).unwrap();
 
     // Compute DEK and Base nonce (salted HKDF)

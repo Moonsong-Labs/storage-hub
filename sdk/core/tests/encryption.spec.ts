@@ -4,7 +4,7 @@ import { blake2s } from "@noble/hashes/blake2.js";
 import { bytesToHex as bytesToHexHash } from "@noble/hashes/utils.js";
 
 import { decryptFile, encryptFile, generateEncryptionKey } from "../src/encryption.js";
-import { ENCRYPTION_CHUNK_SIZE } from "../src/constants.js";
+import { ENCRYPTION_CHUNK_SIZE } from "../src/encryption/consts.js";
 import { IKM } from "../src/encryption/types.js";
 
 import { hexToBytes, bytesToHex } from "@noble/ciphers/utils.js";
@@ -137,7 +137,7 @@ describe(
               if (hdr.ikm !== "password") {
                 throw new Error(`benchmark expected password header, got ${hdr.ikm}`);
               }
-              return IKM.fromPassword(password).unwrap();
+              return IKM.fromPassword(password, Salt.fromBytes(hdr.ikm_salt).unwrap()).unwrap();
             }
           });
           const decTime = performance.now() - decStart;
@@ -187,30 +187,35 @@ describe("E2E encryption / decryption", () => {
     const version = 1;
     const purpose = "In order to generate the encryption key, we need you to sign this message";
     const chainId = 181222;
-    const { message, challenge } = IKM.createEncryptionKeyMessage(
-      appName,
-      domain,
-      version,
-      purpose,
-      chainId,
-      account.address
-    );
-
-    console.log(`Message to sign: ${message}`);
+    let messageToSign = "";
+    let usedIkmSalt: Uint8Array | undefined;
     const { dek, baseNonce, header } = await generateEncryptionKey({
       kind: "signature",
       walletClient,
       account,
-      message,
-      challenge
+      createMessage: (ikm_salt) => {
+        usedIkmSalt = ikm_salt;
+        const { message } = IKM.createEncryptionKeyMessage(
+          appName,
+          domain,
+          version,
+          purpose,
+          chainId,
+          account.address,
+          ikm_salt
+        );
+        messageToSign = message;
+        return message;
+      }
     });
+    console.log(`Message to sign: ${messageToSign}`);
 
     // Quick sanity checks before proceeding to encryption/decryption.
     expect(dek.length).toBe(32);
     expect(baseNonce.bytes.length).toBe(12);
     expect(header.ikm).toBe("signature");
-    expect(header.salt.length).toBe(32);
-    expect(header.challenge?.length).toBe(32);
+    expect(header.dek_salt.length).toBe(32);
+    expect(header.ikm_salt.length).toBe(32);
 
     // ── Encrypt to a repo-local folder (easy to find) ────────────────
     const outDir = join(RESOURCE_DIR, "encrypted");
@@ -232,10 +237,14 @@ describe("E2E encryption / decryption", () => {
     const encryptedBytes = new Uint8Array(readFileSync(encryptedPath));
     const { header: parsedHeader, headerLength } = readEncryptionHeader(encryptedBytes);
     expect(parsedHeader.ikm).toBe("signature");
-    expect(Buffer.compare(Buffer.from(parsedHeader.salt), Buffer.from(header.salt))).toBe(0);
-    expect(Buffer.compare(Buffer.from(parsedHeader.challenge ?? []), Buffer.from(challenge))).toBe(
+    expect(Buffer.compare(Buffer.from(parsedHeader.dek_salt), Buffer.from(header.dek_salt))).toBe(
       0
     );
+    expect(usedIkmSalt).toBeDefined();
+    if (!usedIkmSalt) {
+      throw new Error("missing ikm_salt used for signature message");
+    }
+    expect(Buffer.compare(Buffer.from(parsedHeader.ikm_salt), Buffer.from(usedIkmSalt))).toBe(0);
     expect(headerLength).toBeGreaterThan(0);
     expect(encryptedBytes.length).toBeGreaterThan(headerLength);
 
@@ -250,10 +259,7 @@ describe("E2E encryption / decryption", () => {
       ) as unknown as WritableStream<Uint8Array>,
       getIkm: async (hdr) => {
         expect(hdr.ikm).toBe("signature");
-        expect(hdr.challenge?.length).toBe(32);
-        if (!hdr.challenge) {
-          throw new Error("missing challenge in signature header");
-        }
+        expect(hdr.ikm_salt.length).toBe(32);
         const { message: messageForDec } = IKM.createEncryptionKeyMessage(
           appName,
           domain,
@@ -261,9 +267,9 @@ describe("E2E encryption / decryption", () => {
           purpose,
           chainId,
           account.address,
-          hdr.challenge
+          hdr.ikm_salt
         );
-        // messageForDec is now derived purely from header.challenge
+        // messageForDec is now derived purely from header.ikm_salt
         const signature = await walletClient.signMessage({ account, message: messageForDec });
         return IKM.fromSignature(signature).unwrap();
       }
