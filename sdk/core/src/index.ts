@@ -17,7 +17,13 @@ export { blake2s_256 } from "./encryption/hash.js";
 export { IKM } from "./encryption/types.js";
 export { initWasm } from "./init.js";
 export type { FileInfo } from "./types.js";
-export { ensure0xPrefix, removeHexPrefix, hexToBytes, parseDate } from "./utils.js";
+export {
+  ensure0xPrefix,
+  removeHexPrefix,
+  assert0xString,
+  hexToBytes,
+  parseDate
+} from "./utils.js";
 export { WalletBase } from "./wallet/base.js";
 export { Eip1193Wallet } from "./wallet/eip1193.js";
 export { WalletError, type WalletErrorCode } from "./wallet/errors.js";

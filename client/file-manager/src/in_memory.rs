@@ -27,6 +27,59 @@ impl<T: TrieLayout + 'static> InMemoryFileDataTrie<T> {
 
         Self { root, memdb }
     }
+
+    /// Fast-path for inserting sequential chunks.
+    ///
+    /// This is intended for ingestion pipelines (e.g. backend uploads) where chunks are produced
+    /// sequentially and we want to avoid:
+    /// - cloning chunk data (`data.clone()`) per insert
+    /// - rebuilding a trie mutator for each chunk
+    ///
+    /// `start_chunk_index` is the index of `chunks[0]`, and the rest are assumed to follow
+    /// sequentially.
+    pub fn write_chunks_batched(
+        &mut self,
+        start_chunk_index: u64,
+        chunks: Vec<Chunk>,
+    ) -> Result<(), FileStorageWriteError> {
+        if chunks.is_empty() {
+            return Ok(());
+        }
+
+        let mut trie = if self.memdb.keys().is_empty() {
+            // If the database is empty, create a new trie.
+            TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build()
+        } else {
+            // If the database is not empty, build the trie from an existing root and memdb.
+            TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build()
+        };
+
+        for (offset, data) in chunks.into_iter().enumerate() {
+            let chunk_index = start_chunk_index
+                .checked_add(offset as u64)
+                .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
+            let chunk_id = ChunkId::new(chunk_index);
+
+            // Insert the encoded chunk with its ID into the file trie.
+            // We intentionally do NOT call `trie.contains(key)` here.
+            //
+            // This method is a fast-path for ingestion pipelines that *generate* chunk indices
+            // sequentially (e.g. chunk_index = 0..N). In that setup, duplicates should be
+            // impossible.
+            //
+            // Taking ownership of `data` also avoids the clone step per chunk.
+            let decoded_chunk = ChunkWithId { chunk_id, data };
+            let encoded_chunk = decoded_chunk.encode();
+
+            trie.insert(&chunk_id.as_trie_key(), &encoded_chunk)
+                .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
+        }
+
+        // dropping the trie automatically commits changes to the underlying db
+        drop(trie);
+
+        Ok(())
+    }
 }
 
 impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
@@ -199,11 +252,6 @@ where
             .as_str(),
         );
 
-        let stored_chunks = self.stored_chunks_count(file_key)?;
-        if metadata.chunks_count() != stored_chunks {
-            return Err(FileStorageError::IncompleteFile);
-        }
-
         if metadata.fingerprint() != file_data.get_root().as_ref() {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
@@ -239,6 +287,8 @@ where
         Ok(self.metadata.get(file_key).cloned())
     }
 
+    /// Completeness is determined solely by whether the trie root matches the file's
+    /// fingerprint (a Merkle-hash proof that all chunk data is present and correct).
     fn is_file_complete(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
         let metadata = self
             .metadata
@@ -253,11 +303,7 @@ where
             .as_str(),
         );
 
-        if metadata.fingerprint() != file_data.get_root().as_ref() {
-            return Ok(false);
-        }
-
-        Ok(metadata.chunks_count() == self.stored_chunks_count(key)?)
+        Ok(metadata.fingerprint() == file_data.get_root().as_ref())
     }
 
     fn insert_file(
@@ -276,7 +322,8 @@ where
             panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
         }
 
-        // Initialize chunk count to 0
+        // Initialize chunk count to 0. Unlike the RocksDB implementation, in-memory tries
+        // are not shared by fingerprint, so there is no dedup case to handle here.
         self.chunk_counts.insert(key, 0);
 
         let full_key = [metadata.bucket_id().as_slice(), key.as_ref()].concat();
@@ -750,6 +797,49 @@ mod tests {
             assert_eq!(chunk_ids[id], leaf.key);
             assert_eq!(chunks[id], leaf.data);
         }
+    }
+
+    #[test]
+    fn file_storage_write_chunks_batched_works() {
+        let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let mut expected_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            expected_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "batched-write".to_string().into_bytes(),
+            1024u64 * chunks.len() as u64,
+            expected_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+        let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
+        file_storage.insert_file(key, file_metadata).unwrap();
+
+        let empty = file_storage.write_chunks_batched(&key, Vec::new()).unwrap();
+        assert!(matches!(empty, FileStorageWriteOutcome::FileIncomplete));
+
+        let first = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[0], chunks[0].clone())])
+            .unwrap();
+        assert!(matches!(first, FileStorageWriteOutcome::FileIncomplete));
+
+        let second = file_storage
+            .write_chunks_batched(&key, vec![(chunk_ids[1], chunks[1].clone())])
+            .unwrap();
+        assert!(matches!(second, FileStorageWriteOutcome::FileComplete));
+
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 2);
     }
 
     #[test]

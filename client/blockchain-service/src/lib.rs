@@ -19,7 +19,7 @@ use sp_keystore::KeystorePtr;
 
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::types::StorageHubClient;
+use shc_common::types::{NodeRole, StorageHubClient};
 use shc_telemetry::MetricsLink;
 
 pub use self::{
@@ -32,12 +32,13 @@ pub async fn spawn_blockchain_service<FSH, Runtime>(
     config: BlockchainServiceConfig<Runtime>,
     client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     keystore: KeystorePtr,
-    rpc_handlers: Arc<RpcHandlers>,
+    rpc_handlers: Option<Arc<RpcHandlers>>,
     forest_storage_handler: FSH,
     rocksdb_root_path: impl Into<PathBuf>,
     notify_period: Option<u32>,
     capacity_config: Option<CapacityConfig<Runtime>>,
     maintenance_mode: bool,
+    node_role: NodeRole,
     metrics: MetricsLink,
 ) -> ActorHandle<BlockchainService<FSH, Runtime>>
 where
@@ -58,6 +59,7 @@ where
         notify_period,
         capacity_config.map(CapacityRequestQueue::new),
         maintenance_mode,
+        node_role,
         metrics,
     );
 

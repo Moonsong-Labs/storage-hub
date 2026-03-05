@@ -5,7 +5,10 @@ use std::{
 };
 
 use kvdb::KeyValueDB;
-use shc_common::{traits::StorageEnableRuntime, types::StorageProofsMerkleTrieLayout};
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{NodeRole, StorageProofsMerkleTrieLayout},
+};
 use shc_file_manager::{
     in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
 };
@@ -84,25 +87,43 @@ impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (FishermanRole, NoSt
 /// - [`BspProvider`]
 /// - [`MspProvider`]
 /// - [`UserRole`] (only for testing)
-pub trait ShRole {}
+pub trait ShRole {
+    fn role() -> NodeRole;
+}
 
 /// Backup Storage Provider (BSP) role. Implements the [`ShRole`] trait.
 pub struct BspProvider;
-impl ShRole for BspProvider {}
+impl ShRole for BspProvider {
+    fn role() -> NodeRole {
+        NodeRole::Bsp
+    }
+}
 
 /// Main Storage Provider (MSP) role. Implements the [`ShRole`] trait.
 pub struct MspProvider;
-impl ShRole for MspProvider {}
+impl ShRole for MspProvider {
+    fn role() -> NodeRole {
+        NodeRole::Msp
+    }
+}
 
 /// User role. Implements the [`ShRole`] trait.
 /// Only used for testing.
 pub struct UserRole;
-impl ShRole for UserRole {}
+impl ShRole for UserRole {
+    fn role() -> NodeRole {
+        NodeRole::User
+    }
+}
 
 /// Fisherman role. Implements the [`ShRole`] trait.
 /// Used for monitoring and processing file deletion requests.
 pub struct FishermanRole;
-impl ShRole for FishermanRole {}
+impl ShRole for FishermanRole {
+    fn role() -> NodeRole {
+        NodeRole::Fisherman
+    }
+}
 
 /// Storage layers supported by the StorageHub system.
 ///

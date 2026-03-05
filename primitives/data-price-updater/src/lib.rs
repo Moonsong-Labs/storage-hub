@@ -14,7 +14,7 @@ use core::{
 use shp_traits::{NumericalParam, UpdateStoragePrice};
 use sp_core::Get;
 use sp_runtime::{
-    traits::{One, Saturating},
+    traits::{One, Saturating, UniqueSaturatedInto},
     FixedPointNumber, FixedU128, Perbill,
 };
 
@@ -101,10 +101,18 @@ pub trait MostlyStablePriceIndexUpdaterConfig {
     type MinPrice: Get<Self::Price>;
     /// The factor that multiplies `(e ^ (sys_util - UpperThreshold) - 1)` for calculating the price when the
     /// system utilisation is above `UpperThreshold`.
-    type UpperExponentFactor: Get<u32>;
+    ///
+    /// Note: This factor must be in the same units as `Price` to ensure correct price adjustments.
+    /// For example, if `MostlyStablePrice` is `50 * NANOUNIT`, then `UpperExponentFactor` should also
+    /// be scaled by `NANOUNIT`.
+    type UpperExponentFactor: Get<Self::Price>;
     /// The factor that multiplies `(e ^ (LowerThreshold - sys_util) - 1)` for calculating the price when the
     /// system utilisation is below `LowerThreshold`.
-    type LowerExponentFactor: Get<u32>;
+    ///
+    /// Note: This factor must be in the same units as `Price` to ensure correct price adjustments.
+    /// For example, if `MostlyStablePrice` is `50 * NANOUNIT`, then `LowerExponentFactor` should also
+    /// be scaled by `NANOUNIT`.
+    type LowerExponentFactor: Get<Self::Price>;
 }
 
 impl<T> UpdateStoragePrice for MostlyStablePriceIndexUpdater<T>
@@ -133,9 +141,11 @@ where
             // Calculate the price based on the formula:
             // `price = stable_price - (e ^ (LowerThreshold - system_utilisation) - 1) * LowerExponentFactor`
             let exp_minus_one = exp_taylor_2.saturating_sub(One::one());
-            let lower_exponent_factor = T::LowerExponentFactor::get();
-            let addition_term =
-                exp_minus_one.saturating_mul(FixedU128::from_u32(lower_exponent_factor));
+            let lower_exponent_factor: u128 = T::LowerExponentFactor::get().unique_saturated_into();
+            // Convert the exponent factor to FixedU128 by multiplying with DIV to represent it as a fixed-point number.
+            let addition_term = exp_minus_one.saturating_mul(FixedU128::from_inner(
+                lower_exponent_factor.saturating_mul(FixedU128::DIV),
+            ));
             // Round the addition term and downcast it to a uint type like `u128`.
             let addition_term = addition_term
                 .round()
@@ -156,9 +166,11 @@ where
             // Calculate the price based on the formula:
             // `price = stable_price + (e ^ (system_utilisation - UpperThreshold) - 1) * UpperExponentFactor`
             let exp_minus_one = exp_taylor_2.saturating_sub(One::one());
-            let upper_exponent_factor = T::UpperExponentFactor::get();
-            let addition_term =
-                exp_minus_one.saturating_mul(FixedU128::from_u32(upper_exponent_factor));
+            let upper_exponent_factor: u128 = T::UpperExponentFactor::get().unique_saturated_into();
+            // Convert the exponent factor to FixedU128 by multiplying with DIV to represent it as a fixed-point number.
+            let addition_term = exp_minus_one.saturating_mul(FixedU128::from_inner(
+                upper_exponent_factor.saturating_mul(FixedU128::DIV),
+            ));
             // Round the addition term and downcast it to a uint type like `u128`.
             let addition_term = addition_term
                 .round()
@@ -200,9 +212,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use sp_core::{ConstU128, ConstU32};
+    use sp_core::ConstU128;
 
     use super::*;
+
+    // Test unit multiplier, simulates NANOUNIT = 1000
+    const TEST_UNIT: u128 = 1000;
 
     struct LowerThreshold;
     impl Get<Perbill> for LowerThreshold {
@@ -219,24 +234,29 @@ mod tests {
     }
 
     // Mock implementation of MostlyStablePriceIndexUpdaterConfig
+    // All values are scaled by TEST_UNIT (1000) to simulate NANOUNIT-based prices.
     struct MockConfig;
     impl MostlyStablePriceIndexUpdaterConfig for MockConfig {
         type Price = u128;
         type StorageDataUnit = u64;
-        type MostlyStablePrice = ConstU128<50>;
+        type MostlyStablePrice = ConstU128<{ 50 * TEST_UNIT }>; // 50_000
         type LowerThreshold = LowerThreshold; // 30%
         type UpperThreshold = UpperThreshold; // 95%
-        type MaxPrice = ConstU128<485>; // 50 + 8500 * (e ^ ( 1 - 0.95 ) - 1 ) ≈ 485.8, we set this to be slightly lower, to saturate.
-        type MinPrice = ConstU128<16>; // 50 - 100 * (e ^ ( 0.3 - 0 ) - 1 ) ≈ 15, we set this to be slightly higher, to saturate.
-        type UpperExponentFactor = ConstU32<8500>;
-        type LowerExponentFactor = ConstU32<100>;
+                                              // 50_000 + 8_500_000 * (e ^ ( 1 - 0.95 ) - 1 ) ≈ 485_858, we set this to be slightly lower, to saturate.
+        type MaxPrice = ConstU128<{ 485 * TEST_UNIT }>; // 485_000
+                                                        // 50_000 - 100_000 * (e ^ ( 0.3 - 0 ) - 1 ) ≈ 15_012, we set this to be slightly higher, to saturate.
+        type MinPrice = ConstU128<{ 16 * TEST_UNIT }>; // 16_000
+                                                       // Upper exponent factor scaled by TEST_UNIT: 8500 * 1000 = 8_500_000
+        type UpperExponentFactor = ConstU128<{ 8500 * TEST_UNIT }>;
+        // Lower exponent factor scaled by TEST_UNIT: 100 * 1000 = 100_000
+        type LowerExponentFactor = ConstU128<{ 100 * TEST_UNIT }>;
     }
 
     type TestPriceUpdater = MostlyStablePriceIndexUpdater<MockConfig>;
 
     #[test]
     fn test_stable_price_region() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
         let used_capacity = 6000u64;
         let total_capacity = 10000u64;
 
@@ -251,7 +271,7 @@ mod tests {
 
     #[test]
     fn test_upper_threshold() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
         let used_capacity = 9600u64;
         let total_capacity = 10000u64;
 
@@ -262,12 +282,15 @@ mod tests {
                 > <MockConfig as MostlyStablePriceIndexUpdaterConfig>::MostlyStablePrice::get(),
             "Price should increase above upper threshold"
         );
-        assert!(new_price <= 500u128, "Price should not exceed max price");
+        assert!(
+            new_price <= 500 * TEST_UNIT,
+            "Price should not exceed max price"
+        );
     }
 
     #[test]
     fn test_lower_threshold() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
         let used_capacity = 2900u64;
         let total_capacity = 10000u64;
 
@@ -278,12 +301,15 @@ mod tests {
                 < <MockConfig as MostlyStablePriceIndexUpdaterConfig>::MostlyStablePrice::get(),
             "Price should decrease below lower threshold"
         );
-        assert!(new_price >= 5u128, "Price should not go below min price");
+        assert!(
+            new_price >= 5 * TEST_UNIT,
+            "Price should not go below min price"
+        );
     }
 
     #[test]
     fn test_zero_utilisation() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
         let used_capacity = 0u64;
         let total_capacity = 10000u64;
 
@@ -298,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_full_utilisation() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
         let used_capacity = 10000u64;
         let total_capacity = 10000u64;
 
@@ -313,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_just_below_upper_threshold() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
         let used_capacity = 9499u64;
         let total_capacity = 10000u64;
 
@@ -328,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_just_above_lower_threshold() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
         let used_capacity = 3001u64;
         let total_capacity = 10000u64;
 
@@ -394,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_price_increase_rate() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
         let used_capacity_1 = 9600u64;
         let used_capacity_2 = 9800u64;
         let total_capacity = 10000u64;
@@ -425,7 +451,7 @@ mod tests {
 
     #[test]
     fn test_price_decrease_rate() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
         let used_capacity_1 = 2900u64;
         let used_capacity_2 = 2700u64;
         let total_capacity = 10000u64;
@@ -469,32 +495,42 @@ mod tests {
 
     #[test]
     fn test_function_continuity() {
-        let current_price = 50u128;
+        let current_price = 50 * TEST_UNIT;
+        let stable_price: u128 =
+            <MockConfig as MostlyStablePriceIndexUpdaterConfig>::MostlyStablePrice::get();
 
-        // System utilisation is barely below the threshold, so the price change should be negligible
+        // System utilisation is barely below the lower threshold, so the price change should be negligible.
+        // With scaled exponent factors, there will be a very small price adjustment (this is correct behavior).
         let used_capacity = 29999u64;
         let total_capacity = 100000u64;
 
         let new_price =
             TestPriceUpdater::update_storage_price(current_price, used_capacity, total_capacity);
 
-        assert_eq!(
-            new_price,
-            <MockConfig as MostlyStablePriceIndexUpdaterConfig>::MostlyStablePrice::get(),
-            "Price should remain stable"
+        // Price should be very close to stable price (within 0.2% tolerance).
+        // With properly scaled exponent factors, there will be small but correct price adjustments
+        // even at the threshold edges.
+        let tolerance = stable_price / 500; // 0.2%
+        assert!(
+            new_price >= stable_price.saturating_sub(tolerance)
+                && new_price <= stable_price.saturating_add(tolerance),
+            "Price should be very close to stable price when barely below lower threshold. Got: {}, Expected: {} (±{})",
+            new_price, stable_price, tolerance
         );
 
-        // System utilisation is barely above the threshold, so the price change should be negligible
+        // System utilisation is barely above the upper threshold, so the price change should be negligible.
         let used_capacity = 95001u64;
         let total_capacity = 100000u64;
 
         let new_price =
             TestPriceUpdater::update_storage_price(current_price, used_capacity, total_capacity);
 
-        assert_eq!(
-            new_price,
-            <MockConfig as MostlyStablePriceIndexUpdaterConfig>::MostlyStablePrice::get(),
-            "Price should remain stable"
+        // Price should be very close to stable price (within 0.2% tolerance)
+        assert!(
+            new_price >= stable_price.saturating_sub(tolerance)
+                && new_price <= stable_price.saturating_add(tolerance),
+            "Price should be very close to stable price when barely above upper threshold. Got: {}, Expected: {} (±{})",
+            new_price, stable_price, tolerance
         );
     }
 }

@@ -2391,8 +2391,8 @@ export default {
       MostlyStablePrice: "u128",
       MaxPrice: "u128",
       MinPrice: "u128",
-      UpperExponentFactor: "u32",
-      LowerExponentFactor: "u32",
+      UpperExponentFactor: "u128",
+      LowerExponentFactor: "u128",
       ZeroSizeBucketFixedRate: "u128",
       IdealUtilisationRate: "Perbill",
       DecayRate: "Perbill",
@@ -4326,9 +4326,9 @@ export default {
       MinPrice:
         "(ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice,Option<u128>)",
       UpperExponentFactor:
-        "(ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,Option<u32>)",
+        "(ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,Option<u128>)",
       LowerExponentFactor:
-        "(ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,Option<u32>)",
+        "(ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,Option<u128>)",
       ZeroSizeBucketFixedRate:
         "(ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate,Option<u128>)",
       IdealUtilisationRate:

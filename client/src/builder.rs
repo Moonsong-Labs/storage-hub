@@ -16,8 +16,8 @@ use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{
-    capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
-    BlockchainService,
+    capacity_manager::CapacityConfig, commands::BlockchainServiceCommandInterface,
+    handler::BlockchainServiceConfig, spawn_blockchain_service, BlockchainService,
 };
 use shc_common::{traits::StorageEnableRuntime, types::StorageHubClient};
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
@@ -59,7 +59,7 @@ where
 {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService<Runtime>>>,
-    blockchain:
+    pub blockchain:
         Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType<Runtime>>::FSH, Runtime>>>,
     fisherman: Option<ActorHandle<FishermanService<Runtime>>>,
     storage_path: Option<String>,
@@ -121,6 +121,8 @@ where
     /// Spawn the File Transfer Service.
     pub async fn with_file_transfer(
         &mut self,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
+        trusted_msps: Vec<shc_common::types::ProviderId<Runtime>>,
         file_transfer_request_receiver: Receiver<IncomingRequest>,
         file_transfer_request_protocol_name: ProtocolName,
         network: Arc<dyn NetworkService>,
@@ -132,6 +134,8 @@ where
             file_transfer_request_receiver,
             file_transfer_request_protocol_name,
             network,
+            client,
+            trusted_msps,
         )
         .await;
 
@@ -168,11 +172,11 @@ where
     ///
     /// Cannot be called before setting the Forest Storage Handler.
     /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
+    /// The RPC handlers will be set later via [`set_blockchain_rpc_handlers`](StorageHubBuilder::set_blockchain_rpc_handlers).
     pub async fn with_blockchain(
         &mut self,
         client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
-        rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,
         maintenance_mode: bool,
     ) -> &mut Self {
@@ -199,18 +203,31 @@ where
                 blockchain_service_config,
                 client.clone(),
                 keystore.clone(),
-                rpc_handlers.clone(),
+                None, // RPC handlers will be set later
                 forest_storage_handler,
                 rocksdb_root_path,
                 self.notify_period,
                 capacity_config,
                 maintenance_mode,
+                R::role(),
                 self.metrics.clone(),
             )
             .await;
 
         self.blockchain = Some(blockchain_service_handle);
         self
+    }
+
+    /// Set the RPC handlers for the Blockchain Service.
+    ///
+    /// This should be called after the RPC server has been initialized.
+    /// If the BlockchainService has been created via [`with_blockchain`](StorageHubBuilder::with_blockchain),
+    /// this will set the RPC handlers. Otherwise, it's a no-op.
+    pub async fn set_blockchain_rpc_handlers(&mut self, rpc_handlers: Arc<RpcHandlers>) {
+        if let Some(blockchain) = &self.blockchain {
+            blockchain.set_rpc_handlers(rpc_handlers).await;
+        }
+        // If the blockchain service doesn't exist, do nothing.
     }
 
     /// Spawn the trusted file transfer server if configured
@@ -258,6 +275,8 @@ where
                 .expect("Task spawner is not set."),
             client,
             fisherman_options.batch_interval_seconds,
+            fisherman_options.batch_cooldown_seconds,
+            fisherman_options.consecutive_no_work_batches_threshold,
             fisherman_options.batch_deletion_limit,
             self.metrics.clone(),
         )
@@ -307,6 +326,8 @@ where
     ///
     /// This method is meant to be called after the Storage Layer has been set up.
     /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
+    /// If the Blockchain Service has been created via [`with_blockchain`](StorageHubBuilder::with_blockchain),
+    /// it will be included in the RPC config.
     pub fn create_rpc_config(
         &self,
         keystore: KeystorePtr,
@@ -325,11 +346,12 @@ where
                 .expect("Forest Storage Handler not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
             keystore,
             config,
-						// TODO: Remove this if we stop using the FileTransferService as an event emitter for RPC calls
+            // TODO: Remove this if we stop using the FileTransferService as an event emitter for RPC calls
             self.file_transfer
                 .as_ref()
                 .expect("File Transfer not set.")
                 .clone(),
+            self.blockchain.clone(),
         )
     }
 
@@ -407,6 +429,10 @@ where
 
         if let Some(extrinsic_retry_timeout) = config.extrinsic_retry_timeout {
             blockchain_service_config.extrinsic_retry_timeout = extrinsic_retry_timeout;
+        }
+
+        if let Some(extrinsic_mortality) = config.extrinsic_mortality {
+            blockchain_service_config.extrinsic_mortality = extrinsic_mortality;
         }
 
         if let Some(check_for_pending_proofs_period) = config.check_for_pending_proofs_period {
@@ -904,6 +930,9 @@ impl Into<BspSubmitProofConfig> for BspSubmitProofOptions {
 pub struct BlockchainServiceOptions {
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: Option<u64>,
+    /// Mortality period for extrinsics in number of blocks.
+    /// Will be sanitized to a valid mortal era period.
+    pub extrinsic_mortality: Option<u32>,
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
     pub check_for_pending_proofs_period: Option<u32>,
     /// The peer ID of this node.
@@ -916,6 +945,9 @@ pub struct BlockchainServiceOptions {
     pub bsp_confirm_file_batch_size: Option<u32>,
     /// Maximum number of MSP respond storage requests to batch together.
     pub msp_respond_storage_batch_size: Option<u32>,
+    /// On blocks that are multiples of this number, check the local BSP stop-storing requests
+    /// against the on-chain state to ensure no stop-storing requests are missed.
+    pub check_stop_storing_requests_period: Option<u32>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
@@ -928,9 +960,25 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
         });
 
         let default_config = BlockchainServiceConfig::<Runtime>::default();
+        let check_stop_storing_requests_period = match self.check_stop_storing_requests_period {
+            Some(0) => {
+                warn!(
+                    "Invalid check_stop_storing_requests_period=0 provided; using default value {}",
+                    default_config
+                        .check_stop_storing_requests_period
+                        .saturated_into::<u32>()
+                );
+                default_config.check_stop_storing_requests_period
+            }
+            Some(v) => v.saturated_into(),
+            None => default_config.check_stop_storing_requests_period,
+        };
 
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
+            extrinsic_mortality: self
+                .extrinsic_mortality
+                .unwrap_or(default_config.extrinsic_mortality),
             check_for_pending_proofs_period: self
                 .check_for_pending_proofs_period
                 .unwrap_or_default()
@@ -944,6 +992,7 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
             msp_respond_storage_batch_size: self
                 .msp_respond_storage_batch_size
                 .unwrap_or(default_config.msp_respond_storage_batch_size),
+            check_stop_storing_requests_period,
         }
     }
 }
@@ -970,6 +1019,15 @@ pub struct FishermanOptions {
     pub database_url: String,
     /// Duration between batch deletion processing cycles (in seconds).
     pub batch_interval_seconds: u64,
+    /// Cooldown between batch deletion attempts (in seconds).
+    ///
+    /// This is used to avoid tight loops when there is continuous work.
+    /// Set to `0` to disable cooldown.
+    #[serde(default = "default_batch_cooldown_seconds")]
+    pub batch_cooldown_seconds: u64,
+    /// Number of consecutive no-work batches required before switching to the slower idle polling interval.
+    #[serde(default = "default_consecutive_no_work_batches_threshold")]
+    pub consecutive_no_work_batches_threshold: u8,
     /// Maximum number of files to process per batch deletion cycle.
     #[serde(default = "default_batch_deletion_limit")]
     pub batch_deletion_limit: u64,
@@ -982,9 +1040,22 @@ pub struct FishermanOptions {
     /// Ordering strategy for pending deletions.
     #[serde(default)]
     pub ordering: FileOrdering,
+    /// Configuration options for blockchain service.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blockchain_service: Option<BlockchainServiceOptions>,
 }
 
 /// Default value for batch deletion limit.
 fn default_batch_deletion_limit() -> u64 {
     1000
+}
+
+/// Default value for the consecutive no-work batches threshold.
+fn default_consecutive_no_work_batches_threshold() -> u8 {
+    4
+}
+
+/// Default value for batch cooldown (in seconds).
+fn default_batch_cooldown_seconds() -> u64 {
+    1
 }

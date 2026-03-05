@@ -1,6 +1,7 @@
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Deserializer};
 use shp_types::StorageDataUnit;
+use sp_core::H256;
 use std::{path::PathBuf, str::FromStr};
 
 use crate::command::ProviderOptions;
@@ -170,9 +171,25 @@ pub struct ProviderConfigurations {
     #[arg(long, default_value = "60")]
     pub extrinsic_retry_timeout: Option<u64>,
 
+    /// Mortality period for extrinsics in number of blocks.
+    ///
+    /// Determines how long a submitted transaction remains valid before expiring.
+    /// Must be a power of 2 between 4 and `BlockHashCount` (4096). Non-power-of-2 values
+    /// will be rounded up to the next valid power of 2. Lower values mean transactions
+    /// expire faster, which helps recover from stuck nonces after block reorgs, but also
+    /// reduces the window for a transaction to be included on-chain.
+    #[arg(long, value_name = "BLOCKS", default_value = "256", value_parser = clap::value_parser!(u32).range(4..))]
+    pub extrinsic_mortality: Option<u32>,
+
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
     #[arg(long, default_value = "4")]
     pub check_for_pending_proofs_period: Option<u32>,
+
+    /// On blocks that are multiples of this number, the blockchain service will
+    /// check the local BSP stop-storing requests against the on-chain state to ensure no
+    /// stop-storing requests are missed.
+    #[arg(long, value_name = "BLOCKS", default_value = "600", value_parser = clap::value_parser!(u32).range(1..))]
+    pub check_stop_storing_requests_period: Option<u32>,
 
     /// Enable MSP file distribution to BSPs (disabled by default unless set via config/CLI).
     /// Only applicable when running as an MSP provider.
@@ -415,6 +432,29 @@ pub struct ProviderConfigurations {
         default_value = "7070"
     )]
     pub trusted_file_transfer_server_port: Option<u16>,
+
+    /// Batch size in bytes used by MSP trusted upload ingestion (default: 2MB).
+    #[arg(
+        long,
+        value_name = "BYTES",
+        help_heading = "Trusted File Transfer Server Options",
+        default_value = "2097152",
+        value_parser = clap::value_parser!(u64).range(1..)
+    )]
+    pub trusted_file_transfer_batch_size_bytes: Option<u64>,
+
+    /// List of trusted MSP on-chain IDs allowed to request downloads from this BSP.
+    ///
+    /// This flag is only valid when running as a BSP provider.
+    ///
+    /// Format: comma-separated list of hex IDs, e.g. `0x…`.
+    #[arg(
+        long = "trusted-msps",
+        value_delimiter = ',',
+        value_name = "MSP_ID",
+        help_heading = "BSP Download Authorisation"
+    )]
+    pub trusted_msps: Vec<H256>,
 }
 
 impl ProviderConfigurations {
@@ -523,8 +563,19 @@ impl ProviderConfigurations {
             bs_changed = true;
         }
 
+        if let Some(extrinsic_mortality) = self.extrinsic_mortality {
+            bs_options.extrinsic_mortality = Some(extrinsic_mortality);
+            bs_changed = true;
+        }
+
         if let Some(check_for_pending_proofs_period) = self.check_for_pending_proofs_period {
             bs_options.check_for_pending_proofs_period = Some(check_for_pending_proofs_period);
+            bs_changed = true;
+        }
+
+        if let Some(check_stop_storing_requests_period) = self.check_stop_storing_requests_period {
+            bs_options.check_stop_storing_requests_period =
+                Some(check_stop_storing_requests_period);
             bs_changed = true;
         }
 
@@ -578,6 +629,8 @@ impl ProviderConfigurations {
             trusted_file_transfer_server: self.trusted_file_transfer_server,
             trusted_file_transfer_server_host: self.trusted_file_transfer_server_host.clone(),
             trusted_file_transfer_server_port: self.trusted_file_transfer_server_port,
+            trusted_file_transfer_batch_size_bytes: self.trusted_file_transfer_batch_size_bytes,
+            trusted_msps: self.trusted_msps.clone(),
         }
     }
 }
@@ -662,8 +715,22 @@ pub struct FishermanConfigurations {
     pub fisherman_database_url: Option<String>,
 
     /// Duration between batch deletion processing cycles (in seconds).
-    #[arg(long, default_value = "60", value_parser = clap::value_parser!(u64).range(1..))]
+    #[arg(long, default_value = "30", value_parser = clap::value_parser!(u64).range(1..))]
     pub fisherman_batch_interval_seconds: u64,
+
+    /// Cooldown between batch deletion attempts (in seconds).
+    ///
+    /// Set to `0` to disable cooldown.
+    #[arg(long, default_value = "1", value_parser = clap::value_parser!(u64).range(0..))]
+    pub fisherman_batch_cooldown_seconds: u64,
+
+    /// Number of consecutive no-work batches required before switching to the slower idle polling interval.
+    ///
+    /// The minimum value is 2 because there are two kinds of work: User and Incomplete.
+    /// If we set the value to 1, a non-work batch in one kind of work will trigger the idle poll interval
+    /// on the other kind of work.
+    #[arg(long, default_value = "4", value_parser = clap::value_parser!(u8).range(1..))]
+    pub fisherman_consecutive_no_work_batches_threshold: u8,
 
     /// Maximum number of files to process per batch deletion cycle.
     #[arg(long, default_value = "1000", value_parser = clap::value_parser!(u64).range(1..))]
@@ -697,6 +764,16 @@ pub struct FishermanConfigurations {
         help_heading = "Fisherman Strategy Options"
     )]
     pub fisherman_ttl_threshold_seconds: Option<u64>,
+
+    /// Mortality period for extrinsics in number of blocks.
+    ///
+    /// Determines how long a submitted transaction remains valid before expiring.
+    /// Must be a power of 2 between 4 and BlockHashCount (4096). Non-power-of-2 values
+    /// will be rounded to the nearest valid power of 2. Lower values mean transactions
+    /// expire faster, which helps recover from stuck nonces after block reorgs, but also
+    /// reduces the window for a transaction to be included.
+    #[arg(long, value_name = "BLOCKS", default_value = "256", value_parser = clap::value_parser!(u32).range(4..))]
+    pub fisherman_extrinsic_mortality: Option<u32>,
 }
 
 impl FishermanConfigurations {
@@ -717,16 +794,34 @@ impl FishermanConfigurations {
                 FishermanOrdering::Randomized => FileOrdering::Randomized,
             };
 
+            // Build blockchain_service options
+            let mut blockchain_service = None;
+            let mut bs_options = BlockchainServiceOptions::default();
+            let mut bs_changed = false;
+
+            if let Some(extrinsic_mortality) = self.fisherman_extrinsic_mortality {
+                bs_options.extrinsic_mortality = Some(extrinsic_mortality);
+                bs_changed = true;
+            }
+
+            if bs_changed {
+                blockchain_service = Some(bs_options);
+            }
+
             Some(FishermanOptions {
                 database_url: self
                     .fisherman_database_url
                     .clone()
                     .expect("Fisherman database URL is required"),
                 batch_interval_seconds: self.fisherman_batch_interval_seconds,
+                batch_cooldown_seconds: self.fisherman_batch_cooldown_seconds,
+                consecutive_no_work_batches_threshold: self
+                    .fisherman_consecutive_no_work_batches_threshold,
                 batch_deletion_limit: self.fisherman_batch_deletion_limit,
                 maintenance_mode,
                 filtering,
                 ordering,
+                blockchain_service,
             })
         } else {
             None
@@ -811,13 +906,14 @@ pub struct Cli {
     #[arg(long, conflicts_with_all = [
         "provider", "provider_type", "max_storage_capacity", "jump_capacity",
         "storage_layer", "storage_path", "extrinsic_retry_timeout",
-        "check_for_pending_proofs_period",
+        "check_for_pending_proofs_period", "check_stop_storing_requests_period",
         "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
         "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", "msp_database_url",
+        "trusted_file_transfer_batch_size_bytes",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
-        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts"
+        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts", "trusted_msps",
     ])]
     pub provider_config_file: Option<String>,
 

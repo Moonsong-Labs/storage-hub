@@ -445,22 +445,22 @@ export function FileManager({
           encryptionMode === 'password'
             ? await generateEncryptionKey({ kind: 'password', password: encryptionPassword })
             : (() => {
-                const { message, challenge } = IKM.createEncryptionKeyMessage(
-                  ENC_APP_NAME,
-                  ENC_DOMAIN,
-                  ENC_VERSION,
-                  ENC_PURPOSE,
-                  chainId,
-                  walletAddress as `0x${string}`
-                );
-                return generateEncryptionKey({
-                  kind: 'signature',
-                  walletClient: walletClient as WalletClient,
-                  account: walletAddress as `0x${string}`,
-                  message,
-                  challenge
-                });
-              })();
+              const { message, challenge } = IKM.createEncryptionKeyMessage(
+                ENC_APP_NAME,
+                ENC_DOMAIN,
+                ENC_VERSION,
+                ENC_PURPOSE,
+                chainId,
+                walletAddress as `0x${string}`
+              );
+              return generateEncryptionKey({
+                kind: 'signature',
+                walletClient: walletClient as WalletClient,
+                account: walletAddress as `0x${string}`,
+                message,
+                challenge
+              });
+            })();
         const keys = await keysPromise;
 
         setUploadState(prev => ({ ...prev, uploadProgress: 10 }));
@@ -610,8 +610,12 @@ export function FileManager({
       let uploadReceipt: UploadReceipt | undefined;
       try {
         // Upload file to MSP (use exact same pattern as sdk-precompiles line 245-251)
-        const fileBlob = uploadBlob; // upload the exact bytes we fingerprinted
-        const fileKeyHex = finalFileKey.toHex();
+        const fileBlob = await fileManager.getFileBlob(); // Get Blob like sdk-precompiles
+        const bucketIdHex = (
+          selectedBucketId.startsWith('0x') ? selectedBucketId : `0x${selectedBucketId}`
+        ) as `0x${string}`;
+        const fileKeyHex = finalFileKey.toHex() as `0x${string}`;
+        const ownerHex = walletAddress as `0x${string}`;
 
         await new Promise(resolve => setTimeout(resolve, 3000)); // Add a 3 second delay before uploading
 
@@ -620,10 +624,11 @@ export function FileManager({
         }
 
         uploadReceipt = await mspClient.files.uploadFile(
-          selectedBucketId,
+          bucketIdHex,
           fileKeyHex,
           fileBlob,
-          walletAddress,
+          fingerprint.toHex() as `0x${string}`,
+          ownerHex,
           fileLocation
         );
 
@@ -935,7 +940,7 @@ export function FileManager({
 
     try {
       // Retrieve file info from MSP to build the on-chain delete request
-      const info = await mspClient.files.getFileInfo(bucketId, fileKey);
+      const info = await mspClient.files.getFileInfo(to0x(bucketId), fileKey);
 
       const coreInfo: CoreFileInfo = {
         fileKey: to0x(info.fileKey),

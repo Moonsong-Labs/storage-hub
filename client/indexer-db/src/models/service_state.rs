@@ -5,7 +5,7 @@ use diesel_async::RunQueryDsl;
 use crate::{schema::service_state, DbConnection};
 
 /// A single record table that holds the state/metadata of the indexer service.
-#[derive(Debug, Queryable, Insertable, Selectable)]
+#[derive(Debug, Clone, Queryable, Insertable, Selectable)]
 #[diesel(table_name = service_state)]
 pub struct ServiceState {
     pub id: i32,

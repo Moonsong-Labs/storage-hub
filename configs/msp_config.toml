@@ -28,6 +28,8 @@ trusted_file_transfer_server = true
 trusted_file_transfer_server_host = "127.0.0.1"
 # Port for trusted file transfer HTTP server (default: 7070)
 trusted_file_transfer_server_port = 7070
+# Batch size in bytes used by trusted upload ingestion (default: 2MB)
+trusted_file_transfer_batch_size_bytes = 2097152
 # Maximum number of forest storage instances to keep open simultaneously (default: 512)
 # With RocksDB's default of 512 open files per instance, this results in ~262K max file descriptors.
 max_open_forests = 512
@@ -47,6 +49,10 @@ max_tip = 100.0
 # Configuration for the Blockchain Service
 [provider.blockchain_service]
 extrinsic_retry_timeout = 60
+# Mortality period for extrinsics in number of blocks (default: 256, ~25 min at 6s blocks).
+# Lower values mean faster recovery from stuck nonces after block reorgs.
+# Should be a power of 2 between 4 and `BlockHashCount` (4096).
+extrinsic_mortality = 256
 # When true, the MSP will distribute accepted files to volunteering BSPs
 enable_msp_distribute_files = true
 # Maximum number of MSP respond storage requests to batch together (default: 20)

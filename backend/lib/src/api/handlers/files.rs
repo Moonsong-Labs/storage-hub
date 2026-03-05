@@ -3,7 +3,7 @@
 use axum::{
     body::{Body, Bytes},
     extract::{Path, State},
-    http::StatusCode,
+    http::{header, HeaderValue, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -84,12 +84,7 @@ pub async fn internal_upload_by_key(
             }
             Err(e) => {
                 tracing::error!("Stream error: {:?}", e);
-                let _ = tx
-                    .send(Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        e.to_string(),
-                    )))
-                    .await;
+                let _ = tx.send(Err(std::io::Error::other(e.to_string()))).await;
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Stream error".to_string(),
@@ -155,12 +150,25 @@ pub async fn download_by_key(
     let file_location = String::from_utf8_lossy(file_metadata.location()).to_string();
     let filename = file_location
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or(&file_key)
         .to_string();
 
+    // Set an explicit Content-Type so browsers/clients can preview files correctly.
+    //
+    // We don't currently persist a MIME type in our file metadata / DB schema, so the best
+    // lightweight server-side option is to infer it from the filename extension (e.g. ".pdf" ->
+    // "application/pdf", ".jpg" -> "image/jpeg"). If the extension is missing/unknown we fall
+    // back to "application/octet-stream" (generic binary), which preserves the current behavior.
+    let content_type = mime_guess::from_path(&filename).first_or_octet_stream();
+
     let stream = ReceiverStream::new(rx);
-    let file_stream_resp = FileStream::new(stream).file_name(filename).into_response();
+    let mut file_stream_resp = FileStream::new(stream).file_name(filename).into_response();
+    file_stream_resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(content_type.as_ref())
+            .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+    );
 
     Ok(file_stream_resp)
 }
@@ -213,7 +221,7 @@ pub async fn upload_file(
     let _upload_guard = services
         .upload_sessions
         .start_upload(file_key.clone())
-        .map_err(|e| Error::BadRequest(e))?;
+        .map_err(Error::BadRequest)?;
 
     // Extract from the request the file data stream and file metadata.
     let mut file_data_stream: Option<Field> = None;

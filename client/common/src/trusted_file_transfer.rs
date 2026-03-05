@@ -1,4 +1,5 @@
-use crate::types::{ChunkId, FILE_CHUNK_SIZE};
+use crate::types::{Chunk, ChunkId, FILE_CHUNK_SIZE};
+use bytes::BytesMut;
 
 pub const CHUNK_ID_SIZE: usize = 8; // sizeof(u64)
 
@@ -10,13 +11,20 @@ pub fn encode_chunk_with_id(chunk_id: ChunkId, chunk_data: &[u8]) -> Vec<u8> {
     encoded
 }
 
-/// Gets next chunk from buffer. If cap_at_file_chunk_size is set to true,
-/// it will get FILE_CHUNK_SIZE as data size, else it will use the remainder
-/// of the buffer (used for last chunk when data is not a multiple of FILE_CHUNK_SIZE).
+/// Reads the next chunk record from a `BytesMut` buffer in O(1) time.
+///
+/// This avoids `Vec::drain(..)` shifting costs and is suitable for high-throughput streaming.
+///
+/// Wire format:
+/// `[ChunkId: 8 bytes (u64, little-endian)][Chunk data: N bytes]...`
+///
+/// If `cap_at_file_chunk_size` is set to true, it will read `FILE_CHUNK_SIZE` bytes of data.
+/// Otherwise it will read the remainder of the buffer (used for the last chunk when data is not a
+/// multiple of `FILE_CHUNK_SIZE`).
 pub fn read_chunk_with_id_from_buffer(
-    buffer: &mut Vec<u8>,
+    buffer: &mut BytesMut,
     cap_at_file_chunk_size: bool,
-) -> anyhow::Result<(ChunkId, Vec<u8>)> {
+) -> anyhow::Result<(ChunkId, Chunk)> {
     let min_data_size: usize = if cap_at_file_chunk_size {
         FILE_CHUNK_SIZE as usize
     } else {
@@ -31,9 +39,9 @@ pub fn read_chunk_with_id_from_buffer(
         ));
     }
 
-    let chunk_id_bytes: [u8; CHUNK_ID_SIZE] = buffer
-        .drain(..CHUNK_ID_SIZE)
-        .collect::<Vec<_>>()
+    let chunk_id_bytes = buffer.split_to(CHUNK_ID_SIZE);
+    let chunk_id_bytes: [u8; CHUNK_ID_SIZE] = chunk_id_bytes
+        .as_ref()
         .try_into()
         .map_err(|_| anyhow::anyhow!("Failed to parse chunk ID"))?;
     let chunk_id_value = u64::from_le_bytes(chunk_id_bytes);
@@ -41,9 +49,10 @@ pub fn read_chunk_with_id_from_buffer(
 
     let chunk_data = if cap_at_file_chunk_size {
         let size = FILE_CHUNK_SIZE as usize;
-        buffer.drain(..size).collect()
+        buffer.split_to(size).to_vec()
     } else {
-        std::mem::take(buffer)
+        buffer.split().to_vec()
     };
+
     Ok((chunk_id, chunk_data))
 }

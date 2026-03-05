@@ -13,6 +13,7 @@
 pub mod commands;
 pub mod events;
 pub mod handler;
+pub mod types;
 
 use std::sync::Arc;
 
@@ -25,6 +26,7 @@ pub use self::commands::{
 };
 pub use self::handler::{FileKeyChange, FileKeyOperation, FishermanService};
 pub use events::{BatchFileDeletions, FileDeletionTarget, FishermanServiceEventBusProvider};
+pub use types::{BatchDeletionPermitGuard, BatchDeletionPermitReleased};
 
 /// Spawn the fisherman service as an actor
 ///
@@ -34,6 +36,8 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
     client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     batch_interval_seconds: u64,
+    batch_cooldown_seconds: u64,
+    consecutive_no_work_batches_threshold: u8,
     batch_deletion_limit: u64,
     metrics: MetricsLink,
 ) -> ActorHandle<FishermanService<Runtime>> {
@@ -46,6 +50,8 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     let fisherman_service = FishermanService::new(
         client,
         batch_interval_seconds,
+        batch_cooldown_seconds,
+        consecutive_no_work_batches_threshold,
         batch_deletion_limit,
         metrics,
     );

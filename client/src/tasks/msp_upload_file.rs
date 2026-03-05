@@ -860,15 +860,6 @@ where
         &mut self,
         event: ProcessMspRespondStoringRequest<Runtime>,
     ) -> anyhow::Result<String> {
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
-
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
@@ -1120,12 +1111,6 @@ where
                 self.handle_extrinsic_submission_failure(&all_file_keys)
                     .await;
 
-                // Release the forest root write lock before returning error
-                self.storage_hub_handler
-                    .blockchain
-                    .release_forest_root_write_lock(forest_root_write_tx)
-                    .await?;
-
                 return Err(e);
             }
             Ok(Some(events)) => {
@@ -1134,12 +1119,6 @@ where
                     .await
                 {
                     error!(target: LOG_TARGET, "Failed to handle extrinsic dispatch result: {:?}", err);
-                    // Release the forest root write lock before returning error
-                    self.storage_hub_handler
-                        .blockchain
-                        .release_forest_root_write_lock(forest_root_write_tx)
-                        .await?;
-
                     return Err(err);
                 }
             }
@@ -1165,12 +1144,6 @@ where
                 drop(write_fs);
             }
         }
-
-        // Release the forest root write "lock" and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await?;
 
         Ok(format!(
             "Processed ProcessMspRespondStoringRequest for MSP [{:x}]",
@@ -1495,12 +1468,9 @@ where
                 match decode_module_error::<Runtime>(module_error) {
                     Ok(decoded) => Some(decoded),
                     Err(e) => {
-                        error!(
-                            target: LOG_TARGET,
-                            "Failed to decode module error: {:?}",
-                            e
-                        );
-                        return Err(anyhow!("Failed to decode module error: {:?}", e));
+                        let err_msg = format!("Failed to decode module error. This likely indicates a breaking change in a possible runtime upgrade since a new error variant was encountered and cannot be decoded. Underlying error: {:?}", e);
+                        error!(target: LOG_TARGET, "{}", err_msg);
+                        return Err(anyhow!(err_msg));
                     }
                 }
             }

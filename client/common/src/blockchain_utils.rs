@@ -19,6 +19,8 @@ use crate::{
     },
 };
 
+const LOG_TARGET: &str = "blockchain-utils";
+
 lazy_static! {
     // Static and lazily initialised `events_storage_key`
     static ref EVENTS_STORAGE_KEY: Vec<u8> = {
@@ -51,20 +53,41 @@ pub enum ModuleErrorDecodeError {
 
 /// Get the events storage element for a given block.
 ///
-/// TODO: Version-aware decoding should be implemented in the client layer in the future to support
-/// processing blocks from different runtime versions.
+/// # Event Decoding Strategy
+///
+/// This function decodes `System.Events` locally using the compiled runtime's event types.
+/// If a runtime upgrade introduces breaking event changes, the SCALE decode will fail and return an error.
+///
+/// To ensure backward compatibility for historical blocks, Runtimes which implement StorageHub pallets _**must**_ have fixed pallet indices via `#[runtime::pallet_index(N)]`
+/// but this cannot be enforced at the StorageHub pallet level.
+///
+/// StorageHub pallets do enforce the following constraints on event and error variants:
+/// - Fixed variant indices via `#[codec(index = N)]`
+/// - Append-only variants (breaking changes use `Vx` suffixes)
+///
+/// # Errors
+///
+/// Returns `EventsRetrievalError::DecodeError` if the events payload exists but cannot be
+/// SCALE-decoded into `StorageHubEventsVec<Runtime>`. A decode failure likely indicates an
+/// incompatible runtime upgrade and the client may need to be upgraded.
 pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
     client: &Arc<StorageHubClient<Runtime::RuntimeApi>>,
     block_hash: &H256,
 ) -> Result<StorageHubEventsVec<Runtime>, EventsRetrievalError> {
     // Get the events storage.
-    let raw_storage_opt = client.storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?;
+    let raw_storage = client
+        .storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?
+        .ok_or(EventsRetrievalError::StorageNotFound)?;
 
-    // Decode the events storage.
-    raw_storage_opt
-        .map(|raw_storage| StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()))
-        .transpose()?
-        .ok_or(EventsRetrievalError::StorageNotFound)
+    StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()).map_err(|e| {
+        error!(
+            target: LOG_TARGET,
+            "Failed to decode System.Events at block {:?}. This likely indicates a breaking change in a possible runtime upgrade since an event was likely 
+            added or even worse an existing event was removed or updated and cannot be decoded. Underlying error: {:?}",
+            block_hash, e
+        );
+        EventsRetrievalError::DecodeError(e)
+    })
 }
 
 /// Decode a [`sp_runtime::ModuleError`] into [`StorageEnableErrors`].
@@ -72,14 +95,12 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
 /// This uses compile-time pallet indices to determine which pallet the error originated from,
 /// then decodes the error bytes into the appropriate error variant.
 ///
-/// # Note
+/// # Error Decoding Strategy
 ///
-/// This uses compile-time pallet indices. For version-aware decoding (processing blocks
-/// from different runtime versions), metadata-based decoding should be implemented in
-/// the client layer in the future.
+/// This function relies on fixed pallet indices and error variant indices to
+/// decode the error into the appropriate error variant.
 ///
-/// TODO: Version-aware decoding should be implemented in the client layer in the future to support
-/// processing blocks from different runtime versions.
+/// If a runtime upgrade changes the ordering of error variants or removes an error variant, decoding will fail.
 pub fn decode_module_error<Runtime: StorageEnableRuntime>(
     module_error: sp_runtime::ModuleError,
 ) -> Result<StorageEnableErrors<Runtime>, ModuleErrorDecodeError> {
@@ -190,12 +211,12 @@ pub fn convert_raw_multiaddress_to_multiaddr(raw_multiaddr: &[u8]) -> Option<Mul
         Ok(s) => match Multiaddr::from_str(s) {
             Ok(multiaddr) => Some(multiaddr),
             Err(e) => {
-                error!("Failed to parse Multiaddress from string: {:?}", e);
+                error!(target: LOG_TARGET, "Failed to parse Multiaddress from string: {:?}", e);
                 None
             }
         },
         Err(e) => {
-            error!("Failed to parse Multiaddress from bytes: {:?}", e);
+            error!(target: LOG_TARGET, "Failed to parse Multiaddress from bytes: {:?}", e);
             None
         }
     }

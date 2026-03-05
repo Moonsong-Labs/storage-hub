@@ -25,7 +25,9 @@ import {
  * - Events: `StorageRequestRevoked`, `IncompleteStorageRequest`, `BspFileDeletionsCompleted`, `BucketFileDeletionsCompleted`
  * - Verifies: Incomplete storage cleanup, forest root updates
  *
- * Batch interval: 5 seconds (test config), 60 seconds (default)
+ * Scheduling notes:
+ * - These tests assume a short fisherman poll interval in the test network config (5 seconds).
+ * - Default `--fisherman-batch-interval-seconds` is 30s.
  */
 await describeMspNet(
   "Fisherman Batch File Deletion",

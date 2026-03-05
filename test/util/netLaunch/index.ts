@@ -160,6 +160,10 @@ export class NetworkLauncher {
       }
     }
 
+    // Always allow the primary BSP to accept download requests from the main MSP in tests.
+    // We only set this for the main BSP ("sh-bsp"), not for bspTwo/bspThree created later via addBsp.
+    composeYaml.services["sh-bsp"].command.push(`--trusted-msps=${DUMMY_MSP_ID}`);
+
     // Configure fisherman service
     if (!this.config.fisherman || this.type !== "fullnet") {
       if (composeYaml.services["sh-fisherman"]) {
@@ -921,6 +925,7 @@ export class NetworkLauncher {
     // One BSP will be down, two more will be up.
     const runtimeTypeArgs =
       this.config.runtimeType === "solochain" ? ["--chain=solochain-evm-dev"] : [];
+    const logLevelArgs = this.config.logLevel ? [`-l${this.config.logLevel}`] : [];
     const { containerName: bspDownContainerName, rpcPort: bspDownRpcPort } = await addBsp(
       api,
       api.accounts.bspDownKey,
@@ -931,10 +936,10 @@ export class NetworkLauncher {
         bspId: ShConsts.BSP_DOWN_ID,
         bspStartingWeight: this.config.capacity,
         extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-        additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs]
+        additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
-    const { rpcPort: bspTwoRpcPort } = await addBsp(
+    const { containerName: bspTwoContainerName, rpcPort: bspTwoRpcPort } = await addBsp(
       api,
       api.accounts.bspTwoKey,
       api.accounts.sudo,
@@ -944,10 +949,10 @@ export class NetworkLauncher {
         bspId: ShConsts.BSP_TWO_ID,
         bspStartingWeight: this.config.capacity,
         extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-        additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs]
+        additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
-    const { rpcPort: bspThreeRpcPort } = await addBsp(
+    const { containerName: bspThreeContainerName, rpcPort: bspThreeRpcPort } = await addBsp(
       api,
       api.accounts.bspThreeKey,
       api.accounts.sudo,
@@ -957,7 +962,7 @@ export class NetworkLauncher {
         bspId: ShConsts.BSP_THREE_ID,
         bspStartingWeight: this.config.capacity,
         extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-        additionalArgs: ["--keystore-path=/keystore/bsp-three", ...runtimeTypeArgs]
+        additionalArgs: ["--keystore-path=/keystore/bsp-three", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
 
@@ -973,6 +978,25 @@ export class NetworkLauncher {
     await api.wait.nodeCatchUpToChainTip(bspDownApi);
     await api.wait.nodeCatchUpToChainTip(bspTwoApi);
     await api.wait.nodeCatchUpToChainTip(bspThreeApi);
+
+    // Wait for RPC handlers to be available and passed to the blockchain service
+    await bspDownApi.docker.waitForLog({
+      containerName: bspDownContainerName,
+      searchString: "✅ RPC handlers set for BlockchainService",
+      timeout: 15000
+    });
+
+    await bspTwoApi.docker.waitForLog({
+      containerName: bspTwoContainerName,
+      searchString: "✅ RPC handlers set for BlockchainService",
+      timeout: 15000
+    });
+
+    await bspThreeApi.docker.waitForLog({
+      containerName: bspThreeContainerName,
+      searchString: "✅ RPC handlers set for BlockchainService",
+      timeout: 15000
+    });
 
     await bspTwoApi.disconnect();
     await bspThreeApi.disconnect();
@@ -1032,6 +1056,13 @@ export class NetworkLauncher {
 
     await using bspApi = await launchedNetwork.getApi("sh-bsp");
 
+    // Wait for RPC handlers to be available and passed to the blockchain service
+    await bspApi.docker.waitForLog({
+      containerName: "storage-hub-sh-bsp-1",
+      searchString: "✅ RPC handlers set for BlockchainService",
+      timeout: 15000
+    });
+
     // Wait for network to be in sync
     await bspApi.docker.waitForLog({
       containerName: "storage-hub-sh-bsp-1",
@@ -1054,12 +1085,6 @@ export class NetworkLauncher {
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     await using userApi = await launchedNetwork.getApi("sh-user");
-
-    await userApi.docker.waitForLog({
-      containerName: "storage-hub-sh-user-1",
-      searchString: "💤 Idle",
-      timeout: 15000
-    });
 
     await launchedNetwork.preFundAccounts(userApi);
     await launchedNetwork.setupBsp(userApi, userApi.accounts.bspKey.address, multiAddressBsp);
@@ -1103,6 +1128,21 @@ export class NetworkLauncher {
         if (verbose) {
           console.log(`Adding msp ${service} with address ${multiAddressMsp} and id ${mspId}`);
         }
+
+        // Wait for RPC handlers to be available and passed to the blockchain service
+        await userApi.docker.waitForLog({
+          containerName: mspContainerName,
+          searchString: "✅ RPC handlers set for BlockchainService",
+          timeout: 15000
+        });
+
+        // Wait for network to be in sync
+        await userApi.docker.waitForLog({
+          containerName: mspContainerName,
+          searchString: "💤 Idle",
+          timeout: 15000
+        });
+
         await launchedNetwork.setupMsp(userApi, mspAddress, multiAddressMsp, mspId);
       }
     }

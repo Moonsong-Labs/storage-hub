@@ -564,8 +564,8 @@ export default {
       MostlyStablePrice: "u128",
       MaxPrice: "u128",
       MinPrice: "u128",
-      UpperExponentFactor: "u32",
-      LowerExponentFactor: "u32",
+      UpperExponentFactor: "u128",
+      LowerExponentFactor: "u128",
       ZeroSizeBucketFixedRate: "u128",
       IdealUtilisationRate: "Perbill",
       DecayRate: "Perbill",
@@ -2217,9 +2217,9 @@ export default {
       MinPrice:
         "(ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice,Option<u128>)",
       UpperExponentFactor:
-        "(ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,Option<u32>)",
+        "(ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,Option<u128>)",
       LowerExponentFactor:
-        "(ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,Option<u32>)",
+        "(ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,Option<u128>)",
       ZeroSizeBucketFixedRate:
         "(ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate,Option<u128>)",
       IdealUtilisationRate:

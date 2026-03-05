@@ -1,6 +1,6 @@
 [package]
 name = "shc-blockchain-service-db"
-version = "0.3.0"
+version = "0.4.0"
 description = "StorageHub Blockchain Service DB (pending tx coordination for multi-instance)."
 homepage = { workspace = true }
 license = { workspace = true }

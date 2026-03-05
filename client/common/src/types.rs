@@ -14,7 +14,7 @@ use std::{
 ///
 /// let keys = vec![H256::zero(), H256::repeat_byte(0xff)];
 /// println!("File keys: [{}]", keys.display_hex_list());
-/// // Output: File keys: [0x0000...0000, 0xffff...ffff]
+/// // Output: File keys: [0x0000..0000, 0xffff..ffff]
 /// ```
 pub trait DisplayHexListExt {
     fn display_hex_list(&self) -> String;
@@ -23,7 +23,7 @@ pub trait DisplayHexListExt {
 impl<T: LowerHex> DisplayHexListExt for [T] {
     fn display_hex_list(&self) -> String {
         self.iter()
-            .map(|k| format!("{:x}", k))
+            .map(|k| format!("{:#x}", k))
             .collect::<Vec<_>>()
             .join(", ")
     }
@@ -40,6 +40,21 @@ use sp_runtime::{generic, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 use trie_db::TrieLayout;
+
+/// The role of this node in the StorageHub network.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeRole {
+    Bsp,
+    Msp,
+    Fisherman,
+    User,
+}
+
+impl NodeRole {
+    pub fn is_provider(&self) -> bool {
+        matches!(self, NodeRole::Bsp | NodeRole::Msp)
+    }
+}
 
 /// Size of each batch in bytes (2 MiB)
 /// This is the maximum size of a batch of chunks that can be uploaded in a single call
@@ -126,6 +141,8 @@ pub type PeerId<Runtime> = pallet_file_system::types::PeerId<Runtime>;
 pub type OffchainSignature<Runtime> = pallet_file_system::types::OffchainSignatureFor<Runtime>;
 pub type StorageRequestMetadata<Runtime> =
     pallet_file_system::types::StorageRequestMetadata<Runtime>;
+pub type PendingStopStoringRequest<Runtime> =
+    pallet_file_system::types::PendingStopStoringRequest<Runtime>;
 pub type IncompleteStorageRequestMetadata<Runtime> =
     pallet_file_system::types::IncompleteStorageRequestMetadata<Runtime>;
 pub type MaxBatchConfirmStorageRequests<Runtime> =

@@ -1,7 +1,7 @@
 [package]
 name = "shc-rpc"
 description = "RPCs for the StorageHub client."
-version = "0.3.0"
+version = "0.4.0"
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
@@ -52,6 +52,7 @@ pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 shc-actors-framework = { workspace = true }
+shc-blockchain-service = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-file-transfer-service = { workspace = true }

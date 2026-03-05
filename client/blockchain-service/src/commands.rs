@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
+use sc_service::RpcHandlers;
 use shc_common::{
     blockchain_utils::decode_module_error,
     traits::{KeyTypeOperations, StorageEnableRuntime},
@@ -39,10 +42,11 @@ use crate::{
     handler::BlockchainService,
     transaction_manager::wait_for_transaction_status,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest,
-        FileKeyStatusUpdate, MinimalBlockInfo, RespondStorageRequest, RetryStrategy,
-        SendExtrinsicOptions, StatusToWait, StopStoringForInsolventUserRequest, SubmitProofRequest,
-        SubmittedExtrinsicInfo, WatchTransactionError,
+        ConfirmBspStopStoringRequest, ConfirmStoringRequest, Extrinsic, ExtrinsicResult,
+        FileDeletionRequest, FileKeyStatusUpdate, MinimalBlockInfo, RequestBspStopStoringRequest,
+        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
+        StopStoringForInsolventUserRequest, SubmitProofRequest, SubmittedExtrinsicInfo,
+        WatchTransactionError,
     },
 };
 
@@ -165,8 +169,12 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QuerySlashAmountPerMaxFileSize,
     #[command(success_type = Option<MainStorageProviderId<Runtime>>, error_type = QueryMspIdOfBucketIdError)]
     QueryMspIdOfBucketId { bucket_id: BucketId<Runtime> },
-    ReleaseForestRootWriteLock {
-        forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
+    #[command(success_type = BlockNumber<Runtime>, error_type = ApiError)]
+    QueryMinWaitForStopStoring,
+    #[command(success_type = bool, error_type = ApiError)]
+    HasPendingStopStoringRequest {
+        bsp_id: BackupStorageProviderId<Runtime>,
+        file_key: FileKey,
     },
     QueueFileDeletionRequest {
         request: FileDeletionRequest<Runtime>,
@@ -197,22 +205,9 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueryPendingStorageRequests {
         maybe_file_keys: Option<Vec<FileKey>>,
     },
-    /// Query pending BSP confirm storage requests.
-    ///
-    /// Takes a list of confirm storing requests and returns only file keys where the BSP
-    /// has volunteered but not yet confirmed storing.
-    ///
-    /// Pre-filters requests with pending volunteer transactions (not yet on-chain) and
-    /// re-queues them for later processing.
-    ///
-    /// Internally calls the runtime API `query_pending_bsp_confirm_storage_requests` to filter out:
-    /// - File keys where the BSP has already confirmed storing
-    /// - File keys where the BSP is not a volunteer
-    /// - File keys where the storage request doesn't exist
-    #[command(success_type = Vec<FileKey>)]
-    QueryPendingBspConfirmStorageRequests {
-        confirm_storing_requests: Vec<ConfirmStoringRequest<Runtime>>,
-    },
+    /// Query the maximum amount of storage requests that can be confirmed by a BSP in one batch.
+    #[command(success_type = u32)]
+    QueryMaxBatchConfirmStorageRequests,
     /// Add a file key to pending volunteer tracking.
     ///
     /// Called before submitting a volunteer tx to track that the volunteer is pending.
@@ -242,6 +237,48 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// - After extrinsic submission failures (may be transient)
     #[command(mode = "FireAndForget")]
     RemoveFileKeyStatus { file_key: FileKey },
+    /// Queue a request to stop storing a file for a BSP.
+    ///
+    /// This command is called by the RPC to initiate the BSP stop storing process.
+    /// The request will be queued and processed when the forest root write lock
+    /// is available, ensuring atomic proof generation and submission.
+    #[command(success_type = ())]
+    QueueBspRequestStopStoring {
+        request: RequestBspStopStoringRequest<Runtime>,
+    },
+    /// Queue a confirm stop storing request for a BSP.
+    ///
+    /// This command is called when the on-chain `BspRequestedToStopStoring` event is detected.
+    /// The request will be queued and processed when the confirm_after_tick is reached
+    /// and the forest root write lock is available.
+    #[command(success_type = ())]
+    QueueBspConfirmStopStoring {
+        request: ConfirmBspStopStoringRequest<Runtime>,
+    },
+    /// Set the RPC handlers for the BlockchainService.
+    ///
+    /// This command must be called after the RPC server has been initialized to provide
+    /// the BlockchainService with the RPC handlers needed to submit extrinsics. Otherwise,
+    /// extrinsic submission will fail.
+    #[command(mode = "FireAndForget")]
+    SetRpcHandlers { rpc_handlers: Arc<RpcHandlers> },
+    /// Pop up to N storage requests pending confirmation from the pending queue.
+    ///
+    /// Returns the items without filtering so the task is responsible for filtering stale requests.
+    /// Items are removed from the queue so the task is responsible for re-queuing them if needed.
+    #[command(success_type = Vec<ConfirmStoringRequest<Runtime>>)]
+    PopConfirmStoringRequests { count: u32 },
+    /// Filter confirm storing requests without re-queuing pending volunteer requests.
+    ///
+    /// Takes a list of confirm storing requests and returns two lists:
+    /// - First: Requests ready for confirmation (BSP has volunteered but not yet confirmed)
+    /// - Second: Requests with pending volunteer transactions (not yet on-chain)
+    ///
+    /// This command does NOT re-queue pending volunteer requests.
+    #[command(success_type = (Vec<ConfirmStoringRequest<Runtime>>, Vec<ConfirmStoringRequest<Runtime>>))]
+    FilterConfirmStoringRequests {
+        requests: Vec<ConfirmStoringRequest<Runtime>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -350,7 +387,7 @@ where
                             // Try to decode module errors to get human-readable error names
                             let error_description = match &dispatch_error {
                                 DispatchError::Module(module_error) => {
-                                    match decode_module_error::<Runtime>(module_error.clone()) {
+                                    match decode_module_error::<Runtime>(*module_error) {
                                         Ok(decoded) => format!("{:?}", decoded),
                                         Err(_) => format!("{:?}", dispatch_error),
                                     }
