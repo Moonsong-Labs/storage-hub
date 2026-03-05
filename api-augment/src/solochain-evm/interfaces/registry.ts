@@ -104,12 +104,6 @@ import type {
   PalletGrandpaEvent,
   PalletGrandpaStoredPendingChange,
   PalletGrandpaStoredState,
-  PalletMigrationsActiveCursor,
-  PalletMigrationsCall,
-  PalletMigrationsError,
-  PalletMigrationsEvent,
-  PalletMigrationsHistoricCleanupSelector,
-  PalletMigrationsMigrationCursor,
   PalletNftsAttributeDeposit,
   PalletNftsAttributeNamespace,
   PalletNftsCall,
@@ -361,12 +355,6 @@ declare module "@polkadot/types/types/registry" {
     PalletGrandpaEvent: PalletGrandpaEvent;
     PalletGrandpaStoredPendingChange: PalletGrandpaStoredPendingChange;
     PalletGrandpaStoredState: PalletGrandpaStoredState;
-    PalletMigrationsActiveCursor: PalletMigrationsActiveCursor;
-    PalletMigrationsCall: PalletMigrationsCall;
-    PalletMigrationsError: PalletMigrationsError;
-    PalletMigrationsEvent: PalletMigrationsEvent;
-    PalletMigrationsHistoricCleanupSelector: PalletMigrationsHistoricCleanupSelector;
-    PalletMigrationsMigrationCursor: PalletMigrationsMigrationCursor;
     PalletNftsAttributeDeposit: PalletNftsAttributeDeposit;
     PalletNftsAttributeNamespace: PalletNftsAttributeNamespace;
     PalletNftsCall: PalletNftsCall;
