@@ -6,7 +6,6 @@ use sc_client_api::HeaderBackend;
 use sc_network_types::PeerId;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_core::Get;
 use sp_runtime::traits::Block as BlockT;
 
 use pallet_file_system_runtime_api::FileSystemApi;
@@ -17,8 +16,8 @@ use shc_common::{
     traits::StorageEnableRuntime,
     typed_store::CFDequeAPI,
     types::{
-        BackupStorageProviderId, BlockHash, BlockNumber, BucketId, DefaultMerkleRoot, FileKey,
-        MainStorageProviderId, ProviderId, StorageEnableEvents, TrieMutation,
+        BackupStorageProviderId, BlockHash, BlockNumber, BucketId, FileKey, MainStorageProviderId,
+        ProviderId, StorageEnableEvents, TrieMutation,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -119,19 +118,15 @@ where
     /// Handles the initial sync of a MSP, after coming out of syncing mode.
     ///
     /// At this point, mutations have already been applied during sync via
-    /// `process_msp_sync_mutations`, so we:
-    /// 1. Verify all bucket forest roots match the on-chain roots
-    /// 2. Emit pending storage requests
+    /// `process_msp_sync_mutations`, so we emit pending storage requests.
     pub(crate) async fn msp_initial_sync(
         &mut self,
         block_hash: Runtime::Hash,
         msp_id: ProviderId<Runtime>,
     ) {
-        // Verify all bucket forest roots match their on-chain roots
-        self.verify_msp_bucket_roots(&block_hash, &msp_id).await;
-
         // Emit pending storage requests
-        self.handle_pending_storage_requests(&block_hash, msp_id);
+        self.handle_pending_storage_requests(&block_hash, msp_id)
+            .await;
     }
 
     /// Initialises the block processing flow for a MSP.
@@ -268,7 +263,8 @@ where
         };
 
         // Monitor for new pending storage requests
-        self.handle_pending_storage_requests(block_hash, managed_msp_id);
+        self.handle_pending_storage_requests(block_hash, managed_msp_id)
+            .await;
 
         // Distribute files to BSPs
         self.spawn_distribute_file_to_bsps_tasks(block_hash, managed_msp_id);
@@ -298,6 +294,10 @@ where
                 },
             ) => {
                 if msp_id == managed_msp_id {
+                    if let Some(ManagedProvider::Msp(h)) = &mut self.maybe_managed_provider {
+                        // Remove the bucket from the verification map since this MSP is no longer managing it
+                        h.verified_buckets.remove(&bucket_id);
+                    }
                     self.emit(FinalisedMspStoppedStoringBucket {
                         msp_id,
                         owner,
@@ -313,6 +313,10 @@ where
                 },
             ) => {
                 if msp_id == managed_msp_id {
+                    if let Some(ManagedProvider::Msp(h)) = &mut self.maybe_managed_provider {
+                        // Remove the bucket from the verification map since this MSP is no longer managing it
+                        h.verified_buckets.remove(&bucket_id);
+                    }
                     self.emit(FinalisedMspStopStoringBucketInsolventUser { msp_id, bucket_id })
                 }
             }
@@ -328,6 +332,10 @@ where
                 // of a reorg.
                 if let Some(old_msp_id) = old_msp_id {
                     if managed_msp_id == old_msp_id {
+                        if let Some(ManagedProvider::Msp(h)) = &mut self.maybe_managed_provider {
+                            // Remove the bucket from the verification map since this MSP is no longer managing it
+                            h.verified_buckets.remove(&bucket_id);
+                        }
                         self.emit(FinalisedBucketMovedAway {
                             bucket_id,
                             old_msp_id,
@@ -666,6 +674,14 @@ where
             if !self.validate_bucket_mutations_for_msp(block_hash, managed_msp_id, &bucket_id) {
                 trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. Skipping mutations applied event.", bucket_id, managed_msp_id);
                 return;
+            }
+
+            // Lazily verify bucket forest root on first access after boot.
+            // We verify against `old_root` (the expected root before this mutation) since
+            // the local forest hasn't had this mutation applied yet.
+            if self.caught_up {
+                self.ensure_bucket_forest_verified(&bucket_id, old_root)
+                    .await;
             }
 
             info!(target: LOG_TARGET, "🪾 Applying mutations to bucket [0x{:x}]", bucket_id);
@@ -1039,122 +1055,61 @@ where
         }
     }
 
-    /// Verifies that all MSP bucket forest roots match the on-chain roots.
+    /// Lazily verifies the local forest root for a bucket against an expected root.
     ///
-    /// This is a sanity check after coming out of sync to ensure mutations were
-    /// correctly applied during the sync process.
+    /// Called on first access to a bucket after boot. If the bucket was already
+    /// verified this is a no-op (O(1) set lookup).
     ///
-    /// If a forest doesn't exist locally, it checks that it should be an empty bucket. This is because a user could have
-    /// created a bucket during the downtime, and since the MSP didn't confirm any storage request for it, no mutations
-    /// were applied and as such the forest storage was not created previously during the initial sync.
+    /// - Root matches: adds bucket to `verified_buckets` and emits `CheckBucketFileStorage`
+    ///   so the file storage self-healing task can run.
+    /// - Root mismatch: logs an error. Does NOT emit `CheckBucketFileStorage` because the
+    ///   local forest is incorrect and cannot be used as a reference for file storage healing.
     ///
-    /// TODO: A bucket could have been unassigned from this MSP if a user requested to move it to another MSP.
-    /// We should handle this by deleting the bucket's forest storage and cleaning up the file storage from
-    /// the file keys of that bucket.
-    async fn verify_msp_bucket_roots(
+    /// **Must only be called after the node is caught up** (`self.caught_up == true`).
+    async fn ensure_bucket_forest_verified(
         &mut self,
-        block_hash: &Runtime::Hash,
-        msp_id: &ProviderId<Runtime>,
+        bucket_id: &BucketId<Runtime>,
+        expected_root: shc_common::types::ForestRoot<Runtime>,
     ) {
-        // Get all buckets managed by this MSP
-        //! DANGER: This runtime API call is extremely expensive, as it iterates over all buckets in the system.
-        let buckets = match self
-            .client
-            .runtime_api()
-            .query_buckets_for_msp(*block_hash, msp_id)
-        {
-            Ok(Ok(buckets)) => buckets,
-            Ok(Err(e)) => {
-                error!(target: LOG_TARGET, "Failed to query buckets for MSP during root verification: {:?}", e);
+        // Already verified, so nothing to do.
+        if let Some(ManagedProvider::Msp(h)) = &self.maybe_managed_provider {
+            if h.verified_buckets.contains(bucket_id) {
                 return;
             }
+        }
+
+        // Get the bucket's local forest root.
+        let forest_key = bucket_id.as_ref().to_vec().into();
+        let local_root = match self.forest_storage_handler.get_or_create(&forest_key).await {
+            Ok(fs) => fs.read().await.root(),
             Err(e) => {
-                error!(target: LOG_TARGET, "Runtime API call failed for query_buckets_for_msp: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to get or create forest for bucket [0x{:x}]: {:?}",
+                    bucket_id, e
+                );
                 return;
             }
         };
 
-        if buckets.is_empty() {
-            info!(target: LOG_TARGET, "✅ MSP has no buckets to verify after sync");
-            return;
-        }
-
-        let mut mismatches = 0;
-        let mut verified = 0;
-        let mut missing = 0;
-
-        for bucket_id in buckets {
-            let forest_key = bucket_id.as_ref().to_vec();
-
-            // Get the local root of the bucket.
-            // Not having the bucket is valid, so long as the bucket on-chain is empty,
-            // i.e. it's on-chain root is the default root.
-            let maybe_local_root = match self
-                .forest_storage_handler
-                .get(&forest_key.clone().into())
-                .await
-            {
-                Some(fs) => Some(fs.read().await.root()),
-                None => None,
-            };
-
-            // Get the on-chain root of the bucket
-            let onchain_root = match self
-                .client
-                .runtime_api()
-                .query_bucket_root(*block_hash, &bucket_id)
-            {
-                Ok(Ok(root)) => root,
-                Ok(Err(e)) => {
-                    error!(target: LOG_TARGET, "Failed to query bucket root for [0x{:x}]: {:?}", bucket_id, e);
-                    continue;
-                }
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Runtime API call failed for query_bucket_root [0x{:x}]: {:?}", bucket_id, e);
-                    continue;
-                }
-            };
-
-            // Compare the roots
-            match maybe_local_root {
-                // Failure Case: Local forest exists and its root does not match the on-chain root.
-                Some(local_root) if local_root != onchain_root => {
-                    error!(target: LOG_TARGET, "❌ CRITICAL: Bucket [0x{:x}] root mismatch after sync! Local: [0x{:x}], On-chain: [0x{:x}]", bucket_id, local_root, onchain_root);
-                    mismatches += 1;
-                }
-                // Failure Case: Local forest does not exist and the on-chain root is not the default root (bucket is not empty)
-                None if onchain_root != DefaultMerkleRoot::<Runtime>::get() => {
-                    error!(target: LOG_TARGET, "❌ CRITICAL: Bucket [0x{:x}] forest storage not found locally after sync, and on-chain root is not the default root (bucket is not empty). On-chain root: [0x{:x}]", bucket_id, onchain_root);
-                    missing += 1;
-                }
-                // Success Case: Local forest exists and its root matches the on-chain root.
-                Some(_) => {
-                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] root verified: [0x{:x}]", bucket_id, onchain_root);
-                    verified += 1;
-
-                    // In this case, we emit a `CheckBucketFileStorage` event to the MSP task to check that the files in
-                    // this bucket's forest have their full data in the file storage, and recover them if necessary.
-                    self.emit(CheckBucketFileStorage { bucket_id });
-                }
-                // Success Case: Local forest does not exist and the on-chain root is the default root (bucket is empty).
-                None => {
-                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] root verified: [0x{:x}]", bucket_id, onchain_root);
-                    verified += 1;
-                }
-            }
-        }
-
-        if mismatches > 0 || missing > 0 {
-            error!(
-                    target: LOG_TARGET,
-                    "❌ MSP bucket verification after sync: {} verified, {} mismatches, {} missing",
-                    verified, mismatches, missing
+        if local_root == expected_root {
+            debug!(
+                target: LOG_TARGET,
+                "Bucket [0x{:x}] forest root verified: [{:?}]",
+                bucket_id, local_root
             );
+            if let Some(ManagedProvider::Msp(h)) = &mut self.maybe_managed_provider {
+                h.verified_buckets.insert(*bucket_id);
+            }
+            self.emit(CheckBucketFileStorage {
+                bucket_id: *bucket_id,
+            });
         } else {
-            info!(
-                    target: LOG_TARGET,
-                    "✅ All {} MSP bucket roots verified after sync",
-                    verified
+            error!(
+                target: LOG_TARGET,
+                "❌ CRITICAL: Bucket [0x{:x}] forest root MISMATCH: local={:?} expected={:?}. \
+                 Skipping file storage healing for this bucket.",
+                bucket_id, local_root, expected_root
             );
         }
     }
@@ -1162,22 +1117,20 @@ where
     /// Process pending storage requests for the given MSP.
     ///
     /// Queries pending storage requests and emits a [`NewStorageRequest`] event for file keys
-    /// that are not already being processed. This mirrors the pattern used by
-    /// [`distribute_file_to_bsps`] with [`files_to_distribute`].
+    /// that are not already being processed. Also triggers lazy bucket forest verification
+    /// for each unique bucket encountered, which emits `CheckBucketFileStorage` on first
+    /// access if the forest root matches on-chain.
     ///
     /// ## Status Tracking
     ///
-    /// The status tracking prevents duplicate processing:
-    /// - File keys with any status (`Processing`, `Abandoned`) are skipped
-    /// - New file keys are marked as `Processing` when emitting the event
-    /// - Tasks update statuses via commands as they process requests
-    /// - Stale entries are cleaned up when file keys no longer appear in pending requests
+    /// - File keys with any status (`Processing`, `Abandoned`) are skipped.
+    /// - New file keys are marked as `Processing` when emitting the event.
+    /// - Tasks update statuses via commands as they process requests.
     ///
     /// ## Cleanup
     ///
     /// Stale entries (file keys no longer in pending requests) are removed regardless of status.
-    /// If a file key is not pending, its storage request lifecycle is complete.
-    fn handle_pending_storage_requests(
+    async fn handle_pending_storage_requests(
         &mut self,
         current_block_hash: &Runtime::Hash,
         msp_id: MainStorageProviderId<Runtime>,
@@ -1273,6 +1226,31 @@ where
         if requests_to_emit.is_empty() {
             trace!(target: LOG_TARGET, "No new storage requests to process (all already have status)");
             return;
+        }
+
+        // Lazily verify forest root for each unique bucket on first access.
+        // This triggers `CheckBucketFileStorage` for matching buckets.
+        if self.caught_up {
+            let unique_buckets: HashSet<BucketId<Runtime>> =
+                requests_to_emit.iter().map(|r| r.bucket_id).collect();
+            for bucket_id in &unique_buckets {
+                match self
+                    .client
+                    .runtime_api()
+                    .query_bucket_root(*current_block_hash, bucket_id)
+                {
+                    Ok(Ok(onchain_root)) => {
+                        self.ensure_bucket_forest_verified(bucket_id, onchain_root)
+                            .await;
+                    }
+                    Ok(Err(e)) => {
+                        error!(target: LOG_TARGET, "Failed to query bucket root for [0x{:x}]: {:?}", bucket_id, e);
+                    }
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Runtime API call failed for query_bucket_root [0x{:x}]: {:?}", bucket_id, e);
+                    }
+                }
+            }
         }
 
         info!(
