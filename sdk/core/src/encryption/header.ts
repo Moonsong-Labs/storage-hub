@@ -1,4 +1,4 @@
-import { SALT_SIZE } from "../constants.js";
+import { SALT_SIZE } from "./consts.js";
 import type { Salt } from "./types.js";
 
 export const EncryptionHeaderVersion = {
