@@ -38,7 +38,11 @@ function createChunkAAD(headerHash: Uint8Array, chunkIndex: number, kind: number
   const aad = new Uint8Array(CHUNK_AAD_SIZE_BYTES);
   aad[0] = CHUNK_AAD_VERSION;
   aad[1] = kind;
-  new DataView(aad.buffer, aad.byteOffset, aad.byteLength).setBigUint64(2, BigInt(chunkIndex), false);
+  new DataView(aad.buffer, aad.byteOffset, aad.byteLength).setBigUint64(
+    2,
+    BigInt(chunkIndex),
+    false
+  );
   aad.set(headerHash, 10);
   return aad;
 }
@@ -59,7 +63,10 @@ function createCommitPayload(totalPlaintextBytes: number, totalChunkCount: numbe
   return payload;
 }
 
-function parseCommitPayload(payload: Uint8Array): { totalPlaintextBytes: number; totalChunkCount: number } {
+function parseCommitPayload(payload: Uint8Array): {
+  totalPlaintextBytes: number;
+  totalChunkCount: number;
+} {
   if (payload.length !== COMMIT_PLAINTEXT_SIZE_BYTES) {
     throw new Error(
       `decryptFile: invalid commit payload size (expected ${COMMIT_PLAINTEXT_SIZE_BYTES}, got ${payload.length})`
@@ -86,6 +93,10 @@ function parseCommitPayload(payload: Uint8Array): { totalPlaintextBytes: number;
     totalPlaintextBytes: Number(totalPlaintextBytesBig),
     totalChunkCount: Number(totalChunkCountBig)
   };
+}
+
+function isInvalidAeadTagError(err: unknown): boolean {
+  return err instanceof Error && err.message.toLowerCase().includes("invalid tag");
 }
 
 /**
@@ -407,9 +418,7 @@ export type DecryptFileParams = {
   onProgress?: (p: DecryptFileProgress) => void;
 };
 
-async function readHeaderFromStream(
-  reader: ReadableStreamDefaultReader<Uint8Array>
-): Promise<{
+async function readHeaderFromStream(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<{
   header: EncryptionHeaderParams;
   headerLength: number;
   headerBytes: Uint8Array;
@@ -485,7 +494,18 @@ async function decryptAndWriteChunk({
   const nonce = baseNonce.getNonce(chunkIndex).unwrap();
   const aad = createChunkAAD(headerHash, chunkIndex, CHUNK_AAD_KIND_DATA);
   const cipher = chacha20poly1305(dek, nonce, aad);
-  const plaintext = cipher.decrypt(ciphertext);
+  let plaintext: Uint8Array;
+  try {
+    plaintext = cipher.decrypt(ciphertext);
+  } catch (err) {
+    if (isInvalidAeadTagError(err)) {
+      throw new Error(
+        `decryptFile: authentication failed at chunk ${chunkIndex} (invalid AEAD tag). ` +
+          "Likely wrong password/signature or tampered ciphertext."
+      );
+    }
+    throw err;
+  }
 
   await writer.ready;
   await writer.write(plaintext);
@@ -587,7 +607,18 @@ export async function decryptFile({
     // Decrypt and verify authenticated totals commit trailer.
     const commitNonce = baseNonce.getNonce(chunkIndex).unwrap();
     const commitAad = createChunkAAD(headerHash, chunkIndex, CHUNK_AAD_KIND_COMMIT);
-    const commitPayload = chacha20poly1305(dek, commitNonce, commitAad).decrypt(commitCiphertext);
+    let commitPayload: Uint8Array;
+    try {
+      commitPayload = chacha20poly1305(dek, commitNonce, commitAad).decrypt(commitCiphertext);
+    } catch (err) {
+      if (isInvalidAeadTagError(err)) {
+        throw new Error(
+          "decryptFile: authentication failed at commit trailer (invalid AEAD tag). " +
+            "Likely wrong password/signature or tampered ciphertext."
+        );
+      }
+      throw err;
+    }
     const commit = parseCommitPayload(commitPayload);
     if (commit.totalChunkCount !== totalChunkCount) {
       throw new Error(

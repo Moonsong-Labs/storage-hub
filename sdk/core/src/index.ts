@@ -6,7 +6,13 @@ export { FileOperation, ReplicationLevel } from "./evm/types.js";
 export { FileManager } from "./file-manager.js";
 export { HttpClient, type HttpClientConfig, type RequestOptions } from "./http/HttpClient.js";
 export { decryptFile, encryptFile, generateEncryptionKey } from "./encryption.js";
-export { createEncryptionHeader, readEncryptionHeader } from "./encryption/cbor.js";
+export {
+  createEncryptionHeader,
+  readEncryptionHeader,
+  isEncrypted,
+  type EncryptedFileState,
+  type EncryptedFileInfo
+} from "./encryption/cbor.js";
 export { blake2s_256 } from "./encryption/hash.js";
 export { IKM } from "./encryption/types.js";
 export { initWasm } from "./init.js";

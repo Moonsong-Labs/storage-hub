@@ -4,13 +4,7 @@ import { hexToBytes, utf8ToBytes } from "@noble/ciphers/utils.js";
 import { isHexString, removeHexPrefix } from "../utils.js";
 import { bytesToHex, randomBytes } from "@noble/hashes/utils.js";
 import { argon2id } from "@noble/hashes/argon2.js";
-import {
-  IKM_SIZE,
-  DEK_SIZE,
-  MIN_PASSWORD_SIZE,
-  NONCE_SIZE,
-  SALT_SIZE
-} from "./consts.js";
+import { IKM_SIZE, DEK_SIZE, MIN_PASSWORD_SIZE, NONCE_SIZE, SALT_SIZE } from "./consts.js";
 
 import { hkdf } from "@noble/hashes/hkdf.js";
 
