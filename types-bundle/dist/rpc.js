@@ -298,6 +298,16 @@ export const rpcDefinitions = {
                 }
             ],
             type: "BspStopStoringFileResult"
+        },
+        triggerBucketFileStorageHealing: {
+            description: "Trigger file storage healing for the given bucket.",
+            params: [
+                {
+                    name: "bucket_id",
+                    type: "H256"
+                }
+            ],
+            type: "()"
         }
     }
 };

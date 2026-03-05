@@ -696,6 +696,10 @@ declare module '@polkadot/rpc-core/types/jsonrpc' {
              * Save a file from the local storage to the disk.
              **/
             saveFileToDisk: AugmentedRpc<(file_key: H256 | string | Uint8Array, file_path: Text | string) => Observable<SaveFileToDisk>>;
+            /**
+             * Trigger file storage healing for the given bucket.
+             **/
+            triggerBucketFileStorageHealing: AugmentedRpc<(bucket_id: H256 | string | Uint8Array) => Observable<ITuple<[]>>>;
         };
         syncstate: {
             /**
