@@ -1066,7 +1066,7 @@ where
     ///   local forest is incorrect and cannot be used as a reference for file storage healing.
     ///
     /// **Must only be called after the node is caught up** (`self.caught_up == true`).
-    async fn ensure_bucket_forest_verified(
+    pub(crate) async fn ensure_bucket_forest_verified(
         &mut self,
         bucket_id: &BucketId<Runtime>,
         expected_root: shc_common::types::ForestRoot<Runtime>,

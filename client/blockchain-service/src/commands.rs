@@ -117,6 +117,8 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueueMspRespondStorageRequest {
         request: RespondStorageRequest<Runtime>,
     },
+    #[command(mode = "FireAndForget")]
+    TriggerBucketFileStorageHealing { bucket_id: BucketId<Runtime> },
     QueueStopStoringForInsolventUserRequest {
         request: StopStoringForInsolventUserRequest<Runtime>,
     },

@@ -1183,6 +1183,27 @@ where
                         );
                     }
                 }
+                BlockchainServiceCommand::TriggerBucketFileStorageHealing { bucket_id } => {
+                    if self.caught_up {
+                        let best_hash = self.client.info().best_hash;
+                        match self
+                            .client
+                            .runtime_api()
+                            .query_bucket_root(best_hash, &bucket_id)
+                        {
+                            Ok(Ok(onchain_root)) => {
+                                self.ensure_bucket_forest_verified(&bucket_id, onchain_root)
+                                    .await;
+                            }
+                            Ok(Err(e)) => {
+                                error!(target: LOG_TARGET, "Failed to query bucket root for [0x{:x}]: {:?}", bucket_id, e);
+                            }
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Runtime API call failed for query_bucket_root [0x{:x}]: {:?}", bucket_id, e);
+                            }
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
                     // The strategy used here is to replace the request in the set with the new request.
                     // This is because new insertions are presumed to be done with more information of the current state of the chain,
