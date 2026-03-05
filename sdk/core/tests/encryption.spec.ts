@@ -187,7 +187,6 @@ describe("E2E encryption / decryption", () => {
     const version = 1;
     const purpose = "In order to generate the encryption key, we need you to sign this message";
     const chainId = 181222;
-    let messageToSign = "";
     let usedIkmSalt: Uint8Array | undefined;
     const { dek, baseNonce, header } = await generateEncryptionKey({
       kind: "signature",
@@ -204,7 +203,6 @@ describe("E2E encryption / decryption", () => {
           account.address,
           ikm_salt
         );
-        messageToSign = message;
         return message;
       }
     });

@@ -233,7 +233,7 @@ export const IKM = {
       });
     }
 
-    if (bytes.length != IKM_SIZE) {
+    if (bytes.length !== IKM_SIZE) {
       return withUnwrap({
         ok: false,
         error: new Error(`IKM requires ${IKM_SIZE} bytes`)
