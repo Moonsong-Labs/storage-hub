@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect } from "vitest";
 import { randomBytes } from "node:crypto";
 import { hexToBytes, equalBytes, bytesToHex } from "@noble/ciphers/utils.js";
 
@@ -10,6 +10,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { createWalletClient, defineChain, http } from "viem";
 import { TEST_PRIVATE_KEY_12 } from "./consts.js";
 import { ensure0xPrefix } from "../src/utils.js";
+
+const SLOW_TEST_TIMEOUT = 20_000;
 
 describe("encryption types sanity check", () => {
   function u64be(n: number): Uint8Array {
@@ -75,7 +77,7 @@ describe("DEK derivation sanity check", () => {
     const short = IKM.fromPassword("short", ikmSalt);
     expect(short.ok).toBe(false);
     expect(() => short.unwrap()).toThrow();
-  });
+  }, SLOW_TEST_TIMEOUT);
 
   it("derives a 32-byte DEK from signature (IKM from signature)", () => {
     const signature = `0x${"a1".repeat(65)}` as `0x${string}`; // emulate signature hex
@@ -487,6 +489,8 @@ describe("encrypted file detection", () => {
   const password = "correct horse battery staple";
   const chunkSize = 64;
   const plaintext = new TextEncoder().encode("storagehub-sdk encrypted detection test payload");
+  let encrypted: Uint8Array;
+  let encryptedHeaderLength: number;
 
   function toReadable(bytes: Uint8Array, frameSize = 23): ReadableStream<Uint8Array> {
     let offset = 0;
@@ -539,8 +543,12 @@ describe("encrypted file detection", () => {
     return concatChunks(encryptedChunks);
   }
 
-  it("returns encrypted state with parsed info for a real encrypted file", async () => {
-    const encrypted = await encryptToBytes();
+  beforeAll(async () => {
+    encrypted = await encryptToBytes();
+    encryptedHeaderLength = readEncryptionHeader(encrypted).headerLength;
+  }, SLOW_TEST_TIMEOUT);
+
+  it("returns encrypted state with parsed info for a real encrypted file", () => {
     const res = isEncrypted(encrypted);
     expect(res.state).toBe("encrypted");
     if (res.state !== "encrypted") {
@@ -557,23 +565,19 @@ describe("encrypted file detection", () => {
     expect(res).toEqual({ state: "not_encrypted" });
   });
 
-  it("returns not_encrypted when SHF magic is incomplete", async () => {
-    const encrypted = await encryptToBytes();
+  it("returns not_encrypted when SHF magic is incomplete", () => {
     const truncatedMagic = encrypted.subarray(0, 2);
     const res = isEncrypted(truncatedMagic);
     expect(res).toEqual({ state: "not_encrypted" });
   });
 
-  it("returns not_encrypted when the encrypted file is truncated before the full header", async () => {
-    const encrypted = await encryptToBytes();
-    const { headerLength } = readEncryptionHeader(encrypted);
-    const incompleteHeader = encrypted.subarray(0, headerLength - 1);
+  it("returns not_encrypted when the encrypted file is truncated before the full header", () => {
+    const incompleteHeader = encrypted.subarray(0, encryptedHeaderLength - 1);
     const res = isEncrypted(incompleteHeader);
     expect(res).toEqual({ state: "not_encrypted" });
   });
 
-  it("returns invalid_header when the encrypted file header is corrupted", async () => {
-    const encrypted = await encryptToBytes();
+  it("returns invalid_header when the encrypted file header is corrupted", () => {
     const malformed = encrypted.slice();
 
     // Corrupt the declared CBOR header length while keeping the SHF magic intact and
