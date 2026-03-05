@@ -140,7 +140,7 @@ impl frame_system::Config for Runtime {
     /// The action to take on a Runtime Upgrade
     type OnSetCode = cumulus_pallet_parachain_system::ParachainSetCode<Self>;
     type MaxConsumers = ConstU32<16>;
-    type MultiBlockMigrator = pallet_migrations::Pallet<Runtime>;
+    type MultiBlockMigrator = ();
 }
 /****** ****** ****** ******/
 
@@ -397,62 +397,6 @@ impl pallet_parameters::Config for Runtime {
     type AdminOrigin = EnsureRoot<AccountId>;
     type RuntimeEvent = RuntimeEvent;
     type RuntimeParameters = RuntimeParameters;
-    type WeightInfo = ();
-}
-/****** ****** ****** ******/
-
-/****** Multi-Block Migrations pallet ******/
-parameter_types! {
-    /// Service weight allocated to MBM steps per block (10% of max block weight).
-    pub MbmServiceWeight: Weight =
-        Perbill::from_percent(10) * RuntimeBlockWeights::get().max_block;
-}
-
-/// Handles pause/resume of BSP operations and the proofs-dealer challenge ticker
-/// while the V1→V2 `StorageRequestBsps` multi-block migration is running.
-pub struct V2MigrationStatusHandler;
-
-impl frame_support::migrations::MigrationStatusHandler for V2MigrationStatusHandler {
-    fn started() {
-        // Pause BSP volunteer and confirm-storing operations so that extrinsics cannot
-        // read from `StorageRequestBsps` while it is mid-migration.
-        pallet_file_system::UserOperationPauseFlagsStorage::<Runtime>::mutate(|flags| {
-            flags.set(
-                pallet_file_system::types::UserOperationPauseFlags::FLAG_BSP_VOLUNTEER
-                    | pallet_file_system::types::UserOperationPauseFlags::FLAG_BSP_CONFIRM_STORING,
-            );
-        });
-        // Suspend the challenge ticker so BSPs are not penalised for missed proofs
-        // during the migration window.
-        pallet_proofs_dealer::ChallengesTickerPaused::<Runtime>::set(Some(()));
-    }
-
-    fn completed() {
-        // Re-enable BSP operations.
-        pallet_file_system::UserOperationPauseFlagsStorage::<Runtime>::mutate(|flags| {
-            flags.clear(
-                pallet_file_system::types::UserOperationPauseFlags::FLAG_BSP_VOLUNTEER
-                    | pallet_file_system::types::UserOperationPauseFlags::FLAG_BSP_CONFIRM_STORING,
-            );
-        });
-        // Resume challenge ticker.
-        pallet_proofs_dealer::ChallengesTickerPaused::<Runtime>::kill();
-    }
-}
-
-impl pallet_migrations::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    #[cfg(not(any(feature = "try-runtime", feature = "runtime-benchmarks")))]
-    type Migrations = (pallet_file_system::migrations::v2::MigrateV1ToV2Stepped<Runtime>,);
-    #[cfg(all(feature = "try-runtime", not(feature = "runtime-benchmarks")))]
-    type Migrations = ();
-    #[cfg(feature = "runtime-benchmarks")]
-    type Migrations = pallet_migrations::mock_helpers::MockedMigrations;
-    type CursorMaxLen = ConstU32<65536>;
-    type IdentifierMaxLen = ConstU32<256>;
-    type MigrationStatusHandler = V2MigrationStatusHandler;
-    type FailedMigrationHandler = frame_support::migrations::FreezeChainOnFailedMigration;
-    type MaxServiceWeight = MbmServiceWeight;
     type WeightInfo = ();
 }
 /****** ****** ****** ******/
