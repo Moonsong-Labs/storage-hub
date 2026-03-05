@@ -80,7 +80,7 @@ pub type SignedExtra = (
 pub type UncheckedExtrinsic =
     generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
 
-/// Single-block runtime upgrade migrations (run synchronously on the first block after upgrade).
+/// Migrations to run on runtime upgrade.
 pub type Migrations = (pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,);
 
 /// Executive: handles dispatch to the various modules.

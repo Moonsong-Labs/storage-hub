@@ -866,11 +866,6 @@ parameter_types! {
     pub const MaxBatchConfirmStorageRequests: u32 = 10;
     pub const BaseStorageRequestCreationDeposit: Balance = 1 * UNIT;
     pub const FileDeletionRequestCreationDeposit: Balance = 1 * UNIT;
-    /// Static upper bound for per-request BSP volunteers.
-    ///
-    /// This mirrors the real runtimes so simulator storage bounds and PoV behavior
-    /// match production assumptions.
-    pub const MaxBspVolunteers: u32 = 1_000;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
@@ -931,7 +926,7 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget;
     type MaxReplicationTarget =
         runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
-    type MaxBspVolunteers = MaxBspVolunteers;
+    type MaxBspVolunteers = ConstU32<1000>;
     type MaxMspRespondFileKeys = ConstU32<10>;
     type TickRangeToMaximumThreshold =
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;

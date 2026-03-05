@@ -395,7 +395,6 @@ pub mod pallet {
         /// `msp_respond_storage_requests_multiple_buckets` call.
         ///
         /// Bounds `StorageRequestMspAcceptedFileKeys.file_keys_and_proofs`.
-        /// Clients should also respect this via the `get_max_msp_respond_file_keys` runtime API.
         #[pallet::constant]
         type MaxMspRespondFileKeys: Get<u32>;
 

@@ -165,7 +165,7 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
     fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
-/// Single-block runtime upgrade migrations (run synchronously on the first block after upgrade).
+/// Migrations to run on runtime upgrade.
 pub type Migrations = (pallet_file_system::migrations::v1::MigrateV0ToV1<Runtime>,);
 
 /// Executive: handles dispatch to the various modules.
@@ -758,10 +758,6 @@ impl_runtime_apis! {
 
         fn get_max_batch_confirm_storage_requests() -> u32 {
             FileSystem::get_max_batch_confirm_storage_requests()
-        }
-
-        fn get_max_msp_respond_file_keys() -> u32 {
-            FileSystem::get_max_msp_respond_file_keys()
         }
 
         fn query_min_wait_for_stop_storing() -> BlockNumber {

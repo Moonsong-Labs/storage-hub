@@ -116,6 +116,7 @@ use std::{
     time::Duration,
 };
 
+use frame_support::traits::Get;
 use frame_support::BoundedVec;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
@@ -1026,6 +1027,29 @@ where
                 })?;
 
             let accept = if !accept.is_empty() {
+                // Enforce per-bucket limit.
+                // If overflow occurs (e.g. due to runtime API fallback), re-queue
+                // the excess keys so they aren't permanently lost.
+                let max_keys =
+                    <Runtime as pallet_file_system::Config>::MaxMspRespondFileKeys::get() as usize;
+                if accept.len() > max_keys {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Bucket [{:?}] has {} accepted keys exceeding max {}. Re-queuing overflow.",
+                        bucket_id, accept.len(), max_keys
+                    );
+                    let overflow = accept.split_off(max_keys);
+                    for fkp in overflow {
+                        self.storage_hub_handler
+                            .blockchain
+                            .queue_msp_respond_storage_request(RespondStorageRequest::new(
+                                fkp.file_key,
+                                MspRespondStorageRequest::Accept,
+                            ))
+                            .await;
+                    }
+                }
+
                 let file_keys: Vec<_> = accept
                     .iter()
                     .map(|file_key_with_proof| file_key_with_proof.file_key)
@@ -1040,7 +1064,8 @@ where
                 };
 
                 Some(StorageRequestMspAcceptedFileKeys {
-                    file_keys_and_proofs: BoundedVec::truncate_from(accept.clone()),
+                    file_keys_and_proofs: BoundedVec::try_from(accept.clone())
+                        .expect("accept.len() <= max_keys after overflow split"),
                     forest_proof: forest_proof.proof,
                 })
             } else {
