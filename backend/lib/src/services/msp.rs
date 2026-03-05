@@ -222,6 +222,11 @@ impl MspService {
         }
     }
 
+    /// Get the onchain MSP ID discovered at startup
+    pub fn msp_id(&self) -> &OnchainMspId {
+        &self.msp_id
+    }
+
     /// Best-effort startup cleanup for stale trusted-upload spool temp files.
     ///
     /// Files are deleted only if their filename matches this service's spool naming pattern
@@ -714,7 +719,6 @@ impl MspService {
     ///     FileNotFound, // returns Error
     ///     IncompleteFile(IncompleteFileStatus), // returns Error
     ///     FileFound(FileMetadata), // returns Ok
-    ///     FileFoundWithInconsistency(FileMetadata), // returns Error
     /// }
     /// ```
     pub async fn check_file_status(&self, file_key: &str) -> Result<FileMetadata, Error> {
@@ -727,11 +731,6 @@ impl MspService {
         match file_status {
             GetFileFromFileStorageResult::FileNotFound => {
                 Err(Error::NotFound("File not found".to_string()))
-            }
-            GetFileFromFileStorageResult::FileFoundWithInconsistency(_inconsistent_metadata) => {
-                Err(Error::BadRequest(
-                    "File found with inconsistency".to_string(),
-                ))
             }
             GetFileFromFileStorageResult::IncompleteFile(_status) => {
                 Err(Error::BadRequest("File is incomplete".to_string()))
