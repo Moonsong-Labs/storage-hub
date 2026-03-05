@@ -55,29 +55,33 @@ describe("encryption types sanity check", () => {
 });
 
 describe("DEK derivation sanity check", () => {
-  it("derives a 32-byte DEK from password (IKM from password)", () => {
-    const password = "correct horse battery staple";
-    const ikmSalt = Salt.fromBytes(hexToBytes("aa".repeat(32))).unwrap();
-    const ikmRes = IKM.fromPassword(password, ikmSalt);
-    expect(ikmRes.ok).toBe(true);
-    const ikm = ikmRes.unwrap();
+  it(
+    "derives a 32-byte DEK from password (IKM from password)",
+    () => {
+      const password = "correct horse battery staple";
+      const ikmSalt = Salt.fromBytes(hexToBytes("aa".repeat(32))).unwrap();
+      const ikmRes = IKM.fromPassword(password, ikmSalt);
+      expect(ikmRes.ok).toBe(true);
+      const ikm = ikmRes.unwrap();
 
-    const salt = Salt.fromBytes(hexToBytes("11".repeat(32))).unwrap();
-    const dekRes1 = DEK.derive(ikm, salt);
-    expect(dekRes1.ok).toBe(true);
-    const dek1 = dekRes1.unwrap();
-    expect(dek1.length).toBe(32);
+      const salt = Salt.fromBytes(hexToBytes("11".repeat(32))).unwrap();
+      const dekRes1 = DEK.derive(ikm, salt);
+      expect(dekRes1.ok).toBe(true);
+      const dek1 = dekRes1.unwrap();
+      expect(dek1.length).toBe(32);
 
-    const dekRes2 = DEK.derive(ikm, salt);
-    expect(dekRes2.ok).toBe(true);
-    const dek2 = dekRes2.unwrap();
-    expect(equalBytes(dek1, dek2)).toBe(true);
+      const dekRes2 = DEK.derive(ikm, salt);
+      expect(dekRes2.ok).toBe(true);
+      const dek2 = dekRes2.unwrap();
+      expect(equalBytes(dek1, dek2)).toBe(true);
 
-    // Error path: password too short
-    const short = IKM.fromPassword("short", ikmSalt);
-    expect(short.ok).toBe(false);
-    expect(() => short.unwrap()).toThrow();
-  }, SLOW_TEST_TIMEOUT);
+      // Error path: password too short
+      const short = IKM.fromPassword("short", ikmSalt);
+      expect(short.ok).toBe(false);
+      expect(() => short.unwrap()).toThrow();
+    },
+    SLOW_TEST_TIMEOUT
+  );
 
   it("derives a 32-byte DEK from signature (IKM from signature)", () => {
     const signature = `0x${"a1".repeat(65)}` as `0x${string}`; // emulate signature hex
