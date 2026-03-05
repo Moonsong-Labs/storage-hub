@@ -1,6 +1,20 @@
 import { chacha20poly1305 } from "@noble/ciphers/chacha.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
-import { ENCRYPTION_CHUNK_SIZE, SALT_SIZE } from "./constants.js";
+import {
+  ENCRYPTION_CHUNK_SIZE,
+  SALT_SIZE,
+  AEAD_TAG_SIZE_BYTES,
+  HEADER_HASH_SIZE_BYTES,
+  CHUNK_AAD_SIZE_BYTES,
+  CHUNK_AAD_VERSION,
+  CHUNK_AAD_KIND_DATA,
+  CHUNK_AAD_KIND_COMMIT,
+  COMMIT_MAGIC,
+  COMMIT_PLAINTEXT_SIZE_BYTES,
+  COMMIT_CIPHERTEXT_SIZE_BYTES,
+  MAX_SAFE_INTEGER_BIGINT
+} from "./encryption/consts.js";
 
 import type { WalletClient } from "viem";
 import type { Account } from "viem";
@@ -8,7 +22,71 @@ import { DEK, BaseNonce, IKM, Salt } from "./encryption/types.js";
 import { createEncryptionHeader, readEncryptionHeader } from "./encryption/cbor.js";
 import type { EncryptionHeaderParams } from "./encryption/header.js";
 
-const AEAD_TAG_SIZE_BYTES = 16;
+function createChunkAAD(headerHash: Uint8Array, chunkIndex: number, kind: number): Uint8Array {
+  if (headerHash.length !== HEADER_HASH_SIZE_BYTES) {
+    throw new Error(
+      `createChunkAAD: headerHash must be ${HEADER_HASH_SIZE_BYTES} bytes (got ${headerHash.length})`
+    );
+  }
+  if (!Number.isSafeInteger(chunkIndex) || chunkIndex < 0) {
+    throw new Error(`createChunkAAD: invalid chunkIndex=${chunkIndex}`);
+  }
+  if (kind !== CHUNK_AAD_KIND_DATA && kind !== CHUNK_AAD_KIND_COMMIT) {
+    throw new Error(`createChunkAAD: invalid kind=${kind}`);
+  }
+
+  const aad = new Uint8Array(CHUNK_AAD_SIZE_BYTES);
+  aad[0] = CHUNK_AAD_VERSION;
+  aad[1] = kind;
+  new DataView(aad.buffer, aad.byteOffset, aad.byteLength).setBigUint64(2, BigInt(chunkIndex), false);
+  aad.set(headerHash, 10);
+  return aad;
+}
+
+function createCommitPayload(totalPlaintextBytes: number, totalChunkCount: number): Uint8Array {
+  if (!Number.isSafeInteger(totalPlaintextBytes) || totalPlaintextBytes < 0) {
+    throw new Error(`createCommitPayload: invalid totalPlaintextBytes=${totalPlaintextBytes}`);
+  }
+  if (!Number.isSafeInteger(totalChunkCount) || totalChunkCount < 0) {
+    throw new Error(`createCommitPayload: invalid totalChunkCount=${totalChunkCount}`);
+  }
+
+  const payload = new Uint8Array(COMMIT_PLAINTEXT_SIZE_BYTES);
+  payload.set(COMMIT_MAGIC, 0);
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  view.setBigUint64(COMMIT_MAGIC.length, BigInt(totalPlaintextBytes), false);
+  view.setBigUint64(COMMIT_MAGIC.length + 8, BigInt(totalChunkCount), false);
+  return payload;
+}
+
+function parseCommitPayload(payload: Uint8Array): { totalPlaintextBytes: number; totalChunkCount: number } {
+  if (payload.length !== COMMIT_PLAINTEXT_SIZE_BYTES) {
+    throw new Error(
+      `decryptFile: invalid commit payload size (expected ${COMMIT_PLAINTEXT_SIZE_BYTES}, got ${payload.length})`
+    );
+  }
+
+  for (let i = 0; i < COMMIT_MAGIC.length; i++) {
+    if (payload[i] !== COMMIT_MAGIC[i]) {
+      throw new Error("decryptFile: invalid commit payload magic");
+    }
+  }
+
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  const totalPlaintextBytesBig = view.getBigUint64(COMMIT_MAGIC.length, false);
+  const totalChunkCountBig = view.getBigUint64(COMMIT_MAGIC.length + 8, false);
+  if (totalPlaintextBytesBig > MAX_SAFE_INTEGER_BIGINT) {
+    throw new Error("decryptFile: commit total_plaintext_size exceeds MAX_SAFE_INTEGER");
+  }
+  if (totalChunkCountBig > MAX_SAFE_INTEGER_BIGINT) {
+    throw new Error("decryptFile: commit total_chunk_count exceeds MAX_SAFE_INTEGER");
+  }
+
+  return {
+    totalPlaintextBytes: Number(totalPlaintextBytesBig),
+    totalChunkCount: Number(totalChunkCountBig)
+  };
+}
 
 /**
  * Minimal-copy buffering for Uint8Array streams.
@@ -74,6 +152,7 @@ type EncryptAndWriteChunkParams = {
   writer: WritableStreamDefaultWriter<Uint8Array>;
   dek: DEK;
   baseNonce: BaseNonce;
+  headerHash: Uint8Array;
   chunkIndex: number;
   plaintext: Uint8Array;
   bytesProcessed: number;
@@ -84,6 +163,7 @@ async function encryptAndWriteChunk({
   writer,
   dek,
   baseNonce,
+  headerHash,
   chunkIndex,
   plaintext,
   bytesProcessed,
@@ -91,8 +171,8 @@ async function encryptAndWriteChunk({
 }: EncryptAndWriteChunkParams): Promise<number> {
   // Nonce is derived from BaseNonce + chunkIndex.
   const nonce = baseNonce.getNonce(chunkIndex).unwrap();
-
-  const cipher = chacha20poly1305(dek, nonce);
+  const aad = createChunkAAD(headerHash, chunkIndex, CHUNK_AAD_KIND_DATA);
+  const cipher = chacha20poly1305(dek, nonce, aad);
   const encrypted = cipher.encrypt(plaintext);
 
   // Respect backpressure.
@@ -143,6 +223,7 @@ export async function encryptFile({
   const writer = output.getWriter();
 
   let chunkIndex = 0;
+  let totalChunkCount = 0;
   let bytesProcessed = 0;
 
   // Buffer stream reads into fixed-size plaintext chunks.
@@ -153,6 +234,7 @@ export async function encryptFile({
     // -------- header --------
     // Header is written in plaintext before any ciphertext chunks.
     const headerBytes = createEncryptionHeader(header);
+    const headerHash = sha256(headerBytes);
     await writer.ready;
     await writer.write(headerBytes);
 
@@ -169,12 +251,14 @@ export async function encryptFile({
           writer,
           dek,
           baseNonce,
+          headerHash,
           chunkIndex,
           plaintext: plaintextChunk,
           bytesProcessed,
           onProgress
         });
         chunkIndex++;
+        totalChunkCount++;
       }
     }
 
@@ -185,12 +269,23 @@ export async function encryptFile({
         writer,
         dek,
         baseNonce,
+        headerHash,
         chunkIndex,
         plaintext: lastPlaintext,
         bytesProcessed,
         onProgress
       });
+      chunkIndex++;
+      totalChunkCount++;
     }
+
+    // Commit trailer: authenticated file totals to detect full-chunk truncation/reordering.
+    const commitPayload = createCommitPayload(bytesProcessed, totalChunkCount);
+    const commitNonce = baseNonce.getNonce(chunkIndex).unwrap();
+    const commitAad = createChunkAAD(headerHash, chunkIndex, CHUNK_AAD_KIND_COMMIT);
+    const commitCipher = chacha20poly1305(dek, commitNonce, commitAad).encrypt(commitPayload);
+    await writer.ready;
+    await writer.write(commitCipher);
 
     ok = true;
   } catch (err) {
@@ -314,7 +409,12 @@ export type DecryptFileParams = {
 
 async function readHeaderFromStream(
   reader: ReadableStreamDefaultReader<Uint8Array>
-): Promise<{ header: EncryptionHeaderParams; headerLength: number; remainder: Uint8Array }> {
+): Promise<{
+  header: EncryptionHeaderParams;
+  headerLength: number;
+  headerBytes: Uint8Array;
+  remainder: Uint8Array;
+}> {
   // Layout: [ magic (3) ][ u32be header_len ][ cbor_header ]
   const MAGIC_PLUS_LEN = 7;
   const MAX_HEADER_LEN_BYTES = 64 * 1024;
@@ -358,13 +458,14 @@ async function readHeaderFromStream(
 
   const { header, headerLength } = readEncryptionHeader(fullHeader);
   const remainder = queue.takeAll();
-  return { header, headerLength, remainder };
+  return { header, headerLength, headerBytes: fullHeader, remainder };
 }
 
 type DecryptAndWriteChunkParams = {
   writer: WritableStreamDefaultWriter<Uint8Array>;
   dek: DEK;
   baseNonce: BaseNonce;
+  headerHash: Uint8Array;
   chunkIndex: number;
   ciphertext: Uint8Array;
   bytesProcessed: number;
@@ -375,13 +476,15 @@ async function decryptAndWriteChunk({
   writer,
   dek,
   baseNonce,
+  headerHash,
   chunkIndex,
   ciphertext,
   bytesProcessed,
   onProgress
 }: DecryptAndWriteChunkParams): Promise<number> {
   const nonce = baseNonce.getNonce(chunkIndex).unwrap();
-  const cipher = chacha20poly1305(dek, nonce);
+  const aad = createChunkAAD(headerHash, chunkIndex, CHUNK_AAD_KIND_DATA);
+  const cipher = chacha20poly1305(dek, nonce, aad);
   const plaintext = cipher.decrypt(ciphertext);
 
   await writer.ready;
@@ -410,11 +513,12 @@ export async function decryptFile({
   let ok = false;
   try {
     // -------- header --------
-    const { header, remainder } = await readHeaderFromStream(reader);
+    const { header, headerBytes, remainder } = await readHeaderFromStream(reader);
     const chunkSize = header.chunk_size;
     if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
       throw new Error(`decryptFile: invalid header chunk_size=${chunkSize}`);
     }
+    const headerHash = sha256(headerBytes);
 
     // -------- derive keys --------
     const ikm = await getIkm(header);
@@ -427,21 +531,24 @@ export async function decryptFile({
 
     const fullCipherChunkSize = chunkSize + AEAD_TAG_SIZE_BYTES;
     let chunkIndex = 0;
+    let totalChunkCount = 0;
     let bytesProcessed = 0;
 
     while (true) {
-      while (ciphertextBuf.length >= fullCipherChunkSize) {
+      while (ciphertextBuf.length >= fullCipherChunkSize + COMMIT_CIPHERTEXT_SIZE_BYTES) {
         const ciphertextChunk = ciphertextBuf.take(fullCipherChunkSize);
         bytesProcessed = await decryptAndWriteChunk({
           writer,
           dek,
           baseNonce,
+          headerHash,
           chunkIndex,
           ciphertext: ciphertextChunk,
           bytesProcessed,
           onProgress
         });
         chunkIndex++;
+        totalChunkCount++;
       }
 
       const { done, value } = await reader.read();
@@ -449,21 +556,48 @@ export async function decryptFile({
       ciphertextBuf.push(value);
     }
 
-    // Final chunk (if any) must include at least an AEAD tag.
-    if (ciphertextBuf.length > 0) {
-      if (ciphertextBuf.length <= AEAD_TAG_SIZE_BYTES) {
+    // Split remaining bytes into [optional final data chunk][fixed-size commit trailer].
+    const tail = ciphertextBuf.takeAll();
+    if (tail.length < COMMIT_CIPHERTEXT_SIZE_BYTES) {
+      throw new Error("decryptFile: truncated commit trailer");
+    }
+    const dataTailCiphertextLength = tail.length - COMMIT_CIPHERTEXT_SIZE_BYTES;
+    const dataTailCiphertext = tail.subarray(0, dataTailCiphertextLength);
+    const commitCiphertext = tail.subarray(dataTailCiphertextLength);
+
+    // Optional final data chunk (if any) must include at least an AEAD tag.
+    if (dataTailCiphertext.length > 0) {
+      if (dataTailCiphertext.length <= AEAD_TAG_SIZE_BYTES) {
         throw new Error("decryptFile: truncated final chunk (missing AEAD tag)");
       }
-      const lastCiphertext = ciphertextBuf.takeAll();
       bytesProcessed = await decryptAndWriteChunk({
         writer,
         dek,
         baseNonce,
+        headerHash,
         chunkIndex,
-        ciphertext: lastCiphertext,
+        ciphertext: dataTailCiphertext,
         bytesProcessed,
         onProgress
       });
+      chunkIndex++;
+      totalChunkCount++;
+    }
+
+    // Decrypt and verify authenticated totals commit trailer.
+    const commitNonce = baseNonce.getNonce(chunkIndex).unwrap();
+    const commitAad = createChunkAAD(headerHash, chunkIndex, CHUNK_AAD_KIND_COMMIT);
+    const commitPayload = chacha20poly1305(dek, commitNonce, commitAad).decrypt(commitCiphertext);
+    const commit = parseCommitPayload(commitPayload);
+    if (commit.totalChunkCount !== totalChunkCount) {
+      throw new Error(
+        `decryptFile: chunk count mismatch (expected ${commit.totalChunkCount}, got ${totalChunkCount})`
+      );
+    }
+    if (commit.totalPlaintextBytes !== bytesProcessed) {
+      throw new Error(
+        `decryptFile: plaintext size mismatch (expected ${commit.totalPlaintextBytes}, got ${bytesProcessed})`
+      );
     }
 
     ok = true;
