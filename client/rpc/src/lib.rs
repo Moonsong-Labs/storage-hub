@@ -404,6 +404,17 @@ pub trait StorageHubClientApi {
         &self,
         file_key: shp_types::Hash,
     ) -> RpcResult<BspStopStoringFileResult>;
+
+    /// Trigger file storage healing for the given bucket.
+    ///
+    /// This is a fire-and-forget command that verifies the bucket's forest root
+    /// and emits a `CheckBucketFileStorage` event if the root matches on-chain state.
+    /// Deduplication is handled internally so repeated calls for the same bucket are no-ops.
+    #[method(name = "triggerBucketFileStorageHealing", with_extensions)]
+    async fn trigger_bucket_file_storage_healing(
+        &self,
+        bucket_id: shp_types::Hash,
+    ) -> RpcResult<()>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -1575,6 +1586,34 @@ where
                 )))
             }
         }
+    }
+
+    async fn trigger_bucket_file_storage_healing(
+        &self,
+        ext: &Extensions,
+        bucket_id: shp_types::Hash,
+    ) -> RpcResult<()> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Check if the blockchain service is available.
+        let blockchain = match &self.blockchain {
+            Some(blockchain) => blockchain,
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "trigger_bucket_file_storage_healing called but blockchain service is not available"
+                );
+                return Ok(());
+            }
+        };
+
+        // Send the command.
+        blockchain
+            .trigger_bucket_file_storage_healing(bucket_id.into())
+            .await;
+
+        Ok(())
     }
 }
 
