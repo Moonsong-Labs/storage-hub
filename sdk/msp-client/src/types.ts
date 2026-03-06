@@ -207,7 +207,7 @@ export interface StorageFileInfo extends FileInfo {
 export type PaymentProviderType = "msp" | "bsp";
 
 export interface PaymentStreamInfo {
-  provider: string;
+  provider: `0x${string}`;
   providerType: PaymentProviderType;
   totalAmountPaid: string;
   costPerTick: string;

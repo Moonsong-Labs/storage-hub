@@ -145,6 +145,7 @@ console.log('Folder files:', folderFiles);
   - `getStats(signal?)` – returns capacity and usage stats
   - `getValuePropositions(signal?)` – returns available value props/pricing
   - `getPaymentStreams(signal?)` – returns the authenticated user's payment streams
+  - `getPaymentStreams(address, signal?)` – returns payment streams for any user by `0x` address (no auth required)
 - **`buckets`**: Buckets and file listings
   - `listBuckets(signal?)` – returns all buckets for the current authenticated user
   - `getBucket(bucketId, signal?)` – returns metadata for a specific bucket

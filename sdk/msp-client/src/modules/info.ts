@@ -58,12 +58,28 @@ export class InfoModule extends ModuleBase {
     });
   }
 
-  /** Get payment streams for current authenticated user */
-  async getPaymentStreams(signal?: AbortSignal): Promise<PaymentStreamsResponse> {
+  /** Get payment streams for the currently authenticated user */
+  async getPaymentStreams(signal?: AbortSignal): Promise<PaymentStreamsResponse>;
+  /** Get payment streams for any user by address (no auth required) */
+  async getPaymentStreams(
+    address: `0x${string}`,
+    signal?: AbortSignal
+  ): Promise<PaymentStreamsResponse>;
+  async getPaymentStreams(
+    addressOrSignal?: `0x${string}` | AbortSignal,
+    signal?: AbortSignal
+  ): Promise<PaymentStreamsResponse> {
+    if (typeof addressOrSignal === "string") {
+      return this.ctx.http.get<PaymentStreamsResponse>("/payment_streams", {
+        query: { address: addressOrSignal },
+        ...(signal ? { signal } : {})
+      });
+    }
+
     const headers = await this.withAuth();
     return this.ctx.http.get<PaymentStreamsResponse>("/payment_streams", {
       ...(headers ? { headers } : {}),
-      ...(signal ? { signal } : {})
+      ...(addressOrSignal ? { signal: addressOrSignal } : {})
     });
   }
 }

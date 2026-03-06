@@ -1,9 +1,15 @@
-use axum::{extract::State, response::IntoResponse, Json};
+use alloy_core::primitives::Address;
+use axum::{
+    extract::{Query, State},
+    response::IntoResponse,
+    Json,
+};
+use serde::Deserialize;
 use tracing::debug;
 
 use crate::{
     error::Error,
-    services::{auth::AuthenticatedUser, Services},
+    services::{auth::User, Services},
 };
 
 pub mod auth;
@@ -44,10 +50,33 @@ pub async fn node_health(State(services): State<Services>) -> Result<impl IntoRe
 
 // ==================== Payment Handler ====================
 
+#[derive(Debug, Deserialize)]
+pub struct PaymentStreamsQuery {
+    pub address: Option<String>,
+}
+
+/// Returns payment streams for a given user.
+///
+/// The target address is resolved in order of precedence:
+/// 1. `?address=` query parameter (no auth required)
+/// 2. Authenticated user's address (via JWT)
+/// 3. 400 Bad Request if neither is provided
 pub async fn payment_streams(
     State(services): State<Services>,
-    AuthenticatedUser { address }: AuthenticatedUser,
+    user: User,
+    Query(query): Query<PaymentStreamsQuery>,
 ) -> Result<impl IntoResponse, Error> {
+    let address = match query.address {
+        Some(addr_str) => addr_str
+            .parse::<Address>()
+            .map_err(|_| Error::BadRequest(format!("Invalid address: {addr_str}")))?,
+        None => *user.address().map_err(|_| {
+            Error::BadRequest(
+                "Either provide an ?address= query parameter or authenticate via JWT".to_owned(),
+            )
+        })?,
+    };
+
     debug!(user = %address, "GET payment streams");
     let response = services.msp.get_payment_streams(&address).await?;
     Ok(Json(response))
