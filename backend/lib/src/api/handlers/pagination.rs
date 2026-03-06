@@ -23,7 +23,7 @@ pub struct Pagination {
 impl From<PaginationQuery> for Pagination {
     fn from(value: PaginationQuery) -> Self {
         let limit = value.limit.unwrap_or(DEFAULT_PAGE_LIMIT).clamp(
-            0,
+            1,
             MAX_PAGE_LIMIT
                 .try_into()
                 .expect("MAX_PAGE_LIMIT to be representable as i64"),
@@ -31,7 +31,7 @@ impl From<PaginationQuery> for Pagination {
 
         let offset = limit * value.page.unwrap_or(0);
 
-        Self { offset, limit }
+        Self { limit, offset }
     }
 }
 
@@ -39,7 +39,7 @@ impl From<PaginationQuery> for Pagination {
 /// Pagination query parameters for the given endpoint
 ///
 /// Parameters:
-/// * `limit`: the maximum amount of items to respond with (defaults to 0, capped at [`MAX_PAGE_LIMIT`])
+/// * `limit`: the maximum amount of items to respond with (defaults to [`DEFAULT_PAGE_LIMIT`], capped at [`MAX_PAGE_LIMIT`])
 /// * `page`: the number of pages to skip for this request (defaults to 0), the number of elements in the page is equal to `limit`
 #[derive(Debug, Deserialize)]
 pub struct PaginationQuery {
