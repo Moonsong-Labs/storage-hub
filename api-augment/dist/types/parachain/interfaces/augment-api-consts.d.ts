@@ -122,7 +122,7 @@ declare module '@polkadot/api-base/types/consts' {
              * Maximum number of file keys an MSP can accept per bucket in a single
              * `msp_respond_storage_requests_multiple_buckets` call.
              *
-             * Bounds `StorageRequestMspAcceptedFileKeys.file_keys_and_proofs`.
+             * Bounds [`StorageRequestMspAcceptedFileKeys::file_keys_and_proofs`].
              **/
             maxMspRespondFileKeys: u32 & AugmentedConst<ApiType>;
             /**
