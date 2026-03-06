@@ -116,12 +116,18 @@ use std::{
     time::Duration,
 };
 
+use frame_support::{traits::Get, BoundedVec};
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::types::{
-    FileKeyStatusUpdate, MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
+use shc_blockchain_service::{
+    capacity_manager::CapacityRequestData,
+    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
+    events::{NewStorageRequest, ProcessMspRespondStoringRequest},
+    types::{
+        FileKeyStatusUpdate, MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
+        SendExtrinsicOptions,
+    },
 };
-use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
 use sp_runtime::{
     traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero},
@@ -131,10 +137,6 @@ use sp_runtime::{
 use pallet_file_system::types::RejectedStorageRequest;
 use pallet_proofs_dealer;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{
-    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
-    events::{NewStorageRequest, ProcessMspRespondStoringRequest},
-};
 use shc_common::{
     blockchain_utils::decode_module_error,
     traits::StorageEnableRuntime,
@@ -921,52 +923,63 @@ where
 
         let mut file_key_responses = HashMap::new();
 
-        // Filter out requests that do not have any pending storage requests.
-        let filtered_responses = event
-            .data
-            .respond_storing_requests
-            .iter()
-            .filter(|r| pending_file_keys.contains(&r.file_key))
-            .collect::<Vec<_>>();
-        // For accepted requests, prefetch the chunks to prove without holding any file storage locks.
-        let mut chunks_to_prove_by_file_key: HashMap<H256, Vec<_>> = HashMap::new();
-        for respond in &filtered_responses {
-            if let MspRespondStorageRequest::Accept = &respond.response {
-                let chunks_to_prove = match self
-                    .storage_hub_handler
-                    .blockchain
-                    .query_msp_confirm_chunks_to_prove_for_file(own_msp_id, respond.file_key)
-                    .await
-                {
-                    Ok(chunks) => chunks,
+        // Pass 1: Filter pending, resolve bucket IDs, and enforce per-bucket
+        // accept limits in a single iteration — before any expensive work.
+        let max_keys =
+            <Runtime as pallet_file_system::Config>::MaxMspRespondFileKeys::get() as usize;
+        let mut accepts_per_bucket: HashMap<H256, usize> = HashMap::new();
+        let mut file_key_to_bucket: HashMap<H256, H256> = HashMap::new();
+        {
+            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+            for respond in &event.data.respond_storing_requests {
+                if !pending_file_keys.contains(&respond.file_key) {
+                    continue;
+                }
+
+                let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
+                    Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
+                    Ok(None) => {
+                        error!(target: LOG_TARGET, "File does not exist for key [{:x}]. Maybe we forgot to unregister before deleting?", respond.file_key);
+                        continue;
+                    }
                     Err(e) => {
-                        error!(target: LOG_TARGET, "Failed to get chunks to prove: {:?}", e);
+                        error!(target: LOG_TARGET, "Failed to get file metadata: {:?}", e);
                         continue;
                     }
                 };
 
-                chunks_to_prove_by_file_key.insert(respond.file_key, chunks_to_prove);
+                if let MspRespondStorageRequest::Accept = &respond.response {
+                    let count = accepts_per_bucket.entry(bucket_id).or_default();
+                    if *count >= max_keys {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Bucket [{:?}] already has {} accepted keys (max {}). Re-queuing file key [{:x}].",
+                            bucket_id, *count, max_keys, respond.file_key
+                        );
+                        self.storage_hub_handler
+                            .blockchain
+                            .queue_msp_respond_storage_request(RespondStorageRequest::new(
+                                respond.file_key,
+                                MspRespondStorageRequest::Accept,
+                            ))
+                            .await;
+                        continue;
+                    }
+                    *count += 1;
+                }
+
+                file_key_to_bucket.insert(respond.file_key, bucket_id);
             }
         }
 
-        for respond in filtered_responses {
-            info!(target: LOG_TARGET, "Processing response for file key [{:x}]", respond.file_key);
-
-            // Acquire a file storage read lock only for metadata/proof generation,
-            // for each iteration of the loop, to avoid holding the lock for too long.
-            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
-            let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
-                Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
-                Ok(None) => {
-                    error!(target: LOG_TARGET, "File does not exist for key [{:x}]. Maybe we forgot to unregister before deleting?", respond.file_key);
-                    continue;
-                }
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Failed to get file metadata: {:?}", e);
-                    continue;
-                }
+        // Pass 2: For kept requests, fetch chunks to prove, generate proofs,
+        // and group into per-bucket responses.
+        for respond in &event.data.respond_storing_requests {
+            let Some(&bucket_id) = file_key_to_bucket.get(&respond.file_key) else {
+                continue;
             };
+
+            info!(target: LOG_TARGET, "Processing response for file key [{:x}]", respond.file_key);
 
             let entry = file_key_responses
                 .entry(bucket_id)
@@ -974,16 +987,20 @@ where
 
             match &respond.response {
                 MspRespondStorageRequest::Accept => {
-                    let Some(chunks_to_prove) = chunks_to_prove_by_file_key.get(&respond.file_key)
-                    else {
-                        error!(
-                            target: LOG_TARGET,
-                            "Missing cached chunks_to_prove for accepted file key [{:x}]",
-                            respond.file_key
-                        );
-                        continue;
+                    let chunks_to_prove = match self
+                        .storage_hub_handler
+                        .blockchain
+                        .query_msp_confirm_chunks_to_prove_for_file(own_msp_id, respond.file_key)
+                        .await
+                    {
+                        Ok(chunks) => chunks,
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to get chunks to prove: {:?}", e);
+                            continue;
+                        }
                     };
 
+                    let read_file_storage = self.storage_hub_handler.file_storage.read().await;
                     let proof = match read_file_storage.generate_proof(
                         &respond.file_key,
                         &HashSet::from_iter(chunks_to_prove.iter().cloned()),
@@ -1038,8 +1055,20 @@ where
                     }
                 };
 
+                let file_keys_and_proofs = match BoundedVec::try_from(accept.clone()) {
+                    Ok(bounded) => bounded,
+                    Err(_) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Bucket [{:?}]: accepted keys ({}) exceed BoundedVec limit. Skipping bucket.",
+                            bucket_id, accept.len()
+                        );
+                        continue;
+                    }
+                };
+
                 Some(StorageRequestMspAcceptedFileKeys {
-                    file_keys_and_proofs: accept.clone(),
+                    file_keys_and_proofs,
                     forest_proof: forest_proof.proof,
                 })
             } else {

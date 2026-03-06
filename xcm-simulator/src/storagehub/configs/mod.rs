@@ -926,6 +926,8 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget;
     type MaxReplicationTarget =
         runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
+    type MaxBspVolunteers = ConstU32<1000>;
+    type MaxMspRespondFileKeys = ConstU32<10>;
     type TickRangeToMaximumThreshold =
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type OffchainSignature = Signature;
