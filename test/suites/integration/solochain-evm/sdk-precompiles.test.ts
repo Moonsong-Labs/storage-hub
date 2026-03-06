@@ -856,21 +856,20 @@ await describeMspNet(
 
       const chainId = SH_EVM_SOLOCHAIN_CHAIN_ID;
 
-      const { message: messageForEnc, challenge } = IKM.createEncryptionKeyMessage(
-        ENC_APP_NAME,
-        ENC_DOMAIN,
-        ENC_VERSION,
-        ENC_PURPOSE,
-        chainId,
-        account.address
-      );
-
       const sigKeys = await generateEncryptionKey({
         kind: "signature",
         walletClient,
         account,
-        message: messageForEnc,
-        challenge
+        createMessage: (ikm_salt) =>
+          IKM.createEncryptionKeyMessage(
+            ENC_APP_NAME,
+            ENC_DOMAIN,
+            ENC_VERSION,
+            ENC_PURPOSE,
+            chainId,
+            account.address,
+            ikm_salt
+          ).message
       });
 
       const { writable: sigEncSink, result: sigEncryptedP } = createBytesSink();
@@ -920,6 +919,7 @@ await describeMspNet(
         bucketId,
         sigFileKey.toHex(),
         new Blob([sigEncryptedBytes]),
+        sigFingerprint.toHex() as `0x${string}`,
         account.address,
         ENC_LOCATION_SIG
       );
@@ -998,6 +998,7 @@ await describeMspNet(
         bucketId,
         pwFileKey.toHex(),
         new Blob([pwEncryptedBytes]),
+        pwFingerprint.toHex() as `0x${string}`,
         account.address,
         ENC_LOCATION_PW
       );
@@ -1032,10 +1033,7 @@ await describeMspNet(
         output: sigDecSink,
         getIkm: async (hdr) => {
           assert(hdr.ikm === "signature", "Encrypted(signature) header should indicate signature");
-          assert(
-            hdr.challenge?.length === 32,
-            "Encrypted(signature) header should include challenge"
-          );
+          assert(hdr.ikm_salt.length === 32, "Encrypted(signature) header should include ikm_salt");
           const { message } = IKM.createEncryptionKeyMessage(
             ENC_APP_NAME,
             ENC_DOMAIN,
@@ -1043,7 +1041,7 @@ await describeMspNet(
             ENC_PURPOSE,
             chainId,
             account.address,
-            hdr.challenge as Uint8Array
+            hdr.ikm_salt
           );
           const signature = await walletClient.signMessage({ account, message });
           return IKM.fromSignature(signature).unwrap();
@@ -1067,13 +1065,36 @@ await describeMspNet(
       strictEqual(dlPw.status, 200, "Encrypted(password) download should succeed");
       const dlPwBytes = new Uint8Array(await new Response(dlPw.stream).arrayBuffer());
 
+      const wrongPwChunks: Uint8Array[] = [];
+      await assert.rejects(
+        decryptFile({
+          input: bytesToWebReadable(dlPwBytes),
+          output: new WritableStream<Uint8Array>({
+            write(chunk) {
+              wrongPwChunks.push(chunk);
+            }
+          }),
+          getIkm: async (hdr) => {
+            assert(hdr.ikm === "password", "Encrypted(password) header should indicate password");
+            return IKM.fromPassword(`${ENC_PASSWORD}-wrong`, hdr.ikm_salt).unwrap();
+          }
+        }),
+        /authentication failed/i,
+        "Encrypted(password) decryption should fail with wrong password"
+      );
+      strictEqual(
+        wrongPwChunks.length,
+        0,
+        "Encrypted(password) wrong password should not emit plaintext"
+      );
+
       const { writable: pwDecSink, result: pwDecryptedP } = createBytesSink();
       await decryptFile({
         input: bytesToWebReadable(dlPwBytes),
         output: pwDecSink,
         getIkm: async (hdr) => {
           assert(hdr.ikm === "password", "Encrypted(password) header should indicate password");
-          return IKM.fromPassword(ENC_PASSWORD).unwrap();
+          return IKM.fromPassword(ENC_PASSWORD, hdr.ikm_salt).unwrap();
         }
       });
 
