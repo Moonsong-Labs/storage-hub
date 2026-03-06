@@ -99,7 +99,6 @@ impl<T: Config> StorageRequestMetadata<T> {
         )
         .map_err(|_| Error::<T>::FailedToCreateFileMetadata.into())
     }
-
 }
 
 impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
