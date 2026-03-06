@@ -17,7 +17,7 @@ use chrono::Utc;
 use tokio::sync::RwLock;
 
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp},
+    models::{Bsp, Bucket, File, Msp, ServiceState},
     OnchainBspId, OnchainMspId,
 };
 use shp_types::Hash;
@@ -27,6 +27,7 @@ use crate::{
     data::indexer_db::repository::{
         error::{RepositoryError, RepositoryResult},
         BucketsPage, IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
+        RequestAcceptanceStats,
     },
     test_utils::{random_bytes_32, random_hash},
 };
@@ -43,6 +44,8 @@ pub struct MockRepository {
     /// Payment streams stored by ID with (user_account, PaymentStreamData) tuple
     payment_streams: Arc<RwLock<HashMap<i64, (String, PaymentStreamData)>>>,
     next_id: Arc<AtomicI64>,
+    /// Configurable service state for node-health mock testing.
+    service_state_override: Arc<RwLock<Option<ServiceState>>>,
 }
 
 impl MockRepository {
@@ -55,7 +58,13 @@ impl MockRepository {
             files: Arc::new(RwLock::new(BTreeMap::new())),
             payment_streams: Arc::new(RwLock::new(HashMap::new())),
             next_id: Arc::new(AtomicI64::new(1)),
+            service_state_override: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Override the service state returned by `get_service_state`.
+    pub async fn set_service_state(&self, state: ServiceState) {
+        *self.service_state_override.write().await = Some(state);
     }
 
     /// Create a new mock repository with some sample data loaded in
@@ -370,6 +379,32 @@ impl IndexerOps for MockRepository {
             .filter(|(account, _)| account == user_account)
             .map(|(_, data)| data.clone())
             .collect())
+    }
+
+    // ============ Node Health Operations ============
+    async fn get_service_state(&self) -> RepositoryResult<ServiceState> {
+        if let Some(state) = self.service_state_override.read().await.clone() {
+            return Ok(state);
+        }
+        let now = Utc::now().naive_utc();
+        Ok(ServiceState {
+            id: 1,
+            last_indexed_finalized_block: 100,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    async fn get_request_acceptance_stats(
+        &self,
+        _msp_db_id: i64,
+        _window_secs: u64,
+    ) -> RepositoryResult<RequestAcceptanceStats> {
+        Ok(RequestAcceptanceStats {
+            total: 0,
+            accepted: 0,
+            last_accepted_at: None,
+        })
     }
 }
 
