@@ -116,14 +116,18 @@ use std::{
     time::Duration,
 };
 
-use frame_support::traits::Get;
-use frame_support::BoundedVec;
+use frame_support::{traits::Get, BoundedVec};
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::types::{
-    FileKeyStatusUpdate, MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
+use shc_blockchain_service::{
+    capacity_manager::CapacityRequestData,
+    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
+    events::{NewStorageRequest, ProcessMspRespondStoringRequest},
+    types::{
+        FileKeyStatusUpdate, MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
+        SendExtrinsicOptions,
+    },
 };
-use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
 use sp_runtime::{
     traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero},
@@ -133,10 +137,6 @@ use sp_runtime::{
 use pallet_file_system::types::RejectedStorageRequest;
 use pallet_proofs_dealer;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{
-    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
-    events::{NewStorageRequest, ProcessMspRespondStoringRequest},
-};
 use shc_common::{
     blockchain_utils::decode_module_error,
     traits::StorageEnableRuntime,

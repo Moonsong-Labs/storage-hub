@@ -92,7 +92,7 @@ importers:
         version: 16.4.7
       abitype:
         specifier: ^1.0.0
-        version: 1.1.0(typescript@5.9.2)(zod@3.25.76)
+        version: 1.1.0(typescript@5.9.2)
       ethers:
         specifier: ^6.15.0
         version: 6.15.0
@@ -105,7 +105,7 @@ importers:
         version: 0.8.30
       viem:
         specifier: '>=2.38.3'
-        version: 2.38.3(typescript@5.9.2)(zod@3.25.76)
+        version: 2.38.3(typescript@5.9.2)
 
   sdk/msp-client:
     devDependencies:
@@ -114,7 +114,7 @@ importers:
         version: link:../core
       viem:
         specifier: '>=2.38.3'
-        version: 2.38.3(typescript@5.9.2)(zod@3.25.76)
+        version: 2.38.3(typescript@5.9.2)
 
   test:
     dependencies:
@@ -198,7 +198,7 @@ importers:
         version: 4.20.5
       viem:
         specifier: 2.38.3
-        version: 2.38.3(typescript@5.9.2)(zod@3.25.76)
+        version: 2.38.3(typescript@5.9.2)
       yaml:
         specifier: 2.8.1
         version: 2.8.1
@@ -3125,9 +3125,6 @@ packages:
     resolution: {integrity: sha512-zK7YHHz4ZXpW89AHXUPbQVGKI7uvkd3hzusTdotCg1UxyaVtg0zFJSTfW/Dq5f7OBBVnq6cZIaC8Ti4hb6dtCA==}
     engines: {node: '>= 14'}
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
-
 snapshots:
 
   '@actions/core@1.11.1':
@@ -4456,10 +4453,9 @@ snapshots:
 
   a-sync-waterfall@1.0.1: {}
 
-  abitype@1.1.0(typescript@5.9.2)(zod@3.25.76):
+  abitype@1.1.0(typescript@5.9.2):
     optionalDependencies:
       typescript: 5.9.2
-      zod: 3.25.76
 
   abort-controller@3.0.0:
     dependencies:
@@ -5548,7 +5544,7 @@ snapshots:
 
   os-tmpdir@1.0.2: {}
 
-  ox@0.9.6(typescript@5.9.2)(zod@3.25.76):
+  ox@0.9.6(typescript@5.9.2):
     dependencies:
       '@adraffy/ens-normalize': 1.11.0
       '@noble/ciphers': 1.3.0
@@ -5556,7 +5552,7 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
-      abitype: 1.1.0(typescript@5.9.2)(zod@3.25.76)
+      abitype: 1.1.0(typescript@5.9.2)
       eventemitter3: 5.0.1
     optionalDependencies:
       typescript: 5.9.2
@@ -6116,15 +6112,15 @@ snapshots:
 
   v8-compile-cache-lib@3.0.1: {}
 
-  viem@2.38.3(typescript@5.9.2)(zod@3.25.76):
+  viem@2.38.3(typescript@5.9.2):
     dependencies:
       '@noble/curves': 1.9.1
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
-      abitype: 1.1.0(typescript@5.9.2)(zod@3.25.76)
+      abitype: 1.1.0(typescript@5.9.2)
       isows: 1.0.7(ws@8.18.3)
-      ox: 0.9.6(typescript@5.9.2)(zod@3.25.76)
+      ox: 0.9.6(typescript@5.9.2)
       ws: 8.18.3
     optionalDependencies:
       typescript: 5.9.2
@@ -6322,6 +6318,3 @@ snapshots:
       archiver-utils: 5.0.2
       compress-commons: 6.0.2
       readable-stream: 4.7.0
-
-  zod@3.25.76:
-    optional: true
