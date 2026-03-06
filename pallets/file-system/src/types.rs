@@ -401,10 +401,6 @@ impl UserOperationPauseFlags {
     pub const FLAG_REQUEST_DELETE_FILE: u32 = 1 << 5;
     /// Bit flag for executing file deletions.
     pub const FLAG_DELETE_FILES: u32 = 1 << 6;
-    /// Bit flag for BSPs volunteering to store a file.
-    pub const FLAG_BSP_VOLUNTEER: u32 = 1 << 7;
-    /// Bit flag for BSPs confirming they have stored a file.
-    pub const FLAG_BSP_CONFIRM_STORING: u32 = 1 << 8;
 
     /// Convenience flag where all currently defined operations are paused.
     pub const ALL: Self = Self(
@@ -414,9 +410,7 @@ impl UserOperationPauseFlags {
             | Self::FLAG_DELETE_BUCKET
             | Self::FLAG_ISSUE_STORAGE_REQUEST
             | Self::FLAG_REQUEST_DELETE_FILE
-            | Self::FLAG_DELETE_FILES
-            | Self::FLAG_BSP_VOLUNTEER
-            | Self::FLAG_BSP_CONFIRM_STORING,
+            | Self::FLAG_DELETE_FILES,
     );
 
     /// Create a new flags value from the raw bit representation.
