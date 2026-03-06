@@ -495,9 +495,7 @@ where
 
         // Check for pending RespondStorage requests.
         {
-            let runtime_max = <Runtime as pallet_file_system::Config>::MaxMspRespondFileKeys::get();
-            let max_batch_respond =
-                std::cmp::min(runtime_max, self.config.msp_respond_storage_batch_size);
+            let max_batch_respond = self.config.msp_respond_storage_batch_size;
 
             // Batch multiple RespondStorage requests up to the configured maximum.
             let mut respond_storage_requests = Vec::new();
