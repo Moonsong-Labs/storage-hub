@@ -83,46 +83,58 @@ describe("stream tamper detection", () => {
     return concatChunks(plaintextChunks);
   }
 
-  it("fails decryption when a header bit is flipped", async () => {
-    const encrypted = await encryptToBytes();
-    const { headerLength } = readEncryptionHeader(encrypted);
+  it(
+    "fails decryption when a header bit is flipped",
+    async () => {
+      const encrypted = await encryptToBytes();
+      const { headerLength } = readEncryptionHeader(encrypted);
 
-    const tampered = encrypted.slice();
-    const flipIndex = 7 + Math.floor((headerLength - 7) / 2);
-    tampered[flipIndex] ^= 0x01;
+      const tampered = encrypted.slice();
+      const flipIndex = 7 + Math.floor((headerLength - 7) / 2);
+      tampered[flipIndex] ^= 0x01;
 
-    await expect(decryptToBytes(tampered)).rejects.toThrow();
-  }, STREAM_TEST_TIMEOUT);
+      await expect(decryptToBytes(tampered)).rejects.toThrow();
+    },
+    STREAM_TEST_TIMEOUT
+  );
 
-  it("fails decryption when ciphertext chunks are reordered", async () => {
-    const encrypted = await encryptToBytes();
-    const { headerLength } = readEncryptionHeader(encrypted);
-    const bodyLength = encrypted.length - headerLength;
-    const expectedBodyLength = dataCipherChunkSize * 3 + COMMIT_CIPHERTEXT_SIZE_BYTES;
-    expect(bodyLength).toBe(expectedBodyLength);
+  it(
+    "fails decryption when ciphertext chunks are reordered",
+    async () => {
+      const encrypted = await encryptToBytes();
+      const { headerLength } = readEncryptionHeader(encrypted);
+      const bodyLength = encrypted.length - headerLength;
+      const expectedBodyLength = dataCipherChunkSize * 3 + COMMIT_CIPHERTEXT_SIZE_BYTES;
+      expect(bodyLength).toBe(expectedBodyLength);
 
-    const tampered = encrypted.slice();
-    const c0Start = headerLength;
-    const c1Start = headerLength + dataCipherChunkSize;
+      const tampered = encrypted.slice();
+      const c0Start = headerLength;
+      const c1Start = headerLength + dataCipherChunkSize;
 
-    const chunk0 = tampered.slice(c0Start, c0Start + dataCipherChunkSize);
-    const chunk1 = tampered.slice(c1Start, c1Start + dataCipherChunkSize);
-    tampered.set(chunk1, c0Start);
-    tampered.set(chunk0, c1Start);
+      const chunk0 = tampered.slice(c0Start, c0Start + dataCipherChunkSize);
+      const chunk1 = tampered.slice(c1Start, c1Start + dataCipherChunkSize);
+      tampered.set(chunk1, c0Start);
+      tampered.set(chunk0, c1Start);
 
-    await expect(decryptToBytes(tampered)).rejects.toThrow();
-  }, STREAM_TEST_TIMEOUT);
+      await expect(decryptToBytes(tampered)).rejects.toThrow();
+    },
+    STREAM_TEST_TIMEOUT
+  );
 
-  it("fails decryption when the whole final data chunk is dropped", async () => {
-    const encrypted = await encryptToBytes();
-    const { headerLength } = readEncryptionHeader(encrypted);
+  it(
+    "fails decryption when the whole final data chunk is dropped",
+    async () => {
+      const encrypted = await encryptToBytes();
+      const { headerLength } = readEncryptionHeader(encrypted);
 
-    const dropStart = headerLength + dataCipherChunkSize * 2;
-    const dropEnd = dropStart + dataCipherChunkSize;
-    const tampered = new Uint8Array(encrypted.length - dataCipherChunkSize);
-    tampered.set(encrypted.subarray(0, dropStart), 0);
-    tampered.set(encrypted.subarray(dropEnd), dropStart);
+      const dropStart = headerLength + dataCipherChunkSize * 2;
+      const dropEnd = dropStart + dataCipherChunkSize;
+      const tampered = new Uint8Array(encrypted.length - dataCipherChunkSize);
+      tampered.set(encrypted.subarray(0, dropStart), 0);
+      tampered.set(encrypted.subarray(dropEnd), dropStart);
 
-    await expect(decryptToBytes(tampered)).rejects.toThrow();
-  }, STREAM_TEST_TIMEOUT);
+      await expect(decryptToBytes(tampered)).rejects.toThrow();
+    },
+    STREAM_TEST_TIMEOUT
+  );
 });
