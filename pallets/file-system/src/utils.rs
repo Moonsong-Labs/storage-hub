@@ -1860,13 +1860,6 @@ where
         ),
         DispatchError,
     > {
-        // Check that BSP volunteering is not currently paused (e.g. during a storage migration).
-        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
-        ensure!(
-            !pause_flags.is_all_set(UserOperationPauseFlags::FLAG_BSP_VOLUNTEER),
-            Error::<T>::UserOperationPaused
-        );
-
         let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
             .ok_or(Error::<T>::NotABsp)?;
 
@@ -2005,13 +1998,6 @@ where
         non_inclusion_forest_proof: ForestProof<T>,
         file_keys_and_proofs: BoundedVec<FileKeyWithProof<T>, T::MaxBatchConfirmStorageRequests>,
     ) -> DispatchResult {
-        // Check that BSP confirm storing is not currently paused (e.g. during a storage migration).
-        let pause_flags = UserOperationPauseFlagsStorage::<T>::get();
-        ensure!(
-            !pause_flags.is_all_set(UserOperationPauseFlags::FLAG_BSP_CONFIRM_STORING),
-            Error::<T>::UserOperationPaused
-        );
-
         // Get the Provider ID of the sender.
         let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
             .ok_or(Error::<T>::NotABsp)?;
@@ -2584,7 +2570,7 @@ where
                             <StorageRequestBsps<T>>::set(&file_key, Some(bsps));
                         }
                     }
-                    // BSP volunteered but has not confirmed yet - invalid state for stop storing.
+                    // BSP volunteered but has not confirmed yet.
                     Some(_) => {
                         return Err(Error::<T>::BspNotConfirmed.into());
                     }
@@ -3646,11 +3632,7 @@ mod hooks {
             file_key: MerkleHash<T>,
             meter: &mut WeightMeter,
         ) {
-            // Get storage request and count BSPs that volunteered for it from the separate BSP map.
-            // We read the BSP count BEFORE cleanup since cleanup removes the BSP map entry.
             let storage_request_metadata = StorageRequests::<T>::get(&file_key);
-            let bsps = <StorageRequestBsps<T>>::get(&file_key);
-            let amount_of_volunteered_bsps = bsps.as_ref().map(|b| b.len() as u32).unwrap_or(0);
 
             match storage_request_metadata {
                 Some(storage_request_metadata) => match &storage_request_metadata.msp_status {
@@ -3670,7 +3652,7 @@ mod hooks {
                         // Consume the weight used.
                         meter.consume(
                             T::WeightInfo::process_expired_storage_request_msp_accepted_or_no_msp(
-                                amount_of_volunteered_bsps,
+                                storage_request_metadata.bsps_volunteered.into(),
                             ),
                         );
                     }
@@ -3679,8 +3661,10 @@ mod hooks {
                         if !storage_request_metadata.bsps_confirmed.is_zero() {
                             // There are BSPs that have confirmed storing the file, so we need to create an incomplete storage request metadata
                             // This will allow the fisherman node to delete the file from the confirmed BSPs.
+                            // Read BSP map before cleanup since cleanup removes it.
+                            let bsps = <StorageRequestBsps<T>>::get(&file_key);
                             let incomplete_storage_request_metadata = storage_request_metadata
-                                .to_incomplete_metadata(&bsps.clone().unwrap_or_default());
+                                .to_incomplete_metadata(&bsps.unwrap_or_default());
 
                             Self::add_incomplete_storage_request(
                                 file_key,
@@ -3691,7 +3675,7 @@ mod hooks {
                         Self::cleanup_storage_request(&file_key, &storage_request_metadata);
                         // Consume the weight used.
                         meter.consume(T::WeightInfo::process_expired_storage_request_msp_rejected(
-                            amount_of_volunteered_bsps,
+                            storage_request_metadata.bsps_volunteered.into(),
                         ));
                         // Emit the StorageRequestRejected event
                         // If there are BSPs that have confirmed storing the file,

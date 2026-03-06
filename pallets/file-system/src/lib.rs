@@ -160,6 +160,7 @@ pub mod pallet {
             + Default
             + MaybeDisplay
             + From<u32>
+            + Into<u32>
             + Into<u64>
             + Into<Self::ThresholdType>
             + Copy
@@ -394,7 +395,7 @@ pub mod pallet {
         /// Maximum number of file keys an MSP can accept per bucket in a single
         /// `msp_respond_storage_requests_multiple_buckets` call.
         ///
-        /// Bounds `StorageRequestMspAcceptedFileKeys.file_keys_and_proofs`.
+        /// Bounds [`StorageRequestMspAcceptedFileKeys::file_keys_and_proofs`].
         #[pallet::constant]
         type MaxMspRespondFileKeys: Get<u32>;
 
