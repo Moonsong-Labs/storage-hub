@@ -3,7 +3,7 @@ use core::cmp::max;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
     traits::{fungible::Inspect, nonfungibles_v2::Inspect as NonFungiblesInspect, Get},
-    BoundedBTreeMap, BoundedVec,
+    BoundedVec,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
@@ -14,7 +14,7 @@ use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
     Config, Error, MoveBucketRequestExpirations, NextAvailableMoveBucketRequestExpirationTick,
-    NextAvailableStorageRequestExpirationTick, StorageRequestExpirations,
+    NextAvailableStorageRequestExpirationTick, StorageRequestBsps, StorageRequestExpirations,
 };
 
 /// Ephemeral metadata of a storage request.
@@ -100,13 +100,14 @@ impl<T: Config> StorageRequestMetadata<T> {
         .map_err(|_| Error::<T>::FailedToCreateFileMetadata.into())
     }
 
-    /// Convert this storage request metadata into an [`IncompleteStorageRequestMetadata`],
-    /// using the provided BSP map to determine which BSPs have confirmed storage.
-    pub fn to_incomplete_metadata(
-        &self,
-        bsps: &BoundedBTreeMap<ProviderIdFor<T>, bool, MaxBspVolunteers<T>>,
-    ) -> IncompleteStorageRequestMetadata<T> {
-        // Collect all confirmed BSPs from the provided bsps map
+}
+
+impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
+    for IncompleteStorageRequestMetadata<T>
+{
+    fn from((storage_request, file_key): (&StorageRequestMetadata<T>, &MerkleHash<T>)) -> Self {
+        // Collect all confirmed BSPs
+        let bsps = <StorageRequestBsps<T>>::get(file_key).unwrap_or_default();
         let confirmed_bsps: sp_std::vec::Vec<_> = bsps
             .iter()
             .filter(|(_, confirmed)| **confirmed)
@@ -117,17 +118,19 @@ impl<T: Config> StorageRequestMetadata<T> {
         // this means the file is new and we should mark it for bucket removal.
         // If the MSP accepted the storage request with an inclusion forest proof, the file already
         // existed in the bucket from a previous storage request, so we should not mark it for bucket removal.
-        let pending_bucket_removal =
-            matches!(self.msp_status, MspStorageRequestStatus::AcceptedNewFile(_));
+        let pending_bucket_removal = matches!(
+            storage_request.msp_status,
+            MspStorageRequestStatus::AcceptedNewFile(_)
+        );
 
         let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
 
-        IncompleteStorageRequestMetadata {
-            owner: self.owner.clone(),
-            bucket_id: self.bucket_id,
-            location: self.location.clone(),
-            file_size: self.size,
-            fingerprint: self.fingerprint,
+        Self {
+            owner: storage_request.owner.clone(),
+            bucket_id: storage_request.bucket_id,
+            location: storage_request.location.clone(),
+            file_size: storage_request.size,
+            fingerprint: storage_request.fingerprint,
             pending_bsp_removals: bounded_bsps,
             pending_bucket_removal,
         }

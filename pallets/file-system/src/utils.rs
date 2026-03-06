@@ -1226,9 +1226,8 @@ where
                 // We check if there are any BSP that has already confirmed the storage request
                 if !storage_request_metadata.bsps_confirmed.is_zero() {
                     // We create the incomplete storage request metadata and insert it into the incomplete storage requests
-                    let bsps = <StorageRequestBsps<T>>::get(file_key).unwrap_or_default();
-                    let incomplete_storage_request_metadata =
-                        storage_request_metadata.to_incomplete_metadata(&bsps);
+                    let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
+                        (&storage_request_metadata, &file_key).into();
 
                     Self::add_incomplete_storage_request(
                         file_key,
@@ -2348,9 +2347,8 @@ where
             || storage_request_metadata.msp_status.is_accepted()
         {
             // We create the incomplete storage request metadata and insert it into the incomplete storage requests
-            let bsps = <StorageRequestBsps<T>>::get(&file_key).unwrap_or_default();
-            let incomplete_storage_request_metadata =
-                storage_request_metadata.to_incomplete_metadata(&bsps);
+            let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
+                (&storage_request_metadata, &file_key).into();
             Self::add_incomplete_storage_request(file_key, incomplete_storage_request_metadata);
         }
 
@@ -3118,10 +3116,9 @@ where
                 // - A deletion requests exists for the same file key, so the file is deleted from that MSP's bucket here.
                 // - A BSP confirms the storage request, and it gets fulfilled.
                 // This would result in the file being stored by the BSP, but not by the MSP.
-                let bsps = <StorageRequestBsps<T>>::get(file_key).unwrap_or_default();
                 Self::add_incomplete_storage_request(
                     *file_key,
-                    storage_request.to_incomplete_metadata(&bsps),
+                    IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
                 );
                 Self::cleanup_storage_request(&file_key, &storage_request);
             }
@@ -3265,10 +3262,9 @@ where
                 // - A deletion requests exists for the same file key, so the file is deleted from that MSP's bucket here.
                 // - A BSP confirms the storage request, and it gets fulfilled.
                 // This would result in the file being stored by the BSP, but not by the MSP.
-                let bsps = <StorageRequestBsps<T>>::get(file_key).unwrap_or_default();
                 Self::add_incomplete_storage_request(
                     *file_key,
-                    storage_request.to_incomplete_metadata(&bsps),
+                    IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
                 );
                 Self::cleanup_storage_request(&file_key, &storage_request);
             }
@@ -3460,11 +3456,14 @@ where
 mod hooks {
     use crate::{
         pallet,
-        types::{MerkleHash, MspStorageRequestStatus, RejectedStorageRequestReason, TickNumber},
+        types::{
+            IncompleteStorageRequestMetadata, MerkleHash, MspStorageRequestStatus,
+            RejectedStorageRequestReason, TickNumber,
+        },
         utils::BucketIdFor,
         weights::WeightInfo,
         Event, MoveBucketRequestExpirations, NextStartingTickToCleanUp, Pallet,
-        PendingMoveBucketRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        PendingMoveBucketRequests, StorageRequestExpirations, StorageRequests,
     };
     use sp_runtime::{
         traits::{Get, One, Zero},
@@ -3662,9 +3661,8 @@ mod hooks {
                             // There are BSPs that have confirmed storing the file, so we need to create an incomplete storage request metadata
                             // This will allow the fisherman node to delete the file from the confirmed BSPs.
                             // Read BSP map before cleanup since cleanup removes it.
-                            let bsps = <StorageRequestBsps<T>>::get(&file_key);
-                            let incomplete_storage_request_metadata = storage_request_metadata
-                                .to_incomplete_metadata(&bsps.unwrap_or_default());
+                            let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
+                                (&storage_request_metadata, &file_key).into();
 
                             Self::add_incomplete_storage_request(
                                 file_key,
