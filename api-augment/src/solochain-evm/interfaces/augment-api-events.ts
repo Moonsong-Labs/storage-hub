@@ -578,7 +578,9 @@ declare module "@polkadot/api-base/types/events" {
           fingerprint: H256,
           size_: u64,
           peerIds: Vec<Bytes>,
-          expiresAt: u32
+          expiresAt: u32,
+          bspsRequired: u32,
+          mspId: Option<H256>
         ],
         {
           who: AccountId20;
@@ -589,6 +591,8 @@ declare module "@polkadot/api-base/types/events" {
           size_: u64;
           peerIds: Vec<Bytes>;
           expiresAt: u32;
+          bspsRequired: u32;
+          mspId: Option<H256>;
         }
       >;
       /**

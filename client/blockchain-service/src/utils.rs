@@ -2121,6 +2121,7 @@ where
                 size,
                 peer_ids,
                 expires_at,
+                ..
             }) if who == Self::caller_pub_key(self.keystore.clone()).into() => {
                 // This event should only be of any use if a node is run as a user (not BSP/MSP).
                 if self.maybe_managed_provider.is_none() {

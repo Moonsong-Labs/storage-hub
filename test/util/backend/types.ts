@@ -63,6 +63,8 @@ export interface FileInfo {
   isPublic: boolean;
   uploadedAt: string;
   status: FileStatus;
+  desiredReplicas: number;
+  currentReplication: number;
 }
 
 export interface PaymentStream {
