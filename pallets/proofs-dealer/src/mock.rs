@@ -22,8 +22,8 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
-use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use std::collections::{BTreeMap, BTreeSet};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;

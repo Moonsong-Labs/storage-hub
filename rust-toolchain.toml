@@ -6,7 +6,6 @@
 # but Rust 1.91 (PR #144443) changed this to require an integer: "target-pointer-width": 64.
 # polkadot-sdk stable2503 was tested with Rust 1.84.1; 1.90 is the latest compatible version.
 channel = "1.90"
-
 components = [
 	"cargo",
 	"clippy",

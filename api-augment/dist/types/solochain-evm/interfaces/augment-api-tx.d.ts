@@ -3,7 +3,7 @@ import type { ApiTypes, AugmentedSubmittable, SubmittableExtrinsic, SubmittableE
 import type { Bytes, Compact, Option, U256, Vec, bool, u128, u32, u64 } from '@polkadot/types-codec';
 import type { AnyNumber, IMethod, ITuple } from '@polkadot/types-codec/types';
 import type { AccountId20, Call, H160, H256 } from '@polkadot/types/interfaces/runtime';
-import type { EthereumTransactionTransactionV2, FpAccountEthereumSignature, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileDeletionRequest, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters, ShSolochainEvmRuntimeSessionKeys, SpConsensusBabeDigestsNextConfigDescriptor, SpConsensusGrandpaEquivocationProof, SpConsensusSlotsEquivocationProof, SpSessionMembershipProof, SpTrieStorageProofCompactProof, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
+import type { EthereumTransactionEip7702AuthorizationListItem, EthereumTransactionTransactionV3, FpAccountEthereumSignature, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileDeletionRequest, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters, ShSolochainEvmRuntimeSessionKeys, SpConsensusBabeDigestsNextConfigDescriptor, SpConsensusGrandpaEquivocationProof, SpConsensusSlotsEquivocationProof, SpSessionMembershipProof, SpTrieStorageProofCompactProof, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
 export type __AugmentedSubmittable = AugmentedSubmittable<() => unknown>;
 export type __SubmittableExtrinsic<ApiType extends ApiTypes> = SubmittableExtrinsic<ApiType>;
 export type __SubmittableExtrinsicFunction<ApiType extends ApiTypes> = SubmittableExtrinsicFunction<ApiType>;
@@ -169,13 +169,15 @@ declare module '@polkadot/api-base/types/submittable' {
             /**
              * Transact an Ethereum transaction.
              **/
-            transact: AugmentedSubmittable<(transaction: EthereumTransactionTransactionV2 | {
+            transact: AugmentedSubmittable<(transaction: EthereumTransactionTransactionV3 | {
                 Legacy: any;
             } | {
                 EIP2930: any;
             } | {
                 EIP1559: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [EthereumTransactionTransactionV2]>;
+            } | {
+                EIP7702: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [EthereumTransactionTransactionV3]>;
             /**
              * Generic tx
              **/
@@ -185,16 +187,31 @@ declare module '@polkadot/api-base/types/submittable' {
             /**
              * Issue an EVM call operation. This is similar to a message call transaction in Ethereum.
              **/
-            call: AugmentedSubmittable<(source: H160 | string | Uint8Array, target: H160 | string | Uint8Array, input: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[]) => SubmittableExtrinsic<ApiType>, [H160, H160, Bytes, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>]>;
+            call: AugmentedSubmittable<(source: H160 | string | Uint8Array, target: H160 | string | Uint8Array, input: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[], authorizationList: Vec<EthereumTransactionEip7702AuthorizationListItem> | (EthereumTransactionEip7702AuthorizationListItem | {
+                chainId?: any;
+                address?: any;
+                nonce?: any;
+                signature?: any;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H160, H160, Bytes, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>, Vec<EthereumTransactionEip7702AuthorizationListItem>]>;
             /**
              * Issue an EVM create operation. This is similar to a contract creation transaction in
              * Ethereum.
              **/
-            create: AugmentedSubmittable<(source: H160 | string | Uint8Array, init: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[]) => SubmittableExtrinsic<ApiType>, [H160, Bytes, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>]>;
+            create: AugmentedSubmittable<(source: H160 | string | Uint8Array, init: Bytes | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[], authorizationList: Vec<EthereumTransactionEip7702AuthorizationListItem> | (EthereumTransactionEip7702AuthorizationListItem | {
+                chainId?: any;
+                address?: any;
+                nonce?: any;
+                signature?: any;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H160, Bytes, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>, Vec<EthereumTransactionEip7702AuthorizationListItem>]>;
             /**
              * Issue an EVM create2 operation.
              **/
-            create2: AugmentedSubmittable<(source: H160 | string | Uint8Array, init: Bytes | string | Uint8Array, salt: H256 | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[]) => SubmittableExtrinsic<ApiType>, [H160, Bytes, H256, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>]>;
+            create2: AugmentedSubmittable<(source: H160 | string | Uint8Array, init: Bytes | string | Uint8Array, salt: H256 | string | Uint8Array, value: U256 | AnyNumber | Uint8Array, gasLimit: u64 | AnyNumber | Uint8Array, maxFeePerGas: U256 | AnyNumber | Uint8Array, maxPriorityFeePerGas: Option<U256> | null | Uint8Array | U256 | AnyNumber, nonce: Option<U256> | null | Uint8Array | U256 | AnyNumber, accessList: Vec<ITuple<[H160, Vec<H256>]>> | ([H160 | string | Uint8Array, Vec<H256> | (H256 | string | Uint8Array)[]])[], authorizationList: Vec<EthereumTransactionEip7702AuthorizationListItem> | (EthereumTransactionEip7702AuthorizationListItem | {
+                chainId?: any;
+                address?: any;
+                nonce?: any;
+                signature?: any;
+            } | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H160, Bytes, H256, U256, u64, U256, Option<U256>, Option<U256>, Vec<ITuple<[H160, Vec<H256>]>>, Vec<EthereumTransactionEip7702AuthorizationListItem>]>;
             /**
              * Withdraw balance from EVM into currency/balances pallet.
              **/
