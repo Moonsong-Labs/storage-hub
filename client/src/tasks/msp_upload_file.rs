@@ -63,11 +63,11 @@
 //!
 //! The blockchain service filters pending storage requests before emitting events:
 //!
-//! | Status                        | Meaning                                    | Action in BlockchainService                          |  
-//! | ----------------------------- | ------------------------------------------ | -----------------------------------------------------|  
-//! | [`FileKeyStatus::Processing`] | File key is in the pipeline                | **Skip** (don't emit)                                |  
-//! | [`FileKeyStatus::Abandoned`]  | Failed with non-proof dispatch error       | **Skip** (don't emit)                                |  
-//! | *Not present*                 | New or retryable file key                  | **Emit** (set status to `Processing`)                |  
+//! | Status                        | Meaning                                    | Action in BlockchainService                          |
+//! | ----------------------------- | ------------------------------------------ | -----------------------------------------------------|
+//! | [`FileKeyStatus::Processing`] | File key is in the pipeline                | **Skip** (don't emit)                                |
+//! | [`FileKeyStatus::Abandoned`]  | Failed with non-proof dispatch error       | **Skip** (don't emit)                                |
+//! | *Not present*                 | New or retryable file key                  | **Emit** (set status to `Processing`)                |
 //!
 //! ### Retry Mechanism
 //!
@@ -927,16 +927,18 @@ where
         // accept limits in a single iteration — before any expensive work.
         let max_keys =
             <Runtime as pallet_file_system::Config>::MaxMspRespondFileKeys::get() as usize;
+        // Track number of accepts per bucket
         let mut accepts_per_bucket: HashMap<H256, usize> = HashMap::new();
+        // Track file keys that are part of the set to be accepted per bucket
         let mut file_key_to_bucket: HashMap<H256, H256> = HashMap::new();
-        {
-            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-            for respond in &event.data.respond_storing_requests {
-                if !pending_file_keys.contains(&respond.file_key) {
-                    continue;
-                }
+        for respond in &event.data.respond_storing_requests {
+            if !pending_file_keys.contains(&respond.file_key) {
+                continue;
+            }
 
-                let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
+            let bucket_id = {
+                let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+                match read_file_storage.get_metadata(&respond.file_key) {
                     Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                     Ok(None) => {
                         error!(target: LOG_TARGET, "File does not exist for key [{:x}]. Maybe we forgot to unregister before deleting?", respond.file_key);
@@ -947,29 +949,30 @@ where
                         continue;
                     }
                 };
+            };
 
-                if let MspRespondStorageRequest::Accept = &respond.response {
-                    let count = accepts_per_bucket.entry(bucket_id).or_default();
-                    if *count >= max_keys {
-                        warn!(
-                            target: LOG_TARGET,
-                            "Bucket [{:?}] already has {} accepted keys (max {}). Re-queuing file key [{:x}].",
-                            bucket_id, *count, max_keys, respond.file_key
-                        );
-                        self.storage_hub_handler
-                            .blockchain
-                            .queue_msp_respond_storage_request(RespondStorageRequest::new(
-                                respond.file_key,
-                                MspRespondStorageRequest::Accept,
-                            ))
-                            .await;
-                        continue;
-                    }
-                    *count += 1;
+            // Insert file key to be included in the set of file keys to accept or requeue it if we are passed the maximum key limit
+            if let MspRespondStorageRequest::Accept = &respond.response {
+                let count = accepts_per_bucket.entry(bucket_id).or_default();
+                if *count >= max_keys {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Bucket [{:?}] already has {} accepted keys (max {}). Re-queuing file key [{:x}].",
+                        bucket_id, *count, max_keys, respond.file_key
+                    );
+                    self.storage_hub_handler
+                        .blockchain
+                        .queue_msp_respond_storage_request(RespondStorageRequest::new(
+                            respond.file_key,
+                            MspRespondStorageRequest::Accept,
+                        ))
+                        .await;
+                    continue;
                 }
-
-                file_key_to_bucket.insert(respond.file_key, bucket_id);
+                *count += 1;
             }
+
+            file_key_to_bucket.insert(respond.file_key, bucket_id);
         }
 
         // Pass 2: For kept requests, fetch chunks to prove, generate proofs,
