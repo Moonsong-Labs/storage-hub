@@ -101,41 +101,6 @@ impl<T: Config> StorageRequestMetadata<T> {
     }
 }
 
-impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
-    for IncompleteStorageRequestMetadata<T>
-{
-    fn from((storage_request, file_key): (&StorageRequestMetadata<T>, &MerkleHash<T>)) -> Self {
-        // Collect all confirmed BSPs
-        let bsps = <StorageRequestBsps<T>>::get(file_key).unwrap_or_default();
-        let confirmed_bsps: sp_std::vec::Vec<_> = bsps
-            .iter()
-            .filter(|(_, confirmed)| **confirmed)
-            .map(|(bsp_id, _)| *bsp_id)
-            .collect();
-
-        // Check if the MSP has accepted the storage request with a non-inclusion forest proof, as
-        // this means the file is new and we should mark it for bucket removal.
-        // If the MSP accepted the storage request with an inclusion forest proof, the file already
-        // existed in the bucket from a previous storage request, so we should not mark it for bucket removal.
-        let pending_bucket_removal = matches!(
-            storage_request.msp_status,
-            MspStorageRequestStatus::AcceptedNewFile(_)
-        );
-
-        let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
-
-        Self {
-            owner: storage_request.owner.clone(),
-            bucket_id: storage_request.bucket_id,
-            location: storage_request.location.clone(),
-            file_size: storage_request.size,
-            fingerprint: storage_request.fingerprint,
-            pending_bsp_removals: bounded_bsps,
-            pending_bucket_removal,
-        }
-    }
-}
-
 /// Represents the MSP assignment status for a storage request.
 ///
 /// This enum captures all possible states of the MSP relationship with a storage request:
@@ -686,6 +651,41 @@ impl<T: Config> IncompleteStorageRequestMetadata<T> {
                 // Remove BSP from the pending list
                 self.pending_bsp_removals.retain(|&bsp_id| bsp_id != id);
             }
+        }
+    }
+}
+
+impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
+    for IncompleteStorageRequestMetadata<T>
+{
+    fn from((storage_request, file_key): (&StorageRequestMetadata<T>, &MerkleHash<T>)) -> Self {
+        // Collect all confirmed BSPs
+        let bsps = <StorageRequestBsps<T>>::get(file_key).unwrap_or_default();
+        let confirmed_bsps: sp_std::vec::Vec<_> = bsps
+            .iter()
+            .filter(|(_, confirmed)| **confirmed)
+            .map(|(bsp_id, _)| *bsp_id)
+            .collect();
+
+        // Check if the MSP has accepted the storage request with a non-inclusion forest proof, as
+        // this means the file is new and we should mark it for bucket removal.
+        // If the MSP accepted the storage request with an inclusion forest proof, the file already
+        // existed in the bucket from a previous storage request, so we should not mark it for bucket removal.
+        let pending_bucket_removal = matches!(
+            storage_request.msp_status,
+            MspStorageRequestStatus::AcceptedNewFile(_)
+        );
+
+        let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
+
+        Self {
+            owner: storage_request.owner.clone(),
+            bucket_id: storage_request.bucket_id,
+            location: storage_request.location.clone(),
+            file_size: storage_request.size,
+            fingerprint: storage_request.fingerprint,
+            pending_bsp_removals: bounded_bsps,
+            pending_bucket_removal,
         }
     }
 }
