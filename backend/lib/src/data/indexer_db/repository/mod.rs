@@ -54,7 +54,12 @@ pub struct PaymentStreamData {
     pub total_amount_paid: BigDecimal,
     pub kind: PaymentStreamKind,
 }
-
+/// Paginated buckets plus the total number of matches before pagination.
+#[derive(Debug, Clone)]
+pub struct BucketsPage<T> {
+    pub buckets: Vec<T>,
+    pub total: u64,
+}
 /// Aggregated storage request acceptance stats for an MSP within a time window.
 #[derive(Debug, Clone)]
 pub struct RequestAcceptanceStats {
@@ -108,7 +113,7 @@ pub trait IndexerOps: Send + Sync {
         account: &str,
         limit: i64,
         offset: i64,
-    ) -> RepositoryResult<Vec<Bucket>>;
+    ) -> RepositoryResult<BucketsPage<Bucket>>;
 
     /// Retrieve all the files belonging to the given bucket
     ///
