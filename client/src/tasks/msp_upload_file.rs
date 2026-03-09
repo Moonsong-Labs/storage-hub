@@ -929,7 +929,7 @@ where
             <Runtime as pallet_file_system::Config>::MaxMspRespondFileKeys::get() as usize;
         // Track number of accepts per bucket
         let mut accepts_per_bucket: HashMap<H256, usize> = HashMap::new();
-        // Track file keys that are part of the set to be accepted per bucket
+        // Track file keys that are part of the response set
         let mut file_key_to_bucket: HashMap<H256, H256> = HashMap::new();
         for respond in &event.data.respond_storing_requests {
             if !pending_file_keys.contains(&respond.file_key) {
