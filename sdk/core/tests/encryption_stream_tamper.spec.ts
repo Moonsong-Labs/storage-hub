@@ -1,9 +1,17 @@
 import { describe, it, expect } from "vitest";
+import { chacha20poly1305 } from "@noble/ciphers/chacha.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 import { decryptFile, encryptFile, generateEncryptionKey } from "../src/encryption.js";
 import { readEncryptionHeader } from "../src/encryption/cbor.js";
 import { AEAD_TAG_SIZE_BYTES, COMMIT_CIPHERTEXT_SIZE_BYTES } from "../src/encryption/consts.js";
 import { IKM } from "../src/encryption/types.js";
+import {
+  concatChunks,
+  createCommitAad,
+  parseCommitPayload,
+  toReadable
+} from "./encryption_test_utils.js";
 
 const STREAM_TEST_TIMEOUT = 20_000;
 
@@ -12,32 +20,6 @@ describe("stream tamper detection", () => {
   const chunkSize = 32;
   const plaintext = Uint8Array.from({ length: 96 }, (_, i) => i);
   const dataCipherChunkSize = chunkSize + AEAD_TAG_SIZE_BYTES;
-
-  function toReadable(bytes: Uint8Array, frameSize = 13): ReadableStream<Uint8Array> {
-    let offset = 0;
-    return new ReadableStream<Uint8Array>({
-      pull(controller) {
-        if (offset >= bytes.length) {
-          controller.close();
-          return;
-        }
-        const end = Math.min(offset + frameSize, bytes.length);
-        controller.enqueue(bytes.subarray(offset, end));
-        offset = end;
-      }
-    });
-  }
-
-  function concatChunks(chunks: Uint8Array[]): Uint8Array {
-    const total = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      out.set(chunk, offset);
-      offset += chunk.length;
-    }
-    return out;
-  }
 
   async function encryptToBytes(): Promise<Uint8Array> {
     const encryptedChunks: Uint8Array[] = [];
@@ -82,6 +64,70 @@ describe("stream tamper detection", () => {
     });
     return concatChunks(plaintextChunks);
   }
+
+  it(
+    "encrypts/decrypts empty input and commits with nonce index 0",
+    async () => {
+      const encryptedChunks: Uint8Array[] = [];
+      const decryptedChunks: Uint8Array[] = [];
+
+      const { dek, baseNonce, header } = await generateEncryptionKey({
+        kind: "password",
+        password
+      });
+
+      // Encrypt empty stream: output should be header + commit trailer only.
+      await encryptFile({
+        input: toReadable(new Uint8Array(), 1),
+        output: new WritableStream<Uint8Array>({
+          write(chunk) {
+            encryptedChunks.push(chunk);
+          }
+        }),
+        dek,
+        baseNonce,
+        header: {
+          ...header,
+          chunk_size: chunkSize
+        }
+      });
+
+      const encrypted = concatChunks(encryptedChunks);
+      const { headerLength } = readEncryptionHeader(encrypted);
+      expect(encrypted.length).toBe(headerLength + COMMIT_CIPHERTEXT_SIZE_BYTES);
+
+      const headerBytes = encrypted.subarray(0, headerLength);
+      const commitCiphertext = encrypted.subarray(headerLength);
+      // Empty input means chunkIndex never increments, so commit nonce index is 0.
+      const commitAad = createCommitAad(sha256(headerBytes), 0);
+      const commitNonce = baseNonce.getNonce(0).unwrap();
+      const commitPayload = chacha20poly1305(dek, commitNonce, commitAad).decrypt(
+        commitCiphertext
+      );
+      const commit = parseCommitPayload(commitPayload);
+      expect(commit.totalPlaintextBytes).toBe(0);
+      expect(commit.totalChunkCount).toBe(0);
+
+      // Full decrypt should emit no plaintext bytes.
+      await decryptFile({
+        input: toReadable(encrypted, 19),
+        output: new WritableStream<Uint8Array>({
+          write(chunk) {
+            decryptedChunks.push(chunk);
+          }
+        }),
+        getIkm: async (hdr) => {
+          if (hdr.ikm !== "password") {
+            throw new Error(`expected password header, got ${hdr.ikm}`);
+          }
+          return IKM.fromPassword(password, hdr.ikm_salt).unwrap();
+        }
+      });
+
+      expect(concatChunks(decryptedChunks).length).toBe(0);
+    },
+    STREAM_TEST_TIMEOUT
+  );
 
   it(
     "fails decryption when a header bit is flipped",

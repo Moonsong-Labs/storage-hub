@@ -6,34 +6,9 @@ import { IKM } from "../src/encryption/types.js";
 import { privateKeyToAccount } from "viem/accounts";
 import { createWalletClient, defineChain, http } from "viem";
 import { TEST_PRIVATE_KEY_12 } from "./consts.js";
+import { concatChunks, toReadable } from "./encryption_test_utils.js";
 
 const SLOW_TEST_TIMEOUT = 20_000;
-
-function toReadable(bytes: Uint8Array, frameSize: number): ReadableStream<Uint8Array> {
-  let offset = 0;
-  return new ReadableStream<Uint8Array>({
-    pull(controller) {
-      if (offset >= bytes.length) {
-        controller.close();
-        return;
-      }
-      const end = Math.min(offset + frameSize, bytes.length);
-      controller.enqueue(bytes.subarray(offset, end));
-      offset = end;
-    }
-  });
-}
-
-function concatChunks(chunks: Uint8Array[]): Uint8Array {
-  const total = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
-}
 
 describe("wrong credential handling", () => {
   const chunkSize = 64;
