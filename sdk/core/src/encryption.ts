@@ -19,7 +19,7 @@ import {
 import type { WalletClient } from "viem";
 import type { Account } from "viem";
 import { DEK, BaseNonce, IKM, Salt } from "./encryption/types.js";
-import { createEncryptionHeader, readEncryptionHeader } from "./encryption/cbor.js";
+import { createEncryptionHeader, readEncryptionHeader, HEADER_MAGIC } from "./encryption/cbor.js";
 import type { EncryptionHeaderParams } from "./encryption/header.js";
 
 function createChunkAAD(headerHash: Uint8Array, chunkIndex: number, kind: number): Uint8Array {
@@ -445,6 +445,11 @@ async function readHeaderFromStream(reader: ReadableStreamDefaultReader<Uint8Arr
   }
 
   const prefix = queue.take(MAGIC_PLUS_LEN);
+  for (let i = 0; i < HEADER_MAGIC.length; i++) {
+    if (prefix[i] !== HEADER_MAGIC[i]) {
+      throw new Error("decryptFile: not an encrypted file (magic mismatch)");
+    }
+  }
   const headerLen = new DataView(prefix.buffer, prefix.byteOffset, prefix.byteLength).getUint32(
     3,
     false
