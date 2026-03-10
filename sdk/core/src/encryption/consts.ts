@@ -17,7 +17,7 @@ export const CHUNK_AAD_KIND_DATA = 0;
 export const CHUNK_AAD_KIND_COMMIT = 1;
 
 // Authenticated commit trailer to bind final plaintext totals.
-export const COMMIT_MAGIC = new TextEncoder().encode("SHC1");
+export const COMMIT_MAGIC: Readonly<Uint8Array> = Object.freeze(new TextEncoder().encode("SHC1"));
 export const COMMIT_PLAINTEXT_SIZE_BYTES = COMMIT_MAGIC.length + 8 + 8;
 export const COMMIT_CIPHERTEXT_SIZE_BYTES = COMMIT_PLAINTEXT_SIZE_BYTES + AEAD_TAG_SIZE_BYTES;
 
