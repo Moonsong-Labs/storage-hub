@@ -832,12 +832,15 @@ where
 pub struct MspChargeFeesOptions {
     /// Minimum debt threshold for charging users.
     pub min_debt: Option<u64>,
+    /// Maximum number of payment streams (users) to charge per cycle.
+    pub max_streams_to_charge: Option<u32>,
 }
 
 impl Into<MspChargeFeesConfig> for MspChargeFeesOptions {
     fn into(self) -> MspChargeFeesConfig {
         MspChargeFeesConfig {
             min_debt: self.min_debt.unwrap_or_default(),
+            max_streams_to_charge: self.max_streams_to_charge.unwrap_or(10),
         }
     }
 }
@@ -900,12 +903,15 @@ impl Into<BspMoveBucketConfig> for BspMoveBucketOptions {
 pub struct BspChargeFeesOptions {
     /// Minimum debt threshold for charging users.
     pub min_debt: Option<u64>,
+    /// Maximum number of payment streams (users) to charge per cycle.
+    pub max_streams_to_charge: Option<u32>,
 }
 
 impl Into<BspChargeFeesConfig> for BspChargeFeesOptions {
     fn into(self) -> BspChargeFeesConfig {
         BspChargeFeesConfig {
             min_debt: self.min_debt.unwrap_or_default(),
+            max_streams_to_charge: self.max_streams_to_charge.unwrap_or(10),
         }
     }
 }

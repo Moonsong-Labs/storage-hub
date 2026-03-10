@@ -12,7 +12,7 @@ use shc_blockchain_service::{
     types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
 };
 use shc_common::{
-    consts::CURRENT_FOREST_KEY, traits::StorageEnableRuntime, types::MaxUsersToCharge,
+    consts::CURRENT_FOREST_KEY, traits::StorageEnableRuntime,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{Get, H256};
@@ -30,12 +30,15 @@ const LOG_TARGET: &str = "bsp-charge-fees-task";
 pub struct BspChargeFeesConfig {
     /// Minimum debt threshold for charging users
     pub min_debt: u64,
+    /// Maximum number of payment streams (users) to charge per cycle
+    pub max_streams_to_charge: u32,
 }
 
 impl Default for BspChargeFeesConfig {
     fn default() -> Self {
         Self {
-            min_debt: 0, // Default value that was in command.rs
+            min_debt: 0,
+            max_streams_to_charge: 10,
         }
     }
 }
@@ -120,11 +123,12 @@ where
                 )
             })?;
 
-        // Divides the users to charge in chunks of MaxUsersToCharge to avoid exceeding the block limit.
-        // Calls the `charge_multiple_users_payment_streams` extrinsic for each chunk in the list to be charged.
-        // Logs an error in case of failure and continues.
-        let user_chunk_size = <MaxUsersToCharge<Runtime> as Get<u32>>::get();
-        for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
+        // Chunk users by the lesser of the runtime's MaxUsersToCharge BoundedVec limit
+        // and the operator-configured max_streams_to_charge, then submit one extrinsic per chunk.
+        let runtime_max: u32 =
+            <Runtime as pallet_payment_streams::Config>::MaxUsersToCharge::get();
+        let user_chunk_size = runtime_max.min(self.config.max_streams_to_charge) as usize;
+        for users_chunk in users_with_debt.chunks(user_chunk_size) {
             let call: Runtime::Call =
                 pallet_payment_streams::Call::<Runtime>::charge_multiple_users_payment_streams {
                     user_accounts: users_chunk.to_vec().try_into().expect("Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec"),

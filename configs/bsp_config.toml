@@ -34,6 +34,8 @@ move_bucket_accepted_grace_period = 14400
 [provider.bsp_charge_fees]
 # Minimum debt threshold for charging users
 min_debt = 0
+# Maximum number of payment streams (users) to charge per cycle
+max_streams_to_charge = 10
 
 # Configuration for the BSP Submit Proof task
 [provider.bsp_submit_proof]

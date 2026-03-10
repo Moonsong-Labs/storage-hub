@@ -272,6 +272,14 @@ pub struct ProviderConfigurations {
     )]
     pub msp_charge_fees_min_debt: Option<u64>,
 
+    /// Maximum number of payment streams (users) to charge per cycle (default: 10).
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "MSP Charge Fees Options",
+    )]
+    pub msp_charge_fees_max_streams: Option<u32>,
+
     /// MSP charging fees period (in blocks).
     /// Setting it to 600 with a block every 6 seconds will charge user every hour.
     #[arg(long, required_if_eq_all([
@@ -380,6 +388,14 @@ pub struct ProviderConfigurations {
         ])
     )]
     pub bsp_charge_fees_min_debt: Option<u64>,
+
+    /// Maximum number of payment streams (users) to charge per cycle (default: 10).
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help_heading = "BSP Charge Fees Options",
+    )]
+    pub bsp_charge_fees_max_streams: Option<u32>,
 
     // ============== BSP Submit Proof task options ==============
     /// Enable and configure BSP Submit Proof task.
@@ -514,6 +530,7 @@ impl ProviderConfigurations {
             if self.msp_charge_fees_task {
                 let mut options = MspChargeFeesOptions::default();
                 options.min_debt = self.msp_charge_fees_min_debt;
+                options.max_streams_to_charge = self.msp_charge_fees_max_streams;
                 msp_charge_fees = Some(options);
             }
 
@@ -543,6 +560,7 @@ impl ProviderConfigurations {
             if self.bsp_charge_fees_task {
                 let mut options = BspChargeFeesOptions::default();
                 options.min_debt = self.bsp_charge_fees_min_debt;
+                options.max_streams_to_charge = self.bsp_charge_fees_max_streams;
                 bsp_charge_fees = Some(options);
             }
 
@@ -907,12 +925,12 @@ pub struct Cli {
         "provider", "provider_type", "max_storage_capacity", "jump_capacity",
         "storage_layer", "storage_path", "extrinsic_retry_timeout",
         "check_for_pending_proofs_period", "check_stop_storing_requests_period",
-        "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
+        "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt", "msp_charge_fees_max_streams",
         "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", "msp_database_url",
         "trusted_file_transfer_batch_size_bytes",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
-        "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
+        "bsp_charge_fees_task", "bsp_charge_fees_min_debt", "bsp_charge_fees_max_streams",
         "bsp_submit_proof_task", "bsp_submit_proof_max_attempts", "trusted_msps",
     ])]
     pub provider_config_file: Option<String>,

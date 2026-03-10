@@ -38,6 +38,8 @@ max_open_forests = 512
 [provider.msp_charge_fees]
 # Minimum debt threshold for charging users
 min_debt = 0
+# Maximum number of payment streams (users) to charge per cycle
+max_streams_to_charge = 10
 
 # Configuration for the MSP Move Bucket task
 [provider.msp_move_bucket]
