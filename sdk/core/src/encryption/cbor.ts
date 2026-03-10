@@ -13,7 +13,7 @@ export type {
   EncryptionHeaderV1
 } from "./header.js";
 
-const HEADER_MAGIC: Readonly<Uint8Array> = Object.freeze(new TextEncoder().encode("SHF")); // StorageHub File
+const HEADER_MAGIC: Readonly<Uint8Array> = new TextEncoder().encode("SHF"); // StorageHub File
 const HEADER_PREFIX_LENGTH = HEADER_MAGIC.length + 4;
 
 export type EncryptedFileInfo = {
