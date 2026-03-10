@@ -146,10 +146,10 @@ export const BaseNonce = {
         const nonce = new Uint8Array(NONCE_SIZE);
         nonce.set(base);
 
-        // XOR last 8 bytes with chunk counter (big-endian)
-        // Use DataView to make the compiler happy about out-of-bounds checks
+        // XOR last 8 bytes with chunk counter (big-endian).
+        // Counter starts at 1 so that getNonce(0) never exposes the raw HKDF output.
         const view = new DataView(nonce.buffer, nonce.byteOffset, nonce.byteLength);
-        let counter = BigInt(chunkIndex);
+        let counter = BigInt(chunkIndex + 1);
         for (let offset = 0; offset < 8; offset++) {
           const idx = 11 - offset;
           const byte = view.getUint8(idx);

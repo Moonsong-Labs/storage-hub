@@ -1,12 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { randomBytes } from "node:crypto";
-import { hexToBytes, equalBytes, bytesToHex } from "@noble/ciphers/utils.js";
+import { hexToBytes, equalBytes } from "@noble/ciphers/utils.js";
 
 import { AAD, BaseNonce, DEK, IKM, Nonce, Salt } from "../src/encryption/types.js";
 import { privateKeyToAccount } from "viem/accounts";
 import { createWalletClient, defineChain, http } from "viem";
 import { TEST_PRIVATE_KEY_12 } from "./consts.js";
-import { ensure0xPrefix } from "../src/utils.js";
 
 const SLOW_TEST_TIMEOUT = 20_000;
 
@@ -173,9 +172,9 @@ describe("Generate DEK and base Nonce", () => {
     const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
     expect(baseNonce.bytes.length).toBe(12);
 
-    // Basic nonce sanity: chunk 0 nonce equals base bytes; later nonces differ
+    // Counter starts at 1, so getNonce(0) XORs with 1 and differs from raw base bytes.
     const n0 = baseNonce.getNonce(0).unwrap();
-    expect(ensure0xPrefix(bytesToHex(n0))).toBe(ensure0xPrefix(bytesToHex(baseNonce.bytes)));
+    expect(equalBytes(n0, baseNonce.bytes)).toBe(false);
     const n1 = baseNonce.getNonce(1).unwrap();
     expect(equalBytes(n0, n1)).toBe(false);
   }, 30_000);
@@ -194,7 +193,7 @@ describe("Generate DEK and base Nonce", () => {
     expect(baseNonce.bytes.length).toBe(12);
 
     const n0 = baseNonce.getNonce(0).unwrap();
-    expect(ensure0xPrefix(bytesToHex(n0))).toBe(ensure0xPrefix(bytesToHex(baseNonce.bytes)));
+    expect(equalBytes(n0, baseNonce.bytes)).toBe(false);
     const n1 = baseNonce.getNonce(1).unwrap();
     expect(equalBytes(n0, n1)).toBe(false);
   }, 30_000);
