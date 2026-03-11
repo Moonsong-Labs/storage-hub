@@ -99,6 +99,7 @@ import type {
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
   AddFilesToForestStorageResult,
+  BspStopStoringFileResult,
   CheckpointChallenge,
   FileMetadata,
   GetFileFromFileStorageResult,
@@ -1070,6 +1071,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         (key: H256 | string | Uint8Array, exclude_type: Text | string) => Observable<ITuple<[]>>
       >;
       /**
+       * Request a BSP node to stop storing a file.
+       **/
+      bspStopStoringFile: AugmentedRpc<
+        (file_key: H256 | string | Uint8Array) => Observable<BspStopStoringFileResult>
+      >;
+      /**
        * Generate a SCALE-encoded proof for a file key to allow a BSP to confirm storing it.
        **/
       generateFileKeyProofBspConfirm: AugmentedRpc<
@@ -1115,6 +1122,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
                 | Uint8Array
               )[]
         ) => Observable<Bytes>
+      >;
+      /**
+       * Get all the file keys stored in the node's forest of the given forest key.
+       **/
+      getAllStoredFileKeys: AugmentedRpc<
+        (forest_key: Option<H256> | null | Uint8Array | H256 | string) => Observable<Vec<H256>>
       >;
       /**
        * Get the current price per giga unit per tick from the payment streams pallet

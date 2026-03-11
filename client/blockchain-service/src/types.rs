@@ -182,6 +182,56 @@ impl<Runtime: StorageEnableRuntime> StopStoringForInsolventUserRequest<Runtime> 
     }
 }
 
+/// A struct that holds the information to request stop storing a file for a BSP.
+///
+/// This struct is used as an item in the `pending_request_bsp_stop_storing_requests` queue.
+/// It represents a BSP's request to stop storing a file, triggered by the RPC.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct RequestBspStopStoringRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
+    pub try_count: u32,
+}
+
+impl<Runtime: StorageEnableRuntime> RequestBspStopStoringRequest<Runtime> {
+    pub fn new(file_key: MerkleTrieHash<Runtime>) -> Self {
+        Self {
+            file_key,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
+/// A struct that holds the information to confirm stop storing a file for a BSP.
+///
+/// This struct is used as an item in the `pending_confirm_bsp_stop_storing_requests` queue.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ConfirmBspStopStoringRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
+    pub confirm_after_tick: BlockNumber<Runtime>,
+    pub try_count: u32,
+}
+
+impl<Runtime: StorageEnableRuntime> ConfirmBspStopStoringRequest<Runtime> {
+    pub fn new(
+        file_key: MerkleTrieHash<Runtime>,
+        confirm_after_tick: BlockNumber<Runtime>,
+    ) -> Self {
+        Self {
+            file_key,
+            confirm_after_tick,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
 /// A struct that holds the information to delete a file from storage.
 ///
 /// This struct is used as an item in the `pending_file_deletion_requests` queue.
@@ -838,6 +888,23 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// where a BSP could attempt to send a storage confirmation, before it saw the volunteer transaction
     /// succeed on-chain.
     pub(crate) pending_volunteer_file_keys: HashSet<FileKey>,
+    /// In-memory FIFO queue for pending BSP request stop storing operations.
+    ///
+    /// Not persisted: if the node restarts, the user must re-call the RPC to re-queue the request.
+    pub(crate) pending_request_bsp_stop_storing: VecDeque<RequestBspStopStoringRequest<Runtime>>,
+    /// HashSet tracking file keys currently in the pending BSP request stop storing queue.
+    /// Used for O(1) deduplication and membership checks.
+    pub(crate) pending_request_bsp_stop_storing_file_keys: HashSet<FileKey>,
+    /// In-memory FIFO queue for pending BSP confirm stop storing operations.
+    ///
+    /// Items are queued when a `BspRequestedToStopStoring` event is detected and are processed
+    /// per-block once their `confirm_after_tick` has been reached.
+    /// Not persisted: if the node restarts, the BSP will detect pending requests from the chain
+    /// and re-enqueue them here.
+    pub(crate) pending_confirm_bsp_stop_storing: VecDeque<ConfirmBspStopStoringRequest<Runtime>>,
+    /// HashSet tracking file keys currently in the pending BSP confirm stop storing queue.
+    /// Used for O(1) deduplication and membership checks.
+    pub(crate) pending_confirm_bsp_stop_storing_file_keys: HashSet<FileKey>,
 }
 
 impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
@@ -848,7 +915,158 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
             forest_root_write_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             forest_root_snapshots: BTreeSet::new(),
             pending_volunteer_file_keys: HashSet::new(),
+            pending_request_bsp_stop_storing: VecDeque::new(),
+            pending_request_bsp_stop_storing_file_keys: HashSet::new(),
+            pending_confirm_bsp_stop_storing: VecDeque::new(),
+            pending_confirm_bsp_stop_storing_file_keys: HashSet::new(),
         }
+    }
+
+    /// Enqueue a BSP stop storing request if it is not already tracked.
+    ///
+    /// Retries (`try_count > 0`) are pushed to the front of the queue.
+    pub(crate) fn enqueue_request_bsp_stop_storing(
+        &mut self,
+        request: RequestBspStopStoringRequest<Runtime>,
+    ) -> bool {
+        let file_key: FileKey = request.file_key.into();
+        if self
+            .pending_request_bsp_stop_storing_file_keys
+            .contains(&file_key)
+            || self
+                .pending_confirm_bsp_stop_storing_file_keys
+                .contains(&file_key)
+        {
+            return false;
+        }
+
+        let is_retry = request.try_count > 0;
+        if is_retry {
+            self.pending_request_bsp_stop_storing.push_front(request);
+        } else {
+            self.pending_request_bsp_stop_storing.push_back(request);
+        }
+        self.pending_request_bsp_stop_storing_file_keys
+            .insert(file_key);
+        true
+    }
+
+    /// Pop the front BSP stop storing request.
+    pub(crate) fn pop_request_bsp_stop_storing(
+        &mut self,
+    ) -> Option<RequestBspStopStoringRequest<Runtime>> {
+        let request = self.pending_request_bsp_stop_storing.pop_front()?;
+        let file_key: FileKey = request.file_key.into();
+        self.pending_request_bsp_stop_storing_file_keys
+            .remove(&file_key);
+        Some(request)
+    }
+
+    /// Enqueue a BSP confirm stop storing request if it is not already tracked.
+    ///
+    /// **Queue ordering invariant**: `pending_confirm_bsp_stop_storing` must remain sorted by
+    /// `confirm_after_tick` (ascending) at all times, because `pop_ready_confirm_bsp_stop_storing`
+    /// only inspects the front element.
+    ///
+    /// Retries (`try_count > 0`) are pushed to the front of the queue since their
+    /// `confirm_after_tick` has already been reached when the previous attempt failed.
+    pub(crate) fn enqueue_confirm_bsp_stop_storing(
+        &mut self,
+        request: ConfirmBspStopStoringRequest<Runtime>,
+    ) -> bool {
+        let file_key: FileKey = request.file_key.into();
+        if self
+            .pending_confirm_bsp_stop_storing_file_keys
+            .contains(&file_key)
+        {
+            return false;
+        }
+
+        let is_retry = request.try_count > 0;
+        if is_retry {
+            self.pending_confirm_bsp_stop_storing.push_front(request);
+        } else {
+            self.pending_confirm_bsp_stop_storing.push_back(request);
+        }
+        self.pending_confirm_bsp_stop_storing_file_keys
+            .insert(file_key);
+        true
+    }
+
+    /// Pop the front BSP confirm stop storing request if it is ready to be processed.
+    pub(crate) fn pop_ready_confirm_bsp_stop_storing(
+        &mut self,
+        current_tick: BlockNumber<Runtime>,
+    ) -> Option<ConfirmBspStopStoringRequest<Runtime>> {
+        let ready = self
+            .pending_confirm_bsp_stop_storing
+            .front()
+            .map(|peeked| peeked.confirm_after_tick <= current_tick)
+            .unwrap_or(false);
+
+        if !ready {
+            return None;
+        }
+
+        let request = self.pending_confirm_bsp_stop_storing.pop_front()?;
+        let file_key: FileKey = request.file_key.into();
+        self.pending_confirm_bsp_stop_storing_file_keys
+            .remove(&file_key);
+        Some(request)
+    }
+
+    /// Remove a single file key from the confirm stop-storing queue. Returns `true` if removed.
+    pub(crate) fn remove_confirm_bsp_stop_storing_key(&mut self, file_key: &FileKey) -> bool {
+        if !self
+            .pending_confirm_bsp_stop_storing_file_keys
+            .remove(file_key)
+        {
+            return false;
+        }
+
+        self.pending_confirm_bsp_stop_storing.retain(|r| {
+            let key: FileKey = r.file_key.into();
+            &key != file_key
+        });
+        true
+    }
+
+    /// Remove a single file key from the request stop-storing queue. Returns `true` if removed.
+    pub(crate) fn remove_request_bsp_stop_storing_key(&mut self, file_key: &FileKey) -> bool {
+        if !self
+            .pending_request_bsp_stop_storing_file_keys
+            .remove(file_key)
+        {
+            return false;
+        }
+
+        self.pending_request_bsp_stop_storing.retain(|r| {
+            let key: FileKey = r.file_key.into();
+            &key != file_key
+        });
+        true
+    }
+
+    /// Remove a set of BSP stop storing requests.
+    pub(crate) fn remove_request_bsp_stop_storing_keys(&mut self, keys: &HashSet<FileKey>) {
+        if keys.is_empty() {
+            return;
+        }
+
+        for key in keys {
+            self.pending_request_bsp_stop_storing_file_keys.remove(key);
+        }
+
+        self.pending_request_bsp_stop_storing.retain(|r| {
+            let key: FileKey = r.file_key.into();
+            !keys.contains(&key)
+        });
+    }
+
+    /// Clear the entire confirm stop-storing queue and its index set.
+    pub(crate) fn clear_confirm_bsp_stop_storing(&mut self) {
+        self.pending_confirm_bsp_stop_storing.clear();
+        self.pending_confirm_bsp_stop_storing_file_keys.clear();
     }
 }
 /// Status of a file key in the MSP upload pipeline.
@@ -994,7 +1212,7 @@ impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
 ///
 /// Used as a parameter to `bsp_forest_write_work` to indicate which pending
 /// request queue should be checked or have its front element removed.
-pub(crate) enum BspForestWriteQueue {
+pub(crate) enum BspForestWriteQueue<Runtime: StorageEnableRuntime> {
     /// Pop from the in-memory submit proof requests (BTreeSet, pops lowest tick first).
     SubmitProof,
     /// Check the persistent confirm storing request deque for pending work.
@@ -1002,6 +1220,12 @@ pub(crate) enum BspForestWriteQueue {
     ConfirmStoring,
     /// Pop from the persistent stop storing for insolvent user request deque.
     StopStoringForInsolventUser,
+    /// Peek-then-pop from the persistent confirm BSP stop storing deque.
+    /// Only pops if the front item's `confirm_after_tick` has been reached.
+    /// The contained value is the current tick used for the comparison.
+    ConfirmBspStopStoring(BlockNumber<Runtime>),
+    /// Pop from the persistent request BSP stop storing deque.
+    RequestBspStopStoring,
 }
 
 /// The result of checking or popping from a BSP forest-write request queue.
@@ -1015,6 +1239,10 @@ pub(crate) enum BspForestWriteQueuePop<Runtime: StorageEnableRuntime> {
     ConfirmStoring,
     /// A stop storing for insolvent user request was popped from the persistent deque.
     StopStoringForInsolventUser(StopStoringForInsolventUserRequest<Runtime>),
+    /// A confirm BSP stop storing request was popped from the persistent deque.
+    ConfirmBspStopStoring(ConfirmBspStopStoringRequest<Runtime>),
+    /// A request BSP stop storing request was popped from the persistent deque.
+    RequestBspStopStoring(RequestBspStopStoringRequest<Runtime>),
 }
 
 /// Result of checking for pending BSP forest-write work.

@@ -1,7 +1,7 @@
 import {
+  assert0xString,
   ensure0xPrefix,
   FileMetadata,
-  FileTrie,
   hexToBytes,
   initWasm,
   parseDate
@@ -58,14 +58,19 @@ export class FilesModule extends ModuleBase {
 
   /** Upload a file to a bucket with a specific key */
   async uploadFile(
-    bucketId: string,
-    fileKey: string,
+    bucketId: `0x${string}`,
+    fileKey: `0x${string}`,
     file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown,
-    owner: string,
+    fingerprint: `0x${string}`,
+    owner: `0x${string}`,
     location: string,
     _options?: UploadOptions
   ): Promise<UploadReceipt> {
     void _options;
+
+    assert0xString(bucketId, 32, "Invalid bucketId: expected 0x-prefixed 32-byte hex");
+    assert0xString(fingerprint, 32, "Invalid fingerprint: expected 0x-prefixed 32-byte hex");
+    assert0xString(owner, 20, "Invalid owner: expected 0x-prefixed 20-byte hex");
 
     await initWasm();
 
@@ -75,9 +80,6 @@ export class FilesModule extends ModuleBase {
     // Convert the file to a blob and get its size
     const fileBlob = await this.coerceToFormPart(file);
     const fileSize = fileBlob.size;
-
-    // Compute the fingerprint first
-    const fingerprint = await this.computeFileFingerprint(fileBlob);
 
     // Create the FileMetadata instance
     const metadata = await this.formFileMetadata(
@@ -271,36 +273,19 @@ export class FilesModule extends ModuleBase {
     return new Blob([file as BlobPart], { type: "application/octet-stream" });
   }
 
-  private async computeFileFingerprint(fileBlob: Blob): Promise<Uint8Array> {
-    const trie = new FileTrie();
-    const fileBytes = new Uint8Array(await fileBlob.arrayBuffer());
-
-    // Process the file in 1KB chunks (matching CHUNK_SIZE from constants)
-    const CHUNK_SIZE = 1024;
-    let offset = 0;
-
-    while (offset < fileBytes.length) {
-      const end = Math.min(offset + CHUNK_SIZE, fileBytes.length);
-      const chunk = fileBytes.slice(offset, end);
-      trie.push_chunk(chunk);
-      offset = end;
-    }
-
-    return trie.get_root();
-  }
-
   private async formFileMetadata(
-    owner: string,
-    bucketId: string,
+    owner: `0x${string}`,
+    bucketId: `0x${string}`,
     location: string,
-    fingerprint: Uint8Array,
+    fingerprint: `0x${string}`,
     size: bigint
   ): Promise<FileMetadata> {
     const ownerBytes = hexToBytes(owner);
     const bucketIdBytes = hexToBytes(bucketId);
+    const fingerprintBytes = hexToBytes(fingerprint);
     const locationBytes = new TextEncoder().encode(location);
     await initWasm();
-    return new FileMetadata(ownerBytes, bucketIdBytes, locationBytes, size, fingerprint);
+    return new FileMetadata(ownerBytes, bucketIdBytes, locationBytes, size, fingerprintBytes);
   }
 
   private async computeFileKey(fileMetadata: FileMetadata): Promise<Uint8Array> {

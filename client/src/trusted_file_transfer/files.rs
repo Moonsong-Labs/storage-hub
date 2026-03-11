@@ -1,14 +1,14 @@
 //! File encoding/decoding utilities
 
 use axum::body::Body;
+use bytes::BytesMut;
 use log::{error, info};
 use shc_common::{
     trusted_file_transfer::{read_chunk_with_id_from_buffer, CHUNK_ID_SIZE},
-    types::ChunkId,
+    types::{Chunk, ChunkId},
 };
 use shc_file_manager::traits::FileStorageWriteOutcome;
 use shp_constants::FILE_CHUNK_SIZE;
-use shp_file_metadata::Chunk;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 
@@ -18,27 +18,33 @@ use crate::{trusted_file_transfer::server::LOG_TARGET, types::FileStorageT};
 pub(crate) async fn process_chunk_stream<FL>(
     file_storage: &RwLock<FL>,
     file_key: &sp_core::H256,
+    batch_target_bytes: usize,
     request_body: Body,
 ) -> anyhow::Result<()>
 where
     FL: FileStorageT,
 {
     let mut request_stream = request_body.into_data_stream();
-    let mut buffer = Vec::new();
+    let mut buffer = BytesMut::new();
     let mut last_write_outcome = FileStorageWriteOutcome::FileIncomplete;
+    let mut pending: Vec<(ChunkId, Chunk)> = Vec::new();
+    let mut pending_bytes: usize = 0;
 
     // Process request stream, storing chunks as they are received
     while let Some(try_bytes) = request_stream.next().await {
         let bytes = try_bytes?;
-        buffer.extend_from_slice(&bytes);
+        buffer.extend_from_slice(bytes.as_ref());
 
         while buffer.len() >= CHUNK_ID_SIZE + (FILE_CHUNK_SIZE as usize) {
-            // Here we call with cap_at_file_chunk_size = true because we want to read chunk by chunk.
-            // If there are remaining bytes in the buffer, they could belong to half a chunk that will be
-            // filled in the next iteration of the `while let Some(try_bytes) = request_stream.next().await` loop.
             let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, true)?;
-            last_write_outcome =
-                write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
+            pending_bytes += CHUNK_ID_SIZE + chunk_data.len();
+            pending.push((chunk_id, chunk_data));
+
+            if pending_bytes >= batch_target_bytes {
+                let batch = std::mem::take(&mut pending);
+                pending_bytes = 0;
+                last_write_outcome = write_chunk_batch(file_storage, file_key, batch).await?;
+            }
         }
     }
 
@@ -48,7 +54,12 @@ where
     // in the loop above, and the buffer will be empty).
     if !buffer.is_empty() {
         let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, false)?;
-        last_write_outcome = write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
+        pending.push((chunk_id, chunk_data));
+    }
+
+    if !pending.is_empty() {
+        let batch = std::mem::take(&mut pending);
+        last_write_outcome = write_chunk_batch(file_storage, file_key, batch).await?;
     }
 
     // Verify the file is complete using the last write outcome
@@ -72,25 +83,18 @@ where
     }
 }
 
-async fn write_chunk<FL>(
+async fn write_chunk_batch<FL>(
     file_storage: &RwLock<FL>,
     file_key: &sp_core::H256,
-    chunk_id: &ChunkId,
-    chunk_data: &Chunk,
+    batch: Vec<(ChunkId, Chunk)>,
 ) -> anyhow::Result<FileStorageWriteOutcome>
 where
     FL: FileStorageT,
 {
-    let mut file_storage = file_storage.write().await;
-    file_storage
-        .write_chunk(file_key, chunk_id, chunk_data)
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to write chunk {} to storage: {}",
-                chunk_id.as_u64(),
-                e
-            )
-        })
+    let mut storage = file_storage.write().await;
+    storage
+        .write_chunks_batched(file_key, batch)
+        .map_err(|e| anyhow::anyhow!("Failed to write chunk batch to storage: {}", e))
 }
 
 #[cfg(test)]
@@ -144,9 +148,14 @@ mod tests {
         file_storage.insert_file(file_key, metadata).unwrap();
         let file_storage = Arc::new(RwLock::new(file_storage));
 
-        process_chunk_stream(&file_storage, &file_key, body)
-            .await
-            .unwrap();
+        process_chunk_stream(
+            &file_storage,
+            &file_key,
+            crate::trusted_file_transfer::server::DEFAULT_BATCH_TARGET_BYTES,
+            body,
+        )
+        .await
+        .unwrap();
 
         let storage = file_storage.read().await;
         for i in 0..chunk_count {
@@ -205,9 +214,14 @@ mod tests {
         file_storage.insert_file(file_key, metadata).unwrap();
         let file_storage = Arc::new(RwLock::new(file_storage));
 
-        process_chunk_stream(&file_storage, &file_key, body)
-            .await
-            .unwrap();
+        process_chunk_stream(
+            &file_storage,
+            &file_key,
+            crate::trusted_file_transfer::server::DEFAULT_BATCH_TARGET_BYTES,
+            body,
+        )
+        .await
+        .unwrap();
 
         let storage = file_storage.read().await;
         for i in 0..full_chunk_count {
