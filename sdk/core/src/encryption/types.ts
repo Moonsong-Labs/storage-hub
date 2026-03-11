@@ -133,7 +133,9 @@ export const BaseNonce = {
 
     const base = new Uint8Array(bytes);
     const value: BaseNonce = Object.freeze({
-      bytes: base,
+      get bytes(): Uint8Array {
+        return new Uint8Array(base);
+      },
 
       getNonce(chunkIndex: number) {
         if (!Number.isSafeInteger(chunkIndex) || chunkIndex < 0) {
