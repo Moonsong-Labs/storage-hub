@@ -1,13 +1,13 @@
 [package]
-name = "shc-client"
-version = "0.4.0"
+authors = { workspace = true }
 description = "StorageHub Client."
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
-repository = { workspace = true }
-edition = { workspace = true }
+name = "shc-client"
 publish = false
+repository = { workspace = true }
+version = "0.4.0"
 
 [lib]
 
@@ -31,12 +31,12 @@ lru = { workspace = true }
 ordered-float = { workspace = true }
 priority-queue = { workspace = true }
 rand = { workspace = true }
+rocksdb = { workspace = true }
 sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tower-http = { workspace = true }
-rocksdb = { workspace = true }
 
 # Local
 pallet-file-system = { workspace = true }
@@ -46,12 +46,12 @@ pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
-shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
+shc-actors-framework = { workspace = true }
 shc-blockchain-service = { workspace = true }
-shc-file-transfer-service = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
+shc-file-transfer-service = { workspace = true }
 shc-fisherman-service = { workspace = true }
 shc-forest-manager = { workspace = true }
 shc-indexer-db = { workspace = true }
@@ -63,18 +63,18 @@ shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
 shp-types = { workspace = true }
 
-log = { workspace = true }
 codec = { workspace = true }
-serde = { workspace = true, default-features = true }
-jsonrpsee = { features = ["server"], workspace = true }
 futures = { workspace = true }
+jsonrpsee = { features = ["server"], workspace = true }
+log = { workspace = true }
+serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }
 
 # Substrate
 frame-benchmarking = { workspace = true, default-features = true }
 frame-benchmarking-cli = { workspace = true }
-frame-system = { workspace = true }
 frame-support = { workspace = true }
+frame-system = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 sc-client-api = { workspace = true }
 sc-network = { workspace = true }

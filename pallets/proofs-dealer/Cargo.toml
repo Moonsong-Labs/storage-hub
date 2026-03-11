@@ -1,12 +1,12 @@
 [package]
-name = "pallet-proofs-dealer"
+authors = { workspace = true }
 description = "Pallet for managing, challenging and verifying proofs submitted by providers, where each provider's information is stored as a Merkle Patricia Trie."
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "pallet-proofs-dealer"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
@@ -22,10 +22,10 @@ scale-info = { workspace = true }
 # Local
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true, optional = true }
-shp-traits = { workspace = true }
 shp-file-key-verifier = { workspace = true, optional = true }
 shp-file-metadata = { workspace = true, optional = true }
 shp-forest-verifier = { workspace = true, optional = true }
+shp-traits = { workspace = true }
 
 # Substrate
 frame-benchmarking = { workspace = true, optional = true }
@@ -47,8 +47,8 @@ serde = { workspace = true }
 shp-treasury-funding = { workspace = true }
 
 # Local
-pallet-storage-providers = { workspace = true }
 pallet-payment-streams = { workspace = true }
+pallet-storage-providers = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
@@ -65,43 +65,43 @@ pallet-balances = { workspace = true }
 [features]
 default = ["std"]
 runtime-benchmarks = [
-	"frame-benchmarking/runtime-benchmarks",
-	"frame-support/runtime-benchmarks",
-	"frame-system/runtime-benchmarks",
-	"hex",
-	"pallet-balances/runtime-benchmarks",
-	"pallet-storage-providers/runtime-benchmarks",
-	"shp-file-key-verifier/runtime-benchmarks",
-	"shp-file-metadata/runtime-benchmarks",
-	"shp-forest-verifier/runtime-benchmarks",
-	"sp-core",
-	"sp-runtime/runtime-benchmarks",
-	"sp-trie",
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "hex",
+    "pallet-balances/runtime-benchmarks",
+    "pallet-storage-providers/runtime-benchmarks",
+    "shp-file-key-verifier/runtime-benchmarks",
+    "shp-file-metadata/runtime-benchmarks",
+    "shp-forest-verifier/runtime-benchmarks",
+    "sp-core",
+    "sp-runtime/runtime-benchmarks",
+    "sp-trie",
 ]
 std = [
-	"codec/std",
-	"frame-benchmarking?/std",
-	"frame-support/std",
-	"frame-system/std",
-	"pallet-balances/std",
-	"pallet-payment-streams/std",
-	"pallet-proofs-dealer-runtime-api/std",
-	"pallet-storage-providers/std",
-	"scale-info/std",
-	"shp-traits/std",
-	"shp-treasury-funding/std",
-	"sp-core/std",
-	"sp-io/std",
-	"sp-runtime/std",
-	"sp-trie/std",
-	"sp-weights/std",
+    "codec/std",
+    "frame-benchmarking?/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-balances/std",
+    "pallet-payment-streams/std",
+    "pallet-proofs-dealer-runtime-api/std",
+    "pallet-storage-providers/std",
+    "scale-info/std",
+    "shp-traits/std",
+    "shp-treasury-funding/std",
+    "sp-core/std",
+    "sp-io/std",
+    "sp-runtime/std",
+    "sp-trie/std",
+    "sp-weights/std",
 ]
 try-runtime = [
-	"frame-support/try-runtime",
-	"frame-system/try-runtime",
-	"pallet-balances/try-runtime",
-	"pallet-payment-streams/try-runtime",
-	"shp-traits/try-runtime",
-	"shp-treasury-funding/try-runtime",
-	"sp-runtime/try-runtime",
+    "frame-support/try-runtime",
+    "frame-system/try-runtime",
+    "pallet-balances/try-runtime",
+    "pallet-payment-streams/try-runtime",
+    "shp-traits/try-runtime",
+    "shp-treasury-funding/try-runtime",
+    "sp-runtime/try-runtime",
 ]

@@ -1,13 +1,13 @@
 
 [package]
-name = "shp-data-price-updater"
+authors = { workspace = true }
 description = "Implementations of UpdateStoragePrice trait for File System pallet. This crate provides updaters with different formulas for updating the price of a unit of stored data."
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "shp-data-price-updater"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
@@ -48,7 +48,4 @@ std = [
     "sp-io/std",
     "sp-runtime/std",
 ]
-try-runtime = [
-    "shp-traits/try-runtime",
-    "sp-runtime/try-runtime",
-]
+try-runtime = ["shp-traits/try-runtime", "sp-runtime/try-runtime"]

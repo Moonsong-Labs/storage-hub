@@ -1,12 +1,12 @@
 [package]
-name = "shp-file-metadata"
+authors = { workspace = true }
 description = "A crate containing the types and utilities for handling file metadata in StorageHub."
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "shp-file-metadata"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
@@ -25,18 +25,18 @@ serde = { workspace = true }
 shp-traits = { workspace = true }
 
 # Substrate
+sp-arithmetic = { workspace = true }
 sp-core = { workspace = true }
 sp-std = { workspace = true }
-sp-arithmetic = { workspace = true }
 
 [features]
 default = ["std"]
 runtime-benchmarks = ["shp-traits/runtime-benchmarks"]
 std = [
-	"codec/std",
-	"scale-info/std",
-	"shp-traits/std",
-	"sp-core/std",
-	"sp-std/std",
+    "codec/std",
+    "scale-info/std",
+    "shp-traits/std",
+    "sp-core/std",
+    "sp-std/std",
 ]
 try-runtime = ["shp-traits/try-runtime"]
