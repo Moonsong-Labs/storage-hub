@@ -48,5 +48,11 @@ export function isEncryptionHeaderV1(x: unknown): x is EncryptionHeaderV1 {
   if (typeof obj.chunk_size !== "number") return false;
   if (!Number.isSafeInteger(obj.chunk_size) || obj.chunk_size <= 0) return false;
 
+  const EXPECTED_V1_KEYS = new Set(["v", "ikm", "dek_salt", "ikm_salt", "chunk_size"]);
+  const actualKeys = Object.keys(obj);
+  if (actualKeys.length !== EXPECTED_V1_KEYS.size || actualKeys.some((k) => !EXPECTED_V1_KEYS.has(k))) {
+    return false;
+  }
+
   return true;
 }
