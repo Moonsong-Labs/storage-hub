@@ -1,11 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect } from "vitest";
 import { chacha20poly1305 } from "@noble/ciphers/chacha.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
 import { decryptFile, encryptFile, generateEncryptionKey } from "../src/encryption.js";
 import { readEncryptionHeader } from "../src/encryption/cbor.js";
 import { AEAD_TAG_SIZE_BYTES, COMMIT_CIPHERTEXT_SIZE_BYTES } from "../src/encryption/consts.js";
-import { IKM } from "../src/encryption/types.js";
+import { IKM, type DEK, type BaseNonce } from "../src/encryption/types.js";
+import type { EncryptionHeaderParams } from "../src/encryption/header.js";
 import {
   concatChunks,
   createCommitAad,
@@ -21,12 +22,22 @@ describe("stream tamper detection", () => {
   const plaintext = Uint8Array.from({ length: 96 }, (_, i) => i);
   const dataCipherChunkSize = chunkSize + AEAD_TAG_SIZE_BYTES;
 
-  async function encryptToBytes(): Promise<Uint8Array> {
-    const encryptedChunks: Uint8Array[] = [];
-    const { dek, baseNonce, header } = await generateEncryptionKey({
+  let dek: DEK;
+  let baseNonce: BaseNonce;
+  let header: EncryptionHeaderParams;
+
+  beforeAll(async () => {
+    const keys = await generateEncryptionKey({
       kind: "password",
       password
     });
+    dek = keys.dek;
+    baseNonce = keys.baseNonce;
+    header = { ...keys.header, chunk_size: chunkSize };
+  }, STREAM_TEST_TIMEOUT);
+
+  async function encryptToBytes(): Promise<Uint8Array> {
+    const encryptedChunks: Uint8Array[] = [];
 
     await encryptFile({
       input: toReadable(plaintext),
@@ -37,10 +48,7 @@ describe("stream tamper detection", () => {
       }),
       dek,
       baseNonce,
-      header: {
-        ...header,
-        chunk_size: chunkSize
-      }
+      header
     });
 
     return concatChunks(encryptedChunks);
@@ -71,11 +79,6 @@ describe("stream tamper detection", () => {
       const encryptedChunks: Uint8Array[] = [];
       const decryptedChunks: Uint8Array[] = [];
 
-      const { dek, baseNonce, header } = await generateEncryptionKey({
-        kind: "password",
-        password
-      });
-
       // Encrypt empty stream: output should be header + commit trailer only.
       await encryptFile({
         input: toReadable(new Uint8Array(), 1),
@@ -86,10 +89,7 @@ describe("stream tamper detection", () => {
         }),
         dek,
         baseNonce,
-        header: {
-          ...header,
-          chunk_size: chunkSize
-        }
+        header
       });
 
       const encrypted = concatChunks(encryptedChunks);
