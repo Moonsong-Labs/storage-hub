@@ -50,7 +50,10 @@ export function isEncryptionHeaderV1(x: unknown): x is EncryptionHeaderV1 {
 
   const EXPECTED_V1_KEYS = new Set(["v", "ikm", "derivation_salt", "ikm_salt", "chunk_size"]);
   const actualKeys = Object.keys(obj);
-  if (actualKeys.length !== EXPECTED_V1_KEYS.size || actualKeys.some((k) => !EXPECTED_V1_KEYS.has(k))) {
+  if (
+    actualKeys.length !== EXPECTED_V1_KEYS.size ||
+    actualKeys.some((k) => !EXPECTED_V1_KEYS.has(k))
+  ) {
     return false;
   }
 

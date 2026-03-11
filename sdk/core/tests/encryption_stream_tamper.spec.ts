@@ -101,9 +101,7 @@ describe("stream tamper detection", () => {
       // Empty input means chunkIndex never increments, so commit nonce index is 0.
       const commitAad = createCommitAad(sha256(headerBytes), 0);
       const commitNonce = baseNonce.getNonce(0).unwrap();
-      const commitPayload = chacha20poly1305(dek, commitNonce, commitAad).decrypt(
-        commitCiphertext
-      );
+      const commitPayload = chacha20poly1305(dek, commitNonce, commitAad).decrypt(commitCiphertext);
       const commit = parseCommitPayload(commitPayload);
       expect(commit.totalPlaintextBytes).toBe(0);
       expect(commit.totalChunkCount).toBe(0);

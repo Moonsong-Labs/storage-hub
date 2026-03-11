@@ -251,9 +251,9 @@ describe("E2E encryption / decryption", () => {
     const encryptedBytes = new Uint8Array(readFileSync(encryptedPath));
     const { header: parsedHeader, headerLength } = readEncryptionHeader(encryptedBytes);
     expect(parsedHeader.ikm).toBe("signature");
-    expect(Buffer.compare(Buffer.from(parsedHeader.derivation_salt), Buffer.from(header.derivation_salt))).toBe(
-      0
-    );
+    expect(
+      Buffer.compare(Buffer.from(parsedHeader.derivation_salt), Buffer.from(header.derivation_salt))
+    ).toBe(0);
     expect(usedIkmSalt).toBeDefined();
     if (!usedIkmSalt) {
       throw new Error("missing ikm_salt used for signature message");
