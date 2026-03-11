@@ -1,12 +1,12 @@
 [package]
-name = "shp-traits"
+authors = { workspace = true }
 description = "Support traits used in StorageHub"
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "shp-traits"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
