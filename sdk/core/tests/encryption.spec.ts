@@ -228,7 +228,7 @@ describe("E2E encryption / decryption", () => {
     expect(dek.length).toBe(32);
     expect(baseNonce.bytes.length).toBe(12);
     expect(header.ikm).toBe("signature");
-    expect(header.dek_salt.length).toBe(32);
+    expect(header.derivation_salt.length).toBe(32);
     expect(header.ikm_salt.length).toBe(32);
 
     // ── Encrypt to a repo-local folder (easy to find) ────────────────
@@ -251,7 +251,7 @@ describe("E2E encryption / decryption", () => {
     const encryptedBytes = new Uint8Array(readFileSync(encryptedPath));
     const { header: parsedHeader, headerLength } = readEncryptionHeader(encryptedBytes);
     expect(parsedHeader.ikm).toBe("signature");
-    expect(Buffer.compare(Buffer.from(parsedHeader.dek_salt), Buffer.from(header.dek_salt))).toBe(
+    expect(Buffer.compare(Buffer.from(parsedHeader.derivation_salt), Buffer.from(header.derivation_salt))).toBe(
       0
     );
     expect(usedIkmSalt).toBeDefined();

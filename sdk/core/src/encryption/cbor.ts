@@ -97,7 +97,7 @@ export function createEncryptionHeader(params: EncryptionHeaderParams): Uint8Arr
   const header: EncryptionHeaderV1 = {
     v: HeaderVersion.V1,
     ikm: params.ikm,
-    dek_salt: params.dek_salt,
+    derivation_salt: params.derivation_salt,
     ikm_salt: params.ikm_salt,
     chunk_size: params.chunk_size
   };

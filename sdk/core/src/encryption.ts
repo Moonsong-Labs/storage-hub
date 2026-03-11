@@ -348,13 +348,13 @@ function randomSaltBytes(length = SALT_SIZE): Uint8Array {
 export async function generateEncryptionKey(
   source: EncryptionKeySource
 ): Promise<GeneratedEncryptionKey> {
-  // Public, random DEK salt stored in the CBOR header.
-  const dekSaltBytes = randomSaltBytes(SALT_SIZE);
-  const dekSalt = Salt.fromBytes(dekSaltBytes).unwrap();
+  // Public, random derivation salt stored in the CBOR header.
+  const derivationSaltBytes = randomSaltBytes(SALT_SIZE);
+  const derivationSalt = Salt.fromBytes(derivationSaltBytes).unwrap();
   const ikmSalt = Salt.fromBytes(randomSaltBytes(SALT_SIZE)).unwrap();
   const header: EncryptionHeaderParams = {
     ikm: source.kind,
-    dek_salt: dekSalt,
+    derivation_salt: derivationSalt,
     ikm_salt: ikmSalt,
     // Encryption chunk size is currently fixed to 16 MiB, but because it is encoded
     // in the file header, this value can change in future versions without a protocol break.
@@ -364,8 +364,8 @@ export async function generateEncryptionKey(
   switch (source.kind) {
     case "password": {
       const ikm = IKM.fromPassword(source.password, ikmSalt).unwrap();
-      const dek = DEK.derive(ikm, dekSalt).unwrap();
-      const baseNonce = BaseNonce.derive(ikm, dekSalt).unwrap();
+      const dek = DEK.derive(ikm, derivationSalt).unwrap();
+      const baseNonce = BaseNonce.derive(ikm, derivationSalt).unwrap();
 
       return {
         dek,
@@ -381,8 +381,8 @@ export async function generateEncryptionKey(
       });
 
       const ikm = IKM.fromSignature(signature).unwrap();
-      const dek = DEK.derive(ikm, dekSalt).unwrap();
-      const baseNonce = BaseNonce.derive(ikm, dekSalt).unwrap();
+      const dek = DEK.derive(ikm, derivationSalt).unwrap();
+      const baseNonce = BaseNonce.derive(ikm, derivationSalt).unwrap();
 
       return {
         dek,
@@ -523,7 +523,7 @@ async function decryptAndWriteChunk({
 /**
  * Decrypt a byte stream produced by `encryptFile()`.
  *
- * This reads and validates the CBOR header, re-derives keys using `header.dek_salt`
+ * This reads and validates the CBOR header, re-derives keys using `header.derivation_salt`
  * and a caller-provided IKM source, then chunk-decrypts the ciphertext stream.
  */
 export async function decryptFile({
@@ -547,8 +547,8 @@ export async function decryptFile({
 
     // -------- derive keys --------
     const ikm = await getIkm(header);
-    const dek = DEK.derive(ikm, header.dek_salt).unwrap();
-    const baseNonce = BaseNonce.derive(ikm, header.dek_salt).unwrap();
+    const dek = DEK.derive(ikm, header.derivation_salt).unwrap();
+    const baseNonce = BaseNonce.derive(ikm, header.derivation_salt).unwrap();
 
     // -------- body (chunked decryption) --------
     const ciphertextBuf = new ByteQueue();
