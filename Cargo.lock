@@ -17095,6 +17095,7 @@ dependencies = [
  "serde",
  "serial_test",
  "shc-actors-framework",
+ "shc-blockchain-service",
  "shc-common",
  "shc-file-manager",
  "shc-file-transfer-service",

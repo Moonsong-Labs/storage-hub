@@ -45,6 +45,8 @@ pub trait ForestStorage<T: TrieLayout, Runtime: StorageEnableRuntime>: 'static {
         &self,
         user: &Runtime::AccountId,
     ) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>>;
+    /// List all the file keys in the forest.
+    fn list_all_file_keys(&self) -> Result<Vec<HasherOutT<T>>, ErrorT<T>>;
 }
 
 /// Handler to manage file storage instances.

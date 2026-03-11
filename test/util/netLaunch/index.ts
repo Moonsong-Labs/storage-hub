@@ -842,7 +842,7 @@ export class NetworkLauncher extends BaseNetworkContext {
         additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
-    const { rpcPort: bspTwoRpcPort } = await addBsp(
+    const { containerName: bspTwoContainerName, rpcPort: bspTwoRpcPort } = await addBsp(
       api,
       api.accounts.bspTwoKey,
       api.accounts.sudo,
@@ -855,7 +855,7 @@ export class NetworkLauncher extends BaseNetworkContext {
         additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs, ...logLevelArgs]
       }
     );
-    const { rpcPort: bspThreeRpcPort } = await addBsp(
+    const { containerName: bspThreeContainerName, rpcPort: bspThreeRpcPort } = await addBsp(
       api,
       api.accounts.bspThreeKey,
       api.accounts.sudo,
@@ -881,6 +881,25 @@ export class NetworkLauncher extends BaseNetworkContext {
     await api.wait.nodeCatchUpToChainTip(bspDownApi);
     await api.wait.nodeCatchUpToChainTip(bspTwoApi);
     await api.wait.nodeCatchUpToChainTip(bspThreeApi);
+
+    // Wait for RPC handlers to be available and passed to the blockchain service
+    await bspDownApi.docker.waitForLog({
+      containerName: bspDownContainerName,
+      searchString: "✅ RPC handlers set for BlockchainService",
+      timeout: 15000
+    });
+
+    await bspTwoApi.docker.waitForLog({
+      containerName: bspTwoContainerName,
+      searchString: "✅ RPC handlers set for BlockchainService",
+      timeout: 15000
+    });
+
+    await bspThreeApi.docker.waitForLog({
+      containerName: bspThreeContainerName,
+      searchString: "✅ RPC handlers set for BlockchainService",
+      timeout: 15000
+    });
 
     await bspTwoApi.disconnect();
     await bspThreeApi.disconnect();
@@ -940,6 +959,13 @@ export class NetworkLauncher extends BaseNetworkContext {
 
     await using bspApi = await launchedNetwork.getApi("sh-bsp");
 
+    // Wait for RPC handlers to be available and passed to the blockchain service
+    await bspApi.docker.waitForLog({
+      containerName: "storage-hub-sh-bsp-1",
+      searchString: "✅ RPC handlers set for BlockchainService",
+      timeout: 15000
+    });
+
     // Wait for network to be in sync
     await bspApi.docker.waitForLog({
       containerName: "storage-hub-sh-bsp-1",
@@ -962,12 +988,6 @@ export class NetworkLauncher extends BaseNetworkContext {
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     await using userApi = await launchedNetwork.getApi("sh-user");
-
-    await userApi.docker.waitForLog({
-      containerName: "storage-hub-sh-user-1",
-      searchString: "💤 Idle",
-      timeout: 15000
-    });
 
     await launchedNetwork.preFundAccounts(userApi);
     await launchedNetwork.setupBsp(userApi, userApi.accounts.bspKey.address, multiAddressBsp);
@@ -1011,6 +1031,21 @@ export class NetworkLauncher extends BaseNetworkContext {
         if (verbose) {
           console.log(`Adding msp ${service} with address ${multiAddressMsp} and id ${mspId}`);
         }
+
+        // Wait for RPC handlers to be available and passed to the blockchain service
+        await userApi.docker.waitForLog({
+          containerName: mspContainerName,
+          searchString: "✅ RPC handlers set for BlockchainService",
+          timeout: 15000
+        });
+
+        // Wait for network to be in sync
+        await userApi.docker.waitForLog({
+          containerName: mspContainerName,
+          searchString: "💤 Idle",
+          timeout: 15000
+        });
+
         await launchedNetwork.setupMsp(userApi, mspAddress, multiAddressMsp, mspId);
       }
     }

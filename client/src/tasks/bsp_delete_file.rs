@@ -229,7 +229,7 @@ where
         }
 
         Ok(format!(
-            "Handled FinalisedTrieRemoveMutationsAppliedForBsp for provider [{:x}]",
+            "Handled FinalisedTrieRemoveMutationsAppliedForBsp for provider [0x{:x}]",
             event.provider_id
         ))
     }

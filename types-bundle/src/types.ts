@@ -40,8 +40,7 @@ export const SHARED_TYPES: RegistryTypes = {
     _enum: {
       FileNotFound: null,
       FileFound: "FileMetadata",
-      IncompleteFile: "IncompleteFileStatus",
-      FileFoundWithInconsistency: "FileMetadata"
+      IncompleteFile: "IncompleteFileStatus"
     }
   },
   ProviderId: "H256",
@@ -284,6 +283,18 @@ export const SHARED_TYPES: RegistryTypes = {
       Success: "Vec<Vec<u8>>",
       NotAnMsp: null
     }
+  },
+  BspStopStoringFileResult: {
+    _enum: {
+      Success: null,
+      NotABsp: null,
+      BlockchainServiceNotAvailable: null
+    }
+  },
+  PendingStopStoringRequest: {
+    tick_when_requested: "BlockNumber",
+    file_owner: "AccountId",
+    file_size: "StorageDataUnit"
   }
 };
 
