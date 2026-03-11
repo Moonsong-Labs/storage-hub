@@ -1,8 +1,8 @@
 [package]
-name = "pallet-evm-precompile-file-system"
 authors = { workspace = true }
 description = "A Precompile to manage the file-system pallet through the EVM."
 edition = "2021"
+name = "pallet-evm-precompile-file-system"
 version = "0.4.0"
 
 [dependencies]
@@ -60,16 +60,16 @@ shp-treasury-funding = { workspace = true, features = ["std"] }
 [features]
 default = ["std"]
 std = [
-	"codec/std",
-	"fp-evm/std",
-	"frame-support/std",
-	"frame-system/std",
-	"pallet-evm/std",
-	"pallet-file-system/std",
-	"precompile-utils/std",
-	"shp-traits/std",
-	"sp-core/std",
-	"sp-io/std",
-	"sp-runtime/std",
-	"sp-std/std",
+    "codec/std",
+    "fp-evm/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-evm/std",
+    "pallet-file-system/std",
+    "precompile-utils/std",
+    "shp-traits/std",
+    "sp-core/std",
+    "sp-io/std",
+    "sp-runtime/std",
+    "sp-std/std",
 ]

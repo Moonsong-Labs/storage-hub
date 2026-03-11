@@ -1,13 +1,13 @@
 [package]
-name = "shc-common"
-version = "0.4.0"
+authors = { workspace = true }
 description = "Common types, traits and utilities shared by other client crates."
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
-repository = { workspace = true }
-edition = { workspace = true }
+name = "shc-common"
 publish = false
+repository = { workspace = true }
+version = "0.4.0"
 
 [lib]
 
@@ -20,19 +20,20 @@ bigdecimal = { workspace = true }
 bincode = { workspace = true }
 bytes = { workspace = true }
 codec = { workspace = true }
+lazy-static = { workspace = true }
+log = { workspace = true }
 rocksdb = { workspace = true }
 scale-info = { workspace = true }
 serde = { workspace = true, default-features = true }
-trie-db = { workspace = true }
-lazy-static = { workspace = true }
-log = { workspace = true }
 thiserror = { workspace = true }
+trie-db = { workspace = true }
 
 # Substrate
 frame-benchmarking = { workspace = true }
 frame-metadata-hash-extension = { workspace = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
+k256 = { workspace = true, features = ["ecdsa", "arithmetic"] }
 pallet-balances = { workspace = true }
 pallet-nfts = { workspace = true }
 pallet-transaction-payment = { workspace = true }
@@ -43,16 +44,15 @@ sc-network = { workspace = true }
 sc-service = { workspace = true }
 sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
-sp-core = { workspace = true }
 sp-blockchain = { workspace = true }
-sp-keystore = { workspace = true }
-sp-trie = { workspace = true, default-features = true }
+sp-core = { workspace = true }
 sp-io = { workspace = true, default-features = true }
-sp-runtime = { workspace = true, default-features = true }
+sp-keystore = { workspace = true }
 sp-rpc = { workspace = true }
+sp-runtime = { workspace = true, default-features = true }
 sp-std = { workspace = true }
+sp-trie = { workspace = true, default-features = true }
 substrate-frame-rpc-system = { workspace = true }
-k256 = { workspace = true, features = ["ecdsa", "arithmetic"] }
 
 # Polkadot
 polkadot-primitives = { workspace = true }
@@ -72,8 +72,8 @@ shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
 shp-opaque = { workspace = true }
 shp-traits = { workspace = true }
-shp-types = { workspace = true }
 shp-tx-implicits-runtime-api = { workspace = true }
+shp-types = { workspace = true }
 
 # Local pallets
 pallet-bucket-nfts = { workspace = true }
@@ -93,65 +93,65 @@ tempfile = "3.8"
 [features]
 default = ["std"]
 parachain = [
-	"cumulus-client-service",
-	"cumulus-primitives-core",
-	"cumulus-primitives-storage-weight-reclaim",
-]
-std = [
-	"codec/std",
-	"frame-benchmarking/std",
-	"frame-system/std",
-	"frame-support/std",
-	"frame-metadata-hash-extension/std",
-	"fp-account/std",
-	"log/std",
-	"pallet-file-system-runtime-api/std",
-	"sc-executor/std",
-	"scale-info/std",
-	"sp-api/std",
-	"sp-core/std",
-	"sp-block-builder/std",
-	"sp-keystore/std",
-	"sp-trie/std",
-	"sp-io/std",
-	"sp-runtime/std",
-	"sp-std/std",
-	"trie-db/std",
-	"polkadot-primitives/std",
-	"cumulus-primitives-core?/std",
-	"cumulus-primitives-storage-weight-reclaim?/std",
-	"shp-constants/std",
-	"shp-file-key-verifier/std",
-	"shp-file-metadata/std",
-	"shp-forest-verifier/std",
-	"shp-traits/std",
-	"shp-opaque/std",
-	"shp-types/std",
-	"shp-tx-implicits-runtime-api/std",
-	"pallet-balances/std",
-	"pallet-bucket-nfts/std",
-	"pallet-file-system/std",
-	"pallet-nfts/std",
-	"pallet-payment-streams/std",
-	"pallet-payment-streams-runtime-api/std",
-	"pallet-proofs-dealer/std",
-	"pallet-proofs-dealer-runtime-api/std",
-	"pallet-randomness/std",
-	"pallet-storage-providers/std",
-	"pallet-storage-providers-runtime-api/std",
-	"pallet-transaction-payment/std",
+    "cumulus-client-service",
+    "cumulus-primitives-core",
+    "cumulus-primitives-storage-weight-reclaim",
 ]
 runtime-benchmarks = [
-	"frame-benchmarking/runtime-benchmarks",
-	"frame-system/runtime-benchmarks",
-	"pallet-balances/runtime-benchmarks",
-	"pallet-bucket-nfts/runtime-benchmarks",
-	"pallet-file-system/runtime-benchmarks",
-	"pallet-nfts/runtime-benchmarks",
-	"pallet-payment-streams/runtime-benchmarks",
-	"pallet-proofs-dealer/runtime-benchmarks",
-	"pallet-randomness/runtime-benchmarks",
-	"pallet-storage-providers/runtime-benchmarks",
-	"pallet-transaction-payment/runtime-benchmarks",
-	"sp-runtime/runtime-benchmarks",
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "pallet-balances/runtime-benchmarks",
+    "pallet-bucket-nfts/runtime-benchmarks",
+    "pallet-file-system/runtime-benchmarks",
+    "pallet-nfts/runtime-benchmarks",
+    "pallet-payment-streams/runtime-benchmarks",
+    "pallet-proofs-dealer/runtime-benchmarks",
+    "pallet-randomness/runtime-benchmarks",
+    "pallet-storage-providers/runtime-benchmarks",
+    "pallet-transaction-payment/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
+]
+std = [
+    "codec/std",
+    "frame-benchmarking/std",
+    "frame-system/std",
+    "frame-support/std",
+    "frame-metadata-hash-extension/std",
+    "fp-account/std",
+    "log/std",
+    "pallet-file-system-runtime-api/std",
+    "sc-executor/std",
+    "scale-info/std",
+    "sp-api/std",
+    "sp-core/std",
+    "sp-block-builder/std",
+    "sp-keystore/std",
+    "sp-trie/std",
+    "sp-io/std",
+    "sp-runtime/std",
+    "sp-std/std",
+    "trie-db/std",
+    "polkadot-primitives/std",
+    "cumulus-primitives-core?/std",
+    "cumulus-primitives-storage-weight-reclaim?/std",
+    "shp-constants/std",
+    "shp-file-key-verifier/std",
+    "shp-file-metadata/std",
+    "shp-forest-verifier/std",
+    "shp-traits/std",
+    "shp-opaque/std",
+    "shp-types/std",
+    "shp-tx-implicits-runtime-api/std",
+    "pallet-balances/std",
+    "pallet-bucket-nfts/std",
+    "pallet-file-system/std",
+    "pallet-nfts/std",
+    "pallet-payment-streams/std",
+    "pallet-payment-streams-runtime-api/std",
+    "pallet-proofs-dealer/std",
+    "pallet-proofs-dealer-runtime-api/std",
+    "pallet-randomness/std",
+    "pallet-storage-providers/std",
+    "pallet-storage-providers-runtime-api/std",
+    "pallet-transaction-payment/std",
 ]

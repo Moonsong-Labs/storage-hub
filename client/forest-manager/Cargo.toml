@@ -1,13 +1,13 @@
 [package]
-name = "shc-forest-manager"
-version = "0.4.0"
+authors = { workspace = true }
 description = ""
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
-repository = { workspace = true }
-edition = { workspace = true }
+name = "shc-forest-manager"
 publish = false
+repository = { workspace = true }
+version = "0.4.0"
 
 [lib]
 
@@ -21,8 +21,8 @@ bincode = { workspace = true }
 codec = { workspace = true }
 hash-db = { workspace = true }
 kvdb = { workspace = true }
-kvdb-rocksdb = { workspace = true }
 kvdb-memorydb = { workspace = true }
+kvdb-rocksdb = { workspace = true }
 log = { workspace = true }
 reference-trie = { workspace = true }
 serde = { workspace = true }
@@ -38,19 +38,19 @@ sp-trie = { workspace = true, default-features = true }
 shc-common = { workspace = true }
 
 [dev-dependencies]
+sh-parachain-runtime = { workspace = true }
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
-sh-parachain-runtime = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
-	"sp-core/std",
-	"sp-runtime/std",
-	"sp-state-machine/std",
-	"shp-forest-verifier/std",
-	"shp-traits/std",
-	"sp-trie/std",
-	"shc-common/std",
-	"trie-db/std",
+    "sp-core/std",
+    "sp-runtime/std",
+    "sp-state-machine/std",
+    "shp-forest-verifier/std",
+    "shp-traits/std",
+    "sp-trie/std",
+    "shc-common/std",
+    "trie-db/std",
 ]

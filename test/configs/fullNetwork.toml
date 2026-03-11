@@ -1,40 +1,35 @@
 [relaychain]
 chain = "rococo-local"
-default_image = "parity/polkadot:v1.9.0"
-default_command = "polkadot"
 default_args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
     "--database=paritydb",
 ]
+default_command = "polkadot"
+default_image = "parity/polkadot:v1.9.0"
 
 [[relaychain.nodes]]
-name = "relay-0"
-validator = true
-rpc_port = 31000
 add_to_bootnodes = true
+name = "relay-0"
+rpc_port = 31000
+validator = true
 
 [[relaychain.nodes]]
+add_to_bootnodes = true
 name = "relay-1"
 validator = true
-add_to_bootnodes = true
 
 [[parachains]]
 id = 2000
 
 [[parachains.collators]]
-image = "moonsonglabs/storage-hub:test-local"
+args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 command = "storage-hub-node"
+image = "moonsonglabs/storage-hub:test-local"
 name = "sh-collator"
 rpc_port = 32000
-args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 
 [[parachains.collators]]
-name = "sh-BSP"
-validator = false
-rpc_port = 35000
-image = "moonsonglabs/storage-hub:test-local"
-command = "storage-hub-node"
 args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
@@ -43,6 +38,11 @@ args = [
     "--max-storage-capacity 4294967295",
     "--jump-capacity=1073741824",
 ]
+command = "storage-hub-node"
+image = "moonsonglabs/storage-hub:test-local"
+name = "sh-BSP"
+rpc_port = 35000
+validator = false
 
 [types.Header]
 number = "u64"

@@ -1,14 +1,14 @@
 [package]
-name = "storage-hub-node"
-version = "0.4.0"
+authors = { workspace = true }
+build = "build.rs"
 description = "A Cumulus-based StorageHub node."
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
-repository = { workspace = true }
-edition = { workspace = true }
-build = "build.rs"
+name = "storage-hub-node"
 publish = false
+repository = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
@@ -29,10 +29,10 @@ lazy-static = { workspace = true }
 ordered-float = { workspace = true }
 priority-queue = { workspace = true }
 rand = { workspace = true }
+rocksdb = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-rocksdb = { workspace = true }
 
 # Local
 pallet-file-system = { workspace = true }
@@ -48,15 +48,15 @@ sh-solochain-evm-runtime = { workspace = true }
 shc-actors-derive = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-blockchain-service = { workspace = true }
-shc-file-transfer-service = { workspace = true }
+shc-client = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
+shc-file-transfer-service = { workspace = true }
 shc-fisherman-service = { workspace = true }
 shc-forest-manager = { workspace = true }
 shc-indexer-db = { workspace = true }
 shc-indexer-service = { workspace = true }
 shc-rpc = { workspace = true }
-shc-client = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
@@ -65,25 +65,24 @@ shp-traits = { workspace = true }
 shp-types = { workspace = true }
 
 clap = { workspace = true }
-log = { workspace = true }
 codec = { workspace = true }
-serde = { workspace = true, default-features = true }
-jsonrpsee = { features = ["server"], workspace = true }
 futures = { workspace = true }
+jsonrpsee = { features = ["server"], workspace = true }
+log = { workspace = true }
+serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }
 
 # Substrate
 frame-benchmarking = { workspace = true, default-features = true }
 frame-benchmarking-cli = { workspace = true }
-frame-system = { workspace = true }
 frame-support = { workspace = true }
+frame-system = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 sc-basic-authorship = { workspace = true }
 sc-chain-spec = { workspace = true }
 sc-cli = { workspace = true }
 sc-client-api = { workspace = true }
-sc-offchain = { workspace = true }
 sc-consensus = { workspace = true }
 sc-consensus-aura = { workspace = true }
 sc-consensus-babe = { workspace = true }
@@ -92,6 +91,7 @@ sc-consensus-manual-seal = { workspace = true }
 sc-executor = { workspace = true }
 sc-network = { workspace = true }
 sc-network-sync = { workspace = true }
+sc-offchain = { workspace = true }
 sc-rpc = { workspace = true }
 sc-service = { workspace = true }
 sc-sysinfo = { workspace = true }
@@ -107,10 +107,10 @@ sp-consensus-aura = { workspace = true }
 sp-consensus-babe = { workspace = true }
 sp-core = { workspace = true, default-features = true }
 sp-genesis-builder = { workspace = true }
+sp-inherents = { workspace = true }
+sp-io = { workspace = true, default-features = true }
 sp-keyring = { workspace = true, default-features = true }
 sp-keystore = { workspace = true }
-sp-io = { workspace = true, default-features = true }
-sp-inherents = { workspace = true }
 sp-runtime = { workspace = true, default-features = true }
 sp-timestamp = { workspace = true }
 sp-trie = { workspace = true }

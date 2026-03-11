@@ -8,14 +8,14 @@
 channel = "1.90"
 
 components = [
-	"cargo",
-	"clippy",
-	"rust-analyzer",
-	"rust-src",
-	"rust-std",
-	"rustc-dev",
-	"rustc",
-	"rustfmt",
+    "cargo",
+    "clippy",
+    "rust-analyzer",
+    "rust-src",
+    "rust-std",
+    "rustc-dev",
+    "rustc",
+    "rustfmt",
 ]
 profile = "minimal"
 targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]
