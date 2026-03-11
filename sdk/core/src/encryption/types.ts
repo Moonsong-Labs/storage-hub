@@ -24,10 +24,10 @@ const NONCE_INFO = new TextEncoder().encode("storagehub-sdk:nonce:v1");
 const PASSWORD_IKM_ARGON2_PARAMS = Object.freeze({
   // Iterations (time cost): more rounds increase brute-force cost.
   t: 4,
-  // Memory cost in KiB (64 MiB).
-  m: 64 * 1024,
+  // Memory cost in KiB (128 MiB).
+  m: 128 * 1024,
   // Degree of parallelism (lanes/threads).
-  p: 1,
+  p: 4,
   // Output length in bytes. Argon expects dkLen as param name
   dkLen: IKM_SIZE,
   // Maximum memory noble/argon2 is allowed to allocate (bytes).
