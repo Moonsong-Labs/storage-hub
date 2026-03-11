@@ -1,7 +1,3 @@
-
-include = ["operator/Cargo.toml", "operator/**/*.toml"]
-exclude = ["/contracts"]
-
 [formatting]
 indent_string = "    "
 reorder_keys = true
