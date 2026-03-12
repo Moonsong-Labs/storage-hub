@@ -97,7 +97,8 @@ impl StorageHubRpcClient {
         // The RPC also replies with a hex-encoded SCALE-encoded response
         let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
             RpcConnectionError::Serialization(format!(
-                "RPC runtime API did not respond with a valid hex string: {e}",
+                "RPC runtime API did not respond with a valid hex string: {}",
+                e
             ))
         })?;
 
@@ -135,7 +136,8 @@ impl StorageHubRpcClient {
         // The RPC replies with a hex-encoded SCALE-encoded response
         let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
             RpcConnectionError::Serialization(format!(
-                "RPC runtime API did not respond with a valid hex string: {e}",
+                "RPC runtime API did not respond with a valid hex string: {}",
+                e
             ))
         })?;
 
