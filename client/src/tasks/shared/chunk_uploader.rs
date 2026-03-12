@@ -88,7 +88,7 @@ where
     ///   request. Parses the remote response to detect whether the peer already
     ///   has the entire file (short‑circuit success).
     /// - Implements limited retries:
-    ///   - `RequestFailure::Refused`: up to 3 retries with short sleep.
+    ///   - `RequestFailure::Refused`: up to 30 retries with 1s sleep (litep2p maps transient connectivity errors to Refused).
     ///   - `RequestFailure::Network(_) | NotConnected`: up to 10 retries,
     ///     waiting for several blocks between attempts.
     /// - On the final batch, logs completion if the remote reports that the
