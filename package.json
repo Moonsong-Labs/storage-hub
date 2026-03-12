@@ -13,7 +13,11 @@
     "test",
     "sdk",
     "sdk/core",
-    "sdk/msp-client"
+    "sdk/msp-client",
+    "sdk/e2e",
+    "sdk/examples/node",
+    "sdk/examples/nextjs",
+    "sdk/examples/demo-app"
   ],
   "scripts": {
     "lint": "bun run --workspaces --if-present --sequential lint",
