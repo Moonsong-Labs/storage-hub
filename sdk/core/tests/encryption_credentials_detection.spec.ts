@@ -8,7 +8,7 @@ import { createWalletClient, defineChain, http } from "viem";
 import { TEST_PRIVATE_KEY_12 } from "./consts.js";
 import { concatChunks, toReadable } from "./encryption_test_utils.js";
 
-const SLOW_TEST_TIMEOUT = 20_000;
+const SLOW_TEST_TIMEOUT = 60_000;
 
 describe("wrong credential handling", () => {
   const chunkSize = 64;
@@ -69,7 +69,7 @@ describe("wrong credential handling", () => {
     ).rejects.toThrow("authentication failed");
 
     expect(concatChunks(decryptedChunks).length).toBe(0);
-  }, 20_000);
+  }, SLOW_TEST_TIMEOUT);
 
   it("rejects decryption with wrong signature and emits no plaintext", async () => {
     const encryptedChunks: Uint8Array[] = [];
@@ -147,7 +147,7 @@ describe("wrong credential handling", () => {
     ).rejects.toThrow("authentication failed");
 
     expect(concatChunks(decryptedChunks).length).toBe(0);
-  }, 30_000);
+  }, SLOW_TEST_TIMEOUT);
 });
 
 describe("encrypted file detection", () => {

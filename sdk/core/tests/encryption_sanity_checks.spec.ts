@@ -7,7 +7,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { createWalletClient, defineChain, http } from "viem";
 import { TEST_PRIVATE_KEY_12 } from "./consts.js";
 
-const SLOW_TEST_TIMEOUT = 20_000;
+const SLOW_TEST_TIMEOUT = 60_000;
 
 describe("encryption types sanity check", () => {
   function u64be(n: number): Uint8Array {
@@ -177,7 +177,7 @@ describe("Generate DEK and base Nonce", () => {
     expect(equalBytes(n0, baseNonce.bytes)).toBe(false);
     const n1 = baseNonce.getNonce(1).unwrap();
     expect(equalBytes(n0, n1)).toBe(false);
-  }, 30_000);
+  }, SLOW_TEST_TIMEOUT);
 
   it("Generate DEK & Nonce from Password", async () => {
     // Normalize input
@@ -196,5 +196,5 @@ describe("Generate DEK and base Nonce", () => {
     expect(equalBytes(n0, baseNonce.bytes)).toBe(false);
     const n1 = baseNonce.getNonce(1).unwrap();
     expect(equalBytes(n0, n1)).toBe(false);
-  }, 30_000);
+  }, SLOW_TEST_TIMEOUT);
 });

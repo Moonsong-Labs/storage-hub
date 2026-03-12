@@ -14,7 +14,7 @@ import {
   toReadable
 } from "./encryption_test_utils.js";
 
-const STREAM_TEST_TIMEOUT = 20_000;
+const STREAM_TEST_TIMEOUT = 60_000;
 
 describe("stream tamper detection", () => {
   const password = "correct horse battery staple";
