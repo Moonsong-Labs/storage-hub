@@ -1211,13 +1211,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - name: Install dependencies
         run: |
           cd test
-          pnpm install
+          bun install
       - name: Run unit tests
         run: |
           cd test
@@ -1236,7 +1236,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - run: mkdir -p target/release/
@@ -1252,8 +1252,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -1262,7 +1262,7 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
@@ -1270,7 +1270,7 @@ jobs:
         id: run_tests
         run: |
           cd test
-          pnpm i
+          bun install
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
