@@ -16402,7 +16402,6 @@ dependencies = [
  "sp-offchain 36.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-runtime 41.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-session 38.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
- "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-tracing 17.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-transaction-pool 36.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-trie 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
