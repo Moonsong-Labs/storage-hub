@@ -1,10 +1,10 @@
 [package]
-name = "storagehub-wasm"
-version = "0.4.0"
-edition = "2021"
 description = "WASM support for the StorageHub SDK"
+edition = "2021"
 license = "Apache-2.0"
+name = "storagehub-wasm"
 repository = "https://github.com/moonsong-labs/storage-hub"
+version = "0.4.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -15,6 +15,8 @@ parity-scale-codec = "3.7.4"
 shp-constants = { workspace = true, default-features = false }
 shp-file-metadata = { workspace = true, default-features = false }
 sp-core = { workspace = true, default-features = false }
-sp-runtime-interface = { workspace = true, default-features = false, features = ["disable_target_static_assertions"] }
+sp-runtime-interface = { workspace = true, default-features = false, features = [
+    "disable_target_static_assertions",
+] }
 sp-trie = { workspace = true, default-features = false }
 wasm-bindgen = "0.2"
