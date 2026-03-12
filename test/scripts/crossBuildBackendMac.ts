@@ -49,9 +49,12 @@ async function main() {
   console.log(
     `Running build command: cargo zigbuild --target ${target} --release -p sh-msp-backend ${additionalArgs}`
   );
-  execSyncWithEnv(`cargo zigbuild --target ${target} --release -p sh-msp-backend ${additionalArgs}`, {
-    stdio: "inherit"
-  });
+  execSyncWithEnv(
+    `cargo zigbuild --target ${target} --release -p sh-msp-backend ${additionalArgs}`,
+    {
+      stdio: "inherit"
+    }
+  );
 }
 
 const execCommand = (command: string): string => {
@@ -120,14 +123,9 @@ const buildAndCopyLibpq = async (target: string): Promise<void> => {
   const pqLibDirTargetVar = `PQ_LIB_DIR_${target.toUpperCase().replace(/-/g, "_")}`;
 
   // Make libpq visible both to rustc native linking and to the final binary at runtime.
-  const linkerFlags = [
-    `-L native=${destPath}`,
-    "-C link-arg=-Wl,-rpath,$ORIGIN/../release/deps"
-  ];
+  const linkerFlags = [`-L native=${destPath}`, "-C link-arg=-Wl,-rpath,$ORIGIN/../release/deps"];
 
-  process.env.RUSTFLAGS = [process.env.RUSTFLAGS, ...linkerFlags]
-    .filter(Boolean)
-    .join(" ");
+  process.env.RUSTFLAGS = [process.env.RUSTFLAGS, ...linkerFlags].filter(Boolean).join(" ");
   process.env.CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS = [
     process.env.CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS,
     ...linkerFlags
