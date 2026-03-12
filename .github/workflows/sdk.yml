@@ -118,11 +118,11 @@ jobs:
       - name: Type check
         run: bun run typecheck
       - name: Run tests (core)
-        run: bun run test:core -- --run
+        run: bun run test:core
       - name: Run tests (msp-client)
-        run: bun run test:msp-client -- --run
+        run: bun run test:msp-client
       - name: Coverage
-        run: bun run coverage -- --run
+        run: bun run coverage
       - name: Upload SDK dist
         uses: actions/upload-artifact@v4
         with:
