@@ -60,4 +60,6 @@ pub enum ForestStorageError<H> {
     FailedToConstructProvenLeaves,
     #[error("Failed to copy RocksDB database to another directory")]
     FailedToCopyRocksDB,
+    #[error("Forest is being deleted")]
+    ForestDeleted,
 }

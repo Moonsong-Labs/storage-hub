@@ -1,12 +1,12 @@
 [package]
-name = "shp-treasury-funding"
+authors = { workspace = true }
 description = "Function that determines how much of the charges from Providers goes to the treasury."
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "shp-treasury-funding"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true

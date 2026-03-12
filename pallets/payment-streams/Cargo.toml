@@ -1,12 +1,12 @@
 [package]
-name = "pallet-payment-streams"
+authors = { workspace = true }
 description = "FRAME pallet that allows for the creation and management of payment streams."
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "pallet-payment-streams"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
@@ -53,40 +53,40 @@ pallet-nfts = { workspace = true }
 [features]
 default = ["std"]
 runtime-benchmarks = [
-	"frame-benchmarking/runtime-benchmarks",
-	"frame-support/runtime-benchmarks",
-	"frame-system/runtime-benchmarks",
-	"pallet-balances/runtime-benchmarks",
-	"pallet-proofs-dealer/runtime-benchmarks",
-	"pallet-storage-providers/runtime-benchmarks",
-	"shp-constants/runtime-benchmarks",
-	"shp-file-metadata/runtime-benchmarks",
-	"shp-traits/runtime-benchmarks",
-	"shp-treasury-funding/runtime-benchmarks",
-	"sp-runtime/runtime-benchmarks",
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "pallet-balances/runtime-benchmarks",
+    "pallet-proofs-dealer/runtime-benchmarks",
+    "pallet-storage-providers/runtime-benchmarks",
+    "shp-constants/runtime-benchmarks",
+    "shp-file-metadata/runtime-benchmarks",
+    "shp-traits/runtime-benchmarks",
+    "shp-treasury-funding/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
 ]
 std = [
-	"codec/std",
-	"frame-benchmarking?/std",
-	"frame-support/std",
-	"frame-system/std",
-	"pallet-balances/std",
-	"pallet-nfts/std",
-	"pallet-payment-streams-runtime-api/std",
-	"pallet-proofs-dealer/std",
-	"pallet-storage-providers/std",
-	"scale-info/std",
-	"shp-traits/std",
-	"shp-treasury-funding/std",
-	"sp-core/std",
-	"sp-io/std",
-	"sp-runtime/std",
-	"sp-weights/std",
+    "codec/std",
+    "frame-benchmarking?/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-balances/std",
+    "pallet-nfts/std",
+    "pallet-payment-streams-runtime-api/std",
+    "pallet-proofs-dealer/std",
+    "pallet-storage-providers/std",
+    "scale-info/std",
+    "shp-traits/std",
+    "shp-treasury-funding/std",
+    "sp-core/std",
+    "sp-io/std",
+    "sp-runtime/std",
+    "sp-weights/std",
 ]
 try-runtime = [
-	"frame-support/try-runtime",
-	"frame-system/try-runtime",
-	"shp-traits/try-runtime",
-	"shp-treasury-funding/try-runtime",
-	"sp-runtime/try-runtime",
+    "frame-support/try-runtime",
+    "frame-system/try-runtime",
+    "shp-traits/try-runtime",
+    "shp-treasury-funding/try-runtime",
+    "sp-runtime/try-runtime",
 ]

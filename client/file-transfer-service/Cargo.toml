@@ -1,14 +1,14 @@
 [package]
-name = "shc-file-transfer-service"
-version = "0.4.0"
+authors = { workspace = true }
+build = "build.rs"
 description = ""
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
-repository = { workspace = true }
-edition = { workspace = true }
-build = "build.rs"
+name = "shc-file-transfer-service"
 publish = false
+repository = { workspace = true }
+version = "0.4.0"
 
 [lib]
 
@@ -16,33 +16,33 @@ publish = false
 workspace = true
 
 [dependencies]
-prost = { workspace = true }
-async-channel = { workspace = true }
-tokio = { workspace = true }
-thiserror = { workspace = true }
 anyhow = { workspace = true }
-async-trait = { workspace = true }
 array-bytes = { workspace = true }
-futures = { workspace = true }
-codec = { workspace = true }
+async-channel = { workspace = true }
+async-trait = { workspace = true }
 chrono = { workspace = true }
+codec = { workspace = true }
+futures = { workspace = true }
+prost = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
 
 # Substrate
 sc-client-api = { workspace = true }
-sc-service = { workspace = true }
 sc-network = { workspace = true }
 sc-network-types = { workspace = true }
-sc-utils = { workspace = true }
+sc-service = { workspace = true }
 sc-tracing = { workspace = true }
+sc-utils = { workspace = true }
 sp-api = { workspace = true }
 
 # Local
-shc-actors-framework = { workspace = true }
+pallet-storage-providers-runtime-api = { workspace = true }
 shc-actors-derive = { workspace = true }
+shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
-pallet-storage-providers-runtime-api = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }

@@ -1,13 +1,13 @@
 [package]
-name = "shc-blockchain-service"
-version = "0.4.0"
+authors = { workspace = true }
 description = "The blockchain service for StorageHub. Responsible for listening to the blockchain and interacting with the StorageHub runtime."
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
-repository = { workspace = true }
-edition = { workspace = true }
+name = "shc-blockchain-service"
 publish = false
+repository = { workspace = true }
+version = "0.4.0"
 
 [lib]
 
@@ -33,30 +33,30 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 sc-client-api = { workspace = true }
-sc-service = { workspace = true }
 sc-network = { workspace = true }
 sc-network-types = { workspace = true }
+sc-service = { workspace = true }
+sc-tracing = { workspace = true }
 sc-transaction-pool-api = { workspace = true }
 sc-utils = { workspace = true }
-sc-tracing = { workspace = true }
 sp-api = { workspace = true }
 sp-blockchain = { workspace = true }
+sp-consensus = { workspace = true }
 sp-core = { workspace = true, default-features = true }
 sp-keystore = { workspace = true }
-sp-consensus = { workspace = true }
 sp-runtime = { workspace = true, default-features = true }
 substrate-frame-rpc-system = { workspace = true }
 
 # Polkadot
-polkadot-runtime-common = { workspace = true }
 polkadot-primitives = { workspace = true }
+polkadot-runtime-common = { workspace = true }
 
 # Local
-shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
+shc-actors-framework = { workspace = true }
 shc-blockchain-service-db = { workspace = true }
-shc-forest-manager = { workspace = true }
 shc-common = { workspace = true }
+shc-forest-manager = { workspace = true }
 shc-telemetry = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
