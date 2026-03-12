@@ -214,9 +214,7 @@ await describeMspNet(
       );
       const intentionPayload = intentionCodec.toU8a();
       const rawSignature = shUser.sign(intentionPayload);
-      const userSignature = userApi.createType("MultiSignature", {
-        Sr25519: rawSignature
-      });
+      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
 
       await userApi.block.seal({
         calls: [
@@ -423,9 +421,7 @@ await describeMspNet(
       );
       const intentionPayload = intentionCodec.toU8a();
       const rawSignature = shUser.sign(intentionPayload);
-      const userSignature = userApi.createType("MultiSignature", {
-        Sr25519: rawSignature
-      });
+      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
 
       await userApi.block.seal({
         calls: [
@@ -693,9 +689,7 @@ await describeMspNet(
       );
       const intentionPayload = intentionCodec.toU8a();
       const rawSignature = shUser.sign(intentionPayload);
-      const userSignature = userApi.createType("MultiSignature", {
-        Sr25519: rawSignature
-      });
+      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
 
       const deletionRequest = {
         fileOwner: shUser.address,
@@ -762,18 +756,12 @@ await describeMspNet(
 
       // Drop deletion txs if they went back to pool
       try {
-        await userApi.node.dropTxn({
-          module: "fileSystem",
-          method: "requestDeleteFile"
-        });
+        await userApi.node.dropTxn({ module: "fileSystem", method: "requestDeleteFile" });
       } catch {
         // Transaction not in pool
       }
       try {
-        await userApi.node.dropTxn({
-          module: "fileSystem",
-          method: "deleteFiles"
-        });
+        await userApi.node.dropTxn({ module: "fileSystem", method: "deleteFiles" });
       } catch {
         // Transaction not in pool
       }
@@ -868,9 +856,7 @@ await describeMspNet(
       );
       const intentionPayload = intentionCodec.toU8a();
       const rawSignature = shUser.sign(intentionPayload);
-      const userSignature = userApi.createType("MultiSignature", {
-        Sr25519: rawSignature
-      });
+      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
 
       const deletionRequest = {
         fileOwner: shUser.address,
@@ -933,18 +919,12 @@ await describeMspNet(
 
       // Drop deletion txs if they went back to pool
       try {
-        await userApi.node.dropTxn({
-          module: "fileSystem",
-          method: "requestDeleteFile"
-        });
+        await userApi.node.dropTxn({ module: "fileSystem", method: "requestDeleteFile" });
       } catch {
         // Transaction not in pool
       }
       try {
-        await userApi.node.dropTxn({
-          module: "fileSystem",
-          method: "deleteFiles"
-        });
+        await userApi.node.dropTxn({ module: "fileSystem", method: "deleteFiles" });
       } catch {
         // Transaction not in pool
       }
