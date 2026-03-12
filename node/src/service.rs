@@ -2964,6 +2964,11 @@ where
     let role = config.role;
     let is_authority_role = role.is_authority();
 
+    // Shared Frontier caches (used both by RPC and background tasks)
+    let filter_pool: Option<FilterPool> = Some(Default::default());
+    let fee_history_cache: FeeHistoryCache = Default::default();
+    let fee_history_limit: FeeHistoryCacheLimit = 2048;
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
@@ -2980,10 +2985,6 @@ where
             100, // statuses cache
             prometheus_registry.clone(),
         ));
-        // Shared Frontier caches
-        let filter_pool: Option<FilterPool> = Some(Default::default());
-        let fee_history_cache: FeeHistoryCache = Default::default();
-        let fee_history_limit: FeeHistoryCacheLimit = 2048;
         let filter_pool_captured = filter_pool.clone();
         let fee_history_cache_captured = fee_history_cache.clone();
         let fee_history_limit_captured = fee_history_limit;
@@ -3068,7 +3069,6 @@ where
         );
 
         // EthFilter maintenance (keep in sync with RPC filter_pool)
-        let filter_pool: Option<FilterPool> = Some(Default::default());
         if let Some(filter_pool) = filter_pool.clone() {
             task_manager.spawn_essential_handle().spawn(
                 "frontier-filter-pool",
@@ -3078,15 +3078,13 @@ where
         }
 
         // FeeHistory maintenance (keep in sync with RPC fee cache)
-        let fee_history_cache: FeeHistoryCache = Default::default();
-        let fee_history_limit: FeeHistoryCacheLimit = 2048;
         task_manager.spawn_essential_handle().spawn(
             "frontier-fee-history",
             Some("frontier"),
             EthTask::fee_history_task(
                 client.clone(),
                 storage_override.clone(),
-                fee_history_cache,
+                fee_history_cache.clone(),
                 fee_history_limit,
             ),
         );
