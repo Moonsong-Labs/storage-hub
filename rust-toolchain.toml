@@ -17,4 +17,4 @@ components = [
     "rustfmt",
 ]
 profile = "minimal"
-targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]
+targets = ["wasm32v1-none", "x86_64-unknown-linux-gnu"]

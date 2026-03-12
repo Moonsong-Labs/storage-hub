@@ -16149,6 +16149,7 @@ dependencies = [
  "cumulus-pallet-xcmp-queue",
  "cumulus-primitives-aura",
  "cumulus-primitives-core 0.18.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
+ "cumulus-primitives-storage-weight-reclaim",
  "cumulus-primitives-utility",
  "docify",
  "frame-benchmarking 40.2.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
@@ -16337,6 +16338,7 @@ dependencies = [
  "cumulus-pallet-xcmp-queue",
  "cumulus-primitives-aura",
  "cumulus-primitives-core 0.18.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
+ "cumulus-primitives-storage-weight-reclaim",
  "cumulus-primitives-utility",
  "frame-benchmarking 40.2.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "frame-executive 40.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
@@ -16400,6 +16402,7 @@ dependencies = [
  "sp-offchain 36.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-runtime 41.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-session 38.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-tracing 17.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-transaction-pool 36.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-trie 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
@@ -16730,6 +16733,7 @@ dependencies = [
  "sp-keystore 0.42.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-rpc",
  "sp-runtime 41.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-trie 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "substrate-frame-rpc-system",
  "tempfile",
@@ -17030,6 +17034,7 @@ dependencies = [
  "sp-core 36.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-io 40.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-runtime 41.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-trie 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "trie-db 0.30.0",
 ]
@@ -17046,6 +17051,7 @@ dependencies = [
  "shp-traits",
  "sp-arithmetic 26.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-core 36.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
 ]
 
 [[package]]
@@ -17061,6 +17067,7 @@ dependencies = [
  "sp-core 36.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-io 40.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-runtime 41.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-trie 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "trie-db 0.30.0",
 ]

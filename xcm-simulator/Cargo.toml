@@ -92,8 +92,8 @@ xcm-executor = { workspace = true }
 xcm-runtime-apis = { workspace = true }
 xcm-simulator = { workspace = true }
 
-pallet-collator-selection = { workspace = true }cumulus-pallet-aura-ext = { workspace = true }
 # Cumulus
+cumulus-pallet-aura-ext = { workspace = true }
 cumulus-pallet-parachain-system = { workspace = true }
 cumulus-pallet-session-benchmarking = { workspace = true }
 cumulus-pallet-weight-reclaim = { workspace = true }
@@ -103,6 +103,7 @@ cumulus-primitives-aura = { workspace = true }
 cumulus-primitives-core = { workspace = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true }
 cumulus-primitives-utility = { workspace = true }
+pallet-collator-selection = { workspace = true }
 parachain-info = { workspace = true }
 parachains-common = { workspace = true }
 polkadot-core-primitives = { workspace = true }
