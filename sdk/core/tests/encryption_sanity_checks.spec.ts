@@ -137,64 +137,72 @@ describe("BaseNonce + chunked file nonces", () => {
 });
 
 describe("Generate DEK and base Nonce", () => {
-  it("Generate DEK & Nonce from Signature", async () => {
-    const rpcUrl = "http://127.0.0.1:8545" as const;
-    const chain = defineChain({
-      id: 31337,
-      name: "Hardhat",
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcUrls: { default: { http: [rpcUrl] } }
-    });
+  it(
+    "Generate DEK & Nonce from Signature",
+    async () => {
+      const rpcUrl = "http://127.0.0.1:8545" as const;
+      const chain = defineChain({
+        id: 31337,
+        name: "Hardhat",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: { default: { http: [rpcUrl] } }
+      });
 
-    const account = privateKeyToAccount(TEST_PRIVATE_KEY_12);
-    const walletClient = createWalletClient({ chain, account, transport: http(rpcUrl) });
+      const account = privateKeyToAccount(TEST_PRIVATE_KEY_12);
+      const walletClient = createWalletClient({ chain, account, transport: http(rpcUrl) });
 
-    const fingerprint = "Fingerprint from unencrypted file";
-    const message = `Sign this message to generate the encryption key for filekey: ${fingerprint}`;
-    const signature = await walletClient.signMessage({
-      account,
-      message
-    });
+      const fingerprint = "Fingerprint from unencrypted file";
+      const message = `Sign this message to generate the encryption key for filekey: ${fingerprint}`;
+      const signature = await walletClient.signMessage({
+        account,
+        message
+      });
 
-    // Make sure to use deterministic ECDSA (e.g. RFC 6979)
-    const expectedSignature =
-      "0xf57db1fe2cbf3fe9ba789975126bcdf679394a70363758e429271b0323fc85f265db0fb27a66b8457c5b1138747a5ebefcd5756e8bcabe110c24cffab6ff118b1b";
-    expect(signature).toBe(expectedSignature);
+      // Make sure to use deterministic ECDSA (e.g. RFC 6979)
+      const expectedSignature =
+        "0xf57db1fe2cbf3fe9ba789975126bcdf679394a70363758e429271b0323fc85f265db0fb27a66b8457c5b1138747a5ebefcd5756e8bcabe110c24cffab6ff118b1b";
+      expect(signature).toBe(expectedSignature);
 
-    // Normalize input
-    const ikm = IKM.fromSignature(signature).unwrap();
-    const salt = Salt.fromBytes(hexToBytes("33".repeat(32))).unwrap();
+      // Normalize input
+      const ikm = IKM.fromSignature(signature).unwrap();
+      const salt = Salt.fromBytes(hexToBytes("33".repeat(32))).unwrap();
 
-    // Compute DEK and Base nonce (salted HKDF)
-    const dek = DEK.derive(ikm, salt).unwrap();
-    expect(dek.length).toBe(32);
+      // Compute DEK and Base nonce (salted HKDF)
+      const dek = DEK.derive(ikm, salt).unwrap();
+      expect(dek.length).toBe(32);
 
-    const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
-    expect(baseNonce.bytes.length).toBe(12);
+      const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
+      expect(baseNonce.bytes.length).toBe(12);
 
-    // Counter starts at 1, so getNonce(0) XORs with 1 and differs from raw base bytes.
-    const n0 = baseNonce.getNonce(0).unwrap();
-    expect(equalBytes(n0, baseNonce.bytes)).toBe(false);
-    const n1 = baseNonce.getNonce(1).unwrap();
-    expect(equalBytes(n0, n1)).toBe(false);
-  }, SLOW_TEST_TIMEOUT);
+      // Counter starts at 1, so getNonce(0) XORs with 1 and differs from raw base bytes.
+      const n0 = baseNonce.getNonce(0).unwrap();
+      expect(equalBytes(n0, baseNonce.bytes)).toBe(false);
+      const n1 = baseNonce.getNonce(1).unwrap();
+      expect(equalBytes(n0, n1)).toBe(false);
+    },
+    SLOW_TEST_TIMEOUT
+  );
 
-  it("Generate DEK & Nonce from Password", async () => {
-    // Normalize input
-    const ikmSalt = Salt.fromBytes(hexToBytes("66".repeat(32))).unwrap();
-    const ikm = IKM.fromPassword("User sets some really strong password", ikmSalt).unwrap();
-    const salt = Salt.fromBytes(hexToBytes("44".repeat(32))).unwrap();
+  it(
+    "Generate DEK & Nonce from Password",
+    async () => {
+      // Normalize input
+      const ikmSalt = Salt.fromBytes(hexToBytes("66".repeat(32))).unwrap();
+      const ikm = IKM.fromPassword("User sets some really strong password", ikmSalt).unwrap();
+      const salt = Salt.fromBytes(hexToBytes("44".repeat(32))).unwrap();
 
-    // Compute DEK and Base nonce (salted HKDF)
-    const dek = DEK.derive(ikm, salt).unwrap();
-    expect(dek.length).toBe(32);
+      // Compute DEK and Base nonce (salted HKDF)
+      const dek = DEK.derive(ikm, salt).unwrap();
+      expect(dek.length).toBe(32);
 
-    const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
-    expect(baseNonce.bytes.length).toBe(12);
+      const baseNonce = BaseNonce.derive(ikm, salt).unwrap();
+      expect(baseNonce.bytes.length).toBe(12);
 
-    const n0 = baseNonce.getNonce(0).unwrap();
-    expect(equalBytes(n0, baseNonce.bytes)).toBe(false);
-    const n1 = baseNonce.getNonce(1).unwrap();
-    expect(equalBytes(n0, n1)).toBe(false);
-  }, SLOW_TEST_TIMEOUT);
+      const n0 = baseNonce.getNonce(0).unwrap();
+      expect(equalBytes(n0, baseNonce.bytes)).toBe(false);
+      const n1 = baseNonce.getNonce(1).unwrap();
+      expect(equalBytes(n0, n1)).toBe(false);
+    },
+    SLOW_TEST_TIMEOUT
+  );
 });

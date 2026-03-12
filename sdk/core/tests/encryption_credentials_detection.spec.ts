@@ -25,129 +25,137 @@ describe("wrong credential handling", () => {
     return `0x${mutatedNibble}${signature.slice(3)}` as `0x${string}`;
   }
 
-  it("rejects decryption with wrong password and emits no plaintext", async () => {
-    const encryptedChunks: Uint8Array[] = [];
-    const decryptedChunks: Uint8Array[] = [];
-    const correctPassword = "correct horse battery staple";
+  it(
+    "rejects decryption with wrong password and emits no plaintext",
+    async () => {
+      const encryptedChunks: Uint8Array[] = [];
+      const decryptedChunks: Uint8Array[] = [];
+      const correctPassword = "correct horse battery staple";
 
-    const { dek, baseNonce, header } = await generateEncryptionKey({
-      kind: "password",
-      password: correctPassword
-    });
+      const { dek, baseNonce, header } = await generateEncryptionKey({
+        kind: "password",
+        password: correctPassword
+      });
 
-    await encryptFile({
-      input: toReadable(plaintext, 19),
-      output: new WritableStream<Uint8Array>({
-        write(chunk) {
-          encryptedChunks.push(chunk);
-        }
-      }),
-      dek,
-      baseNonce,
-      header: {
-        ...header,
-        chunk_size: chunkSize
-      }
-    });
-
-    const encrypted = concatChunks(encryptedChunks);
-    await expect(
-      decryptFile({
-        input: toReadable(encrypted, 19),
+      await encryptFile({
+        input: toReadable(plaintext, 19),
         output: new WritableStream<Uint8Array>({
           write(chunk) {
-            decryptedChunks.push(chunk);
+            encryptedChunks.push(chunk);
           }
         }),
-        getIkm: async (hdr) => {
-          if (hdr.ikm !== "password") {
-            throw new Error(`expected password header, got ${hdr.ikm}`);
-          }
-          return IKM.fromPassword("definitely the wrong password", hdr.ikm_salt).unwrap();
+        dek,
+        baseNonce,
+        header: {
+          ...header,
+          chunk_size: chunkSize
         }
-      })
-    ).rejects.toThrow("authentication failed");
+      });
 
-    expect(concatChunks(decryptedChunks).length).toBe(0);
-  }, SLOW_TEST_TIMEOUT);
-
-  it("rejects decryption with wrong signature and emits no plaintext", async () => {
-    const encryptedChunks: Uint8Array[] = [];
-    const decryptedChunks: Uint8Array[] = [];
-
-    const rpcUrl = "http://127.0.0.1:8545" as const;
-    const chain = defineChain({
-      id: 31337,
-      name: "Hardhat",
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcUrls: { default: { http: [rpcUrl] } }
-    });
-    const account = privateKeyToAccount(TEST_PRIVATE_KEY_12);
-    const walletClient = createWalletClient({ chain, account, transport: http(rpcUrl) });
-
-    const { dek, baseNonce, header } = await generateEncryptionKey({
-      kind: "signature",
-      walletClient,
-      account,
-      createMessage: (ikm_salt) =>
-        IKM.createEncryptionKeyMessage(
-          appName,
-          domain,
-          version,
-          purpose,
-          chainId,
-          account.address,
-          ikm_salt
-        ).message
-    });
-
-    await encryptFile({
-      input: toReadable(plaintext, 19),
-      output: new WritableStream<Uint8Array>({
-        write(chunk) {
-          encryptedChunks.push(chunk);
-        }
-      }),
-      dek,
-      baseNonce,
-      header: {
-        ...header,
-        chunk_size: chunkSize
-      }
-    });
-
-    const encrypted = concatChunks(encryptedChunks);
-    await expect(
-      decryptFile({
-        input: toReadable(encrypted, 19),
-        output: new WritableStream<Uint8Array>({
-          write(chunk) {
-            decryptedChunks.push(chunk);
+      const encrypted = concatChunks(encryptedChunks);
+      await expect(
+        decryptFile({
+          input: toReadable(encrypted, 19),
+          output: new WritableStream<Uint8Array>({
+            write(chunk) {
+              decryptedChunks.push(chunk);
+            }
+          }),
+          getIkm: async (hdr) => {
+            if (hdr.ikm !== "password") {
+              throw new Error(`expected password header, got ${hdr.ikm}`);
+            }
+            return IKM.fromPassword("definitely the wrong password", hdr.ikm_salt).unwrap();
           }
-        }),
-        getIkm: async (hdr) => {
-          if (hdr.ikm !== "signature") {
-            throw new Error(`expected signature header, got ${hdr.ikm}`);
-          }
+        })
+      ).rejects.toThrow("authentication failed");
 
-          const { message } = IKM.createEncryptionKeyMessage(
+      expect(concatChunks(decryptedChunks).length).toBe(0);
+    },
+    SLOW_TEST_TIMEOUT
+  );
+
+  it(
+    "rejects decryption with wrong signature and emits no plaintext",
+    async () => {
+      const encryptedChunks: Uint8Array[] = [];
+      const decryptedChunks: Uint8Array[] = [];
+
+      const rpcUrl = "http://127.0.0.1:8545" as const;
+      const chain = defineChain({
+        id: 31337,
+        name: "Hardhat",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: { default: { http: [rpcUrl] } }
+      });
+      const account = privateKeyToAccount(TEST_PRIVATE_KEY_12);
+      const walletClient = createWalletClient({ chain, account, transport: http(rpcUrl) });
+
+      const { dek, baseNonce, header } = await generateEncryptionKey({
+        kind: "signature",
+        walletClient,
+        account,
+        createMessage: (ikm_salt) =>
+          IKM.createEncryptionKeyMessage(
             appName,
             domain,
             version,
             purpose,
             chainId,
             account.address,
-            hdr.ikm_salt
-          );
-          const signature = await walletClient.signMessage({ account, message });
-          const wrongSignature = mutateHexSignature(signature);
-          return IKM.fromSignature(wrongSignature).unwrap();
-        }
-      })
-    ).rejects.toThrow("authentication failed");
+            ikm_salt
+          ).message
+      });
 
-    expect(concatChunks(decryptedChunks).length).toBe(0);
-  }, SLOW_TEST_TIMEOUT);
+      await encryptFile({
+        input: toReadable(plaintext, 19),
+        output: new WritableStream<Uint8Array>({
+          write(chunk) {
+            encryptedChunks.push(chunk);
+          }
+        }),
+        dek,
+        baseNonce,
+        header: {
+          ...header,
+          chunk_size: chunkSize
+        }
+      });
+
+      const encrypted = concatChunks(encryptedChunks);
+      await expect(
+        decryptFile({
+          input: toReadable(encrypted, 19),
+          output: new WritableStream<Uint8Array>({
+            write(chunk) {
+              decryptedChunks.push(chunk);
+            }
+          }),
+          getIkm: async (hdr) => {
+            if (hdr.ikm !== "signature") {
+              throw new Error(`expected signature header, got ${hdr.ikm}`);
+            }
+
+            const { message } = IKM.createEncryptionKeyMessage(
+              appName,
+              domain,
+              version,
+              purpose,
+              chainId,
+              account.address,
+              hdr.ikm_salt
+            );
+            const signature = await walletClient.signMessage({ account, message });
+            const wrongSignature = mutateHexSignature(signature);
+            return IKM.fromSignature(wrongSignature).unwrap();
+          }
+        })
+      ).rejects.toThrow("authentication failed");
+
+      expect(concatChunks(decryptedChunks).length).toBe(0);
+    },
+    SLOW_TEST_TIMEOUT
+  );
 });
 
 describe("encrypted file detection", () => {
