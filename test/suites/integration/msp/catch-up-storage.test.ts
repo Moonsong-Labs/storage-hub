@@ -91,9 +91,7 @@ await describeMspNet(
       await mspApi.disconnect();
 
       // Restarting the MSP container. This will start the Substrate node from scratch.
-      await userApi.docker.restartContainer({
-        containerName: "storage-hub-sh-msp-1"
-      });
+      await userApi.docker.restartContainer({ containerName: "storage-hub-sh-msp-1" });
 
       // TODO: Wait for the container logs of starting up
       await userApi.docker.waitForLog({
