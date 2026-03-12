@@ -164,8 +164,10 @@ where
         };
 
         // Process the events that are common to all roles.
-        {
-            trace!(target: LOG_TARGET, "No common MSP block import events to process while in LEADER, STANDALONE or FOLLOWER role");
+        match event {
+            _ => {
+                trace!(target: LOG_TARGET, "No common MSP block import events to process while in LEADER, STANDALONE or FOLLOWER role");
+            }
         }
 
         // Process the events that are common to all roles.
