@@ -1,12 +1,12 @@
 [package]
-name = "pallet-storage-providers"
+authors = { workspace = true }
 description = "FRAME pallet that works as a registry for storage providers (both main and backup ones)"
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "pallet-storage-providers"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
@@ -40,8 +40,8 @@ sp-trie = { workspace = true }
 serde = { workspace = true }
 
 #Local
-pallet-proofs-dealer = { workspace = true }
 pallet-payment-streams = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
 pallet-randomness = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-treasury-funding = { workspace = true }

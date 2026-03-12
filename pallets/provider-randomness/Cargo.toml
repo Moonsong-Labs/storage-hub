@@ -1,12 +1,12 @@
 [package]
-name = "pallet-cr-randomness"
+authors = { workspace = true }
 description = "This pallet provides verifiable commit reveal randomness to the runtime"
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "pallet-cr-randomness"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [dependencies]
 codec = { workspace = true }
@@ -33,28 +33,28 @@ sp-trie = { workspace = true }
 
 [features]
 default = ["std"]
-std = [
-	"codec/std",
-	"frame-support/std",
-	"frame-system/std",
-	"pallet-balances/std",
-	"pallet-payment-streams/std",
-	"pallet-proofs-dealer/std",
-	"pallet-storage-providers/std",
-	"scale-info/std",
-	"serde",
-	"shp-constants/std",
-	"shp-file-metadata/std",
-	"shp-treasury-funding/std",
-	"shp-session-keys/std",
-	"shp-traits/std",
-	"sp-core/std",
-	"sp-io/std",
-	"sp-runtime/std",
-	"sp-trie/std",
-]
 runtime-benchmarks = [
-	"pallet-proofs-dealer/runtime-benchmarks",
-	"shp-session-keys/runtime-benchmarks",
+    "pallet-proofs-dealer/runtime-benchmarks",
+    "shp-session-keys/runtime-benchmarks",
+]
+std = [
+    "codec/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-balances/std",
+    "pallet-payment-streams/std",
+    "pallet-proofs-dealer/std",
+    "pallet-storage-providers/std",
+    "scale-info/std",
+    "serde",
+    "shp-constants/std",
+    "shp-file-metadata/std",
+    "shp-treasury-funding/std",
+    "shp-session-keys/std",
+    "shp-traits/std",
+    "sp-core/std",
+    "sp-io/std",
+    "sp-runtime/std",
+    "sp-trie/std",
 ]
 try-runtime = ["frame-support/try-runtime", "pallet-proofs-dealer/try-runtime"]

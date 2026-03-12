@@ -1,12 +1,12 @@
 [package]
-name = "pallet-file-system"
+authors = { workspace = true }
 description = "Pallet exposing storage related actions actors can execute within StorageHub."
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "pallet-file-system"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
@@ -44,11 +44,11 @@ shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
 
 [dev-dependencies]
-serde = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-cr-randomness = { workspace = true }
-pallet-storage-providers = { workspace = true }
 pallet-payment-streams = { workspace = true }
+pallet-storage-providers = { workspace = true }
+serde = { workspace = true }
 shp-data-price-updater = { workspace = true }
 shp-treasury-funding = { workspace = true }
 
@@ -61,55 +61,55 @@ pallet-balances = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
-std = [
-	"codec/std",
-	"frame-benchmarking?/std",
-	"frame-support/std",
-	"frame-system/std",
-	"pallet-bucket-nfts/std",
-	"pallet-cr-randomness/std",
-	"pallet-file-system-runtime-api/std",
-	"pallet-nfts/std",
-	"pallet-payment-streams/std",
-	"pallet-proofs-dealer/std",
-	"pallet-storage-providers/std",
-	"scale-info/std",
-	"shp-constants/std",
-	"shp-file-metadata/std",
-	"shp-traits/std",
-	"shp-treasury-funding/std",
-	"sp-core/std",
-	"sp-io/std",
-	"sp-runtime/std",
-	"sp-trie/std",
-	"sp-weights/std",
-]
 runtime-benchmarks = [
-	"frame-benchmarking/runtime-benchmarks",
-	"frame-support/runtime-benchmarks",
-	"frame-system/runtime-benchmarks",
-	"hex",
-	"pallet-cr-randomness/runtime-benchmarks",
-	"pallet-payment-streams/runtime-benchmarks",
-	"pallet-proofs-dealer/runtime-benchmarks",
-	"pallet-storage-providers/runtime-benchmarks",
-	"pallet-bucket-nfts/runtime-benchmarks",
-	"shp-constants/runtime-benchmarks",
-	"shp-file-key-verifier/runtime-benchmarks",
-	"shp-file-metadata/runtime-benchmarks",
-	"shp-traits/runtime-benchmarks",
-	"shp-treasury-funding/runtime-benchmarks",
-	"sp-runtime/runtime-benchmarks",
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "hex",
+    "pallet-cr-randomness/runtime-benchmarks",
+    "pallet-payment-streams/runtime-benchmarks",
+    "pallet-proofs-dealer/runtime-benchmarks",
+    "pallet-storage-providers/runtime-benchmarks",
+    "pallet-bucket-nfts/runtime-benchmarks",
+    "shp-constants/runtime-benchmarks",
+    "shp-file-key-verifier/runtime-benchmarks",
+    "shp-file-metadata/runtime-benchmarks",
+    "shp-traits/runtime-benchmarks",
+    "shp-treasury-funding/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
+]
+std = [
+    "codec/std",
+    "frame-benchmarking?/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-bucket-nfts/std",
+    "pallet-cr-randomness/std",
+    "pallet-file-system-runtime-api/std",
+    "pallet-nfts/std",
+    "pallet-payment-streams/std",
+    "pallet-proofs-dealer/std",
+    "pallet-storage-providers/std",
+    "scale-info/std",
+    "shp-constants/std",
+    "shp-file-metadata/std",
+    "shp-traits/std",
+    "shp-treasury-funding/std",
+    "sp-core/std",
+    "sp-io/std",
+    "sp-runtime/std",
+    "sp-trie/std",
+    "sp-weights/std",
 ]
 try-runtime = [
-	"frame-support/try-runtime",
-	"frame-system/try-runtime",
-	"pallet-proofs-dealer/try-runtime",
-	"pallet-storage-providers/try-runtime",
-	"pallet-bucket-nfts/try-runtime",
-	"shp-constants/try-runtime",
-	"shp-file-metadata/try-runtime",
-	"shp-traits/try-runtime",
-	"shp-treasury-funding/try-runtime",
-	"sp-runtime/try-runtime",
+    "frame-support/try-runtime",
+    "frame-system/try-runtime",
+    "pallet-proofs-dealer/try-runtime",
+    "pallet-storage-providers/try-runtime",
+    "pallet-bucket-nfts/try-runtime",
+    "shp-constants/try-runtime",
+    "shp-file-metadata/try-runtime",
+    "shp-traits/try-runtime",
+    "shp-treasury-funding/try-runtime",
+    "sp-runtime/try-runtime",
 ]
