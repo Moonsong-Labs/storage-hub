@@ -19,6 +19,7 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     globals: true,
     watch: false,
+    pool: "forks",
     coverage: {
       provider: "v8",
       exclude: ["scripts/**", "**/wasm/pkg/**"],
