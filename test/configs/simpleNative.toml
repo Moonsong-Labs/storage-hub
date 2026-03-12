@@ -1,32 +1,32 @@
 [relaychain]
 chain = "rococo-local"
-default_command = "tmp/polkadot"
 default_args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
     "--database=paritydb",
 ]
+default_command = "tmp/polkadot"
 
 
 [[relaychain.nodes]]
-name = "relay-0"
-validator = true
-rpc_port = 31000
 add_to_bootnodes = true
+name = "relay-0"
+rpc_port = 31000
+validator = true
 
 [[relaychain.nodes]]
+add_to_bootnodes = true
 name = "relay-1"
 validator = true
-add_to_bootnodes = true
 
 
 [[parachains]]
 id = 2000
 
 [parachains.collator]
+args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 command = "../target/release/storage-hub-node"
 name = "sh"
-args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 rpc_port = 32000
 
 [types.Header]
@@ -35,5 +35,5 @@ parent_hash = "Hash"
 post_state = "Hash"
 
 [settings]
-provider = "native"
 bootnode = true
+provider = "native"

@@ -1,9 +1,9 @@
 [package]
-name = "shc-fisherman-service"
-version = "0.4.0"
-edition = "2021"
 authors = ["StorageHub Team"]
 description = "Fisherman monitoring service for StorageHub protocol"
+edition = "2021"
+name = "shc-fisherman-service"
+version = "0.4.0"
 
 [dependencies]
 async-trait = { workspace = true }
@@ -16,19 +16,19 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 
 pallet-file-system = { workspace = true }
-pallet-proofs-dealer = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
-shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
+shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
-shc-telemetry = { workspace = true }
 shc-indexer-db = { workspace = true }
+shc-telemetry = { workspace = true }
 shp-types = { workspace = true }
 
+sc-client-api = { workspace = true }
+sc-utils = { workspace = true }
 sp-api = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
-sc-client-api = { workspace = true }
-sc-utils = { workspace = true }
