@@ -948,7 +948,7 @@ where
                         error!(target: LOG_TARGET, "Failed to get file metadata: {:?}", e);
                         continue;
                     }
-                };
+                }
             };
 
             // Insert file key to be included in the set of file keys to accept or requeue it if we are passed the maximum key limit
