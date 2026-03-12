@@ -880,21 +880,103 @@ impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
     }
 }
 
-// Converts a given signed message in a EIP-191 compliant message bytes to verify.
-/// EIP-191: https://eips.ethereum.org/EIPS/eip-191
-/// "\x19Ethereum Signed Message:\n" + len(message) + message"
+/// Converts a SCALE-encoded `FileOperationIntention` into a human-readable EIP-191 message.
+/// Converts a SCALE-encoded `FileOperationIntention` plus a rich context blob into a
+/// human-readable EIP-191 message that wallets can display clearly.
+///
+/// The wallet will show something like:
+/// ```text
+/// StorageHub File Deletion Request
+///
+/// File: documents/report.pdf
+/// Size: 1048576 bytes
+/// Bucket: 0xabcdef…
+/// File Key: 0x1c64fd…
+/// Action: Delete
+/// ```
+///
+/// EIP-191: <https://eips.ethereum.org/EIPS/eip-191>
 pub struct Eip191Adapter;
+
+impl Eip191Adapter {
+    const HEX_CHARS: &'static [u8; 16] = b"0123456789abcdef";
+
+    fn hex_encode(bytes: &[u8], out: &mut Vec<u8>) {
+        for &b in bytes {
+            out.push(Self::HEX_CHARS[(b >> 4) as usize]);
+            out.push(Self::HEX_CHARS[(b & 0x0f) as usize]);
+        }
+    }
+
+    /// Build a human-readable UTF-8 message from the SCALE-encoded intention + context.
+    ///
+    /// **Intention layout** (33 bytes): `[32-byte file_key][1-byte operation_index]`
+    /// **Context layout**: `[32-byte bucket_id][8-byte size LE][N-byte location UTF-8]`
+    ///
+    /// Falls back to raw intention bytes when layouts are unexpected.
+    fn to_human_readable(intention: &[u8], context: &[u8]) -> Vec<u8> {
+        if intention.len() != 33 || context.len() < 40 {
+            return intention.to_vec();
+        }
+
+        let file_key = &intention[..32];
+        let operation_name: &[u8] = match intention[32] {
+            0 => b"Delete",
+            _ => return intention.to_vec(),
+        };
+
+        let bucket_id = &context[..32];
+        let size_bytes: [u8; 8] = context[32..40]
+            .try_into()
+            .expect("slice is exactly 8 bytes");
+        let size = u64::from_le_bytes(size_bytes);
+        let location = &context[40..];
+
+        let mut msg = Vec::with_capacity(256);
+
+        // Title
+        msg.extend_from_slice(b"StorageHub File ");
+        msg.extend_from_slice(operation_name);
+        msg.extend_from_slice(b" Request\n\nFile: ");
+
+        // Location (already UTF-8 bytes from the pallet's BoundedVec<u8>)
+        msg.extend_from_slice(location);
+
+        // Size
+        msg.extend_from_slice(b"\nSize: ");
+        let mut size_buf = itoa::Buffer::new();
+        msg.extend_from_slice(size_buf.format(size).as_bytes());
+        msg.extend_from_slice(b" bytes");
+
+        // Bucket
+        msg.extend_from_slice(b"\nBucket: 0x");
+        Self::hex_encode(bucket_id, &mut msg);
+
+        // File key
+        msg.extend_from_slice(b"\nFile Key: 0x");
+        Self::hex_encode(file_key, &mut msg);
+
+        // Action
+        msg.extend_from_slice(b"\nAction: ");
+        msg.extend_from_slice(operation_name);
+
+        msg
+    }
+}
+
 impl shp_traits::MessageAdapter for Eip191Adapter {
-    fn bytes_to_verify(message: &[u8]) -> Vec<u8> {
+    fn bytes_to_verify(intention: &[u8], context: &[u8]) -> Vec<u8> {
+        let human_message = Self::to_human_readable(intention, context);
+
         const PREFIX: &str = "\x19Ethereum Signed Message:\n";
-        let len = message.len();
+        let len = human_message.len();
         let mut len_string_buffer = itoa::Buffer::new();
         let len_string = len_string_buffer.format(len);
 
         let mut eth_message = Vec::with_capacity(PREFIX.len() + len_string.len() + len);
         eth_message.extend_from_slice(PREFIX.as_bytes());
         eth_message.extend_from_slice(len_string.as_bytes());
-        eth_message.extend_from_slice(message);
+        eth_message.extend_from_slice(&human_message);
         eth_message
     }
 }
