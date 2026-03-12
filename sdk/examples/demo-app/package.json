@@ -13,10 +13,10 @@
     "start": "next start --port 3001",
     "lint": "biome lint .",
     "type-check": "tsc --noEmit",
-    "env:build": "cd ../../.. && cd test && pnpm docker:build && pnpm docker:build:backend",
-    "env:start": "cd ../../.. && cd test && pnpm docker:start:solochain-evm:initialised",
-    "env:start:initialized": "cd ../../.. && cd test && pnpm docker:start:solochain-evm:initialised",
-    "env:stop": "cd ../../.. && cd test && pnpm docker:stop:fullnet"
+    "env:build": "bun run --cwd ../../../test docker:build && bun run --cwd ../../../test docker:build:backend",
+    "env:start": "bun run --cwd ../../../test docker:start:solochain-evm:initialised",
+    "env:start:initialized": "bun run --cwd ../../../test docker:start:solochain-evm:initialised",
+    "env:stop": "bun run --cwd ../../../test docker:stop:fullnet"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

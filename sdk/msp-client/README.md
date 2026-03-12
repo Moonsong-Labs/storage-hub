@@ -37,8 +37,8 @@ This starts a mock MSP backend on `http://127.0.0.1:8080` that you can use for d
 ## Install
 
 ```bash
-# pnpm (recommended)
-pnpm add @storagehub-sdk/msp-client
+# Bun (recommended)
+bun add @storagehub-sdk/msp-client
 
 # npm
 npm i @storagehub-sdk/msp-client

@@ -5,14 +5,21 @@
   "main": "index.js",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.3.10",
   "workspaces": [
-    "test"
+    "api-augment",
+    "scripts",
+    "types-bundle",
+    "test",
+    "sdk",
+    "sdk/core",
+    "sdk/msp-client"
   ],
   "scripts": {
-    "lint": "pnpm -r lint",
-    "lint:fix": "pnpm -r lint:fix",
-    "fmt": "pnpm -r fmt",
-    "fmt:fix": "pnpm -r fmt:fix"
+    "lint": "bun run --workspaces --if-present --sequential lint",
+    "lint:fix": "bun run --workspaces --if-present --sequential lint:fix",
+    "fmt": "bun run --workspaces --if-present --sequential fmt",
+    "fmt:fix": "bun run --workspaces --if-present --sequential fmt:fix"
   },
   "keywords": [],
   "author": "moonsonglabs",
@@ -20,5 +27,15 @@
   "dependencies": {
     "@biomejs/biome": "2.2.4",
     "typescript": "5.9.2"
+  },
+  "trustedDependencies": [
+    "@biomejs/biome",
+    "cpu-features",
+    "esbuild",
+    "protobufjs",
+    "ssh2"
+  ],
+  "overrides": {
+    "toml": "3.0.0"
   }
 }

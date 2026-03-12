@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: Full SHA to build the pnpm package from
+        description: Full SHA to build the Bun package from
         required: true
 
 # TODO: When we start publishing runtimes, change steps to fetch from docker instead
@@ -20,17 +20,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Use pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
           cache: false
       - uses: rui314/setup-mold@v1
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
       - name: Install libpq-dev
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
       - uses: arduino/setup-protoc@v3
@@ -42,9 +38,9 @@ jobs:
         run: readelf -p .comment target/release/storage-hub-node
       - name: Regenerate TypeScript API with new runtime metadata
         run: |
-          pnpm i 
+          bun install
           cd test
-          pnpm typegen
+          bun run typegen
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
