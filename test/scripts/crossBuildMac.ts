@@ -7,6 +7,9 @@ import inquirer from "inquirer";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const execSyncWithEnv = (command: string, options: { stdio: "inherit" | "pipe" }) =>
+  execSync(command, { ...options, env: process.env });
+
 async function main() {
   const ARCH = execSync("uname -m").toString().trim();
   const OS = execSync("uname -s").toString().trim();
@@ -46,12 +49,14 @@ async function main() {
   console.log(
     `Running build command: cargo zigbuild --target ${target} --release ${additionalArgs}`
   );
-  execSync(`cargo zigbuild --target ${target} --release ${additionalArgs}`, { stdio: "inherit" });
+  execSyncWithEnv(`cargo zigbuild --target ${target} --release ${additionalArgs}`, {
+    stdio: "inherit"
+  });
 }
 
 const execCommand = (command: string): string => {
   try {
-    return execSync(command, { stdio: "pipe" }).toString().trim();
+    return execSyncWithEnv(command, { stdio: "pipe" }).toString().trim();
   } catch (_error) {
     return "";
   }
@@ -59,7 +64,7 @@ const execCommand = (command: string): string => {
 
 const isCommandAvailable = (command: string): boolean => {
   try {
-    execSync(`command -v ${command}`, { stdio: "pipe" });
+    execSyncWithEnv(`command -v ${command}`, { stdio: "pipe" });
     return true;
   } catch {
     return false;
@@ -68,13 +73,13 @@ const isCommandAvailable = (command: string): boolean => {
 
 const installCargoZigbuild = (): void => {
   if (!execCommand("cargo install --list").includes("cargo-zigbuild")) {
-    execSync("cargo install cargo-zigbuild --locked", { stdio: "inherit" });
+    execSyncWithEnv("cargo install cargo-zigbuild --locked", { stdio: "inherit" });
   }
 };
 
 const addRustupTarget = (target: string): void => {
   if (!execCommand("rustup target list --installed").includes(target)) {
-    execSync(`rustup target add ${target}`, { stdio: "inherit" });
+    execSyncWithEnv(`rustup target add ${target}`, { stdio: "inherit" });
   }
 };
 
@@ -87,26 +92,28 @@ const buildAndCopyLibpq = async (target: string): Promise<void> => {
 
   // Build Docker image
   const dockerfilePath = path.join(__dirname, "crossbuild-mac-libpq.dockerfile");
-  execSync(
+  execSyncWithEnv(
     `docker build -f ${dockerfilePath} -t crossbuild-libpq ${path.join(__dirname, "..", "..")}`,
     { stdio: "inherit" }
   );
 
   // Create container and copy libpq.so
-  execSync("docker create --name linux-libpq-container crossbuild-libpq", { stdio: "inherit" });
+  execSyncWithEnv("docker create --name linux-libpq-container crossbuild-libpq", {
+    stdio: "inherit"
+  });
 
   const destPath = path.join(__dirname, "..", "..", "target", target, "release", "deps");
 
   // Ensure the destination directory exists
   fs.mkdirSync(destPath, { recursive: true });
 
-  execSync(
+  execSyncWithEnv(
     `docker cp linux-libpq-container:/artifacts/libpq.so ${path.join(destPath, "libpq.so")}`,
     { stdio: "inherit" }
   );
 
   // Remove container
-  execSync("docker rm linux-libpq-container", { stdio: "inherit" });
+  execSyncWithEnv("docker rm linux-libpq-container", { stdio: "inherit" });
 
   console.log(`libpq.so has been copied to ${destPath}`);
 
