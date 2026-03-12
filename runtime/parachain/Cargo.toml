@@ -124,6 +124,7 @@ std = [
     "cumulus-primitives-core/std",
     "cumulus-primitives-utility/std",
     "cumulus-pallet-weight-reclaim/std",
+    "cumulus-primitives-storage-weight-reclaim/std",
     "frame-benchmarking?/std",
     "frame-executive/std",
     "frame-metadata-hash-extension/std",
