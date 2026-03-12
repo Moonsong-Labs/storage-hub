@@ -26,7 +26,6 @@ shp-traits = { workspace = true }
 # Substrate
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
-sp-std = { workspace = true }
 sp-trie = { workspace = true }
 
 trie-db = { workspace = true }

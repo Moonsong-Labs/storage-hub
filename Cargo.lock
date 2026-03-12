@@ -16732,7 +16732,6 @@ dependencies = [
  "sp-keystore 0.42.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-rpc",
  "sp-runtime 41.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
- "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-trie 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "substrate-frame-rpc-system",
  "tempfile",
@@ -17033,7 +17032,6 @@ dependencies = [
  "sp-core 36.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-io 40.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-runtime 41.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
- "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-trie 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "trie-db 0.30.0",
 ]
@@ -17066,7 +17064,6 @@ dependencies = [
  "sp-core 36.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-io 40.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-runtime 41.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
- "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "sp-trie 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "trie-db 0.30.0",
 ]
