@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'api-augment/**'
+      - "api-augment/**"
   workflow_dispatch:
     inputs:
       sha:
@@ -49,7 +49,7 @@ jobs:
           PKG_NAME=$(node -p "require('./package.json').name")
           PKG_VERSION=$(node -p "require('./package.json').version")
           echo "Publishing $PKG_NAME v$PKG_VERSION"
-          bun publish --access public --tolerate-republish || {
+          bun publish --access public || {
             echo "Publish failed (possibly already published). Checking registry...";
             CURR=$(npm view "$PKG_NAME" version || echo "");
             if [ "$CURR" = "$PKG_VERSION" ]; then

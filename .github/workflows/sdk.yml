@@ -332,9 +332,9 @@ jobs:
         working-directory: sdk/core
         run: |
           bun pm pack
-          bun publish --access public --tolerate-republish
+          bun publish --access public
       - name: Pack and publish msp-client
         working-directory: sdk/msp-client
         run: |
           bun pm pack
-          bun publish --access public --tolerate-republish
+          bun publish --access public
