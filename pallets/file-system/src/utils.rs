@@ -1,3 +1,9 @@
+extern crate alloc;
+
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    vec::Vec,
+};
 use codec::{Decode, Encode};
 use core::cmp::max;
 use frame_support::{
@@ -18,10 +24,6 @@ use sp_runtime::{
         SaturatedConversion, Saturating, Verify, Zero,
     },
     ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError,
-};
-use sp_std::{
-    collections::{btree_map::BTreeMap, btree_set::BTreeSet},
-    vec::Vec,
 };
 
 use pallet_file_system_runtime_api::{
@@ -238,7 +240,7 @@ where
         file_key: &MerkleHash<T>,
     ) -> T::ThresholdType {
         // Concatenate the encoded BSP ID and file key and hash them to get the volunteering hash.
-        let concatenated = sp_std::vec![bsp_id.encode(), file_key.encode()].concat();
+        let concatenated = alloc::vec![bsp_id.encode(), file_key.encode()].concat();
         let volunteering_hash =
             <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
 
@@ -480,7 +482,7 @@ where
     /// Return all pending stop storing requests for a given BSP.
     pub fn pending_stop_storing_requests_by_bsp(
         bsp_id: ProviderIdFor<T>,
-    ) -> sp_std::collections::btree_map::BTreeMap<MerkleHash<T>, PendingStopStoringRequest<T>> {
+    ) -> alloc::collections::btree_map::BTreeMap<MerkleHash<T>, PendingStopStoringRequest<T>> {
         PendingStopStoringRequests::<T>::iter_prefix(&bsp_id).collect()
     }
 

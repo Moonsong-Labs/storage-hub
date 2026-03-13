@@ -1,8 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::collections::{BTreeMap, BTreeSet};
 use frame_support::sp_runtime::DispatchError;
 use shp_traits::{CommitmentVerifier, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation};
-use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
 use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
 

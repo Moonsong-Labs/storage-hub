@@ -29,6 +29,7 @@ use frame_benchmarking::v2::*;
 mod benchmarks {
     use super::*;
     use crate::{pallet, types::*, Call, Config, Event, Pallet};
+    use alloc::vec;
     use frame_support::{assert_ok, traits::fungible::Mutate, BoundedVec};
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
     use pallet_storage_providers::types::{
@@ -38,7 +39,6 @@ mod benchmarks {
     use shp_traits::ReadBucketsInterface;
     use sp_core::Get;
     use sp_runtime::traits::{Hash, One, StaticLookup, Zero};
-    use sp_std::vec;
 
     fn run_to_block<T: crate::Config>(n: BlockNumberFor<T>) {
         assert!(

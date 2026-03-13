@@ -15,6 +15,7 @@ use crate::{
     StorageRequestExpirations, StorageRequests, UserOperationPauseFlagsStorage,
 };
 use codec::Encode;
+use core::cmp::max;
 use frame_support::{
     assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
@@ -41,7 +42,6 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, Get},
     BoundedVec, MultiSignature,
 };
-use sp_std::cmp::max;
 use sp_trie::CompactProof;
 
 /// Helper function to create FileMetadata for tests

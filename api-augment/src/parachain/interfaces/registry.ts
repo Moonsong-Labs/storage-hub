@@ -15,6 +15,7 @@ import type {
   CumulusPalletParachainSystemUnincludedSegmentHrmpChannelUpdate,
   CumulusPalletParachainSystemUnincludedSegmentSegmentTracker,
   CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth,
+  CumulusPalletWeightReclaimStorageWeightReclaim,
   CumulusPalletXcmCall,
   CumulusPalletXcmEvent,
   CumulusPalletXcmpQueueCall,
@@ -25,7 +26,6 @@ import type {
   CumulusPalletXcmpQueueQueueConfigData,
   CumulusPrimitivesCoreAggregateMessageOrigin,
   CumulusPrimitivesParachainInherentParachainInherentData,
-  CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim,
   FrameMetadataHashExtensionCheckMetadataHash,
   FrameMetadataHashExtensionMode,
   FrameSupportDispatchDispatchClass,
@@ -34,6 +34,7 @@ import type {
   FrameSupportDispatchPerDispatchClassWeight,
   FrameSupportDispatchPerDispatchClassWeightsPerClass,
   FrameSupportMessagesProcessMessageError,
+  FrameSupportPalletId,
   FrameSupportTokensMiscBalanceStatus,
   FrameSupportTokensMiscIdAmount,
   FrameSystemAccountInfo,
@@ -166,9 +167,12 @@ import type {
   PalletTransactionPaymentChargeTransactionPayment,
   PalletTransactionPaymentEvent,
   PalletTransactionPaymentReleases,
+  PalletXcmAuthorizedAliasesEntry,
   PalletXcmCall,
   PalletXcmError,
   PalletXcmEvent,
+  PalletXcmHoldReason,
+  PalletXcmMaxAuthorizedAliases,
   PalletXcmQueryStatus,
   PalletXcmRemoteLockedFungibleRecord,
   PalletXcmVersionMigrationStage,
@@ -283,6 +287,7 @@ import type {
   StagingXcmV5TraitsOutcome,
   StagingXcmV5Xcm,
   XcmDoubleEncoded,
+  XcmRuntimeApisAuthorizedAliasesOriginAliaser,
   XcmV3Instruction,
   XcmV3Junction,
   XcmV3JunctionBodyId,
@@ -303,6 +308,7 @@ import type {
   XcmV3QueryResponseInfo,
   XcmV3Response,
   XcmV3TraitsError,
+  XcmV3TraitsSendError,
   XcmV3WeightLimit,
   XcmV3Xcm,
   XcmV5TraitsError,
@@ -324,6 +330,7 @@ declare module "@polkadot/types/types/registry" {
     CumulusPalletParachainSystemUnincludedSegmentHrmpChannelUpdate: CumulusPalletParachainSystemUnincludedSegmentHrmpChannelUpdate;
     CumulusPalletParachainSystemUnincludedSegmentSegmentTracker: CumulusPalletParachainSystemUnincludedSegmentSegmentTracker;
     CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth: CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth;
+    CumulusPalletWeightReclaimStorageWeightReclaim: CumulusPalletWeightReclaimStorageWeightReclaim;
     CumulusPalletXcmCall: CumulusPalletXcmCall;
     CumulusPalletXcmEvent: CumulusPalletXcmEvent;
     CumulusPalletXcmpQueueCall: CumulusPalletXcmpQueueCall;
@@ -334,7 +341,6 @@ declare module "@polkadot/types/types/registry" {
     CumulusPalletXcmpQueueQueueConfigData: CumulusPalletXcmpQueueQueueConfigData;
     CumulusPrimitivesCoreAggregateMessageOrigin: CumulusPrimitivesCoreAggregateMessageOrigin;
     CumulusPrimitivesParachainInherentParachainInherentData: CumulusPrimitivesParachainInherentParachainInherentData;
-    CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim: CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim;
     FrameMetadataHashExtensionCheckMetadataHash: FrameMetadataHashExtensionCheckMetadataHash;
     FrameMetadataHashExtensionMode: FrameMetadataHashExtensionMode;
     FrameSupportDispatchDispatchClass: FrameSupportDispatchDispatchClass;
@@ -343,6 +349,7 @@ declare module "@polkadot/types/types/registry" {
     FrameSupportDispatchPerDispatchClassWeight: FrameSupportDispatchPerDispatchClassWeight;
     FrameSupportDispatchPerDispatchClassWeightsPerClass: FrameSupportDispatchPerDispatchClassWeightsPerClass;
     FrameSupportMessagesProcessMessageError: FrameSupportMessagesProcessMessageError;
+    FrameSupportPalletId: FrameSupportPalletId;
     FrameSupportTokensMiscBalanceStatus: FrameSupportTokensMiscBalanceStatus;
     FrameSupportTokensMiscIdAmount: FrameSupportTokensMiscIdAmount;
     FrameSystemAccountInfo: FrameSystemAccountInfo;
@@ -475,9 +482,12 @@ declare module "@polkadot/types/types/registry" {
     PalletTransactionPaymentChargeTransactionPayment: PalletTransactionPaymentChargeTransactionPayment;
     PalletTransactionPaymentEvent: PalletTransactionPaymentEvent;
     PalletTransactionPaymentReleases: PalletTransactionPaymentReleases;
+    PalletXcmAuthorizedAliasesEntry: PalletXcmAuthorizedAliasesEntry;
     PalletXcmCall: PalletXcmCall;
     PalletXcmError: PalletXcmError;
     PalletXcmEvent: PalletXcmEvent;
+    PalletXcmHoldReason: PalletXcmHoldReason;
+    PalletXcmMaxAuthorizedAliases: PalletXcmMaxAuthorizedAliases;
     PalletXcmQueryStatus: PalletXcmQueryStatus;
     PalletXcmRemoteLockedFungibleRecord: PalletXcmRemoteLockedFungibleRecord;
     PalletXcmVersionMigrationStage: PalletXcmVersionMigrationStage;
@@ -592,6 +602,7 @@ declare module "@polkadot/types/types/registry" {
     StagingXcmV5TraitsOutcome: StagingXcmV5TraitsOutcome;
     StagingXcmV5Xcm: StagingXcmV5Xcm;
     XcmDoubleEncoded: XcmDoubleEncoded;
+    XcmRuntimeApisAuthorizedAliasesOriginAliaser: XcmRuntimeApisAuthorizedAliasesOriginAliaser;
     XcmV3Instruction: XcmV3Instruction;
     XcmV3Junction: XcmV3Junction;
     XcmV3JunctionBodyId: XcmV3JunctionBodyId;
@@ -612,6 +623,7 @@ declare module "@polkadot/types/types/registry" {
     XcmV3QueryResponseInfo: XcmV3QueryResponseInfo;
     XcmV3Response: XcmV3Response;
     XcmV3TraitsError: XcmV3TraitsError;
+    XcmV3TraitsSendError: XcmV3TraitsSendError;
     XcmV3WeightLimit: XcmV3WeightLimit;
     XcmV3Xcm: XcmV3Xcm;
     XcmV5TraitsError: XcmV5TraitsError;

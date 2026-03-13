@@ -5,6 +5,7 @@ pub mod xcm_config;
 pub mod storage_hub;
 
 // Substrate and Polkadot dependencies
+use alloc::vec;
 use core::marker::PhantomData;
 use cumulus_pallet_parachain_system::DefaultCoreSelector;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
@@ -47,7 +48,6 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify, Zero},
     AccountId32, Perbill, SaturatedConversion,
 };
-use sp_std::vec;
 use sp_trie::{TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
@@ -140,6 +140,11 @@ impl frame_system::Config for Runtime {
     /// The action to take on a Runtime Upgrade
     type OnSetCode = cumulus_pallet_parachain_system::ParachainSetCode<Self>;
     type MaxConsumers = ConstU32<16>;
+}
+
+/// Configure the weight reclaim extension.
+impl cumulus_pallet_weight_reclaim::Config for Runtime {
+    type WeightInfo = ();
 }
 /****** ****** ****** ******/
 
@@ -302,6 +307,7 @@ impl pallet_session::Config for Runtime {
     type SessionHandler = <SessionKeys as sp_runtime::traits::OpaqueKeys>::KeyTypeIdProviders;
     type Keys = SessionKeys;
     type WeightInfo = ();
+    type DisablingStrategy = ();
 }
 
 impl pallet_aura::Config for Runtime {
@@ -385,6 +391,7 @@ impl pallet_nfts::Config for Runtime {
     type OffchainSignature = Signature;
     type OffchainPublic = <Signature as Verify>::Signer;
     type WeightInfo = pallet_nfts::weights::SubstrateWeight<Runtime>;
+    type BlockNumberProvider = frame_system::Pallet<Self>;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
     type Locker = ();
