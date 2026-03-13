@@ -17,7 +17,7 @@
 //! - **Broadcast**: Transaction has been propagated to peers
 //! - **InBlock**: Transaction included in a block (NOT final - can be retracted)
 //! - **Retracted**: Block containing tx was reverted (tx stays in pool)
-//! - **Finalized**: Transaction was finalized by consensus (terminal success)
+//! - **Finalized**: Transaction was finalised by consensus (terminal success)
 //! - **Invalid**: Transaction is no longer valid (terminal failure, retriable)
 //! - **Dropped**: Transaction was removed due to pool limits (terminal failure, retriable)
 //! - **Usurped**: Transaction was replaced by another with same nonce (terminal)
