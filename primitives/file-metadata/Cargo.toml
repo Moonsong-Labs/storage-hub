@@ -32,11 +32,5 @@ sp-std = { workspace = true }
 [features]
 default = ["std"]
 runtime-benchmarks = ["shp-traits/runtime-benchmarks"]
-std = [
-    "codec/std",
-    "scale-info/std",
-    "shp-traits/std",
-    "sp-core/std",
-    "sp-std/std",
-]
+std = ["codec/std", "scale-info/std", "shp-traits/std", "sp-core/std"]
 try-runtime = ["shp-traits/try-runtime"]

@@ -1,12 +1,12 @@
 //! A minimal runtime including the pallet-randomness pallet
 use super::*;
+use core::convert::{TryFrom, TryInto};
 use frame_support::{derive_impl, parameter_types, traits::Everything, weights::Weight};
 use sp_core::{blake2_256, H160, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, BlockNumberProvider, IdentityLookup},
     BuildStorage, Perbill,
 };
-use sp_std::convert::{TryFrom, TryInto};
 
 pub type AccountId = H160;
 pub type Balance = u128;

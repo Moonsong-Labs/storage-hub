@@ -460,6 +460,15 @@ await describeMspNet(
       const destination = "test/revoke-subsequent-fisherman.jpg";
       const bucketName = "revoke-subsequent-fisherman-bucket";
 
+      // Top up user balance - previous tests drain it via payment stream charges,
+      // causing MSP to detect insolvency and reject new storage requests.
+      const topUpAmount = 10000n * 10n ** 12n;
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, topUpAmount))
+        ]
+      });
+
       const mspId = userApi.shConsts.DUMMY_MSP_ID;
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
