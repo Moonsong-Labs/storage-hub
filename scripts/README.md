@@ -1,6 +1,6 @@
 ## scripts
 
-This folder is a **workspace package** (see `pnpm-workspace.yaml`) so it can depend on other
+This folder is a **workspace package** (see the root `package.json` `workspaces` field) so it can depend on other
 in-repo packages via `workspace:*` (e.g. `@storagehub/api-augment`, `@storagehub/types-bundle`).
 
 ### Install
@@ -8,21 +8,21 @@ in-repo packages via `workspace:*` (e.g. `@storagehub/api-augment`, `@storagehub
 From the repo root:
 
 ```bash
-pnpm i
+bun install
 ```
 
-### Run (with pnpm + tsx)
+### Run
 
 From the repo root:
 
 ```bash
-pnpm --dir scripts find:file-deletions <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>
+bun run --cwd scripts find:file-deletions <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>
 ```
 
 Or:
 
 ```bash
-pnpm --dir scripts remove:files-from-forest-storage --file=/path/to/bucket_file_deletions.json
+bun run --cwd scripts remove:files-from-forest-storage --file=/path/to/bucket_file_deletions.json
 ```
 
 ### Parameters / usage details
@@ -44,6 +44,6 @@ Start here:
 
 ### Notes
 
-- These scripts are executed via **pnpm** using a TypeScript runtime (`tsx`) from the workspace.
-- Always install dependencies from the repo root with `pnpm i` so that `workspace:*` references
+- These scripts are executed via **Bun** from the workspace.
+- Always install dependencies from the repo root with `bun install` so that `workspace:*` references
   resolve correctly.

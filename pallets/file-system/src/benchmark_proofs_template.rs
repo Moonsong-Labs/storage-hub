@@ -7,9 +7,9 @@
 //! 1. Clone the `storage-hub` repo if you haven't already.
 //! 2. Make sure you're able to run BSPNet integration tests locally. You can see the steps in the [testing README](https://github.com/Moonsong-Labs/storage-hub/blob/main/test/README.md).
 //!     Usually this involves just:
-//!     a. Building the node. Be careful to build with the `runtime-benchmarks` feature enabled. If you're building in a Mac for instance, run `pnpm crossbuild:mac --features runtime-benchmarks`.
-//!     b. Building docker images. Run `pnpm docker:build`.
-//! 3. Run the script with `pnpm docker:start:generateFileSystemBenchmarkProofs`.
+//!     a. Building the node. Be careful to build with the `runtime-benchmarks` feature enabled. If you're building on a Mac for instance, run `bun run crossbuild:mac --features runtime-benchmarks`.
+//!     b. Building docker images. Run `bun run docker:build`.
+//! 3. Run the script with `bun run docker:start:generateFileSystemBenchmarkProofs`.
 //!
 //! The `generateFileSystemBenchmarkProofs.ts` script should run, and it should automatically regenerate this file.
 

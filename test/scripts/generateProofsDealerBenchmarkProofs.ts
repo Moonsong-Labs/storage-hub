@@ -379,7 +379,7 @@ async function tearDownNetwork() {
   }
 
   console.log(`${GREEN_TEXT}▶ 💣 Tearing down network${RESET_TEXT}`);
-  exec("pnpm docker:stop:generateProofsDealerBenchmarkProofs");
+  exec("bun run docker:stop:generateProofsDealerBenchmarkProofs");
 
   console.log(`${GREEN_TEXT}◀ ✅ Network torn down${RESET_TEXT}`);
   console.log("");
@@ -417,7 +417,7 @@ const removeMutationChallengesToAdd = (existingChallenges: number): number => {
 generateBenchmarkProofs().catch((e) => {
   console.error("Error running generate Proofs Dealer's benchmark proofs script:", e);
   console.error(
-    "You might need to run `pnpm docker:stop:generateProofsDealerBenchmarkProofs` to stop the network"
+    "You might need to run `bun run docker:stop:generateProofsDealerBenchmarkProofs` to stop the network"
   );
 
   process.exitCode = 1;

@@ -17,7 +17,7 @@ Foundational, backend-agnostic building blocks for StorageHub. This package cont
 
 ### Install
 ```bash
-pnpm add @storagehub-sdk/core
+bun add @storagehub-sdk/core
 # or
 npm i @storagehub-sdk/core
 # or

@@ -219,7 +219,7 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
             <div className="space-y-2">
               <h4 className="font-medium text-blue-900">1. Build Docker Images</h4>
               <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-sm">
-                pnpm demo:build
+                bun run env:build
               </div>
               <p className="text-sm text-blue-800">
                 This builds the StorageHub node and MSP backend Docker images.
@@ -229,7 +229,7 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
             <div className="space-y-2">
               <h4 className="font-medium text-blue-900">2. Start Environment</h4>
               <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-sm">
-                pnpm demo:start
+                bun run env:start
               </div>
               <p className="text-sm text-blue-800">
                 This starts the complete StorageHub environment with blockchain node, MSP backend, and PostgreSQL database.

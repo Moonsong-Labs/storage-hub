@@ -2,11 +2,9 @@
 
 ## Pre-requisites
 
-### pnpm
+### Bun
 
-[pnpm](https://pnpm.io/) is used in this project as the JavaScript package manager to install dependencies. To install it you can follow the official instructions at: [https://pnpm.io/installation](https://pnpm.io/installation)
-
-The quickest way is via their script: `curl -fsSL https://get.pnpm.io/install.sh | sh -`
+[Bun](https://bun.sh/) is used in this project as the JavaScript package manager and runtime for workspace scripts. Install it by following the official instructions at: [https://bun.sh/docs/installation](https://bun.sh/docs/installation)
 
 ## Docker Setup
 
@@ -27,14 +25,14 @@ cargo build --release
 > If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the node. See the [Zig installation guide](https://ziglang.org/learn/getting-started/).
 
 ```sh
-pnpm i
-pnpm crossbuild:mac
+bun install
+bun run crossbuild:mac
 ```
 
 ### 2. Build Docker Image
 
 ```sh
-pnpm docker:build
+bun run docker:build
 ```
 
 ### 3. Build Backend (required for Backend & Solochain-EVM tests)
@@ -51,14 +49,14 @@ cargo build --release -p sh-msp-backend
 > If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the backend. See the [Zig installation guide](https://ziglang.org/learn/getting-started/).
 
 ```sh
-pnpm i
-pnpm crossbuild:mac:backend
+bun install
+bun run crossbuild:mac:backend
 ```
 
 ### 4. Build Backend Docker Image
 
 ```sh
-pnpm docker:build:backend
+bun run docker:build:backend
 ```
 
 ## Testing Types
@@ -68,7 +66,7 @@ pnpm docker:build:backend
 This is a small network running in `dev` mode, with manual sealing on blocks, between a BSP & a User node. This is used to test the merklisation of files, and their retrieval.
 
 ```sh
-pnpm test:bspnet
+bun run test:bspnet
 ```
 
 ### Dev Node Test
@@ -79,7 +77,7 @@ The `storage-hub` node is run in a Docker container in dev mode, so that it can 
 > Provider functionality is not covered here, only how the system chain behaves.
 
 ```sh
-pnpm test:node
+bun run test:node
 ```
 
 ### End-To-End Tests
@@ -88,14 +86,14 @@ pnpm test:node
 > Please ensure the Rust project is built first, e.g., `cargo build --release`.
 > This is required as currently we only support native binaries.
 
-In `/test` run: `pnpm install` to install ZombieNet
+In `/test` run: `bun install` to install ZombieNet
 
 #### 1. Run Network
 
 ```shell
 # In the /test directory
-pnpm i
-pnpm zombie:run:full:native
+bun install
+bun run zombie:run:full:native
 ```
 
 Wait for ZombieNet network to start, and then:
@@ -103,20 +101,20 @@ Wait for ZombieNet network to start, and then:
 #### 2. Run Setup & Tests
 
 ```shell
-pnpm typegen
-pnpm zombie:setup:native
-pnpm test:full
+bun run typegen
+bun run zombie:setup:native
+bun run test:full
 ```
 
 ### Backend Integration Tests
 
 > [!IMPORTANT]
-> Requires both images: node (`pnpm docker:build`) and backend (`pnpm docker:build:backend`). On macOS, build the backend via `pnpm crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`. The backend Docker build uses `docker/storage-hub-msp-backend.Dockerfile`.
+> Requires both images: node (`bun run docker:build`) and backend (`bun run docker:build:backend`). On macOS, build the backend via `bun run crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`. The backend Docker build uses `docker/storage-hub-msp-backend.Dockerfile`.
 
 ```sh
 # In the /test directory
-pnpm i
-pnpm test:backend
+bun install
+bun run test:backend
 ```
 
 Runs a local full network with indexer and the backend, then executes backend tests.
@@ -124,12 +122,12 @@ Runs a local full network with indexer and the backend, then executes backend te
 ### Solochain EVM Integration Tests
 
 > [!IMPORTANT]
-> Requires both images: node (`pnpm docker:build`) and backend (`pnpm docker:build:backend`). On macOS, build the backend via `pnpm crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`. The backend Docker build uses `docker/storage-hub-msp-backend.Dockerfile`.
+> Requires both images: node (`bun run docker:build`) and backend (`bun run docker:build:backend`). On macOS, build the backend via `bun run crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`. The backend Docker build uses `docker/storage-hub-msp-backend.Dockerfile`.
 
 ```sh
 # In the /test directory
-pnpm i
-pnpm test:solochain-evm
+bun install
+bun run test:solochain-evm
 ```
 
 Launches Solochain EVM runtime with indexer and backend enabled and runs SDK precompile tests.
@@ -139,7 +137,7 @@ Launches Solochain EVM runtime with indexer and backend enabled and runs SDK pre
 This is the networking testing suite for topology and network stability. It is a suite of tests that run on a network of nodes, and is used to verify the network's stability and the nodes' ability to communicate with each other.
 
 ```sh
-pnpm zombie:test:native
+bun run zombie:test:native
 ```
 
 ## Launching Networks
@@ -147,13 +145,13 @@ pnpm zombie:test:native
 ### Spawning Local DevNode
 
 - Native launch: `../target/release/storage-hub --dev`
-- Docker launch (local): `pnpm docker:start` / `pnpm docker:stop`
-- Docker launch (latest): `pnpm docker:start:latest` / `pnpm docker:stop:latest`
+- Docker launch (local): `bun run docker:start` / `bun run docker:stop`
+- Docker launch (latest): `bun run docker:start:latest` / `bun run docker:stop:latest`
 
 ### Spawning BSPNet
 
 ```sh
-pnpm docker:start:bspnet
+bun run docker:start:bspnet
 ```
 
 This will start a BSPNet network with a BSP and a User node. As part of the setup it will force onboard a MSP and BSP, and then upload a file from user node.
@@ -161,7 +159,7 @@ This will start a BSPNet network with a BSP and a User node. As part of the setu
 ### Spawning Solochain EVM (initialised fullnet)
 
 ```sh
-pnpm docker:start:solochain-evm:initialised
+bun run docker:start:solochain-evm:initialised
 ```
 
 Starts a full network on Solochain EVM runtime with indexer and backend, pre-initialised for demos.
@@ -171,20 +169,20 @@ Starts a full network on Solochain EVM runtime with indexer and backend, pre-ini
 
 ### Spawning NoisyNet
 
-- Docker launch (local): `pnpm docker:start:noisynet` / `pnpm docker:stop:noisynet`
+- Docker launch (local): `bun run docker:start:noisynet` / `bun run docker:stop:noisynet`
 
 ### Spawning ZombieNet Native
 
 > [!TIP]
 > Polkadot binaries are required to run a ZombieNet network.
-> For Linux you can run the script: `pnpm tsx scripts/downloadPolkadot.ts <version>`
+> For Linux you can run the script: `bun run scripts/downloadPolkadot.ts <version>`
 > For macOS you will have to [compile from source](https://github.com/paritytech/polkadot-sdk/tree/master/polkadot#build-from-source).
 
 To launch a non-ephemeral ZombieNet network by executing the following in: `/test` directory:
 
 ```sh
-pnpm install
-pnpm zombie:run:native
+bun install
+bun run zombie:run:native
 ```
 
 From here you should see in the terminal, the different nodes being spun up. When the network is fully launched, you should see something like this:
@@ -203,7 +201,7 @@ This repo uses polkadot{.js} [TS Type Generation](https://polkadot.js.org/docs/a
 To generate new type interfaces run the following in `/test`:
 
 ```sh
-pnpm typegen
+bun run typegen
 ```
 
 > [!TIP]  
