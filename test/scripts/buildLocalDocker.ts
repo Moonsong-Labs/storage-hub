@@ -16,7 +16,7 @@ async function main() {
     console.error(`No node found at ${BINARY_PATH}, you probably need to build.`);
 
     if (OS === "Darwin") {
-      console.error("You are on a Mac, you need to build for Linux. Run `pnpm crossbuild:mac`");
+      console.error("You are on a Mac, you need to build for Linux. Run `bun run crossbuild:mac`");
     }
     process.exitCode = 1;
     return;

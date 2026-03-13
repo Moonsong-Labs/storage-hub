@@ -9,16 +9,16 @@ Added convenient build and environment management scripts to the demo app's `pac
 
 ```bash
 # Build required Docker images (StorageHub node + MSP backend)
-pnpm env:build
+bun run env:build
 
 # Start complete StorageHub environment (blockchain + MSP + database)
-pnpm env:start
+bun run env:start
 
 # Stop the environment
-pnpm env:stop
+bun run env:stop
 
 # Run the demo app
-pnpm dev
+bun run dev
 ```
 
 **What it sets up:**
@@ -136,16 +136,16 @@ The foundation is complete and ready for:
 cd sdk/examples/demo-app
 
 # 1. Install dependencies
-pnpm install
+bun install
 
 # 2. Build environment
-pnpm env:build
+bun run env:build
 
 # 3. Start services (in separate terminal)
-pnpm env:start
+bun run env:start
 
 # 4. Run demo app (in another terminal)
-pnpm dev
+bun run dev
 
 # 5. Visit http://localhost:3001
 ```

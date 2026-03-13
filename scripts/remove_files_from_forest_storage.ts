@@ -4,17 +4,17 @@
  *
  * How to run (from the repository root):
  *   - Basic usage (JSON file is mandatory):
- *       pnpm --dir scripts remove:files-from-forest-storage \
+ *       bun run --cwd scripts remove:files-from-forest-storage \
  *         --file=/path/to/bucket_file_deletions.json
  *
  *   - With custom RPC URL and higher concurrency:
- *       pnpm --dir scripts remove:files-from-forest-storage \
+ *       bun run --cwd scripts remove:files-from-forest-storage \
  *         --file=/path/to/bucket_file_deletions.json \
  *         --rpc-url=http://127.0.0.1:9933 \
  *         --concurrency=16
  *
  *   - Dry run (no RPC calls, just logs):
- *       pnpm --dir scripts remove:files-from-forest-storage \
+ *       bun run --cwd scripts remove:files-from-forest-storage \
  *         --file=/path/to/bucket_file_deletions.json \
  *         --dry-run
  *
@@ -52,7 +52,7 @@ type CliOptions = {
 function parseArgs(argv: string[]): CliOptions {
   if (argv.includes("--help") || argv.includes("-h")) {
     console.log(
-      "Usage: pnpm --dir scripts remove:files-from-forest-storage " +
+      "Usage: bun run --cwd scripts remove:files-from-forest-storage " +
         "--file=/path/to/bucket_file_deletions.json " +
         "[--rpc-url=URL] [--concurrency=N] [--dry-run]"
     );
@@ -93,7 +93,7 @@ function parseArgs(argv: string[]): CliOptions {
   if (!jsonPath) {
     throw new Error(
       "Missing required --file option.\n" +
-        "Usage: pnpm --dir scripts remove:files-from-forest-storage " +
+        "Usage: bun run --cwd scripts remove:files-from-forest-storage " +
         "--file=/path/to/bucket_file_deletions.json " +
         "[--rpc-url=URL] [--concurrency=N] [--dry-run]"
     );
