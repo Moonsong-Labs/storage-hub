@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "node ./build.js && bun run build:types",
-    "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
+    "build:types": "tsc --emitDeclarationOnly -p tsconfig.build.json",
     "clean": "rm -rf dist node_modules",
     "coverage": "vitest run --coverage",
     "dev": "node ./build.js --watch",
