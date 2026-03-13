@@ -375,7 +375,7 @@ impl<Runtime: StorageEnableRuntime> SubmittedExtrinsicInfo<Runtime> {
         }
     }
 
-    /// Wait for the transaction to be finalised.
+    /// Wait for the transaction to be finalized.
     ///
     /// This is a convenience method that waits for the transaction to reach Finalized status.
     /// Returns an error if the transaction fails or times out.
@@ -649,7 +649,7 @@ impl Default for RetryStrategy {
 pub enum StatusToWait {
     /// Wait for the transaction to be included in a block.
     InBlock,
-    /// Wait for the transaction to be finalised.
+    /// Wait for the transaction to be finalized.
     Finalized,
 }
 
