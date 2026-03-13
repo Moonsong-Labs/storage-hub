@@ -14,6 +14,15 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Normalise npm auth token for Bun
+      shell: bash
+      run: |
+        if [ -n "${NPM_CONFIG_TOKEN:-}" ]; then
+          echo "NPM_CONFIG_TOKEN=${NPM_CONFIG_TOKEN}" >> "$GITHUB_ENV"
+        elif [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+          echo "NPM_CONFIG_TOKEN=${NODE_AUTH_TOKEN}" >> "$GITHUB_ENV"
+        fi
+
     - name: Install Bun
       uses: oven-sh/setup-bun@v2
       with:
@@ -40,3 +49,4 @@ runs:
         always-auth: true
       env:
         NODE_AUTH_TOKEN: ${{ env.NODE_AUTH_TOKEN }}
+        NPM_CONFIG_TOKEN: ${{ env.NPM_CONFIG_TOKEN }}
