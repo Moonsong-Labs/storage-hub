@@ -25,6 +25,13 @@ pub struct Bucket {
     pub file_count: u64,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ListBucketsResponse {
+    pub buckets: Vec<Bucket>,
+    #[serde(rename = "totalBuckets")]
+    pub total_buckets: u64,
+}
+
 impl Bucket {
     pub fn from_db(db: &DBBucket, size_bytes: u64, file_count: u64) -> Self {
         Self {

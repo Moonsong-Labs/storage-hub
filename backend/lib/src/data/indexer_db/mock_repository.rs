@@ -17,7 +17,7 @@ use chrono::Utc;
 use tokio::sync::RwLock;
 
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp},
+    models::{Bsp, Bucket, File, Msp, ServiceState},
     OnchainBspId, OnchainMspId,
 };
 use shp_types::Hash;
@@ -26,7 +26,8 @@ use crate::{
     constants::{mocks::MOCK_ADDRESS, rpc::DUMMY_MSP_ID, test},
     data::indexer_db::repository::{
         error::{RepositoryError, RepositoryResult},
-        IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
+        BucketsPage, IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
+        RequestAcceptanceStats,
     },
     test_utils::{random_bytes_32, random_hash},
 };
@@ -43,6 +44,8 @@ pub struct MockRepository {
     /// Payment streams stored by ID with (user_account, PaymentStreamData) tuple
     payment_streams: Arc<RwLock<HashMap<i64, (String, PaymentStreamData)>>>,
     next_id: Arc<AtomicI64>,
+    /// Configurable service state for node-health mock testing.
+    service_state_override: Arc<RwLock<Option<ServiceState>>>,
 }
 
 impl MockRepository {
@@ -55,7 +58,13 @@ impl MockRepository {
             files: Arc::new(RwLock::new(BTreeMap::new())),
             payment_streams: Arc::new(RwLock::new(HashMap::new())),
             next_id: Arc::new(AtomicI64::new(1)),
+            service_state_override: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Override the service state returned by `get_service_state`.
+    pub async fn set_service_state(&self, state: ServiceState) {
+        *self.service_state_override.write().await = Some(state);
     }
 
     /// Create a new mock repository with some sample data loaded in
@@ -286,16 +295,21 @@ impl IndexerOps for MockRepository {
         account: &str,
         limit: i64,
         offset: i64,
-    ) -> RepositoryResult<Vec<Bucket>> {
+    ) -> RepositoryResult<BucketsPage<Bucket>> {
         let buckets = self.buckets.read().await;
-
-        Ok(buckets
+        let filtered = buckets
             .values()
             .filter(|b| b.msp_id == Some(msp) && b.account == account)
+            .cloned()
+            .collect::<Vec<_>>();
+        let total = filtered.len() as u64;
+        let buckets = filtered
+            .into_iter()
             .skip(offset as usize)
             .take(limit as usize)
-            .cloned()
-            .collect())
+            .collect::<Vec<_>>();
+
+        Ok(BucketsPage { buckets, total })
     }
 
     async fn get_files_by_bucket(
@@ -380,6 +394,32 @@ impl IndexerOps for MockRepository {
             .filter(|(account, _)| account == user_account)
             .map(|(_, data)| data.clone())
             .collect())
+    }
+
+    // ============ Node Health Operations ============
+    async fn get_service_state(&self) -> RepositoryResult<ServiceState> {
+        if let Some(state) = self.service_state_override.read().await.clone() {
+            return Ok(state);
+        }
+        let now = Utc::now().naive_utc();
+        Ok(ServiceState {
+            id: 1,
+            last_indexed_finalized_block: 100,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    async fn get_request_acceptance_stats(
+        &self,
+        _msp_db_id: i64,
+        _window_secs: u64,
+    ) -> RepositoryResult<RequestAcceptanceStats> {
+        Ok(RequestAcceptanceStats {
+            total: 0,
+            accepted: 0,
+            last_accepted_at: None,
+        })
     }
 }
 
@@ -974,18 +1014,19 @@ pub mod tests {
             .id;
 
         // Test fetching user buckets by MSP
-        let buckets = repo
+        let buckets_page = repo
             .get_buckets_by_user_and_msp(msp_id, user_account, 10, 0)
             .await
             .expect("should list user buckets by MSP");
 
-        assert_eq!(buckets.len(), 3);
-        assert_eq!(buckets[0].id, bucket1_id);
-        assert_eq!(buckets[1].id, bucket2_id);
-        assert_eq!(buckets[2].id, bucket3_id);
+        assert_eq!(buckets_page.total, 3);
+        assert_eq!(buckets_page.buckets.len(), 3);
+        assert_eq!(buckets_page.buckets[0].id, bucket1_id);
+        assert_eq!(buckets_page.buckets[1].id, bucket2_id);
+        assert_eq!(buckets_page.buckets[2].id, bucket3_id);
 
         // Verify all buckets belong to the correct user and MSP
-        for bucket in &buckets {
+        for bucket in &buckets_page.buckets {
             assert_eq!(bucket.account, user_account);
             assert_eq!(bucket.msp_id, Some(msp_id));
         }
@@ -1039,14 +1080,15 @@ pub mod tests {
         .expect("should create bucket");
 
         // Should only return the target user's bucket
-        let buckets = repo
+        let buckets_page = repo
             .get_buckets_by_user_and_msp(msp_id, user_account, 10, 0)
             .await
             .expect("should filter by user");
 
-        assert_eq!(buckets.len(), 1);
-        assert_eq!(buckets[0].id, user_bucket_id);
-        assert_eq!(buckets[0].account, user_account);
+        assert_eq!(buckets_page.total, 1);
+        assert_eq!(buckets_page.buckets.len(), 1);
+        assert_eq!(buckets_page.buckets[0].id, user_bucket_id);
+        assert_eq!(buckets_page.buckets[0].account, user_account);
     }
 
     #[tokio::test]
@@ -1095,14 +1137,15 @@ pub mod tests {
             .id;
 
         // Should only return buckets for MSP1
-        let buckets = repo
+        let buckets_page = repo
             .get_buckets_by_user_and_msp(msp1_id, user_account, 10, 0)
             .await
             .expect("should filter by MSP");
 
-        assert_eq!(buckets.len(), 1);
-        assert_eq!(buckets[0].id, msp1_bucket_id);
-        assert_eq!(buckets[0].msp_id, Some(msp1_id));
+        assert_eq!(buckets_page.total, 1);
+        assert_eq!(buckets_page.buckets.len(), 1);
+        assert_eq!(buckets_page.buckets[0].id, msp1_bucket_id);
+        assert_eq!(buckets_page.buckets[0].msp_id, Some(msp1_id));
     }
 
     #[tokio::test]
@@ -1145,14 +1188,15 @@ pub mod tests {
             .id;
 
         // Should only return bucket with the specified MSP
-        let buckets = repo
+        let buckets_page = repo
             .get_buckets_by_user_and_msp(msp_id, user_account, 10, 0)
             .await
             .expect("should filter out buckets without MSP");
 
-        assert_eq!(buckets.len(), 1);
-        assert_eq!(buckets[0].id, msp_bucket_id);
-        assert_eq!(buckets[0].msp_id, Some(msp_id));
+        assert_eq!(buckets_page.total, 1);
+        assert_eq!(buckets_page.buckets.len(), 1);
+        assert_eq!(buckets_page.buckets[0].id, msp_bucket_id);
+        assert_eq!(buckets_page.buckets[0].msp_id, Some(msp_id));
     }
 
     #[tokio::test]
@@ -1209,9 +1253,10 @@ pub mod tests {
             .await
             .expect("should retrieve limited buckets");
 
-        assert_eq!(limited_buckets.len(), 2);
-        assert_eq!(limited_buckets[0].id, bucket1_id);
-        assert_eq!(limited_buckets[1].id, bucket2_id);
+        assert_eq!(limited_buckets.total, 3);
+        assert_eq!(limited_buckets.buckets.len(), 2);
+        assert_eq!(limited_buckets.buckets[0].id, bucket1_id);
+        assert_eq!(limited_buckets.buckets[1].id, bucket2_id);
 
         // Test offset
         let offset_buckets = repo
@@ -1219,9 +1264,10 @@ pub mod tests {
             .await
             .expect("should retrieve buckets with offset");
 
-        assert_eq!(offset_buckets.len(), 2);
-        assert_eq!(offset_buckets[0].id, bucket2_id);
-        assert_eq!(offset_buckets[1].id, bucket3_id);
+        assert_eq!(offset_buckets.total, 3);
+        assert_eq!(offset_buckets.buckets.len(), 2);
+        assert_eq!(offset_buckets.buckets[0].id, bucket2_id);
+        assert_eq!(offset_buckets.buckets[1].id, bucket3_id);
 
         // Test limit and offset combined
         let paginated_buckets = repo
@@ -1229,8 +1275,43 @@ pub mod tests {
             .await
             .expect("should retrieve paginated buckets");
 
-        assert_eq!(paginated_buckets.len(), 1);
-        assert_eq!(paginated_buckets[0].id, bucket2_id);
+        assert_eq!(paginated_buckets.total, 3);
+        assert_eq!(paginated_buckets.buckets.len(), 1);
+        assert_eq!(paginated_buckets.buckets[0].id, bucket2_id);
+    }
+
+    #[tokio::test]
+    async fn get_buckets_by_user_and_msp_high_offset_returns_empty_page_with_total() {
+        let repo = MockRepository::new();
+        let msp = repo
+            .create_msp(
+                TEST_MSP_ACCOUNT_STR,
+                OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
+            )
+            .await
+            .expect("should create MSP");
+        let msp_id = msp.id;
+        let user_account = "test_user";
+
+        for idx in 0..3 {
+            repo.create_bucket(
+                user_account,
+                Some(msp_id),
+                format!("bucket-{idx}").as_bytes(),
+                &random_hash(),
+                !bucket::DEFAULT_IS_PUBLIC,
+            )
+            .await
+            .expect("should create bucket");
+        }
+
+        let page = repo
+            .get_buckets_by_user_and_msp(msp_id, user_account, 10, 99)
+            .await
+            .expect("should retrieve page");
+
+        assert_eq!(page.total, 3);
+        assert!(page.buckets.is_empty());
     }
 
     #[tokio::test]

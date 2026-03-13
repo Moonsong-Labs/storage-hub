@@ -48,7 +48,7 @@ function getVersionArg() {
   const args = process.argv.slice(2);
   assert(
     args.length > 0,
-    "No version provided. Usage: pnpm tsx scripts/downloadPolkadot.ts <version>"
+    "No version provided. Usage: bun run scripts/downloadPolkadot.ts <version>"
   );
   return args[0];
 }

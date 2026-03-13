@@ -12,14 +12,14 @@
  *
  * How to run (from the repository root):
  *   - Basic usage (positional args):
- *       pnpm --dir scripts find:file-deletions \
+ *       bun run --cwd scripts find:file-deletions \
  *         <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>
  *
  *   - Using env vars:
  *       INITIAL_BLOCK=738513 FINAL_BLOCK=738900 \
  *       WS_ENDPOINT=wss://services.datahaven-testnet.network/testnet \
  *       OUTPUT_JSON=./bucket_file_deletions.json \
- *       pnpm --dir scripts find:file-deletions
+ *       bun run --cwd scripts find:file-deletions
  *
  * Environment:
  *   - INITIAL_BLOCK: start block number (non-negative integer)
@@ -112,13 +112,13 @@ function usage(): string {
   return [
     "Usage:",
     "  # From repo root",
-    "  pnpm --dir scripts find:file-deletions <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>",
+    "  bun run --cwd scripts find:file-deletions <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>",
     "",
     "  # From ./scripts",
-    "  pnpm find:file-deletions <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>",
+    "  bun run find:file-deletions <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>",
     "",
     "Env alternative:",
-    "  INITIAL_BLOCK=... FINAL_BLOCK=... WS_ENDPOINT=ws://... OUTPUT_JSON=./out.json pnpm --dir scripts find:file-deletions",
+    "  INITIAL_BLOCK=... FINAL_BLOCK=... WS_ENDPOINT=ws://... OUTPUT_JSON=./out.json bun run --cwd scripts find:file-deletions",
     "",
     "Optional env:",
     "  CONCURRENCY=8",

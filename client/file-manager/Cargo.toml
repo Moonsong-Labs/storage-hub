@@ -1,13 +1,13 @@
 [package]
-name = "shc-file-manager"
-version = "0.4.0"
+authors = { workspace = true }
 description = ""
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
-repository = { workspace = true }
-edition = { workspace = true }
+name = "shc-file-manager"
 publish = false
+repository = { workspace = true }
+version = "0.4.0"
 
 [lib]
 
@@ -19,8 +19,8 @@ bincode = { workspace = true }
 codec = { workspace = true }
 hash-db = { workspace = true }
 kvdb = { workspace = true }
-kvdb-rocksdb = { workspace = true }
 kvdb-memorydb = { workspace = true }
+kvdb-rocksdb = { workspace = true }
 log = { workspace = true }
 lru = { workspace = true }
 serde_json = { workspace = true }
@@ -33,8 +33,8 @@ sp-runtime = { workspace = true }
 sp-state-machine = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 
-shp-traits = { workspace = true }
 shc-common = { workspace = true }
+shp-traits = { workspace = true }
 
 [features]
 default = ["std"]

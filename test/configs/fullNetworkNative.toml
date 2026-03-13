@@ -1,40 +1,36 @@
 [relaychain]
 chain = "rococo-local"
-default_command = "tmp/polkadot"
-rpc_port = 31000
 default_args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
     "--database=paritydb",
 ]
-
-[[relaychain.nodes]]
-name = "relay-0"
-validator = true
+default_command = "tmp/polkadot"
 rpc_port = 31000
-add_to_bootnodes = true
 
 [[relaychain.nodes]]
+add_to_bootnodes = true
+name = "relay-0"
+rpc_port = 31000
+validator = true
+
+[[relaychain.nodes]]
+add_to_bootnodes = true
 name = "relay-1"
 validator = true
-add_to_bootnodes = true
 
 
 [[parachains]]
 id = 2000
 
 [[parachains.collators]]
+args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 command = "../target/release/storage-hub-node"
 name = "sh-collator"
 rpc_port = 32000
-args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 
 
 [[parachains.collators]]
-name = "sh-BSP"
-validator = false
-rpc_port = 35000
-command = "../target/release/storage-hub-node"
 args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
@@ -43,17 +39,21 @@ args = [
     "--max-storage-capacity 4294967295",
     "--jump-capacity=1073741824",
 ]
+command = "../target/release/storage-hub-node"
+name = "sh-BSP"
+rpc_port = 35000
+validator = false
 
 [[parachains.collators]]
-name = "sh-User"
-rpc_port = 36000
-command = "../target/release/storage-hub-node"
 args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
     "--provider",
     "--provider-type user",
 ]
+command = "../target/release/storage-hub-node"
+name = "sh-User"
+rpc_port = 36000
 
 [types.Header]
 number = "u64"

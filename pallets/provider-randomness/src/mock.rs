@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::*;
 use crate as pallet_cr_randomness;
 use codec::{Decode, Encode};
+use core::convert::{TryFrom, TryInto};
 use frame_support::{
     derive_impl, parameter_types,
     traits::{Everything, Randomness},
@@ -22,7 +23,6 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup},
     BoundedBTreeSet, BoundedVec, BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
-use sp_std::convert::{TryFrom, TryInto};
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -579,6 +579,7 @@ impl ExtBuilder {
                 (123, 5_000_000 * UNITS), // Alice for `on_poll` testing = 123
                 (TreasuryAccount::get(), ExistentialDeposit::get()),
             ],
+            dev_accounts: None,
         }
         .assimilate_storage(&mut t)
         .unwrap();

@@ -26,9 +26,10 @@
 
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
+use chrono::NaiveDateTime;
 
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp},
+    models::{Bsp, Bucket, File, Msp, ServiceState},
     OnchainBspId, OnchainMspId,
 };
 use shp_types::Hash;
@@ -52,6 +53,22 @@ pub struct PaymentStreamData {
     pub provider: String,
     pub total_amount_paid: BigDecimal,
     pub kind: PaymentStreamKind,
+}
+/// Paginated buckets plus the total number of matches before pagination.
+#[derive(Debug, Clone)]
+pub struct BucketsPage<T> {
+    pub buckets: Vec<T>,
+    pub total: u64,
+}
+/// Aggregated storage request acceptance stats for an MSP within a time window.
+#[derive(Debug, Clone)]
+pub struct RequestAcceptanceStats {
+    /// Total storage requests directed at this MSP in the window
+    pub total: i64,
+    /// Storage requests accepted (those that have an `msp_file` association) in the window
+    pub accepted: i64,
+    /// Timestamp of the most recent accepted storage request (if any)
+    pub last_accepted_at: Option<NaiveDateTime>,
 }
 
 /// Read-only operations for indexer data access.
@@ -96,7 +113,7 @@ pub trait IndexerOps: Send + Sync {
         account: &str,
         limit: i64,
         offset: i64,
-    ) -> RepositoryResult<Vec<Bucket>>;
+    ) -> RepositoryResult<BucketsPage<Bucket>>;
 
     /// Retrieve all the files belonging to the given bucket
     ///
@@ -149,6 +166,23 @@ pub trait IndexerOps: Send + Sync {
         &self,
         onchain_msp_id: &OnchainMspId,
     ) -> RepositoryResult<u64>;
+
+    /// Get the indexer service state (last indexed block, updated_at, etc.)
+    async fn get_service_state(&self) -> RepositoryResult<ServiceState>;
+
+    /// Get aggregated storage request acceptance stats for an MSP within a time window.
+    ///
+    /// Returns the total storage requests count, accepted count, and timestamp of the
+    /// most recent storage request acceptance.
+    ///
+    /// # Arguments
+    /// * `msp_db_id` - The MSP's database ID
+    /// * `window_secs` - Time window in seconds from now
+    async fn get_request_acceptance_stats(
+        &self,
+        msp_db_id: i64,
+        window_secs: u64,
+    ) -> RepositoryResult<RequestAcceptanceStats>;
 }
 
 /// Mutable operations for test environments.

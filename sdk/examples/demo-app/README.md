@@ -25,19 +25,19 @@ A comprehensive demonstration of all StorageHub SDK features including MSP clien
 
 Build the required Docker images:
 ```bash
-pnpm env:build
+bun run env:build
 ```
 
 Start the StorageHub environment:
 
 **Recommended: Clean Environment (Matches SDK precompiles tests):**
 ```bash
-pnpm env:start
+bun run env:start
 ```
 
 **Alternative: Pre-initialized Environment (with demo data):**
 ```bash
-pnpm env:start:initialized
+bun run env:start:initialized
 ```
 
 This will start:
@@ -63,12 +63,12 @@ Install MetaMask browser extension and add the StorageHub network:
 
 Install dependencies:
 ```bash
-pnpm install
+bun install
 ```
 
 Run the development server:
 ```bash
-pnpm dev
+bun run dev
 ```
 
 The demo will be available at [http://localhost:3001](http://localhost:3001).
@@ -102,7 +102,7 @@ The demo will be available at [http://localhost:3001](http://localhost:3001).
 
 To stop the StorageHub environment:
 ```bash
-pnpm env:stop
+bun run env:stop
 ```
 
-Or press Ctrl+C in the terminal where `pnpm env:start` is running.
+Or press Ctrl+C in the terminal where `bun run env:start` is running.

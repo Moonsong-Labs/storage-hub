@@ -15,13 +15,14 @@
 use async_trait::async_trait;
 #[cfg(test)]
 use bigdecimal::BigDecimal;
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
-    models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp, MspFile},
-    schema::{bsp, bucket, file},
+    models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp, MspFile, ServiceState},
+    schema::{bsp, bucket, file, msp_file},
     OnchainMspId,
 };
 use shp_types::Hash;
@@ -33,7 +34,7 @@ use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
     pool::SmartPool,
-    IndexerOps, PaymentStreamData, PaymentStreamKind,
+    BucketsPage, IndexerOps, PaymentStreamData, PaymentStreamKind, RequestAcceptanceStats,
 };
 
 /// PostgreSQL repository implementation.
@@ -99,20 +100,32 @@ impl IndexerOps for Repository {
         account: &str,
         limit: i64,
         offset: i64,
-    ) -> RepositoryResult<Vec<Bucket>> {
+    ) -> RepositoryResult<BucketsPage<Bucket>> {
         let mut conn = self.pool.get().await?;
 
-        // Same as Bucket::get_user_buckets_by_msp but with pagination
         let buckets = bucket::table
-            .order(bucket::id.asc())
             .filter(bucket::account.eq(account))
             .filter(bucket::msp_id.eq(msp))
+            .order(bucket::id.asc())
             .limit(limit)
             .offset(offset)
-            .load(&mut conn)
+            .load::<Bucket>(&mut conn)
             .await?;
 
-        Ok(buckets)
+        let count: i64 = bucket::table
+            .filter(bucket::account.eq(account))
+            .filter(bucket::msp_id.eq(msp))
+            .count()
+            .get_result(&mut conn)
+            .await?;
+
+        let total = u64::try_from(count).map_err(|_| {
+            RepositoryError::configuration(format!(
+                "bucket count should be non-negative, got {count}"
+            ))
+        })?;
+
+        Ok(BucketsPage { buckets, total })
     }
 
     async fn get_files_by_bucket(
@@ -204,6 +217,49 @@ impl IndexerOps for Repository {
         let file_count = MspFile::get_all_files_for_msp(&mut conn, onchain_msp_id).await?;
 
         Ok(file_count)
+    }
+
+    async fn get_service_state(&self) -> RepositoryResult<ServiceState> {
+        let mut conn = self.pool.get().await?;
+        ServiceState::get(&mut conn).await.map_err(Into::into)
+    }
+
+    async fn get_request_acceptance_stats(
+        &self,
+        msp_db_id: i64,
+        window_secs: u64,
+    ) -> RepositoryResult<RequestAcceptanceStats> {
+        let mut conn = self.pool.get().await?;
+        let cutoff = chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
+
+        let (total, accepted): (i64, i64) = file::table
+            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .left_join(
+                msp_file::table.on(file::id
+                    .eq(msp_file::file_id)
+                    .and(msp_file::msp_id.eq(msp_db_id))),
+            )
+            .filter(bucket::msp_id.eq(msp_db_id))
+            .filter(file::created_at.ge(cutoff))
+            .select((
+                diesel::dsl::count(file::id),
+                diesel::dsl::count(msp_file::file_id.nullable()),
+            ))
+            .first(&mut *conn)
+            .await?;
+
+        let last_accepted_at: Option<NaiveDateTime> = msp_file::table
+            .inner_join(file::table.on(msp_file::file_id.eq(file::id)))
+            .filter(msp_file::msp_id.eq(msp_db_id))
+            .select(diesel::dsl::max(file::created_at))
+            .first(&mut *conn)
+            .await?;
+
+        Ok(RequestAcceptanceStats {
+            total,
+            accepted,
+            last_accepted_at,
+        })
     }
 }
 
@@ -748,13 +804,17 @@ mod tests {
         .expect("Failed to create bucket 3");
 
         // We added 2 more, so should have 3 total
-        let buckets = repo
+        let buckets_page = repo
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 0)
             .await
             .expect("Failed to get user buckets");
 
         assert_eq!(
-            buckets.len(),
+            buckets_page.total, 3,
+            "Should have 3 buckets for BUCKET_ACCOUNT with MSP #2"
+        );
+        assert_eq!(
+            buckets_page.buckets.len(),
             3,
             "Should have 3 buckets for BUCKET_ACCOUNT with MSP #2"
         );
@@ -797,8 +857,9 @@ mod tests {
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 2, 0)
             .await
             .expect("Failed to get limited buckets");
+        assert_eq!(limited_buckets.total, 3, "Total should remain unpaginated");
         assert!(
-            limited_buckets.len() <= 2,
+            limited_buckets.buckets.len() <= 2,
             "Should return at most 2 buckets with limit"
         );
 
@@ -807,12 +868,13 @@ mod tests {
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 1)
             .await
             .expect("Failed to get offset buckets");
+        assert_eq!(offset_buckets.total, 3, "Total should remain unpaginated");
         assert!(
-            !offset_buckets.is_empty(),
+            !offset_buckets.buckets.is_empty(),
             "Should have buckets after offset"
         );
         assert_ne!(
-            limited_buckets[0].name, offset_buckets[0].name,
+            limited_buckets.buckets[0].name, offset_buckets.buckets[0].name,
             "Should skip first bucket"
         );
 
@@ -821,12 +883,16 @@ mod tests {
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 2, 1)
             .await
             .expect("Failed to get offset buckets");
+        assert_eq!(
+            paginated_buckets.total, 3,
+            "Total should remain unpaginated"
+        );
         assert!(
-            paginated_buckets.len() <= 2,
+            paginated_buckets.buckets.len() <= 2,
             "Should return at most 2 buckets with limit"
         );
         assert_ne!(
-            limited_buckets[0].name, paginated_buckets[0].name,
+            limited_buckets.buckets[0].name, paginated_buckets.buckets[0].name,
             "Should skip first bucket"
         );
     }
@@ -860,18 +926,18 @@ mod tests {
             .expect("Failed to get target user buckets");
 
         assert_eq!(
-            target_buckets.len(),
-            1,
+            target_buckets.total, 1,
             "Should return exactly 1 bucket for BUCKET_ACCOUNT (from snapshot)"
         );
+        assert_eq!(target_buckets.buckets.len(), 1);
 
         // Verify the returned bucket belongs to BUCKET_ACCOUNT
         assert_eq!(
-            target_buckets[0].account, BUCKET_ACCOUNT,
+            target_buckets.buckets[0].account, BUCKET_ACCOUNT,
             "Bucket should belong to BUCKET_ACCOUNT"
         );
         assert_eq!(
-            target_buckets[0].msp_id,
+            target_buckets.buckets[0].msp_id,
             Some(MSP_TWO_ID),
             "Bucket should have MSP #2"
         );
@@ -883,12 +949,12 @@ mod tests {
             .expect("Failed to get other user buckets");
 
         assert_eq!(
-            other_user_buckets.len(),
-            1,
+            other_user_buckets.total, 1,
             "Other user should have their own bucket"
         );
+        assert_eq!(other_user_buckets.buckets.len(), 1);
         assert_ne!(
-            other_user_buckets[0].id, target_buckets[0].id,
+            other_user_buckets.buckets[0].id, target_buckets.buckets[0].id,
             "Should be different buckets"
         );
     }
@@ -921,19 +987,19 @@ mod tests {
             .expect("Failed to get MSP #1 buckets");
 
         assert_eq!(
-            msp1_buckets.len(),
-            1,
+            msp1_buckets.total, 1,
             "Should return exactly 1 bucket for MSP #1 (from our insert)"
         );
+        assert_eq!(msp1_buckets.buckets.len(), 1);
 
         // Verify the returned bucket has MSP #1
         assert_eq!(
-            msp1_buckets[0].msp_id,
+            msp1_buckets.buckets[0].msp_id,
             Some(MSP_ONE_ID),
             "Bucket should have MSP #1"
         );
         assert_eq!(
-            msp1_buckets[0].name, msp1_bucket_name,
+            msp1_buckets.buckets[0].name, msp1_bucket_name,
             "Should be our MSP1 bucket"
         );
 
@@ -944,19 +1010,19 @@ mod tests {
             .expect("Failed to get MSP #2 buckets");
 
         assert_eq!(
-            msp2_buckets.len(),
-            1,
+            msp2_buckets.total, 1,
             "Should return exactly 1 bucket for MSP #2 (from snapshot)"
         );
+        assert_eq!(msp2_buckets.buckets.len(), 1);
 
         // Verify the returned bucket has MSP #2
         assert_eq!(
-            msp2_buckets[0].msp_id,
+            msp2_buckets.buckets[0].msp_id,
             Some(MSP_TWO_ID),
             "Bucket should have MSP #2"
         );
         assert_eq!(
-            msp2_buckets[0].name,
+            msp2_buckets.buckets[0].name,
             BUCKET_NAME.as_bytes(),
             "Should be the snapshot bucket"
         );
@@ -990,27 +1056,69 @@ mod tests {
             .expect("Failed to get MSP #2 buckets");
 
         assert_eq!(
-            msp_buckets.len(),
-            1,
+            msp_buckets.total, 1,
             "Should return exactly 1 bucket with MSP #2 (excluding NULL MSP bucket)"
         );
+        assert_eq!(msp_buckets.buckets.len(), 1);
 
         // Verify the returned bucket has MSP #2, not NULL
         assert_eq!(
-            msp_buckets[0].msp_id,
+            msp_buckets.buckets[0].msp_id,
             Some(MSP_TWO_ID),
             "Bucket should have MSP #2"
         );
         assert_eq!(
-            msp_buckets[0].name,
+            msp_buckets.buckets[0].name,
             BUCKET_NAME.as_bytes(),
             "Should be the snapshot bucket with MSP"
         );
 
         // Verify NULL MSP bucket is not included
         assert_ne!(
-            msp_buckets[0].name, no_msp_bucket_name,
+            msp_buckets.buckets[0].name, no_msp_bucket_name,
             "Should not include the NULL MSP bucket"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_buckets_by_user_and_msp_high_offset_returns_empty_page_with_total() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Add two more buckets to the existing one in snapshot, total should be 3.
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            Some(MSP_TWO_ID),
+            b"offset-test-bucket-2",
+            &random_hash(),
+            false,
+        )
+        .await
+        .expect("Failed to create offset test bucket 2");
+
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            Some(MSP_TWO_ID),
+            b"offset-test-bucket-3",
+            &random_hash(),
+            false,
+        )
+        .await
+        .expect("Failed to create offset test bucket 3");
+
+        let page = repo
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 50, 500)
+            .await
+            .expect("Failed to query high-offset buckets page");
+
+        assert_eq!(page.total, 3, "Total should still report all matching rows");
+        assert!(
+            page.buckets.is_empty(),
+            "High offset should return empty page content"
         );
     }
 

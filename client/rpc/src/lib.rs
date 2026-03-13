@@ -154,7 +154,6 @@ pub enum GetFileFromFileStorageResult {
     FileNotFound,
     IncompleteFile(IncompleteFileStatus),
     FileFound(FileMetadata),
-    FileFoundWithInconsistency(FileMetadata),
 }
 
 /// Result of adding files to the forest storage.
@@ -279,6 +278,16 @@ pub trait StorageHubClientApi {
         &self,
         forest_key: Option<shp_types::Hash>,
     ) -> RpcResult<Option<shp_types::Hash>>;
+
+    /// Check if a forest storage is present for the given forest key.
+    ///
+    /// In the case of a BSP node, the forest key is empty since it only maintains a single forest.
+    /// In the case of an MSP node, the forest key is a bucket id.
+    #[method(name = "isForestStoragePresent")]
+    async fn is_forest_storage_present(
+        &self,
+        forest_key: Option<shp_types::Hash>,
+    ) -> RpcResult<bool>;
 
     #[method(name = "isFileInForest")]
     async fn is_file_in_forest(
@@ -669,12 +678,15 @@ where
         };
 
         // Check if file is incomplete.
-        let stored_chunks = read_file_storage
-            .stored_chunks_count(&file_key)
+        let is_complete = read_file_storage
+            .is_file_complete(&file_key)
             .map_err(into_rpc_error)?;
         let total_chunks = file_metadata.chunks_count();
 
-        if stored_chunks < total_chunks {
+        if !is_complete {
+            let stored_chunks = read_file_storage
+                .stored_chunks_count(&file_key)
+                .map_err(into_rpc_error)?;
             return Ok(SaveFileToDisk::IncompleteFile(IncompleteFileStatus {
                 file_metadata,
                 stored_chunks,
@@ -887,6 +899,30 @@ where
         Ok(maybe_root)
     }
 
+    async fn is_forest_storage_present(
+        &self,
+        forest_key: Option<shp_types::Hash>,
+    ) -> RpcResult<bool> {
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
+
+        let result = self
+            .forest_storage_handler
+            .is_forest_storage_present(&forest_key)
+            .await;
+
+        info!(
+            target: LOG_TARGET,
+            "is_forest_storage_present for forest_key=[{}]. Result: {}",
+            hex::encode(forest_key),
+            result
+        );
+
+        Ok(result)
+    }
+
     async fn is_file_in_forest(
         &self,
         forest_key: Option<shp_types::Hash>,
@@ -935,20 +971,21 @@ where
         {
             None => GetFileFromFileStorageResult::FileNotFound,
             Some(file_metadata) => {
-                let stored_chunks = read_file_storage
-                    .stored_chunks_count(&file_key)
+                let is_complete = read_file_storage
+                    .is_file_complete(&file_key)
                     .map_err(into_rpc_error)?;
-                let total_chunks = file_metadata.chunks_count();
-                if stored_chunks < total_chunks {
+                if is_complete {
+                    GetFileFromFileStorageResult::FileFound(file_metadata)
+                } else {
+                    let stored_chunks = read_file_storage
+                        .stored_chunks_count(&file_key)
+                        .map_err(into_rpc_error)?;
+                    let total_chunks = file_metadata.chunks_count();
                     GetFileFromFileStorageResult::IncompleteFile(IncompleteFileStatus {
                         file_metadata,
                         stored_chunks,
                         total_chunks,
                     })
-                } else if stored_chunks > total_chunks {
-                    GetFileFromFileStorageResult::FileFoundWithInconsistency(file_metadata)
-                } else {
-                    GetFileFromFileStorageResult::FileFound(file_metadata)
                 }
             }
         };

@@ -810,14 +810,27 @@ where
             RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &state.partial_root);
 
         // Insert trie nodes into overlay. `delta` counts only genuinely new chunk insertions.
+        // Delta-based counting is intentional: it correctly handles retries where the same
+        // file_key's upload is re-sent after a partial failure, avoiding double-counting
+        // chunks that were already committed in the previous attempt.
         let (new_partial_root, delta) = file_trie.insert_chunks_batched(chunks)?;
         let new_count = state
             .chunk_count
             .checked_add(delta)
             .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
 
-        // Prevent uploads from writing more chunks than declared in metadata.
-        if new_count > state.metadata.chunks_count() {
+        // Completeness is determined solely by the trie root matching the fingerprint.
+        // The chunk count is not part of the completion check because the trie is shared
+        // by fingerprint across file keys, and the per-key counter may not reflect the
+        // true state of the shared trie.
+        let file_complete = state.metadata.fingerprint() == new_partial_root.as_ref();
+
+        // Prevent uploads from writing more chunks than declared in metadata,
+        // but only when the file is still incomplete. When the trie root already
+        // matches the fingerprint (data is complete), the count may exceed the
+        // declared total due to concurrent writes from different upload paths
+        // (e.g. P2P and trusted transfer) and this is harmless.
+        if !file_complete && new_count > state.metadata.chunks_count() {
             warn!(
                 target: LOG_TARGET,
                 "Batch write exceeded metadata chunk count for file {:?}: new_count={}, declared={}",
@@ -849,10 +862,6 @@ where
         // Keep cache in sync so the next batch avoids extra DB reads.
         state.partial_root = new_partial_root;
         state.chunk_count = new_count;
-
-        // Mirror `is_file_complete` semantics without re-reading from DB/trie.
-        let file_complete = state.metadata.fingerprint() == new_partial_root.as_ref()
-            && state.metadata.chunks_count() == new_count;
 
         if file_complete {
             Ok(FileStorageWriteOutcome::FileComplete)
@@ -990,8 +999,10 @@ where
     /// Differences vs [`Self::write_chunk`]:
     /// - Processes multiple chunks in one transaction using cached metadata/root/chunk_count.
     /// - Skips per-chunk existence checks; duplicate chunk IDs are not rejected.
-    /// - Progress tracking increments by input batch length (including duplicates), and may return
-    ///   [`FileStorageWriteError::ChunkCountOverflow`] when that count exceeds declared metadata.
+    /// - Progress tracking increments by the number of genuinely new trie insertions (delta),
+    ///   which correctly handles retries where previously-committed chunks are re-sent.
+    /// - Completion is determined solely by the trie root matching the fingerprint, not by
+    ///   chunk count. The overflow guard only fires when the file is still incomplete.
     fn write_chunks_batched(
         &mut self,
         file_key: &HasherOutT<T>,
@@ -1037,20 +1048,21 @@ where
     }
 
     /// Checks if all chunks are stored for a given file key.
+    ///
+    /// Completeness is determined solely by whether the trie root matches the file's
+    /// fingerprint (a Merkle-hash proof that all chunk data is present and correct).
+    /// The per-file-key chunk count is intentionally not checked here because the
+    /// underlying trie data is shared by fingerprint: multiple file keys with the same
+    /// fingerprint share a single trie, and the per-key counter may lag behind the
+    /// actual trie state.
     fn is_file_complete(&self, file_key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
         let metadata = self
             .get_metadata(file_key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let stored_chunks = self.stored_chunks_count(file_key)?;
-
         let file_trie = self.get_file_trie(&metadata)?;
 
-        if metadata.fingerprint() != file_trie.get_root().as_ref() {
-            return Ok(false);
-        }
-
-        Ok(metadata.chunks_count() == stored_chunks)
+        Ok(metadata.fingerprint() == file_trie.get_root().as_ref())
     }
 
     /// Stores file metadata with an empty root.
@@ -1073,7 +1085,7 @@ where
             &serialized_metadata,
         );
 
-        // Ensure a partial root exists for this fingerprint, but do not overwrite if it already exists
+        // Ensure a partial root exists for this fingerprint, but do not overwrite if it already exists.
         let existing_partial_root = self
             .storage
             .read(Column::Roots.into(), metadata.fingerprint().as_ref())
@@ -1081,6 +1093,18 @@ where
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
             })?;
+
+        // If the trie root already matches the fingerprint, all chunk data for this
+        // fingerprint is present (from another file key that shares this fingerprint).
+        // Initialize chunk count to the full total so that progress reporting and
+        // overflow guards reflect the actual data availability.
+        let initial_chunk_count = match &existing_partial_root {
+            Some(root_bytes) if root_bytes.as_slice() == metadata.fingerprint().as_ref() => {
+                metadata.chunks_count()
+            }
+            _ => 0,
+        };
+
         if existing_partial_root.is_none() {
             // Stores an empty root to allow for later initialization of the trie.
             transaction.put(
@@ -1089,11 +1113,11 @@ where
                 empty_root.as_ref(),
             );
         }
-        // Initialize chunk count to 0
+
         transaction.put(
             Column::ChunkCount.into(),
             file_key.as_ref(),
-            &0u64.to_le_bytes(),
+            &initial_chunk_count.to_le_bytes(),
         );
 
         // Also store the bucket-prefixed key to support efficient deletions by bucket prefix.
@@ -1221,11 +1245,6 @@ where
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let file_trie = self.get_file_trie(&metadata)?;
-
-        let stored_chunks = self.stored_chunks_count(key)?;
-        if metadata.chunks_count() != stored_chunks {
-            return Err(FileStorageError::IncompleteFile);
-        }
 
         if metadata.fingerprint() != file_trie.get_root().as_ref() {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);

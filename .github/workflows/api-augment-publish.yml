@@ -3,11 +3,11 @@ on:
   push:
     branches: [main]
     paths:
-      - 'api-augment/**'
+      - "api-augment/**"
   workflow_dispatch:
     inputs:
       sha:
-        description: Full SHA to build the pnpm package from
+        description: Full SHA to build the Bun package from
         required: true
       dry_run:
         description: Perform a dry run (no actual publish)
@@ -29,27 +29,29 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         uses: actions/checkout@v4
 
-      - name: Setup pnpm & cache
-        uses: ./.github/workflow-templates/setup-pnpm
+      - name: Setup Bun & cache
+        uses: ./.github/workflow-templates/setup-bun
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install and build API Augment
         run: |
           cd api-augment
-          pnpm i --no-frozen-lockfile
-          pnpm run build
+          bun install
+          bun run build
 
       - name: Publish API Augment
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true') }}
         working-directory: api-augment
         env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           PKG_NAME=$(node -p "require('./package.json').name")
           PKG_VERSION=$(node -p "require('./package.json').version")
           echo "Publishing $PKG_NAME v$PKG_VERSION"
-          pnpm publish --access public --no-git-checks || {
+          bun publish --access public || {
             echo "Publish failed (possibly already published). Checking registry...";
             CURR=$(npm view "$PKG_NAME" version || echo "");
             if [ "$CURR" = "$PKG_VERSION" ]; then
