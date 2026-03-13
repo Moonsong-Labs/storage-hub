@@ -17,7 +17,7 @@ async function main() {
 
     if (OS === "Darwin") {
       console.error(
-        "You are on a Mac, you need to build for Linux. Run `pnpm crossbuild:mac:backend`"
+        "You are on a Mac, you need to build for Linux. Run `bun run crossbuild:mac:backend`"
       );
     }
     process.exitCode = 1;

@@ -32,12 +32,12 @@ See `sdk/examples/README.md` for how to run them.
 
 ### Environments
 - **Browser**: first‑class support (auto‑bound `fetch`) and EIP‑1193 wallets.
-- **Node.js (LTS 18+)**: supported; older Node may require a `fetch` polyfill.
+- **Node.js (LTS 22+)**: supported; older Node may require a `fetch` polyfill.
 
 ### Folder structure
 
 ```
-sdk/ – workspace root, pnpm workspace + shared tooling
+sdk/ – workspace root, Bun workspace + shared tooling
 ├─ package.json
 ├─ tsconfig.json
 ├─ vitest.config.ts

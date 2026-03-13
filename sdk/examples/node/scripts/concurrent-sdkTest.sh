@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Configuration
-CMD="pnpm test"     # runs tsx src/sdkTest.ts
+CMD="bun run test"  # runs src/downloadTest.ts
 NUM_CONCURRENT=${1:-5}
 OUTPUT_DIR="./concurrent-logs"
 

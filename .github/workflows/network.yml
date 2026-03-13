@@ -142,7 +142,7 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Set build flags (use mold linker)
         run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
       # Install required build dependencies (incl. binutils for readelf)
       - name: Install build deps
         run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev binutils
@@ -202,7 +202,7 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Set build flags (use mold linker)
         run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
       - name: Install libpq-dev
         run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev
       - name: Install Protoc
@@ -328,7 +328,7 @@ jobs:
   #       working-directory: test
   #   steps:
   #     - uses: actions/checkout@v4
-  # - uses: ./.github/workflow-templates/setup-pnpm
+  # - uses: ./.github/workflow-templates/setup-bun
   #     - name: Pull Docker image
   #       run: docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image-tag }}
   #     - name: Start local k8 cluster
@@ -340,8 +340,8 @@ jobs:
   #         memory: 12000
   #     - name: Run Zombienet Test!
   #       run: |
-  #         pnpm  install
-  #         pnpm  zombienet test configs/simple.zndsl
+  #         bun install --frozen-lockfile
+  #         bunx zombienet test configs/simple.zndsl
 
   network_test:
     needs: [build_node, setup]
@@ -350,7 +350,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
       - run: mkdir -p target/release/
       - name: Get node binary from artefacts if changed
         if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
@@ -370,18 +370,18 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm  install
-          pnpm  zombie:run:full:native &
+          bun install --frozen-lockfile
+          bun run zombie:run:full:native &
 
           sleep 60
       - name: Setup zombienet
         run: |
           cd test
-          pnpm zombie:setup:native
+          bun run zombie:setup:native
       - name: Run zombienet tests
         run: |
           cd test
-          pnpm test:full
+          bun run test:full
 
   zombie_test:
     needs: [build_node, setup]
@@ -390,7 +390,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
       - run: mkdir -p target/release/
       - name: Get node binary from artefacts if changed
         if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
@@ -410,12 +410,12 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm tsx scripts/downloadPolkadot.ts stable2412
+          bun install --frozen-lockfile
+          bun run scripts/downloadPolkadot.ts stable2412
       - name: Run zombienet tests using its CLI
         run: |
           cd test
-          pnpm zombienet test --provider native configs/simpleNative.zndsl
+          bunx zombienet test --provider native configs/simpleNative.zndsl
 
   dev_node_test:
     needs: [build_node, setup]
@@ -428,7 +428,7 @@ jobs:
         shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
       - run: mkdir -p target/release/
       - name: Get node binary from artefacts if changed
         if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
@@ -442,8 +442,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install --frozen-lockfile
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -452,7 +452,7 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - name: Run Dev Node tests
         run: |
           cd test
@@ -477,7 +477,7 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - run: mkdir -p target/release/
@@ -493,8 +493,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install --frozen-lockfile
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -503,7 +503,7 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
@@ -511,7 +511,7 @@ jobs:
         id: run_tests
         run: |
           cd test
-          pnpm i
+          bun install --frozen-lockfile
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
@@ -568,7 +568,7 @@ jobs:
         shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - run: mkdir -p target/release/
@@ -584,8 +584,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install --frozen-lockfile
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -594,12 +594,12 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - name: Run BSPNet tests
         id: run_tests
         run: |
           cd test
-          pnpm i
+          bun install --frozen-lockfile
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
@@ -656,7 +656,7 @@ jobs:
         shard: [1]
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -679,8 +679,8 @@ jobs:
           chmod +x target/release/sh-msp-backend
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm i
-          pnpm docker:build:backend
+          bun install --frozen-lockfile
+          bun run docker:build:backend
       - name: Pull latest backend Docker image if not changed
         if: needs.setup.outputs.backend_changed == 'false' && needs.setup.outputs.force_backend == 'false'
         run: |
@@ -698,8 +698,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install --frozen-lockfile
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -713,7 +713,7 @@ jobs:
         id: run_tests
         run: |
           cd test
-          pnpm i
+          bun install --frozen-lockfile
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
@@ -775,7 +775,7 @@ jobs:
         shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - run: mkdir -p target/release/
@@ -791,8 +791,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install --frozen-lockfile
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -801,7 +801,7 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
@@ -809,7 +809,7 @@ jobs:
         id: run_tests
         run: |
           cd test
-          pnpm i
+          bun install --frozen-lockfile
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
@@ -866,7 +866,7 @@ jobs:
         shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - run: mkdir -p target/release/
@@ -882,8 +882,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install --frozen-lockfile
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -892,7 +892,7 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
@@ -900,7 +900,7 @@ jobs:
         id: run_tests
         run: |
           cd test
-          pnpm i
+          bun install --frozen-lockfile
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
@@ -953,7 +953,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - run: mkdir -p target/release/
@@ -969,8 +969,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install --frozen-lockfile
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -979,7 +979,7 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
@@ -987,7 +987,7 @@ jobs:
         id: run_tests
         run: |
           cd test
-          pnpm i
+          bun install --frozen-lockfile
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
@@ -1039,7 +1039,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -1062,8 +1062,8 @@ jobs:
           chmod +x target/release/sh-msp-backend
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm i
-          pnpm docker:build:backend
+          bun install --frozen-lockfile
+          bun run docker:build:backend
       - name: Pull latest backend Docker image if not changed
         if: needs.setup.outputs.backend_changed == 'false' && needs.setup.outputs.force_backend == 'false'
         run: |
@@ -1081,8 +1081,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install --frozen-lockfile
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -1091,7 +1091,7 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - name: Setup Rust toolchain (for SDK wasm build)
         uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
@@ -1102,8 +1102,8 @@ jobs:
       - name: Build SDK
         run: |
           cd sdk
-          pnpm install --frozen-lockfile
-          pnpm build
+          bun install --frozen-lockfile
+          bun run build
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
@@ -1111,7 +1111,7 @@ jobs:
         id: run_tests
         run: |
           cd test
-          pnpm i
+          bun install --frozen-lockfile
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
@@ -1166,7 +1166,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 22
       - run: mkdir -p target/release/
@@ -1182,8 +1182,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install --frozen-lockfile
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -1192,12 +1192,12 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - name: Check for changes
         run: |
           cd api-augment
           if [ -n "$(git status --porcelain .)" ]; then
-            echo "Typegen produced changes. Please run 'pnpm typegen' locally and commit the changes."
+            echo "Typegen produced changes. Please run 'bun run --cwd test typegen' locally and commit the changes."
             exit 1
           else
             echo "No changes"
@@ -1211,13 +1211,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - name: Install dependencies
         run: |
           cd test
-          pnpm install
+          bun install
       - name: Run unit tests
         run: |
           cd test
@@ -1236,7 +1236,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
       - run: mkdir -p target/release/
@@ -1252,8 +1252,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
-          pnpm docker:build
+          bun install
+          bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
@@ -1262,7 +1262,7 @@ jobs:
       - name: Run typegen
         run: |
           cd test
-          pnpm typegen
+          bun run typegen
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
@@ -1270,7 +1270,7 @@ jobs:
         id: run_tests
         run: |
           cd test
-          pnpm i
+          bun install
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
