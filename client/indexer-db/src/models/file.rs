@@ -143,6 +143,11 @@ pub struct File {
     /// Contains the Ethereum transaction hash from `pallet_ethereum::Event::Executed` if the storage
     /// request was created via an EVM transaction. NULL for native Substrate transactions.
     pub tx_hash: Option<Vec<u8>>,
+    /// Number of BSPs required from the storage request that created this file record.
+    pub bsps_required: i32,
+    /// Rolling counter tracking the user's desired replication level for this file key.
+    /// Computed as `max(previous_desired, current_bsp_count + bsps_required)` for user-initiated SRs.
+    pub desired_replicas: i32,
 }
 
 /// Lightweight struct containing only the fields needed for [`FileMetadata`](shc_common::types::FileMetadata) construction.
@@ -182,6 +187,8 @@ impl File {
         block_hash: Vec<u8>,
         tx_hash: Option<Vec<u8>>,
         is_in_bucket: bool,
+        bsps_required: i32,
+        desired_replicas: i32,
     ) -> Result<Self, diesel::result::Error> {
         let file = diesel::insert_into(file::table)
             .values((
@@ -198,6 +205,8 @@ impl File {
                 file::is_in_bucket.eq(is_in_bucket),
                 file::block_hash.eq(block_hash),
                 file::tx_hash.eq(tx_hash),
+                file::bsps_required.eq(bsps_required),
+                file::desired_replicas.eq(desired_replicas),
             ))
             .returning(File::as_select())
             .get_result(conn)
@@ -366,6 +375,36 @@ impl File {
             }
         }
         Ok(())
+    }
+
+    /// Count the number of BSP associations across all file records sharing the given file key.
+    pub async fn count_bsp_associations_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<i64, diesel::result::Error> {
+        use crate::schema::bsp_file;
+        let file_key = file_key.as_ref().to_vec();
+        bsp_file::table
+            .inner_join(file::table.on(bsp_file::file_id.eq(file::id)))
+            .filter(file::file_key.eq(file_key))
+            .count()
+            .get_result(conn)
+            .await
+    }
+
+    /// Get the maximum `desired_replicas` value across all file records sharing the given file key.
+    pub async fn get_max_desired_replicas_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<i32, diesel::result::Error> {
+        use diesel::dsl::max;
+        let file_key = file_key.as_ref().to_vec();
+        file::table
+            .filter(file::file_key.eq(file_key))
+            .select(max(file::desired_replicas))
+            .first::<Option<i32>>(conn)
+            .await
+            .map(|v| v.unwrap_or(0))
     }
 
     /// Check if file has any BSP associations

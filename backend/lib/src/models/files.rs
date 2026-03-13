@@ -49,6 +49,10 @@ pub struct FileInfo {
     /// For files created via native Substrate extrinsics, this will be None.
     #[serde(rename = "txHash", skip_serializing_if = "Option::is_none")]
     pub tx_hash: Option<String>,
+    #[serde(rename = "desiredReplicas")]
+    pub desired_replicas: i32,
+    #[serde(rename = "currentReplication")]
+    pub current_replication: i64,
 }
 
 impl FileInfo {
@@ -68,7 +72,12 @@ impl FileInfo {
             })
     }
 
-    pub fn from_db(db: &DBFile, is_public: bool) -> Self {
+    pub fn from_db(
+        db: &DBFile,
+        is_public: bool,
+        desired_replicas: i32,
+        current_replication: i64,
+    ) -> Self {
         Self {
             file_key: hex::encode(&db.file_key),
             fingerprint: Hash::from_slice(&db.fingerprint).to_fixed_bytes(),
@@ -81,6 +90,8 @@ impl FileInfo {
             status: Self::status_from_db(db),
             block_hash: hex::encode(&db.block_hash),
             tx_hash: db.tx_hash.as_ref().map(hex::encode),
+            desired_replicas,
+            current_replication,
         }
     }
 
