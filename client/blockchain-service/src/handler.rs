@@ -393,7 +393,13 @@ where
         }
 
         // Catch up on any blocks that were imported but not processed
-        self.actor.catch_up_missed_blocks().await;
+        if let Err(e) = self.actor.catch_up_missed_blocks().await {
+            error!(
+                target: LOG_TARGET,
+                "Failed to catch up missed blocks during startup: {:?}. Finalized blocks will be retried on next finality notification.",
+                e
+            );
+        }
 
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
@@ -2101,8 +2107,17 @@ where
         match new_block_notification_kind {
             NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => {
                 // Process the new best block as a linear chain extension
-                self.process_sync_block(&new_best_block.hash, new_best_block.number)
-                    .await;
+                // If processing fails, the block won't be marked as processed and will be retried on restart
+                if let Err(e) = self
+                    .process_sync_block(&new_best_block.hash, new_best_block.number)
+                    .await
+                {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process sync block #{}: {:?}. Block will be retried on restart.",
+                        new_best_block.number, e
+                    );
+                }
             }
             NewBlockNotificationKind::NewNonBestBlock(_) => {
                 // Skip non-best blocks (uncle/stale blocks not on the canonical chain)
@@ -2114,7 +2129,14 @@ where
                 ..
             } => {
                 // Process the reorg
-                self.process_sync_reorg(&tree_route, new_best_block).await;
+                // If processing fails, the block won't be marked as processed and will be retried on restart
+                if let Err(e) = self.process_sync_reorg(&tree_route, new_best_block).await {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process sync reorg: {:?}. Block will be retried on restart.",
+                        e
+                    );
+                }
             }
         }
     }
@@ -2192,14 +2214,31 @@ where
             .await;
 
         // Provider-specific code to run at the start of every block import.
+        // If forest root changes fail, we log the error but continue processing the block.
         match self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
-                self.bsp_init_block_processing(block_hash, block_number, tree_route.clone())
-                    .await;
+                if let Err(e) = self
+                    .bsp_init_block_processing(block_hash, block_number, tree_route.clone())
+                    .await
+                {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process BSP forest root changes for block #{}: {:?}",
+                        block_number, e
+                    );
+                }
             }
             Some(ManagedProvider::Msp(_)) => {
-                self.msp_init_block_processing(block_hash, block_number, tree_route.clone())
-                    .await;
+                if let Err(e) = self
+                    .msp_init_block_processing(block_hash, block_number, tree_route.clone())
+                    .await
+                {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process MSP forest root changes for block #{}: {:?}",
+                        block_number, e
+                    );
+                }
             }
             None => {
                 trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
@@ -2419,6 +2458,10 @@ where
     }
 
     /// Internal method to process a finality notification.
+    ///
+    /// If finality event processing fails, the block is NOT marked as processed
+    /// (i.e., `last_finalised_block_processed` is not updated), ensuring the block
+    /// will be retried on the next finality notification or restart.
     async fn process_finality_notification(
         &mut self,
         notification: FinalityNotification<OpaqueBlock>,
@@ -2479,12 +2522,36 @@ where
                     continue;
                 }
 
-                self.process_finality_events(intermediate_hash);
+                if let Err(e) = self.process_finality_events(intermediate_hash) {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to process finality events for intermediate block #{} (0x{:x}): {:?}. Block will be retried on the next finality notification or restart.",
+                        intermediate_number, intermediate_hash, e
+                    );
+                    observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_FAILURE], start.elapsed().as_secs_f64());
+                    return;
+                }
+
+                // Update last_finalised_block_processed after each successful intermediate block
+                // so we don't reprocess it on restart or on later finality notifications if a later block fails
+                self.last_finalised_block_processed = MinimalBlockInfo {
+                    number: intermediate_number,
+                    hash: *intermediate_hash,
+                };
+                self.update_last_finalised_block_info(self.last_finalised_block_processed);
             }
         }
 
         // Process finality events for the newly finalised block itself
-        self.process_finality_events(&block_hash);
+        if let Err(e) = self.process_finality_events(&block_hash) {
+            error!(
+                target: LOG_TARGET,
+                "Failed to process finality events for block #{} (0x{:x}): {:?}. Block will be retried on the next finality notification or restart.",
+                block_number, block_hash, e
+            );
+            observe_histogram!(metrics: self.metrics.as_ref(), block_processing_seconds, labels: &["finalized_block", STATUS_FAILURE], start.elapsed().as_secs_f64());
+            return;
+        }
 
         // Cleanup the pending transaction store for the last finalised block processed.
         // Transactions with a nonce below the on-chain nonce of this block are finalised.

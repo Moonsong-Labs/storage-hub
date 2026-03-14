@@ -1,3 +1,4 @@
+use anyhow::Result;
 use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
 use std::{collections::HashSet, sync::Arc};
@@ -56,19 +57,19 @@ where
     /// This is called for each sync block to apply `MutationsAppliedForProvider` events
     /// before state pruning can occur. This ensures the local forest stays in sync with
     /// the on-chain state even when the node has been offline for a long period.
+    ///
+    /// Returns an error if there's a failure during event processing that should prevent
+    /// the block from being marked as processed (e.g., API errors when fetching events).
     pub(crate) async fn process_bsp_sync_mutations(
         &mut self,
         block_hash: &Runtime::Hash,
         bsp_id: BackupStorageProviderId<Runtime>,
-    ) {
+    ) -> Result<()> {
         // Get all events for the block
-        let events = match get_events_at_block::<Runtime>(&self.client, block_hash) {
-            Ok(events) => events,
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
-                return;
-            }
-        };
+        let events = get_events_at_block::<Runtime>(&self.client, block_hash).map_err(|e| {
+            warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
+            e
+        })?;
 
         // Apply any mutations in the block that are relevant to this BSP
         for ev in events {
@@ -103,6 +104,8 @@ where
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Handles the initial sync of a BSP, after coming out of syncing mode.
@@ -132,19 +135,23 @@ where
     /// Steps:
     /// 1. Catch up to Forest root changes in this BSP's Forest.
     /// 2. In blocks that are a multiple of `BlockchainServiceConfig::check_for_pending_proofs_period`, catch up to proof submissions for the current tick.
+    ///
+    /// Returns an error if there's a failure during forest root change processing.
     pub(crate) async fn bsp_init_block_processing<Block>(
         &mut self,
         block_hash: &Runtime::Hash,
         block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
-    ) where
+    ) -> Result<()>
+    where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        self.forest_root_changes_catchup(&tree_route).await;
+        self.forest_root_changes_catchup(&tree_route).await?;
         let block_number: U256 = (*block_number).into();
         if block_number % self.config.check_for_pending_proofs_period == Zero::zero() {
             self.proof_submission_catch_up(block_hash);
         }
+        Ok(())
     }
 
     /// Processes new block imported events that are only relevant for a BSP.
@@ -814,16 +821,21 @@ where
         }
     }
 
+    /// Processes forest root changing events for BSP.
+    ///
+    /// Returns an error if there's a failure during event processing that should prevent
+    /// the block from being marked as processed (e.g., failed to apply mutations and verify root).
     pub(crate) async fn bsp_process_forest_root_changing_events(
         &mut self,
         event: StorageEnableEvents<Runtime>,
         revert: bool,
-    ) {
+    ) -> Result<()> {
         let managed_bsp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => &bsp_handler.bsp_id,
             _ => {
-                error!(target: LOG_TARGET, "`bsp_process_forest_root_changing_events` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
+                let err_msg = format!("`bsp_process_forest_root_changing_events` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                error!(target: LOG_TARGET, "{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
             }
         };
 
@@ -839,7 +851,7 @@ where
                 // Check if the `provider_id` is the BSP that this node is managing.
                 if provider_id != *managed_bsp_id {
                     debug!(target: LOG_TARGET, "Provider ID [{:?}] is not the BSP ID [{:?}] that this node is managing. Skipping mutations applied event.", provider_id, managed_bsp_id);
-                    return;
+                    return Ok(());
                 }
 
                 info!(target: LOG_TARGET, "🪾 Applying mutations to BSP [{:?}]", provider_id);
@@ -869,24 +881,26 @@ where
                 // For file deletions, we will remove the file from the File Storage only after finality is reached.
                 // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
                 let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-                if let Err(e) = self
-                    .apply_forest_mutations_and_verify_root(
-                        current_forest_key,
-                        &mutations,
-                        revert,
-                        old_root,
-                        new_root,
-                    )
-                    .await
-                {
-                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for BSP [{:?}]. \nError: {:?}", provider_id, e);
-                    return;
-                };
+                self.apply_forest_mutations_and_verify_root(
+                    current_forest_key,
+                    &mutations,
+                    revert,
+                    old_root,
+                    new_root,
+                )
+                .await
+                .map_err(|e| {
+                    let err_msg = format!("CRITICAL ❗️❗️ Failed to apply mutations and verify root for BSP [{:?}]. \nError: {:?}", provider_id, e);
+                    error!(target: LOG_TARGET, "{}", err_msg);
+                    anyhow::anyhow!(err_msg)
+                })?;
 
                 info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
             }
             _ => {}
         }
+
+        Ok(())
     }
 
     /// Verifies that the local BSP forest root matches the on-chain root.
