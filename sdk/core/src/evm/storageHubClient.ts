@@ -210,12 +210,59 @@ export class StorageHubClient {
     if (value == null) throw new Error(message);
   }
 
+  private static readonly OPERATION_NAMES: Record<FileOperation, string> = {
+    [FileOperation.Delete]: "Delete"
+  };
+
   /**
-   * Serialize FileOperationIntention and sign it
+   * Build the human-readable message that the wallet will display and sign
+   * via EIP-191 `personal_sign`.
+   *
+   * The on-chain `Eip191Adapter` reconstructs the **exact same string** from the
+   * SCALE-encoded intention + context blob, so both sides agree on the signed payload.
+   *
+   * @example
+   * ```text
+   * StorageHub File Delete Request
+   *
+   * File: documents/report.pdf
+   * Size: 1048576 bytes
+   * Bucket: 0xabcdef…
+   * File Key: 0x1c64fd…
+   * Action: Delete
+   * ```
+   */
+  static buildIntentionMessage(
+    fileKey: `0x${string}`,
+    operation: FileOperation,
+    location: string,
+    bucketId: `0x${string}`,
+    size: bigint
+  ): string {
+    const name = StorageHubClient.OPERATION_NAMES[operation];
+    if (!name) {
+      throw new Error(`Unknown file operation: ${operation}`);
+    }
+    return [
+      `StorageHub File ${name} Request`,
+      "",
+      `File: ${location}`,
+      `Size: ${size.toString()} bytes`,
+      `Bucket: ${bucketId.toLowerCase()}`,
+      `File Key: ${fileKey.toLowerCase()}`,
+      `Action: ${name}`
+    ].join("\n");
+  }
+
+  /**
+   * Serialize FileOperationIntention and sign a human-readable message.
    */
   private async signIntention(
     fileKey: `0x${string}`,
-    operation: FileOperation
+    operation: FileOperation,
+    location: string,
+    bucketId: `0x${string}`,
+    size: bigint
   ): Promise<{
     signedIntention: readonly [`0x${string}`, number];
     signature: `0x${string}`;
@@ -225,14 +272,21 @@ export class StorageHubClient {
       throw new Error(`Invalid file key: expected 32 bytes, got ${fileKeyBytes.length} bytes`);
     }
 
-    const serialized = new Uint8Array([...fileKeyBytes, operation]);
     if (!this.walletClient.account) {
       throw new Error("Wallet client must have an account to sign messages");
     }
 
+    const message = StorageHubClient.buildIntentionMessage(
+      fileKey,
+      operation,
+      location,
+      bucketId,
+      size
+    );
+
     const signature = await this.walletClient.signMessage({
       account: this.walletClient.account,
-      message: { raw: serialized }
+      message
     });
 
     return {
@@ -467,7 +521,10 @@ export class StorageHubClient {
   async requestDeleteFile(fileInfo: FileInfo, options?: EvmWriteOptions): Promise<`0x${string}`> {
     const { signedIntention, signature } = await this.signIntention(
       fileInfo.fileKey,
-      FileOperation.Delete
+      FileOperation.Delete,
+      fileInfo.location,
+      fileInfo.bucketId,
+      fileInfo.size
     );
     const locationHex = this.validateStringLength(
       fileInfo.location,

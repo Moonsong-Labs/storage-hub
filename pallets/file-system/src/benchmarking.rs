@@ -2504,8 +2504,10 @@ mod benchmarks {
 
             // pre-verify signature
             let signed_intention_encoded = signed_intention.encode();
+            let context = Pallet::<T>::build_intention_context(&bucket_id, size, &location);
             let to_verify = <T as crate::Config>::IntentionMsgAdapter::bytes_to_verify(
                 &signed_intention_encoded,
+                &context,
             );
             let is_valid_pre_check = signature.verify(&to_verify[..], &user_account);
             ensure!(
@@ -2852,8 +2854,10 @@ mod benchmarks {
 
             // pre-verify signature
             let signed_intention_encoded = signed_intention.encode();
+            let context = Pallet::<T>::build_intention_context(&bucket_id, size, &location);
             let to_verify = <T as crate::Config>::IntentionMsgAdapter::bytes_to_verify(
                 &signed_intention_encoded,
+                &context,
             );
             let is_valid_pre_check = signature.verify(&to_verify[..], &user_account);
             ensure!(
