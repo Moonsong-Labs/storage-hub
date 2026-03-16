@@ -444,23 +444,21 @@ export function FileManager({
         const keysPromise =
           encryptionMode === 'password'
             ? await generateEncryptionKey({ kind: 'password', password: encryptionPassword })
-            : (() => {
-              const { message, challenge } = IKM.createEncryptionKeyMessage(
-                ENC_APP_NAME,
-                ENC_DOMAIN,
-                ENC_VERSION,
-                ENC_PURPOSE,
-                chainId,
-                walletAddress as `0x${string}`
-              );
-              return generateEncryptionKey({
+            : generateEncryptionKey({
                 kind: 'signature',
                 walletClient: walletClient as WalletClient,
                 account: walletAddress as `0x${string}`,
-                message,
-                challenge
+                createMessage: (ikmSalt) =>
+                  IKM.createEncryptionKeyMessage(
+                    ENC_APP_NAME,
+                    ENC_DOMAIN,
+                    ENC_VERSION,
+                    ENC_PURPOSE,
+                    chainId,
+                    walletAddress as `0x${string}`,
+                    ikmSalt
+                  ).message
               });
-            })();
         const keys = await keysPromise;
 
         setUploadState(prev => ({ ...prev, uploadProgress: 10 }));
@@ -877,7 +875,7 @@ export function FileManager({
       try {
         const { header } = readEncryptionHeader(combinedArray);
         const ikm = header.ikm;
-        const hasChallenge = !!header.challenge;
+        const hasChallenge = !!header.ikm_salt;
         if (ikm === 'password' || ikm === 'signature') {
           setDecryptPassword('');
           setDecryptState({
@@ -1716,11 +1714,11 @@ export function FileManager({
                       output: ts.writable,
                       getIkm: async (hdr) => {
                         if (hdr.ikm === 'password') {
-                          return IKM.fromPassword(decryptPassword).unwrap();
+                          return IKM.fromPassword(decryptPassword, hdr.ikm_salt).unwrap();
                         }
                         if (hdr.ikm === 'signature') {
                           if (!walletClient || !walletAddress) throw new Error('Wallet not connected');
-                          if (!hdr.challenge) throw new Error('Missing challenge in encrypted header');
+                          if (!hdr.ikm_salt) throw new Error('Missing ikm_salt in encrypted header');
                           const { message } = IKM.createEncryptionKeyMessage(
                             ENC_APP_NAME,
                             ENC_DOMAIN,
@@ -1728,7 +1726,7 @@ export function FileManager({
                             ENC_PURPOSE,
                             chainId,
                             walletAddress as `0x${string}`,
-                            hdr.challenge as any
+                            hdr.ikm_salt
                           );
                           const signature = await walletClient.signMessage({
                             account: walletAddress as `0x${string}`,
