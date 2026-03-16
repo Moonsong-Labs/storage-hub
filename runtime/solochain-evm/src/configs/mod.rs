@@ -302,6 +302,7 @@ impl pallet_session::historical::SessionManager<AccountId, ()> for NoChangesSess
 }
 
 impl pallet_session::historical::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
     type FullIdentification = ();
     type FullIdentificationOf = FullIdentificationOf;
 }
@@ -495,7 +496,6 @@ parameter_types! {
 }
 
 impl pallet_ethereum::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type StateRoot = pallet_ethereum::IntermediateStateRoot<Self::Version>;
     type PostLogContent = PostBlockAndTxnHashes;
     type ExtraDataLength = ConstU32<30>;
@@ -652,7 +652,6 @@ impl pallet_evm::Config for Runtime {
     type WithdrawOrigin = EnsureAddressNever<AccountId>;
     type AddressMapping = IdentityAddressMapping;
     type Currency = Balances;
-    type RuntimeEvent = RuntimeEvent;
     type PrecompilesType = Precompiles<Runtime>;
     type PrecompilesValue = PrecompilesValue;
     type ChainId = EvmChainId;
