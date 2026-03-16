@@ -188,7 +188,7 @@ export const AAD = {
 };
 
 function normalize(input: Uint8Array, context: string): Uint8Array {
-  return sha256(new Uint8Array([...new TextEncoder().encode(context), ...input]));
+  return sha256.create().update(new TextEncoder().encode(context)).update(input).digest();
 }
 
 export const IKM = {
