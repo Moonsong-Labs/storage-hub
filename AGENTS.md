@@ -18,11 +18,11 @@ StorageHub is a Substrate-based parachain for the Polkadot ecosystem, focused on
 cargo build --release
 
 # macOS cross-build (requires zig)
-pnpm i
-pnpm crossbuild:mac
+bun install
+bun run crossbuild:mac
 
 # Build Docker image
-pnpm docker:build
+bun run docker:build
 ```
 
 ### Tests
@@ -32,16 +32,16 @@ pnpm docker:build
 cargo test
 
 # Integration tests (requires Docker)
-pnpm test:node      # Solo node tests
-pnpm test:bspnet    # BSP network tests
-pnpm test:fullnet   # Full network tests
-pnpm test:user      # User interaction tests
+bun run test:node      # Solo node tests
+bun run test:bspnet    # BSP network tests
+bun run test:fullnet   # Full network tests
+bun run test:user      # User interaction tests
 
 # Run specific test with filter
-pnpm test:node:single # with FILTER env var
+bun run test:node:single # with FILTER env var
 
 # Zombienet tests
-pnpm zombie:test:native
+bun run zombie:test:native
 ```
 
 ### Linting and Formatting
@@ -52,17 +52,17 @@ cargo fmt --all -- --check
 cargo clippy --all-targets
 
 # JavaScript/TypeScript
-pnpm lint
-pnpm fmt
-pnpm fmt:fix
-pnpm typecheck
+bun run lint
+bun run fmt
+bun run fmt:fix
+bun run typecheck
 ```
 
 ### Type Generation
 
 ```bash
 # In /test directory
-pnpm typegen  # Generate TypeScript types from runtime
+bun run typegen  # Generate TypeScript types from runtime
 ```
 
 ## Architecture
@@ -100,25 +100,25 @@ The client uses an actor-based architecture (`/client/actors-framework`) with sp
    # Start dev node
    ../target/release/storage-hub --dev
    # or with Docker
-   pnpm docker:start
+   bun run docker:start
    ```
 
 2. **Running Networks**:
 
    ```bash
    # BSPNet (small test network)
-   pnpm docker:start:bspnet
+   bun run docker:start:bspnet
 
    # Full Zombienet
-   pnpm zombie:run:full:native
-   pnpm zombie:setup:native
+   bun run zombie:run:full:native
+   bun run zombie:setup:native
    ```
 
 3. **Before Committing**:
    - Run `cargo fmt --all`
    - Run `cargo clippy --all-targets`
    - Run relevant tests for your changes
-   - Update TypeScript types if runtime APIs changed: `pnpm typegen`
+   - Update TypeScript types if runtime APIs changed: `bun run --cwd test typegen`
 
 ## Event/Error Encoding Stability
 
@@ -138,7 +138,7 @@ The following pallets have encoding stability requirements: `Providers`, `FileSy
 
 ## Key Development Notes
 
-- The project uses a monorepo structure with both Rust (Cargo workspace) and TypeScript (pnpm workspace)
+- The project uses a monorepo structure with both Rust (Cargo workspace) and TypeScript (Bun workspace)
 - Docker is heavily used for testing to ensure consistency and isolation
 - When updating RuntimeAPIs or RPC calls, update `/types-bundle/src/rpc.ts` and `/types-bundle/src/runtime.ts`
 - BSP selection can be "gamed" in tests by choosing BSP IDs that match file fingerprints

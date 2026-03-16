@@ -14,10 +14,10 @@ The `types-bundle` package contains all the necessary type definitions and overr
 
 The following scripts are available for development and maintenance:
 
-- `pnpm fmt`: Format the codebase using Biome.
-- `pnpm fmt:fix`: Format and fix the codebase using Biome.
-- `pnpm tsc`: Run TypeScript compiler without emitting files.
-- `pnpm build`: Build the TypeScript project.
+- `bun run fmt`: Format the codebase using Biome.
+- `bun run fmt:fix`: Format and fix the codebase using Biome.
+- `bun run tsc`: Run TypeScript compiler without emitting files.
+- `bun run build`: Build the TypeScript project.
 
 ## Usage
 

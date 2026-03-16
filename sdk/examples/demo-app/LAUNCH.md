@@ -2,7 +2,7 @@
 
 ## Prerequisites
 - Docker installed and running
-- Node.js and pnpm installed
+- Bun installed
 - MetaMask browser extension
 
 ## Launch Commands
@@ -12,16 +12,16 @@
 cd sdk/examples/demo-app
 
 # Install dependencies
-pnpm install
+bun install
 
 # 1. Build StorageHub environment (first time only)
-pnpm env:build
+bun run env:build
 
 # 2. Start StorageHub services (in separate terminal)
-pnpm env:start
+bun run env:start
 
 # 3. Run the demo app (in another terminal)
-pnpm dev
+bun run dev
 ```
 
 ## Access
@@ -31,9 +31,9 @@ pnpm dev
 
 ## Stop Environment
 ```bash
-pnpm env:stop
+bun run env:stop
 ```
-Or press `Ctrl+C` in the terminal running `pnpm env:start`
+Or press `Ctrl+C` in the terminal running `bun run env:start`
 
 ## MetaMask Network Setup
 The demo will automatically add and switch to the StorageHub network when you connect your wallet.

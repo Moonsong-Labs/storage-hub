@@ -2,8 +2,8 @@ import '@polkadot/api-base/types/storage';
 import type { ApiTypes, AugmentedQuery, QueryableStorageEntry } from '@polkadot/api-base/types';
 import type { BTreeSet, Bytes, Null, Option, U256, U8aFixed, Vec, bool, u128, u32, u64, u8 } from '@polkadot/types-codec';
 import type { AnyNumber, ITuple } from '@polkadot/types-codec/types';
-import type { AccountId20, H160, H256 } from '@polkadot/types/interfaces/runtime';
-import type { EthereumBlock, EthereumReceiptReceiptV3, EthereumTransactionTransactionV2, FpRpcTransactionStatus, FrameSupportDispatchPerDispatchClassWeight, FrameSupportTokensMiscIdAmountRuntimeFreezeReason, FrameSupportTokensMiscIdAmountRuntimeHoldReason, FrameSystemAccountInfo, FrameSystemCodeUpgradeAuthorization, FrameSystemEventRecord, FrameSystemLastRuntimeUpgradeInfo, FrameSystemPhase, PalletBalancesAccountData, PalletBalancesBalanceLock, PalletBalancesReserveData, PalletEvmCodeMetadata, PalletFileSystemIncompleteStorageRequestMetadata, PalletFileSystemMoveBucketRequestMetadata, PalletFileSystemPendingFileDeletionRequest, PalletFileSystemPendingStopStoringRequest, PalletFileSystemStorageRequestBspsMetadata, PalletFileSystemStorageRequestMetadata, PalletGrandpaStoredPendingChange, PalletGrandpaStoredState, PalletNftsAttributeDeposit, PalletNftsAttributeNamespace, PalletNftsCollectionConfig, PalletNftsCollectionDetails, PalletNftsCollectionMetadata, PalletNftsItemConfig, PalletNftsItemDetails, PalletNftsItemMetadata, PalletNftsPendingSwap, PalletPaymentStreamsDynamicRatePaymentStream, PalletPaymentStreamsFixedRatePaymentStream, PalletPaymentStreamsProviderLastChargeableInfo, PalletProofsDealerCustomChallenge, PalletProofsDealerProofSubmissionRecord, PalletStorageProvidersBackupStorageProvider, PalletStorageProvidersBucket, PalletStorageProvidersMainStorageProvider, PalletStorageProvidersSignUpRequest, PalletStorageProvidersStorageProviderId, PalletStorageProvidersTopUpMetadata, PalletStorageProvidersValueProposition, PalletTransactionPaymentReleases, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersKey, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersValue, ShSolochainEvmRuntimeSessionKeys, SpConsensusBabeAppPublic, SpConsensusBabeBabeEpochConfiguration, SpConsensusBabeDigestsNextConfigDescriptor, SpConsensusBabeDigestsPreDigest, SpConsensusGrandpaAppPublic, SpCoreCryptoKeyTypeId, SpRuntimeDigest, SpStakingOffenceOffenceDetails, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
+import type { AccountId20, H160, H256, Perbill } from '@polkadot/types/interfaces/runtime';
+import type { EthereumBlock, EthereumReceiptReceiptV4, EthereumTransactionTransactionV3, FpRpcTransactionStatus, FrameSupportDispatchPerDispatchClassWeight, FrameSupportTokensMiscIdAmountRuntimeFreezeReason, FrameSupportTokensMiscIdAmountRuntimeHoldReason, FrameSystemAccountInfo, FrameSystemCodeUpgradeAuthorization, FrameSystemEventRecord, FrameSystemLastRuntimeUpgradeInfo, FrameSystemPhase, PalletBalancesAccountData, PalletBalancesBalanceLock, PalletBalancesReserveData, PalletEvmCodeMetadata, PalletFileSystemIncompleteStorageRequestMetadata, PalletFileSystemMoveBucketRequestMetadata, PalletFileSystemPendingFileDeletionRequest, PalletFileSystemPendingStopStoringRequest, PalletFileSystemStorageRequestBspsMetadata, PalletFileSystemStorageRequestMetadata, PalletGrandpaStoredPendingChange, PalletGrandpaStoredState, PalletNftsAttributeDeposit, PalletNftsAttributeNamespace, PalletNftsCollectionConfig, PalletNftsCollectionDetails, PalletNftsCollectionMetadata, PalletNftsItemConfig, PalletNftsItemDetails, PalletNftsItemMetadata, PalletNftsPendingSwap, PalletPaymentStreamsDynamicRatePaymentStream, PalletPaymentStreamsFixedRatePaymentStream, PalletPaymentStreamsProviderLastChargeableInfo, PalletProofsDealerCustomChallenge, PalletProofsDealerProofSubmissionRecord, PalletStorageProvidersBackupStorageProvider, PalletStorageProvidersBucket, PalletStorageProvidersMainStorageProvider, PalletStorageProvidersSignUpRequest, PalletStorageProvidersStorageProviderId, PalletStorageProvidersTopUpMetadata, PalletStorageProvidersValueProposition, PalletTransactionPaymentReleases, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersKey, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersValue, ShSolochainEvmRuntimeSessionKeys, SpConsensusBabeAppPublic, SpConsensusBabeBabeEpochConfiguration, SpConsensusBabeDigestsNextConfigDescriptor, SpConsensusBabeDigestsPreDigest, SpConsensusGrandpaAppPublic, SpCoreCryptoKeyTypeId, SpRuntimeDigest, SpStakingOffenceOffenceDetails, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
 import type { Observable } from '@polkadot/types/types';
 export type __AugmentedQuery<ApiType extends ApiTypes> = AugmentedQuery<ApiType, () => unknown>;
 export type __QueryableStorageEntry<ApiType extends ApiTypes> = QueryableStorageEntry<ApiType>;
@@ -207,7 +207,7 @@ declare module '@polkadot/api-base/types/storage' {
             /**
              * The current Ethereum receipts.
              **/
-            currentReceipts: AugmentedQuery<ApiType, () => Observable<Option<Vec<EthereumReceiptReceiptV3>>>, []> & QueryableStorageEntry<ApiType, []>;
+            currentReceipts: AugmentedQuery<ApiType, () => Observable<Option<Vec<EthereumReceiptReceiptV4>>>, []> & QueryableStorageEntry<ApiType, []>;
             /**
              * The current transaction statuses.
              **/
@@ -215,7 +215,7 @@ declare module '@polkadot/api-base/types/storage' {
             /**
              * Mapping from transaction index to transaction in the current building block.
              **/
-            pending: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<ITuple<[EthereumTransactionTransactionV2, FpRpcTransactionStatus, EthereumReceiptReceiptV3]>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
+            pending: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<ITuple<[EthereumTransactionTransactionV3, FpRpcTransactionStatus, EthereumReceiptReceiptV4]>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
             /**
              * Generic query
              **/
@@ -976,7 +976,7 @@ declare module '@polkadot/api-base/types/storage' {
              * disabled using binary search. It gets cleared when `on_session_ending` returns
              * a new set of identities.
              **/
-            disabledValidators: AugmentedQuery<ApiType, () => Observable<Vec<u32>>, []> & QueryableStorageEntry<ApiType, []>;
+            disabledValidators: AugmentedQuery<ApiType, () => Observable<Vec<ITuple<[u32, Perbill]>>>, []> & QueryableStorageEntry<ApiType, []>;
             /**
              * The owner of a key. The key is the `KeyTypeId` + the encoded key.
              **/
@@ -1078,6 +1078,16 @@ declare module '@polkadot/api-base/types/storage' {
              * Extrinsics data for the current block (maps an extrinsic's index to its data).
              **/
             extrinsicData: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Bytes>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
+            /**
+             * The weight reclaimed for the extrinsic.
+             *
+             * This information is available until the end of the extrinsic execution.
+             * More precisely this information is removed in `note_applied_extrinsic`.
+             *
+             * Logic doing some post dispatch weight reduction must update this storage to avoid duplicate
+             * reduction.
+             **/
+            extrinsicWeightReclaimed: AugmentedQuery<ApiType, () => Observable<SpWeightsWeightV2Weight>, []> & QueryableStorageEntry<ApiType, []>;
             /**
              * Whether all inherents have been applied.
              **/

@@ -14,7 +14,7 @@ core/src/abi/*.abi.json
 
 # Logs
 npm-debug.log*
-pnpm-debug.log*
+bun-debug.log*
 
 # WASM generated files
 **/wasm/pkg/

@@ -85,7 +85,7 @@ Any new Structs or ErrorEnums can be defined at `/src/types.ts` , using existing
 Now, navigate to the `/test` directory and run:
 
 ```sh
-pnpm typegen
+bun run --cwd test typegen
 ```
 
 From there you should be able to see the new RPC in your tests for the `EnrichedBspApi` object.

@@ -74,7 +74,6 @@ sp-io = { workspace = true }
 sp-offchain = { workspace = true }
 sp-runtime = { workspace = true }
 sp-session = { workspace = true }
-sp-std = { workspace = true }
 sp-tracing = { workspace = true }
 sp-transaction-pool = { workspace = true }
 sp-trie = { workspace = true }
@@ -96,6 +95,7 @@ xcm-simulator = { workspace = true }
 cumulus-pallet-aura-ext = { workspace = true }
 cumulus-pallet-parachain-system = { workspace = true }
 cumulus-pallet-session-benchmarking = { workspace = true }
+cumulus-pallet-weight-reclaim = { workspace = true }
 cumulus-pallet-xcm = { workspace = true }
 cumulus-pallet-xcmp-queue = { workspace = true }
 cumulus-primitives-aura = { workspace = true }
@@ -120,6 +120,7 @@ std = [
     "cumulus-primitives-aura/std",
     "cumulus-primitives-core/std",
     "cumulus-primitives-utility/std",
+    "cumulus-pallet-weight-reclaim/std",
     "cumulus-primitives-storage-weight-reclaim/std",
     "frame-benchmarking?/std",
     "frame-executive/std",
@@ -169,7 +170,6 @@ std = [
     "sp-offchain/std",
     "sp-runtime/std",
     "sp-session/std",
-    "sp-std/std",
     "sp-tracing/std",
     "sp-transaction-pool/std",
     "sp-version/std",

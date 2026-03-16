@@ -208,7 +208,7 @@ You can also override individual values via CLI flags such as `--host`, `--port`
 
 ## Build
 
-Prereqs: Rust toolchain, pnpm (for cross-build script), Docker (for container build).
+Prereqs: Rust toolchain, Bun (for cross-build script), Docker (for container build).
 
 - Standard build (Linux/CI or non-macOS):
   - From repo root:
@@ -217,8 +217,8 @@ Prereqs: Rust toolchain, pnpm (for cross-build script), Docker (for container bu
 - macOS cross build (to Linux target used in Docker):
   - From repo root:
     - `cd test`
-    - `pnpm install` (first time)
-    - `pnpm crossbuild:mac:backend`
+    - `bun install` (first time)
+    - `bun run crossbuild:mac:backend`
 
 Artifacts:
 
@@ -229,7 +229,7 @@ Artifacts:
 
 - From repo root:
   - `cd test`
-  - `pnpm docker:build:backend`
+  - `bun run docker:build:backend`
 
 This uses the prebuilt backend artifact (via cross-build on macOS or cargo build on Linux) and `docker/storage-hub-msp-backend.Dockerfile` to produce the backend image.
 

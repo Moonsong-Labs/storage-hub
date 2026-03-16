@@ -45,29 +45,29 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
-      - run: pnpm install
-      - run: pnpm fmt
+      - uses: ./.github/workflow-templates/setup-bun
+      - run: bun install --frozen-lockfile
+      - run: bun run fmt
 
   check-ts-lint:
     name: "Check lint with biome"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
-      - run: pnpm install
-      - run: pnpm lint
+      - uses: ./.github/workflow-templates/setup-bun
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
 
   typecheck-ts:
     name: "Typecheck with tsc"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/workflow-templates/setup-pnpm
-      - run: pnpm install
+      - uses: ./.github/workflow-templates/setup-bun
+      - run: bun install --frozen-lockfile
       - run: |
           cd test
-          pnpm typecheck
+          bun run typecheck
 
   check-cargo-sort:
     name: "Check Cargo sort"

@@ -374,7 +374,7 @@ where
             }
         }
 
-        if confirm_storing_requests_with_chunks_to_prove.len() == 0 {
+        if confirm_storing_requests_with_chunks_to_prove.is_empty() {
             return Ok(
                 "Skipped ProcessConfirmStoringRequest: no keys to confirm after querying chunks"
                     .to_string(),

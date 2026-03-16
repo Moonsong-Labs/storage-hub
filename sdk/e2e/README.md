@@ -31,15 +31,15 @@ sdk/e2e/
 Build SDK once so the browser import map resolves `@storagehub-sdk/core` and `@storagehub/wasm`:
 
 ```bash
-pnpm -C sdk build
+bun run --cwd sdk build
 ```
 
 Install e2e deps and Playwright (Chromium):
 
 ```bash
 cd sdk/e2e
-pnpm install
-pnpm exec playwright install --with-deps chromium
+bun install
+bunx playwright install --with-deps chromium
 ```
 
 ## 🧪 Running
@@ -48,15 +48,15 @@ Run tests:
 
 ```bash
 # All tests
-pnpm -C sdk build
-cd sdk/e2e && pnpm install
-pnpm exec playwright test
+bun run --cwd sdk build
+cd sdk/e2e && bun install
+bunx playwright test
 
 # Only MetaMask
-pnpm exec playwright test --project metamask
+bunx playwright test --project metamask
 
 # Only MSP
-pnpm exec playwright test --project msp
+bunx playwright test --project msp
 ```
 
 ## 🔧 How it works
@@ -76,12 +76,12 @@ pnpm exec playwright test --project msp
 
 - `#connect` never appears: ensure the server serves the sdk root, and the test URL is `/e2e/page/index.html`.
 - Module specifier errors (e.g., `ethers`): confirm the import map in `page/index.html`.
-- SDK not found: run `pnpm -C sdk build` to create `core/dist` and `core/wasm/pkg`.
-- Playwright binary not found: use `pnpm exec playwright ...` (pnpm resolves local binaries).
+- SDK not found: run `bun run --cwd sdk build` to create `core/dist` and `core/wasm/pkg`.
+- Playwright binary not found: use `bunx playwright ...`.
 
 ## 🧰 CI notes
 
-- Build SDK before tests (`pnpm -C sdk build`).
+- Build SDK before tests (`bun run --cwd sdk build`).
 - Playwright webServer auto-starts the static server; reports/artifacts are written to `/tmp`.
 - CI runs headed browsers under Xvfb.
 

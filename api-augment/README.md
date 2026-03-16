@@ -14,9 +14,9 @@ This package is used to generate TypeScript types for the Storage Hub Runtime us
 To generate the types, run the following commands:
 
 ```sh
-pnpm i
-pnpm scrape
-pnpm generate:all
+bun install
+bun run scrape
+bun run generate:all
 ```
 
 ## Importing into Files for Type Completion
@@ -28,20 +28,20 @@ import "@storagehub/api-augment";
 ```
 
 >[!TIP]  
-> This step is also achievable by running `pnpm typegen` from within the `/test` folder.
+> This step is also achievable by running `bun run --cwd test typegen`.
 
 ## Available Scripts
 
 In addition to the generation scripts, the following scripts are available:
 
-- `pnpm fmt`: Format the codebase using Biome.
-- `pnpm fmt:fix`: Format and fix the codebase using Biome.
-- `pnpm tsc`: Run TypeScript compiler without emitting files.
-- `pnpm build`: Build the TypeScript project.
-- `pnpm scrape`: Scrape metadata from the local Storage Hub node.
-- `pnpm generate:all`: Generate all types (definitions and metadata).
-- `pnpm generate:defs`: Generate type definitions.
-- `pnpm generate:meta`: Generate metadata types.
+- `bun run fmt`: Format the codebase using Biome.
+- `bun run fmt:fix`: Format and fix the codebase using Biome.
+- `bun run tsc`: Run TypeScript compiler without emitting files.
+- `bun run build`: Build the TypeScript project.
+- `bun run scrape`: Scrape metadata from the local Storage Hub node.
+- `bun run generate:all`: Generate all types (definitions and metadata).
+- `bun run generate:defs`: Generate type definitions.
+- `bun run generate:meta`: Generate metadata types.
 
 ## CI/CD Workflow
 
