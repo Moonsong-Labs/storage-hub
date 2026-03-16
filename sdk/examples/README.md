@@ -35,11 +35,11 @@ Backend defaults to `http://127.0.0.1:8080`.
 ```bash
 # Node example
 cd sdk/examples/node
-pnpm install
-pnpm start
+bun install
+bun run start
 
 # Next.js example
 cd sdk/examples/nextjs
-pnpm install
-pnpm dev
+bun install
+bun run dev
 ```

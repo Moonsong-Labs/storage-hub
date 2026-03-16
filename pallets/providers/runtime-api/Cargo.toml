@@ -1,12 +1,12 @@
 [package]
-name = "pallet-storage-providers-runtime-api"
+authors = { workspace = true }
 description = "Crate exposing StorageProviders pallet related helper runtime API calls."
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "pallet-storage-providers-runtime-api"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
@@ -19,7 +19,6 @@ codec = { workspace = true }
 scale-info = { workspace = true }
 sp-api = { workspace = true }
 sp-runtime = { workspace = true }
-sp-std = { workspace = true }
 
 [features]
 default = ["std"]

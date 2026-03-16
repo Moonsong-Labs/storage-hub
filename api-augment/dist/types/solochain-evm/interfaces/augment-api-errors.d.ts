@@ -121,6 +121,10 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             BalanceLow: AugmentedError<ApiType>;
             /**
+             * Address not allowed to deploy contracts either via CREATE or CALL(CREATE).
+             **/
+            CreateOriginNotAllowed: AugmentedError<ApiType>;
+            /**
              * Calculating total fee overflowed
              **/
             FeeOverflow: AugmentedError<ApiType>;

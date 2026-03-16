@@ -59,9 +59,13 @@ await describeMspNet("User: Send file to provider", ({ before, createUserApi, it
 
     await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
+    // Note: litep2p (default in stable2503+) maps paused-peer errors to `Refused`,
+    // which logs "Final batch upload rejected by peer". The old libp2p backend returned
+    // `Network(Timeout)` instead, logging "Unable to upload final batch to peer".
     await userApi.docker.waitForLog({
-      searchString: "Unable to upload final batch to peer",
-      containerName: userApi.shConsts.NODE_INFOS.user.containerName
+      searchString: "Final batch upload rejected by peer",
+      containerName: userApi.shConsts.NODE_INFOS.user.containerName,
+      timeout: 120000
     });
 
     // Resume the MSP container, otherwise the test won't exit correctly as it won't be able to connect to the MSP to clean it up.

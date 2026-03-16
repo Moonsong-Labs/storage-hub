@@ -1,12 +1,12 @@
 [package]
-name = "pallet-bucket-nfts"
+authors = { workspace = true }
 description = "Pallet for managing non-fungible tokens (NFTs) in a bucket."
-version = "0.4.0"
+edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-authors = { workspace = true }
+name = "pallet-bucket-nfts"
 repository = { workspace = true }
-edition = { workspace = true }
+version = "0.4.0"
 
 [lints]
 workspace = true
@@ -26,12 +26,11 @@ frame-system = { workspace = true }
 
 pallet-balances = { workspace = true, optional = true }
 pallet-file-system = { workspace = true, optional = true }
-pallet-storage-providers = { workspace = true, optional = true }
 pallet-nfts = { workspace = true }
-sp-keyring = { workspace = true }
+pallet-storage-providers = { workspace = true, optional = true }
 sp-core = { workspace = true }
+sp-keyring = { workspace = true }
 sp-runtime = { workspace = true }
-sp-std = { workspace = true }
 
 # Local
 shp-data-price-updater = { workspace = true }
@@ -42,8 +41,8 @@ shp-traits = { workspace = true }
 serde = { workspace = true }
 
 pallet-file-system = { workspace = true }
-pallet-storage-providers = { workspace = true }
 pallet-payment-streams = { workspace = true }
+pallet-storage-providers = { workspace = true }
 shp-constants = { workspace = true }
 shp-treasury-funding = { workspace = true }
 

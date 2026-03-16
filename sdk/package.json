@@ -1,30 +1,32 @@
 {
   "name": "@storagehub-sdk/root",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.6.3",
   "description": "Workspace root for StorageHub SDK monorepo",
   "type": "module",
+  "packageManager": "bun@1.3.10",
   "workspaces": [
     "core",
     "msp-client",
     "e2e",
     "examples/node",
-    "examples/nextjs"
+    "examples/nextjs",
+    "examples/demo-app"
   ],
   "scripts": {
-    "build": "pnpm run build:core && pnpm run build:msp-client",
-    "build:core": "pnpm --filter ./core run build",
-    "build:msp-client": "pnpm --filter ./msp-client run build",
+    "build": "bun run build:core && bun run build:msp-client",
+    "build:core": "bun run --filter '@storagehub-sdk/core' build",
+    "build:msp-client": "bun run --filter '@storagehub-sdk/msp-client' build",
     "clean": "node scripts/clean.js",
-    "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
-    "fmt": "pnpm -r fmt",
-    "fmt:fix": "pnpm -r fmt:fix",
-    "lint": "pnpm -r lint",
-    "lint:fix": "pnpm -r lint:fix",
-    "test": "pnpm run test:core && pnpm run test:msp-client",
-    "test:core": "pnpm --filter ./core run test -- --run",
-    "test:msp-client": "pnpm --filter ./msp-client run test -- --run",
-    "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck"
+    "coverage": "bun run --filter '@storagehub-sdk/core' coverage -- --run && bun run --filter '@storagehub-sdk/msp-client' coverage -- --run",
+    "fmt": "bun run --workspaces --if-present --sequential fmt",
+    "fmt:fix": "bun run --workspaces --if-present --sequential fmt:fix",
+    "lint": "bun run --workspaces --if-present --sequential lint",
+    "lint:fix": "bun run --workspaces --if-present --sequential lint:fix",
+    "test": "bun run test:core && bun run test:msp-client",
+    "test:core": "bun run --filter '@storagehub-sdk/core' test -- --run",
+    "test:msp-client": "bun run --filter '@storagehub-sdk/msp-client' test -- --run",
+    "typecheck": "bun run --filter '@storagehub-sdk/core' typecheck && bun run --filter '@storagehub-sdk/msp-client' typecheck"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.4",
@@ -34,6 +36,9 @@
     "typescript": "~5.5.4",
     "vitest": "^3.2.4"
   },
+  "trustedDependencies": [
+    "esbuild"
+  ],
   "engines": {
     "node": ">=22"
   }

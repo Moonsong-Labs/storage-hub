@@ -8,6 +8,7 @@ await describeMspNet(
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
     let bucketId: H256;
+    let fileKey: string;
 
     before(async () => {
       userApi = await createUserApi();
@@ -29,6 +30,7 @@ await describeMspNet(
       bucketId = newBucketEventDataBlob.bucketId;
 
       const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
+      fileKey = fileMetadata.fileKey;
 
       // Wait for MSP to download file from user
       await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
@@ -138,6 +140,15 @@ await describeMspNet(
         lambda: async () =>
           (await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString())).isNone
       });
+
+      // Verify the file is no longer in the MSP's file storage
+      await mspApi.wait.fileDeletionFromFileStorage(fileKey);
+
+      // Verify the forest storage has been fully removed
+      const isPresent = await mspApi.rpc.storagehubclient.isForestStoragePresent(
+        bucketId.toString()
+      );
+      strictEqual(isPresent.isFalse, true, "Forest storage should no longer be present");
     });
   }
 );

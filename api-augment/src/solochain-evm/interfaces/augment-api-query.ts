@@ -21,11 +21,11 @@ import type {
   u8
 } from "@polkadot/types-codec";
 import type { AnyNumber, ITuple } from "@polkadot/types-codec/types";
-import type { AccountId20, H160, H256 } from "@polkadot/types/interfaces/runtime";
+import type { AccountId20, H160, H256, Perbill } from "@polkadot/types/interfaces/runtime";
 import type {
   EthereumBlock,
-  EthereumReceiptReceiptV3,
-  EthereumTransactionTransactionV2,
+  EthereumReceiptReceiptV4,
+  EthereumTransactionTransactionV3,
   FpRpcTransactionStatus,
   FrameSupportDispatchPerDispatchClassWeight,
   FrameSupportTokensMiscIdAmountRuntimeFreezeReason,
@@ -373,7 +373,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       currentReceipts: AugmentedQuery<
         ApiType,
-        () => Observable<Option<Vec<EthereumReceiptReceiptV3>>>,
+        () => Observable<Option<Vec<EthereumReceiptReceiptV4>>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -396,7 +396,7 @@ declare module "@polkadot/api-base/types/storage" {
         ) => Observable<
           Option<
             ITuple<
-              [EthereumTransactionTransactionV2, FpRpcTransactionStatus, EthereumReceiptReceiptV3]
+              [EthereumTransactionTransactionV3, FpRpcTransactionStatus, EthereumReceiptReceiptV4]
             >
           >
         >,
@@ -1611,7 +1611,11 @@ declare module "@polkadot/api-base/types/storage" {
        * disabled using binary search. It gets cleared when `on_session_ending` returns
        * a new set of identities.
        **/
-      disabledValidators: AugmentedQuery<ApiType, () => Observable<Vec<u32>>, []> &
+      disabledValidators: AugmentedQuery<
+        ApiType,
+        () => Observable<Vec<ITuple<[u32, Perbill]>>>,
+        []
+      > &
         QueryableStorageEntry<ApiType, []>;
       /**
        * The owner of a key. The key is the `KeyTypeId` + the encoded key.
@@ -1774,6 +1778,21 @@ declare module "@polkadot/api-base/types/storage" {
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;
+      /**
+       * The weight reclaimed for the extrinsic.
+       *
+       * This information is available until the end of the extrinsic execution.
+       * More precisely this information is removed in `note_applied_extrinsic`.
+       *
+       * Logic doing some post dispatch weight reduction must update this storage to avoid duplicate
+       * reduction.
+       **/
+      extrinsicWeightReclaimed: AugmentedQuery<
+        ApiType,
+        () => Observable<SpWeightsWeightV2Weight>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * Whether all inherents have been applied.
        **/

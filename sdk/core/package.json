@@ -1,6 +1,6 @@
 {
   "name": "@storagehub-sdk/core",
-  "version": "0.6.1",
+  "version": "0.6.3",
   "description": "Core primitives for StorageHub SDK (types, crypto, filemanager, storage, wasm bindings)",
   "type": "module",
   "main": "./dist/index.node.js",
@@ -24,7 +24,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node ./build.js && pnpm run build:types",
+    "build": "node ./build.js && bun run build:types",
     "build:abi": "node scripts/compile-abi.js",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
     "clean": "rm -rf dist node_modules wasm/pkg/* src/abi/*.abi.json",
@@ -34,7 +34,7 @@
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
     "lint:fix": "biome lint . --write",
-    "prebuild": "pnpm run build:abi",
+    "prebuild": "bun run build:abi",
     "test": "vitest",
     "typecheck": "tsc --noEmit"
   },
