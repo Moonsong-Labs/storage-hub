@@ -122,7 +122,10 @@ pub mod pallet {
                         ),
                         // As far as the caller is concerned, this was dispatched without error, so
                         // we just report the weight used.
-                        Outcome::Incomplete { used, error: instruction_error } => (
+                        Outcome::Incomplete {
+                            used,
+                            error: instruction_error,
+                        } => (
                             Ok(used),
                             Event::Fail {
                                 message_id: Some(hash),
