@@ -6,10 +6,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 const WRITE_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
 
 export async function generateRandomFile(path: string, sizeMB: number): Promise<void> {
-  if (existsSync(path)) return;
-
   if (existsSync(path)) {
-    // Optional but very useful during benchmarks
     console.log(`[test] Skipping existing file: ${path}`);
     return;
   }
