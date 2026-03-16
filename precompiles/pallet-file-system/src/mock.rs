@@ -253,7 +253,6 @@ impl Randomness<H256, BlockNumber> for MockRandomness {
 
 /****** Commit-Reveal Randomness pallet ******/
 impl pallet_cr_randomness::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type SeedCommitment = H256;
     type Seed = H256;
@@ -309,7 +308,6 @@ parameter_types! {
 }
 
 impl pallet_payment_streams::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
@@ -367,7 +365,6 @@ parameter_types! {
 }
 
 impl pallet_storage_providers::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
@@ -455,7 +452,6 @@ parameter_types! {
 }
 
 impl pallet_proofs_dealer::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
@@ -558,7 +554,6 @@ impl Convert<Balance, BlockNumber> for SaturatingBalanceToBlockNumber {
 }
 
 impl pallet_bucket_nfts::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
@@ -578,7 +573,6 @@ parameter_types! {
 }
 
 impl pallet_file_system::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type Providers = Providers;
     type ProofDealer = ProofsDealer;

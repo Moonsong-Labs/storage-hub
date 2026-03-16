@@ -122,7 +122,6 @@ parameter_types! {
 }
 
 impl mock_message_queue::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type XcmExecutor = XcmExecutor<XcmConfig>;
 }
 
