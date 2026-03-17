@@ -1065,12 +1065,18 @@ where
     /// - Root mismatch: logs an error. Does NOT emit `CheckBucketFileStorage` because the
     ///   local forest is incorrect and cannot be used as a reference for file storage healing.
     ///
-    /// **Must only be called after the node is caught up** (`self.caught_up == true`).
+    /// **Must only be called after the node is caught up, otherwise this will return early and log an error** (`self.caught_up == true`).
     pub(crate) async fn ensure_bucket_forest_verified(
         &mut self,
         bucket_id: &BucketId<Runtime>,
         expected_root: shc_common::types::ForestRoot<Runtime>,
     ) {
+        // Check that this node is caught up.
+        if !self.caught_up {
+            error!(target: LOG_TARGET, "ensure_bucket_forest_verified called but node is not caught up");
+            return;
+        }
+
         // Already verified, so nothing to do.
         if let Some(ManagedProvider::Msp(h)) = &self.maybe_managed_provider {
             if h.verified_buckets.contains(bucket_id) {
