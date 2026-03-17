@@ -145,8 +145,19 @@ pub struct File {
     pub tx_hash: Option<Vec<u8>>,
     /// Number of BSPs required from the storage request that created this file record.
     pub bsps_required: i32,
-    /// Rolling counter tracking the user's desired replication level for this file key.
-    /// Computed as `max(previous_desired, current_bsp_count + bsps_required)` for user-initiated SRs.
+    /// Rolling counter tracking the user's desired replication level for this file key.  
+    ///  
+    /// Computed as `max(previous_desired, current_bsp_count + bsps_required)` for user-initiated SRs.  
+    /// Where:  
+    /// - `previous_desired` is the desired replication target set up to the previous storage request  
+    ///   for this file key. Remember there can be multiple storage requests for the same file key, for  
+    ///   example to increase the number of replicas, or replace a BSP that has become inactive.  
+    /// - `current_bsp_count` is the number of BSPs currently storing the file key.  
+    /// - `bsps_required` is the number of BSPs required in the new storage request for this file key.  
+    ///  
+    /// For instance, if the previous desired replication target was 2, and the current BSP count is 1,  
+    /// and the new storage request requires 2 more BSP, then the desired replication target will be  
+    /// `max(2, 1 + 2) = 3`.  
     pub desired_replicas: i32,
 }
 
