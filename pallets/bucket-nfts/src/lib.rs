@@ -23,7 +23,7 @@ extern crate alloc;
 #[frame_support::pallet]
 pub mod pallet {
     use crate::weights::WeightInfo;
-    use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
+    use frame_support::dispatch::DispatchResult;
     use frame_system::pallet_prelude::*;
     #[cfg(feature = "runtime-benchmarks")]
     use sp_core::H256;

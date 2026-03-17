@@ -1493,7 +1493,7 @@ where
             ));
     }
 
-    let (relay_chain_interface, collator_key, relay_network_service, relay_req_receiver) =
+    let (relay_chain_interface, collator_key, _relay_network_service, _relay_req_receiver) =
         build_relay_chain_interface(
             polkadot_config,
             &parachain_config,
