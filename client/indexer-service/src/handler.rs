@@ -461,10 +461,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // System-initiated SRs (msp_id is None) carry forward the previous desired value.
                 // User-initiated SRs (msp_id is Some) apply: max(prev_desired, current_bsp_count + bsps_required).
                 let is_system_sr = msp_id.is_none();
-                let bsps_required_val: i32 = {
-                    let val: u64 = (*bsps_required).into();
-                    i32::try_from(val).unwrap_or(i32::MAX)
-                };
+
+                // The assumption in this conversion is that the bsps_required is always less than i32::MAX = 2^31 - 1 = 2,147,483,647.
+                let bsps_required_val: i32 =
+                    (*bsps_required).saturated_into::<u64>().saturated_into();
 
                 let prev_desired =
                     File::get_max_desired_replicas_by_file_key(conn, file_key.as_ref().to_vec())
@@ -484,7 +484,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                                 warn!(target: LOG_TARGET, "Failed to count BSP associations for file_key, defaulting to 0: {:?}", e);
                                 0
                             }) as i32;
-                    std::cmp::max(prev_desired, current_bsp_count + bsps_required_val)
+                    std::cmp::max(
+                        prev_desired,
+                        current_bsp_count.saturating_add(bsps_required_val),
+                    )
                 };
 
                 File::create(
