@@ -186,7 +186,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify the fixed-rate payment stream creation event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::FixedRatePaymentStreamCreated {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::FixedRatePaymentStreamCreated {
                 user_account: user_account.clone(),
                 provider_id,
                 rate: rate.into(),
@@ -273,7 +273,7 @@ mod benchmarks {
         let amount_charged: BalanceOf<T> = initial_rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
                 / GIGAUNIT.into());
-        let charge_event = <T as pallet::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
             user_account: user_account.clone(),
             provider_id,
             amount: amount_charged,
@@ -283,7 +283,7 @@ mod benchmarks {
         frame_system::Pallet::<T>::assert_has_event(charge_event.into());
         // Verify the fixed-rate payment stream update event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::FixedRatePaymentStreamUpdated {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::FixedRatePaymentStreamUpdated {
                 user_account: user_account.clone(),
                 provider_id,
                 new_rate: new_rate.into(),
@@ -346,7 +346,7 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the charge event was emitted.
-        let charge_event = <T as pallet::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
             user_account: user_account.clone(),
             provider_id,
             amount: rate.into(),
@@ -356,7 +356,7 @@ mod benchmarks {
         frame_system::Pallet::<T>::assert_has_event(charge_event.into());
         // Verify the fixed-rate payment stream deletion event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::FixedRatePaymentStreamDeleted {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::FixedRatePaymentStreamDeleted {
                 user_account: user_account.clone(),
                 provider_id,
             });
@@ -402,7 +402,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify the dynamic-rate payment stream creation event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamCreated {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamCreated {
                 user_account: user_account.clone(),
                 provider_id,
                 amount_provided: amount_provided.into(),
@@ -492,7 +492,7 @@ mod benchmarks {
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (initial_amount_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
                 / GIGAUNIT.into());
-        let charge_event = <T as pallet::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
             user_account: user_account.clone(),
             provider_id,
             amount: amount_charged,
@@ -502,7 +502,7 @@ mod benchmarks {
         frame_system::Pallet::<T>::assert_has_event(charge_event.into());
         // Verify the dynamic-rate payment stream update event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamUpdated {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamUpdated {
                 user_account: user_account.clone(),
                 provider_id,
                 new_amount_provided: new_amount_provided.into(),
@@ -584,7 +584,7 @@ mod benchmarks {
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
                 / GIGAUNIT.into());
-        let charge_event = <T as pallet::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
             user_account: user_account.clone(),
             provider_id,
             amount: amount_charged,
@@ -595,7 +595,7 @@ mod benchmarks {
 
         // Verify the dynamic-rate payment stream deletion event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamDeleted {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamDeleted {
                 user_account: user_account.clone(),
                 provider_id,
             });
@@ -671,7 +671,7 @@ mod benchmarks {
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
                 / GIGAUNIT.into());
-        let charge_event = <T as pallet::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
             user_account: user_account.clone(),
             provider_id,
             amount: amount_charged,
@@ -760,7 +760,7 @@ mod benchmarks {
                 / GIGAUNIT.into());
         for user_account in user_accounts.iter() {
             let charge_event =
-                <T as pallet::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+                <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
                     user_account: user_account.clone(),
                     provider_id,
                     amount: amount_charged,
@@ -870,7 +870,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the user paid all debts event was emitted for the user
         let user_paid_debts_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::UserPaidAllDebts {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::UserPaidAllDebts {
                 who: user_account.clone(),
             });
         frame_system::Pallet::<T>::assert_has_event(user_paid_debts_event.into());
@@ -913,7 +913,7 @@ mod benchmarks {
         assert!(!UsersWithoutFunds::<T>::contains_key(user_account.clone()));
 
         // Verify that the `UserSolvent` event was emitted
-        let user_solvent_event = <T as pallet::Config>::RuntimeEvent::from(Event::UserSolvent {
+        let user_solvent_event = <T as frame_system::Config>::RuntimeEvent::from(Event::UserSolvent {
             who: user_account.clone(),
         });
         frame_system::Pallet::<T>::assert_has_event(user_solvent_event.into());

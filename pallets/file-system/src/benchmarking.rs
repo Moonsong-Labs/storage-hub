@@ -146,7 +146,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketRequested {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::MoveBucketRequested {
                 who: user,
                 bucket_id,
                 new_msp_id,
@@ -221,7 +221,7 @@ mod benchmarks {
         );
 
         // Ensure the expected event was emitted.
-        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketAccepted {
+        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::MoveBucketAccepted {
             bucket_id,
             old_msp_id: Some(initial_msp_id),
             new_msp_id,
@@ -287,7 +287,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::BucketPrivacyUpdated {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BucketPrivacyUpdated {
                 who: user,
                 bucket_id,
                 private: true,
@@ -353,7 +353,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::NewCollectionAndAssociation {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::NewCollectionAndAssociation {
                 who: user,
                 bucket_id,
                 collection_id: new_collection_id,
@@ -409,7 +409,7 @@ mod benchmarks {
         assert!(!pallet_nfts::Collection::<T>::contains_key(collection_id));
 
         // Ensure the expected event was emitted.
-        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::BucketDeleted {
+        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::BucketDeleted {
             who: user,
             bucket_id,
             maybe_collection_id: Some(collection_id),
@@ -936,7 +936,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::AcceptedBspVolunteer {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::AcceptedBspVolunteer {
                 bsp_id,
                 multiaddresses: bsp_multiaddresses,
                 bucket_id,
@@ -1187,7 +1187,7 @@ mod benchmarks {
         // Ensure the expected events were emitted.
         for file_key in file_keys_to_confirm.clone() {
             let expected_event =
-                <T as pallet::Config>::RuntimeEvent::from(Event::StorageRequestFulfilled {
+                <T as frame_system::Config>::RuntimeEvent::from(Event::StorageRequestFulfilled {
                     file_key,
                 });
             frame_system::Pallet::<T>::assert_has_event(expected_event.into());
@@ -1195,7 +1195,7 @@ mod benchmarks {
 
         let new_bsp_root = pallet_storage_providers::Pallet::<T>::get_root(bsp_id).unwrap();
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::BspConfirmedStoring {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BspConfirmedStoring {
                 who: bsp_account,
                 bsp_id,
                 confirmed_file_keys: confirmed_file_keys_with_metadata.try_into().unwrap(),
@@ -1295,7 +1295,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestedToStopStoring {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BspRequestedToStopStoring {
                 bsp_id,
                 file_key,
                 owner: user_account,
@@ -1461,7 +1461,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::BspConfirmStoppedStoring {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BspConfirmStoppedStoring {
                 bsp_id,
                 file_key,
                 new_root: new_bsp_root,
@@ -1638,7 +1638,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::SpStopStoringInsolventUser {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::SpStopStoringInsolventUser {
                 sp_id: bsp_id,
                 file_key,
                 new_root: new_bsp_root,
@@ -1805,7 +1805,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::SpStopStoringInsolventUser {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::SpStopStoringInsolventUser {
                 sp_id: msp_id,
                 file_key,
                 new_root: new_bucket_root,
@@ -1906,7 +1906,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted.
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::MspStopStoringBucketInsolventUser {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::MspStopStoringBucketInsolventUser {
                 msp_id,
                 owner: user.clone(),
                 bucket_id,
@@ -2071,7 +2071,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::StorageRequestExpired { file_key });
+            <T as frame_system::Config>::RuntimeEvent::from(Event::StorageRequestExpired { file_key });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Ensure the Storage Request no longer exists in storage
@@ -2194,7 +2194,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::StorageRequestRejected {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::StorageRequestRejected {
                 file_key,
                 msp_id,
                 bucket_id,
@@ -2260,7 +2260,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketRequestExpired {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::MoveBucketRequestExpired {
                 bucket_id,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -2697,7 +2697,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::BucketFileDeletionsCompleted {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BucketFileDeletionsCompleted {
                 user: user_account.clone(),
                 file_keys: file_keys_bounded.clone(),
                 bucket_id,
@@ -3021,7 +3021,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::BspFileDeletionsCompleted {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BspFileDeletionsCompleted {
                 users: users_bounded,
                 file_keys: file_keys_bounded.clone(),
                 bsp_id,
@@ -3256,7 +3256,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::BucketFileDeletionsCompleted {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BucketFileDeletionsCompleted {
                 user: user_account.clone(),
                 file_keys: file_keys_bounded_clone,
                 bucket_id,
@@ -3483,7 +3483,7 @@ mod benchmarks {
 
         // Ensure the expected event was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::BspFileDeletionsCompleted {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BspFileDeletionsCompleted {
                 users: users_bounded,
                 file_keys: file_keys_bounded_clone,
                 bsp_id,
