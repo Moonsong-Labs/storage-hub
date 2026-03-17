@@ -1,6 +1,6 @@
 {
   "name": "@storagehub/api-augment",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "description": "",
   "scripts": {
     "scrape": "bun run scripts/scrapeMetadata.ts",
