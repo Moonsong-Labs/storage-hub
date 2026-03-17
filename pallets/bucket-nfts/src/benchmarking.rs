@@ -90,7 +90,7 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event was emitted
-        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::AccessShared {
+        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::AccessShared {
             issuer,
             recipient: recipient.clone(),
         });
@@ -147,7 +147,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::ItemReadAccessUpdated {
+            <T as frame_system::Config>::RuntimeEvent::from(Event::ItemReadAccessUpdated {
                 admin: issuer,
                 bucket: bucket_id,
                 item_id,

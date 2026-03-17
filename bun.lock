@@ -11,7 +11,7 @@
     },
     "api-augment": {
       "name": "@storagehub/api-augment",
-      "version": "0.4.6",
+      "version": "0.4.7",
       "dependencies": {
         "@polkadot/api": "^16.4.7",
         "@polkadot/api-base": "^16.4.7",
@@ -196,7 +196,7 @@
     },
     "types-bundle": {
       "name": "@storagehub/types-bundle",
-      "version": "0.4.6",
+      "version": "0.4.7",
       "dependencies": {
         "@polkadot/api": "^16.4.7",
         "@polkadot/api-base": "^16.4.7",

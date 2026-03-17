@@ -1678,6 +1678,11 @@ declare module '@polkadot/api-base/types/events' {
         };
         session: {
             /**
+             * The `NewSession` event in the current block also implies a new validator set to be
+             * queued.
+             **/
+            NewQueued: AugmentedEvent<ApiType, []>;
+            /**
              * New session has happened. Note that the argument is the session index, not the
              * block number as the type might suggest.
              **/

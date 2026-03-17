@@ -171,6 +171,7 @@ import type {
   PalletXcmAuthorizedAliasesEntry,
   PalletXcmCall,
   PalletXcmError,
+  PalletXcmErrorsExecutionError,
   PalletXcmEvent,
   PalletXcmHoldReason,
   PalletXcmMaxAuthorizedAliases,
@@ -237,6 +238,7 @@ import type {
   SpRuntimeDigest,
   SpRuntimeDigestDigestItem,
   SpRuntimeDispatchError,
+  SpRuntimeHeader,
   SpRuntimeModuleError,
   SpRuntimeMultiSignature,
   SpRuntimeProvingTrieTrieError,
@@ -285,6 +287,7 @@ import type {
   StagingXcmV5PalletInfo,
   StagingXcmV5QueryResponseInfo,
   StagingXcmV5Response,
+  StagingXcmV5TraitsInstructionError,
   StagingXcmV5TraitsOutcome,
   StagingXcmV5Xcm,
   XcmDoubleEncoded,
@@ -487,6 +490,7 @@ declare module "@polkadot/types/types/registry" {
     PalletXcmAuthorizedAliasesEntry: PalletXcmAuthorizedAliasesEntry;
     PalletXcmCall: PalletXcmCall;
     PalletXcmError: PalletXcmError;
+    PalletXcmErrorsExecutionError: PalletXcmErrorsExecutionError;
     PalletXcmEvent: PalletXcmEvent;
     PalletXcmHoldReason: PalletXcmHoldReason;
     PalletXcmMaxAuthorizedAliases: PalletXcmMaxAuthorizedAliases;
@@ -553,6 +557,7 @@ declare module "@polkadot/types/types/registry" {
     SpRuntimeDigest: SpRuntimeDigest;
     SpRuntimeDigestDigestItem: SpRuntimeDigestDigestItem;
     SpRuntimeDispatchError: SpRuntimeDispatchError;
+    SpRuntimeHeader: SpRuntimeHeader;
     SpRuntimeModuleError: SpRuntimeModuleError;
     SpRuntimeMultiSignature: SpRuntimeMultiSignature;
     SpRuntimeProvingTrieTrieError: SpRuntimeProvingTrieTrieError;
@@ -601,6 +606,7 @@ declare module "@polkadot/types/types/registry" {
     StagingXcmV5PalletInfo: StagingXcmV5PalletInfo;
     StagingXcmV5QueryResponseInfo: StagingXcmV5QueryResponseInfo;
     StagingXcmV5Response: StagingXcmV5Response;
+    StagingXcmV5TraitsInstructionError: StagingXcmV5TraitsInstructionError;
     StagingXcmV5TraitsOutcome: StagingXcmV5TraitsOutcome;
     StagingXcmV5Xcm: StagingXcmV5Xcm;
     XcmDoubleEncoded: XcmDoubleEncoded;

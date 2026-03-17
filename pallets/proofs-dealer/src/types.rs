@@ -126,9 +126,6 @@ impl<T: crate::Config> Debug for CustomChallenge<T> {
 // ********************* Syntactic sugar for types ****************************
 // ****************************************************************************
 
-/// Syntactic sugar for the AccountId type used in the proofs pallet.
-pub type AccountIdFor<T> = <T as frame_system::Config>::AccountId;
-
 /// Syntactic sugar for the MerkleHash type used in the proofs pallet.
 pub type MerkleHashFor<T> = <T as crate::Config>::MerkleTrieHash;
 

@@ -554,6 +554,24 @@ declare module '@polkadot/api-base/types/events' {
              **/
             [key: string]: AugmentedEvent<ApiType>;
         };
+        historical: {
+            /**
+             * The merkle roots of up to this session index were pruned
+             **/
+            RootsPruned: AugmentedEvent<ApiType, [upTo: u32], {
+                upTo: u32;
+            }>;
+            /**
+             * The merkle root of the validators of the said session were stored
+             **/
+            RootStored: AugmentedEvent<ApiType, [index: u32], {
+                index: u32;
+            }>;
+            /**
+             * Generic event
+             **/
+            [key: string]: AugmentedEvent<ApiType>;
+        };
         nfts: {
             /**
              * All approvals of an item got cancelled.
@@ -1333,6 +1351,11 @@ declare module '@polkadot/api-base/types/events' {
             [key: string]: AugmentedEvent<ApiType>;
         };
         session: {
+            /**
+             * The `NewSession` event in the current block also implies a new validator set to be
+             * queued.
+             **/
+            NewQueued: AugmentedEvent<ApiType, []>;
             /**
              * New session has happened. Note that the argument is the session index, not the
              * block number as the type might suggest.

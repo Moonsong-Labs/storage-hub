@@ -86,7 +86,7 @@ mod benchmarks {
         Pallet::challenge(RawOrigin::Signed(caller.clone()), file_key);
 
         // Verify the challenge event was emitted.
-        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::NewChallenge {
+        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::NewChallenge {
             who: Some(caller),
             key_challenged: file_key,
         });

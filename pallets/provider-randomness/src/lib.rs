@@ -61,9 +61,6 @@ pub mod pallet {
     /// Configuration trait of this pallet.
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_proofs_dealer::Config {
-        /// Overarching event type
-        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-
         /// Commitment of a seed
         type SeedCommitment: Parameter
             + Member

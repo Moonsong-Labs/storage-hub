@@ -23,7 +23,6 @@ pub mod pallet {
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
-        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         type XcmExecutor: ExecuteXcm<Self::RuntimeCall>;
     }
 
@@ -108,11 +107,11 @@ pub mod pallet {
                         max_weight,
                         Weight::zero(),
                     ) {
-                        Outcome::Error { error } => (
-                            Err(error),
+                        Outcome::Error(instruction_error) => (
+                            Err(instruction_error.error),
                             Event::Fail {
                                 message_id: Some(hash),
-                                error,
+                                error: instruction_error.error,
                             },
                         ),
                         Outcome::Complete { used } => (
@@ -123,11 +122,14 @@ pub mod pallet {
                         ),
                         // As far as the caller is concerned, this was dispatched without error, so
                         // we just report the weight used.
-                        Outcome::Incomplete { used, error } => (
+                        Outcome::Incomplete {
+                            used,
+                            error: instruction_error,
+                        } => (
                             Ok(used),
                             Event::Fail {
                                 message_id: Some(hash),
-                                error,
+                                error: instruction_error.error,
                             },
                         ),
                     }

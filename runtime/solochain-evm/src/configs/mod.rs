@@ -302,6 +302,7 @@ impl pallet_session::historical::SessionManager<AccountId, ()> for NoChangesSess
 }
 
 impl pallet_session::historical::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
     type FullIdentification = ();
     type FullIdentificationOf = FullIdentificationOf;
 }
@@ -495,7 +496,6 @@ parameter_types! {
 }
 
 impl pallet_ethereum::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type StateRoot = pallet_ethereum::IntermediateStateRoot<Self::Version>;
     type PostLogContent = PostBlockAndTxnHashes;
     type ExtraDataLength = ConstU32<30>;
@@ -652,7 +652,6 @@ impl pallet_evm::Config for Runtime {
     type WithdrawOrigin = EnsureAddressNever<AccountId>;
     type AddressMapping = IdentityAddressMapping;
     type Currency = Balances;
-    type RuntimeEvent = RuntimeEvent;
     type PrecompilesType = Precompiles<Runtime>;
     type PrecompilesValue = PrecompilesValue;
     type ChainId = EvmChainId;
@@ -724,7 +723,6 @@ impl pallet_storage_providers::benchmarking::BenchmarkHelpers<Runtime>
 }
 
 impl pallet_storage_providers::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_storage_providers::weights::SubstrateWeight<Runtime>;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
@@ -907,7 +905,6 @@ impl shp_traits::MessageAdapter for Eip191Adapter {
 }
 
 impl pallet_file_system::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_file_system::weights::SubstrateWeight<Runtime>;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
@@ -1104,7 +1101,6 @@ impl Get<u32> for MaxSlashableProvidersPerTick {
 }
 
 impl pallet_proofs_dealer::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_proofs_dealer::weights::SubstrateWeight<Runtime>;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
@@ -1182,7 +1178,6 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
 }
 
 impl pallet_randomness::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
     type BabeBlockGetter = BlockNumberGetter;
     type WeightInfo = ();
@@ -1214,7 +1209,6 @@ impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perbill> for Runtime {
 }
 
 impl pallet_payment_streams::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_payment_streams::weights::SubstrateWeight<Runtime>;
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
@@ -1231,7 +1225,6 @@ impl pallet_payment_streams::Config for Runtime {
 }
 
 impl pallet_bucket_nfts::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_bucket_nfts::weights::SubstrateWeight<Runtime>;
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
