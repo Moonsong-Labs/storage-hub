@@ -273,13 +273,14 @@ mod benchmarks {
         let amount_charged: BalanceOf<T> = initial_rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
                 / GIGAUNIT.into());
-        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
-            user_account: user_account.clone(),
-            provider_id,
-            amount: amount_charged,
-            last_tick_charged: frame_system::Pallet::<T>::block_number(),
-            charged_at_tick: frame_system::Pallet::<T>::block_number(),
-        });
+        let charge_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+                user_account: user_account.clone(),
+                provider_id,
+                amount: amount_charged,
+                last_tick_charged: frame_system::Pallet::<T>::block_number(),
+                charged_at_tick: frame_system::Pallet::<T>::block_number(),
+            });
         frame_system::Pallet::<T>::assert_has_event(charge_event.into());
         // Verify the fixed-rate payment stream update event was emitted.
         let expected_event =
@@ -346,13 +347,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the charge event was emitted.
-        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
-            user_account: user_account.clone(),
-            provider_id,
-            amount: rate.into(),
-            last_tick_charged: frame_system::Pallet::<T>::block_number(),
-            charged_at_tick: frame_system::Pallet::<T>::block_number(),
-        });
+        let charge_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+                user_account: user_account.clone(),
+                provider_id,
+                amount: rate.into(),
+                last_tick_charged: frame_system::Pallet::<T>::block_number(),
+                charged_at_tick: frame_system::Pallet::<T>::block_number(),
+            });
         frame_system::Pallet::<T>::assert_has_event(charge_event.into());
         // Verify the fixed-rate payment stream deletion event was emitted.
         let expected_event =
@@ -401,12 +403,13 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify the dynamic-rate payment stream creation event was emitted.
-        let expected_event =
-            <T as frame_system::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamCreated {
+        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(
+            Event::DynamicRatePaymentStreamCreated {
                 user_account: user_account.clone(),
                 provider_id,
                 amount_provided: amount_provided.into(),
-            });
+            },
+        );
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the newly created payment stream exists in storage
@@ -492,21 +495,23 @@ mod benchmarks {
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (initial_amount_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
                 / GIGAUNIT.into());
-        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
-            user_account: user_account.clone(),
-            provider_id,
-            amount: amount_charged,
-            last_tick_charged: frame_system::Pallet::<T>::block_number(),
-            charged_at_tick: frame_system::Pallet::<T>::block_number(),
-        });
+        let charge_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+                user_account: user_account.clone(),
+                provider_id,
+                amount: amount_charged,
+                last_tick_charged: frame_system::Pallet::<T>::block_number(),
+                charged_at_tick: frame_system::Pallet::<T>::block_number(),
+            });
         frame_system::Pallet::<T>::assert_has_event(charge_event.into());
         // Verify the dynamic-rate payment stream update event was emitted.
-        let expected_event =
-            <T as frame_system::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamUpdated {
+        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(
+            Event::DynamicRatePaymentStreamUpdated {
                 user_account: user_account.clone(),
                 provider_id,
                 new_amount_provided: new_amount_provided.into(),
-            });
+            },
+        );
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the payment stream exists in storage and was updated
@@ -584,21 +589,23 @@ mod benchmarks {
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
                 / GIGAUNIT.into());
-        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
-            user_account: user_account.clone(),
-            provider_id,
-            amount: amount_charged,
-            last_tick_charged: frame_system::Pallet::<T>::block_number(),
-            charged_at_tick: frame_system::Pallet::<T>::block_number(),
-        });
+        let charge_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+                user_account: user_account.clone(),
+                provider_id,
+                amount: amount_charged,
+                last_tick_charged: frame_system::Pallet::<T>::block_number(),
+                charged_at_tick: frame_system::Pallet::<T>::block_number(),
+            });
         frame_system::Pallet::<T>::assert_has_event(charge_event.into());
 
         // Verify the dynamic-rate payment stream deletion event was emitted.
-        let expected_event =
-            <T as frame_system::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamDeleted {
+        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(
+            Event::DynamicRatePaymentStreamDeleted {
                 user_account: user_account.clone(),
                 provider_id,
-            });
+            },
+        );
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the newly created payment stream was correctly deleted
@@ -671,13 +678,14 @@ mod benchmarks {
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
                 / GIGAUNIT.into());
-        let charge_event = <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
-            user_account: user_account.clone(),
-            provider_id,
-            amount: amount_charged,
-            last_tick_charged: frame_system::Pallet::<T>::block_number(),
-            charged_at_tick: frame_system::Pallet::<T>::block_number(),
-        });
+        let charge_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+                user_account: user_account.clone(),
+                provider_id,
+                amount: amount_charged,
+                last_tick_charged: frame_system::Pallet::<T>::block_number(),
+                charged_at_tick: frame_system::Pallet::<T>::block_number(),
+            });
         frame_system::Pallet::<T>::assert_has_event(charge_event.into());
 
         Ok(())
@@ -913,9 +921,10 @@ mod benchmarks {
         assert!(!UsersWithoutFunds::<T>::contains_key(user_account.clone()));
 
         // Verify that the `UserSolvent` event was emitted
-        let user_solvent_event = <T as frame_system::Config>::RuntimeEvent::from(Event::UserSolvent {
-            who: user_account.clone(),
-        });
+        let user_solvent_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::UserSolvent {
+                who: user_account.clone(),
+            });
         frame_system::Pallet::<T>::assert_has_event(user_solvent_event.into());
 
         Ok(())

@@ -293,13 +293,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the sign up confirmation was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::BspSignUpSuccess {
-            who: user_account.clone(),
-            bsp_id: AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap(),
-            capacity: capacity.into(),
-            multiaddresses: multiaddresses.clone(),
-            root: T::DefaultMerkleRoot::get(),
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BspSignUpSuccess {
+                who: user_account.clone(),
+                bsp_id: AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap(),
+                capacity: capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+                root: T::DefaultMerkleRoot::get(),
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the BSP is now in the providers' storage
@@ -391,13 +392,14 @@ mod benchmarks {
             id: value_prop.derive_id(),
             value_prop: value_prop.clone(),
         };
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::MspSignUpSuccess {
-            who: user_account.clone(),
-            msp_id: AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap(),
-            capacity: 100000u32.into(),
-            multiaddresses: multiaddresses.clone(),
-            value_prop: value_prop_with_id,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::MspSignUpSuccess {
+                who: user_account.clone(),
+                msp_id: AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap(),
+                capacity: 100000u32.into(),
+                multiaddresses: multiaddresses.clone(),
+                value_prop: value_prop_with_id,
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the MSP is now in the providers' storage
@@ -580,10 +582,11 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the MSP sign off was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::MspSignOffSuccess {
-            who: user_account.clone(),
-            msp_id,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::MspSignOffSuccess {
+                who: user_account.clone(),
+                msp_id,
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the MSP was removed from the providers' storage
@@ -673,10 +676,11 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the BSP sign off was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::BspSignOffSuccess {
-            who: user_account.clone(),
-            bsp_id,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BspSignOffSuccess {
+                who: user_account.clone(),
+                bsp_id,
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the BSP was removed from the providers' storage
@@ -775,14 +779,15 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::CapacityChanged {
-            who: user_account.clone(),
-            provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
-            old_capacity: initial_capacity.into(),
-            new_capacity: new_capacity.into(),
-            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::CapacityChanged {
+                who: user_account.clone(),
+                provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
+                old_capacity: initial_capacity.into(),
+                new_capacity: new_capacity.into(),
+                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -888,14 +893,15 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::CapacityChanged {
-            who: user_account.clone(),
-            provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
-            old_capacity: initial_capacity.into(),
-            new_capacity: new_capacity.into(),
-            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::CapacityChanged {
+                who: user_account.clone(),
+                provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
+                old_capacity: initial_capacity.into(),
+                new_capacity: new_capacity.into(),
+                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -1008,14 +1014,15 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::CapacityChanged {
-            who: user_account.clone(),
-            provider_id: StorageProviderId::MainStorageProvider(msp_id),
-            old_capacity: initial_capacity.into(),
-            new_capacity: new_capacity.into(),
-            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::CapacityChanged {
+                who: user_account.clone(),
+                provider_id: StorageProviderId::MainStorageProvider(msp_id),
+                old_capacity: initial_capacity.into(),
+                new_capacity: new_capacity.into(),
+                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -1128,14 +1135,15 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::CapacityChanged {
-            who: user_account.clone(),
-            provider_id: StorageProviderId::MainStorageProvider(msp_id),
-            old_capacity: initial_capacity.into(),
-            new_capacity: new_capacity.into(),
-            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::CapacityChanged {
+                who: user_account.clone(),
+                provider_id: StorageProviderId::MainStorageProvider(msp_id),
+                old_capacity: initial_capacity.into(),
+                new_capacity: new_capacity.into(),
+                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -1258,11 +1266,12 @@ mod benchmarks {
             value_prop_max_data_limit.into(),
         );
         let value_prop_id = value_prop.derive_id();
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::ValuePropAdded {
-            msp_id,
-            value_prop_id,
-            value_prop: value_prop.clone(),
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::ValuePropAdded {
+                msp_id,
+                value_prop_id,
+                value_prop: value_prop.clone(),
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the value proposition was added
@@ -1371,11 +1380,12 @@ mod benchmarks {
             value_prop_max_data_limit.into(),
         );
         let value_prop_id = value_prop.derive_id();
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::ValuePropAdded {
-            msp_id,
-            value_prop_id,
-            value_prop,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::ValuePropAdded {
+                msp_id,
+                value_prop_id,
+                value_prop,
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         /*********** Call the extrinsic to benchmark: ***********/
@@ -1491,10 +1501,11 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the added multiaddress was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::MultiAddressAdded {
-            provider_id: bsp_id,
-            new_multiaddress: new_multiaddress.clone(),
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::MultiAddressAdded {
+                provider_id: bsp_id,
+                new_multiaddress: new_multiaddress.clone(),
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the multiaddress was added to the BSP
@@ -1931,10 +1942,11 @@ mod benchmarks {
         let held_deposit_difference = required_held_amt.saturating_sub(deposit_before_top_up);
 
         // Verify that we entered the top up branch of the `do_slash` execution.
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::TopUpFulfilled {
-            provider_id: bsp_id,
-            amount: held_deposit_difference,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::TopUpFulfilled {
+                provider_id: bsp_id,
+                amount: held_deposit_difference,
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         Ok(())
@@ -2065,10 +2077,11 @@ mod benchmarks {
             .ok_or(BenchmarkError::Stop("TopUpMetadata not found"))?;
 
         // Construct the event with the actual metadata from storage
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::AwaitingTopUp {
-            provider_id: bsp_id,
-            top_up_metadata,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::AwaitingTopUp {
+                provider_id: bsp_id,
+                top_up_metadata,
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         Ok(())
@@ -2179,10 +2192,11 @@ mod benchmarks {
         assert!(new_deposit > previous_deposit);
 
         // Verify that the event of the top up fulfilled was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::TopUpFulfilled {
-            provider_id: bsp_id,
-            amount: new_deposit - previous_deposit,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::TopUpFulfilled {
+                provider_id: bsp_id,
+                amount: new_deposit - previous_deposit,
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the BSP was removed from the AwaitingTopUpFromProviders storage
@@ -2616,9 +2630,10 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
 
         // Verify that the event of the BSP being marked as insolvent was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::ProviderInsolvent {
-            provider_id: bsp_id,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::ProviderInsolvent {
+                provider_id: bsp_id,
+            });
         frame_system::Pallet::<T>::assert_has_event(expected_event.into());
 
         // Verify that the BSP no longer has a deposit to be a storage provider
@@ -2764,9 +2779,10 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
 
         // Verify that the event of the BSP being marked as insolvent was emitted
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::ProviderInsolvent {
-            provider_id: msp_id,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::ProviderInsolvent {
+                provider_id: msp_id,
+            });
         frame_system::Pallet::<T>::assert_has_event(expected_event.into());
 
         // Verify that the MSP no longer has a deposit to be a storage provider

@@ -221,12 +221,13 @@ mod benchmarks {
         );
 
         // Ensure the expected event was emitted.
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::MoveBucketAccepted {
-            bucket_id,
-            old_msp_id: Some(initial_msp_id),
-            new_msp_id,
-            value_prop_id: new_value_prop_id,
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::MoveBucketAccepted {
+                bucket_id,
+                old_msp_id: Some(initial_msp_id),
+                new_msp_id,
+                value_prop_id: new_value_prop_id,
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         Ok(())
@@ -409,11 +410,12 @@ mod benchmarks {
         assert!(!pallet_nfts::Collection::<T>::contains_key(collection_id));
 
         // Ensure the expected event was emitted.
-        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(Event::BucketDeleted {
-            who: user,
-            bucket_id,
-            maybe_collection_id: Some(collection_id),
-        });
+        let expected_event =
+            <T as frame_system::Config>::RuntimeEvent::from(Event::BucketDeleted {
+                who: user,
+                bucket_id,
+                maybe_collection_id: Some(collection_id),
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         Ok(())
@@ -1905,12 +1907,13 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted.
-        let expected_event =
-            <T as frame_system::Config>::RuntimeEvent::from(Event::MspStopStoringBucketInsolventUser {
+        let expected_event = <T as frame_system::Config>::RuntimeEvent::from(
+            Event::MspStopStoringBucketInsolventUser {
                 msp_id,
                 owner: user.clone(),
                 bucket_id,
-            });
+            },
+        );
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // The bucket should have been deleted.
@@ -2071,7 +2074,9 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted
         let expected_event =
-            <T as frame_system::Config>::RuntimeEvent::from(Event::StorageRequestExpired { file_key });
+            <T as frame_system::Config>::RuntimeEvent::from(Event::StorageRequestExpired {
+                file_key,
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Ensure the Storage Request no longer exists in storage
