@@ -88,7 +88,7 @@ where
     ///   request. Parses the remote response to detect whether the peer already
     ///   has the entire file (short‑circuit success).
     /// - Implements limited retries:
-    ///   - `RequestFailure::Refused`: up to 3 retries with short sleep.
+    ///   - `RequestFailure::Refused`: up to 30 retries with 1s sleep (litep2p maps transient connectivity errors to Refused).
     ///   - `RequestFailure::Network(_) | NotConnected`: up to 10 retries,
     ///     waiting for several blocks between attempts.
     /// - On the final batch, logs completion if the remote reports that the
@@ -197,7 +197,11 @@ where
 
                                 break;
                             }
-                            Err(RequestFailure::Refused) if retry_attempts < 3 => {
+                            // Note: With litep2p network backend, transient connectivity errors
+                            // (ConnectionClosed, SubstreamClosed, dial-failed, etc.) are mapped to
+                            // `RequestFailure::Refused` instead of `NotConnected`. We use a high
+                            // retry count to handle peer recovery scenarios.
+                            Err(RequestFailure::Refused) if retry_attempts < 30 => {
                                 warn!(
                                     target: LOG_TARGET,
                                     "Final batch upload rejected by peer {:?}, retrying... (attempt {})",
@@ -329,7 +333,11 @@ where
                                 }
                                 break;
                             }
-                            Err(RequestFailure::Refused) if retry_attempts < 3 => {
+                            // Note: With litep2p network backend, transient connectivity errors
+                            // (ConnectionClosed, SubstreamClosed, dial-failed, etc.) are mapped to
+                            // `RequestFailure::Refused` instead of `NotConnected`. We use a high
+                            // retry count to handle peer recovery scenarios.
+                            Err(RequestFailure::Refused) if retry_attempts < 30 => {
                                 warn!(
                                     target: LOG_TARGET,
                                     "Final batch upload rejected by peer {:?}, retrying... (attempt {})",

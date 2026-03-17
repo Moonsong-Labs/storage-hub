@@ -6,11 +6,11 @@ use shp_traits::{
 };
 use sp_core::H256;
 use sp_runtime::traits::BlakeTwo256;
-use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, Trie, TrieDBBuilder, TrieDBMutBuilder,
     TrieLayout, TrieMut,
 };
+use std::collections::BTreeSet;
 use trie_db::{Hasher, TrieIterator};
 
 use crate::ForestVerifier;

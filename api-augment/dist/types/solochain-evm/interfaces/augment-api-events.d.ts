@@ -459,7 +459,7 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a new file has been requested to be stored.
              **/
-            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId20, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u64, peerIds: Vec<Bytes>, expiresAt: u32], {
+            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId20, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u64, peerIds: Vec<Bytes>, expiresAt: u32, bspsRequired: u32, mspId: Option<H256>], {
                 who: AccountId20;
                 fileKey: H256;
                 bucketId: H256;
@@ -468,6 +468,8 @@ declare module '@polkadot/api-base/types/events' {
                 size_: u64;
                 peerIds: Vec<Bytes>;
                 expiresAt: u32;
+                bspsRequired: u32;
+                mspId: Option<H256>;
             }>;
             /**
              * Notifies that a SP has stopped storing a file because its owner has become insolvent.
@@ -1341,6 +1343,18 @@ declare module '@polkadot/api-base/types/events' {
                 sessionIndex: u32;
             }>;
             /**
+             * Validator has been disabled.
+             **/
+            ValidatorDisabled: AugmentedEvent<ApiType, [validator: AccountId20], {
+                validator: AccountId20;
+            }>;
+            /**
+             * Validator has been re-enabled.
+             **/
+            ValidatorReenabled: AugmentedEvent<ApiType, [validator: AccountId20], {
+                validator: AccountId20;
+            }>;
+            /**
              * Generic event
              **/
             [key: string]: AugmentedEvent<ApiType>;
@@ -1403,6 +1417,13 @@ declare module '@polkadot/api-base/types/events' {
              **/
             NewAccount: AugmentedEvent<ApiType, [account: AccountId20], {
                 account: AccountId20;
+            }>;
+            /**
+             * An invalid authorized upgrade was rejected while trying to apply it.
+             **/
+            RejectedInvalidAuthorizedUpgrade: AugmentedEvent<ApiType, [codeHash: H256, error: SpRuntimeDispatchError], {
+                codeHash: H256;
+                error: SpRuntimeDispatchError;
             }>;
             /**
              * On on-chain remark happened.

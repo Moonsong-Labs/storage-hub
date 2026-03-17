@@ -49,6 +49,7 @@ import type {
   StagingXcmV5Response,
   StagingXcmV5TraitsOutcome,
   StagingXcmV5Xcm,
+  XcmV3TraitsSendError,
   XcmV5TraitsError,
   XcmVersionedAssets,
   XcmVersionedLocation
@@ -639,7 +640,9 @@ declare module "@polkadot/api-base/types/events" {
           fingerprint: H256,
           size_: u64,
           peerIds: Vec<Bytes>,
-          expiresAt: u32
+          expiresAt: u32,
+          bspsRequired: u32,
+          mspId: Option<H256>
         ],
         {
           who: AccountId32;
@@ -650,6 +653,8 @@ declare module "@polkadot/api-base/types/events" {
           size_: u64;
           peerIds: Vec<Bytes>;
           expiresAt: u32;
+          bspsRequired: u32;
+          mspId: Option<H256>;
         }
       >;
       /**
@@ -1366,6 +1371,31 @@ declare module "@polkadot/api-base/types/events" {
     };
     polkadotXcm: {
       /**
+       * `target` removed alias authorization for `aliaser`.
+       **/
+      AliasAuthorizationRemoved: AugmentedEvent<
+        ApiType,
+        [aliaser: StagingXcmV5Location, target: StagingXcmV5Location],
+        { aliaser: StagingXcmV5Location; target: StagingXcmV5Location }
+      >;
+      /**
+       * An `aliaser` location was authorized by `target` to alias it, authorization valid until
+       * `expiry` block number.
+       **/
+      AliasAuthorized: AugmentedEvent<
+        ApiType,
+        [aliaser: StagingXcmV5Location, target: StagingXcmV5Location, expiry: Option<u64>],
+        { aliaser: StagingXcmV5Location; target: StagingXcmV5Location; expiry: Option<u64> }
+      >;
+      /**
+       * `target` removed all alias authorizations.
+       **/
+      AliasesAuthorizationsRemoved: AugmentedEvent<
+        ApiType,
+        [target: StagingXcmV5Location],
+        { target: StagingXcmV5Location }
+      >;
+      /**
        * Some assets have been claimed from an asset trap
        **/
       AssetsClaimed: AugmentedEvent<
@@ -1532,6 +1562,14 @@ declare module "@polkadot/api-base/types/events" {
         { location: StagingXcmV5Location; queryId: u64; error: XcmV5TraitsError }
       >;
       /**
+       * An XCM message failed to process.
+       **/
+      ProcessXcmError: AugmentedEvent<
+        ApiType,
+        [origin: StagingXcmV5Location, error: XcmV5TraitsError, messageId: U8aFixed],
+        { origin: StagingXcmV5Location; error: XcmV5TraitsError; messageId: U8aFixed }
+      >;
+      /**
        * Query response has been received and is ready for taking with `take_response`. There is
        * no registered notification call.
        **/
@@ -1545,7 +1583,25 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ResponseTaken: AugmentedEvent<ApiType, [queryId: u64], { queryId: u64 }>;
       /**
-       * A XCM message was sent.
+       * An XCM message failed to send.
+       **/
+      SendFailed: AugmentedEvent<
+        ApiType,
+        [
+          origin: StagingXcmV5Location,
+          destination: StagingXcmV5Location,
+          error: XcmV3TraitsSendError,
+          messageId: U8aFixed
+        ],
+        {
+          origin: StagingXcmV5Location;
+          destination: StagingXcmV5Location;
+          error: XcmV3TraitsSendError;
+          messageId: U8aFixed;
+        }
+      >;
+      /**
+       * An XCM message was sent.
        **/
       Sent: AugmentedEvent<
         ApiType,
@@ -2004,6 +2060,22 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NewSession: AugmentedEvent<ApiType, [sessionIndex: u32], { sessionIndex: u32 }>;
       /**
+       * Validator has been disabled.
+       **/
+      ValidatorDisabled: AugmentedEvent<
+        ApiType,
+        [validator: AccountId32],
+        { validator: AccountId32 }
+      >;
+      /**
+       * Validator has been re-enabled.
+       **/
+      ValidatorReenabled: AugmentedEvent<
+        ApiType,
+        [validator: AccountId32],
+        { validator: AccountId32 }
+      >;
+      /**
        * Generic event
        **/
       [key: string]: AugmentedEvent<ApiType>;
@@ -2071,6 +2143,14 @@ declare module "@polkadot/api-base/types/events" {
        * A new account was created.
        **/
       NewAccount: AugmentedEvent<ApiType, [account: AccountId32], { account: AccountId32 }>;
+      /**
+       * An invalid authorized upgrade was rejected while trying to apply it.
+       **/
+      RejectedInvalidAuthorizedUpgrade: AugmentedEvent<
+        ApiType,
+        [codeHash: H256, error: SpRuntimeDispatchError],
+        { codeHash: H256; error: SpRuntimeDispatchError }
+      >;
       /**
        * On on-chain remark happened.
        **/

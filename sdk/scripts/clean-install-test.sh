@@ -16,10 +16,10 @@ rm -rf node_modules core/wasm/pkg/*
 wasm-pack build ./core/wasm --target nodejs --release --out-dir pkg
 
 # 3. Fresh install (now pkg exists)
-pnpm install
+bun install
 
 # 4. Build TypeScript bundle
-pnpm run build
+bun run build
 
 # 5. Run Vitest suite
-pnpm test 
+bun run test

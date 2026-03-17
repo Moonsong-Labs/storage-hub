@@ -347,6 +347,8 @@ where
                             size,
                             peer_ids,
                             expires_at,
+                            bsps_required: _,
+                            msp_id: _,
                         },
                     ) => {
                         self.emit(NewStorageRequest {

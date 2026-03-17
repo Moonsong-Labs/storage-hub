@@ -3,7 +3,7 @@ import type { ApiTypes, AugmentedEvent } from '@polkadot/api-base/types';
 import type { Bytes, Null, Option, Result, U8aFixed, Vec, bool, u128, u32, u64, u8 } from '@polkadot/types-codec';
 import type { ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, H256 } from '@polkadot/types/interfaces/runtime';
-import type { CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportMessagesProcessMessageError, FrameSupportTokensMiscBalanceStatus, FrameSystemDispatchEventInfo, PalletFileSystemFileOperationIntention, PalletFileSystemRejectedStorageRequestReason, PalletNftsAttributeNamespace, PalletNftsPalletAttributes, PalletNftsPriceWithDirection, PalletProofsDealerCustomChallenge, PalletProofsDealerProof, PalletStorageProvidersStorageProviderId, PalletStorageProvidersTopUpMetadata, PalletStorageProvidersValueProposition, PalletStorageProvidersValuePropositionWithId, ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey, ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue, ShpFileMetadataFileMetadata, ShpTraitsTrieMutation, SpRuntimeDispatchError, SpRuntimeMultiSignature, SpWeightsWeightV2Weight, StagingXcmV5AssetAssets, StagingXcmV5Location, StagingXcmV5Response, StagingXcmV5TraitsOutcome, StagingXcmV5Xcm, XcmV5TraitsError, XcmVersionedAssets, XcmVersionedLocation } from '@polkadot/types/lookup';
+import type { CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportMessagesProcessMessageError, FrameSupportTokensMiscBalanceStatus, FrameSystemDispatchEventInfo, PalletFileSystemFileOperationIntention, PalletFileSystemRejectedStorageRequestReason, PalletNftsAttributeNamespace, PalletNftsPalletAttributes, PalletNftsPriceWithDirection, PalletProofsDealerCustomChallenge, PalletProofsDealerProof, PalletStorageProvidersStorageProviderId, PalletStorageProvidersTopUpMetadata, PalletStorageProvidersValueProposition, PalletStorageProvidersValuePropositionWithId, ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey, ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue, ShpFileMetadataFileMetadata, ShpTraitsTrieMutation, SpRuntimeDispatchError, SpRuntimeMultiSignature, SpWeightsWeightV2Weight, StagingXcmV5AssetAssets, StagingXcmV5Location, StagingXcmV5Response, StagingXcmV5TraitsOutcome, StagingXcmV5Xcm, XcmV3TraitsSendError, XcmV5TraitsError, XcmVersionedAssets, XcmVersionedLocation } from '@polkadot/types/lookup';
 export type __AugmentedEvent<ApiType extends ApiTypes> = AugmentedEvent<ApiType>;
 declare module '@polkadot/api-base/types/events' {
     interface AugmentedEvents<ApiType extends ApiTypes> {
@@ -499,7 +499,7 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a new file has been requested to be stored.
              **/
-            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId32, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u64, peerIds: Vec<Bytes>, expiresAt: u32], {
+            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId32, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u64, peerIds: Vec<Bytes>, expiresAt: u32, bspsRequired: u32, mspId: Option<H256>], {
                 who: AccountId32;
                 fileKey: H256;
                 bucketId: H256;
@@ -508,6 +508,8 @@ declare module '@polkadot/api-base/types/events' {
                 size_: u64;
                 peerIds: Vec<Bytes>;
                 expiresAt: u32;
+                bspsRequired: u32;
+                mspId: Option<H256>;
             }>;
             /**
              * Notifies that a SP has stopped storing a file because its owner has become insolvent.
@@ -1106,6 +1108,28 @@ declare module '@polkadot/api-base/types/events' {
         };
         polkadotXcm: {
             /**
+             * `target` removed alias authorization for `aliaser`.
+             **/
+            AliasAuthorizationRemoved: AugmentedEvent<ApiType, [aliaser: StagingXcmV5Location, target: StagingXcmV5Location], {
+                aliaser: StagingXcmV5Location;
+                target: StagingXcmV5Location;
+            }>;
+            /**
+             * An `aliaser` location was authorized by `target` to alias it, authorization valid until
+             * `expiry` block number.
+             **/
+            AliasAuthorized: AugmentedEvent<ApiType, [aliaser: StagingXcmV5Location, target: StagingXcmV5Location, expiry: Option<u64>], {
+                aliaser: StagingXcmV5Location;
+                target: StagingXcmV5Location;
+                expiry: Option<u64>;
+            }>;
+            /**
+             * `target` removed all alias authorizations.
+             **/
+            AliasesAuthorizationsRemoved: AugmentedEvent<ApiType, [target: StagingXcmV5Location], {
+                target: StagingXcmV5Location;
+            }>;
+            /**
              * Some assets have been claimed from an asset trap
              **/
             AssetsClaimed: AugmentedEvent<ApiType, [hash_: H256, origin: StagingXcmV5Location, assets: XcmVersionedAssets], {
@@ -1239,6 +1263,14 @@ declare module '@polkadot/api-base/types/events' {
                 error: XcmV5TraitsError;
             }>;
             /**
+             * An XCM message failed to process.
+             **/
+            ProcessXcmError: AugmentedEvent<ApiType, [origin: StagingXcmV5Location, error: XcmV5TraitsError, messageId: U8aFixed], {
+                origin: StagingXcmV5Location;
+                error: XcmV5TraitsError;
+                messageId: U8aFixed;
+            }>;
+            /**
              * Query response has been received and is ready for taking with `take_response`. There is
              * no registered notification call.
              **/
@@ -1253,7 +1285,16 @@ declare module '@polkadot/api-base/types/events' {
                 queryId: u64;
             }>;
             /**
-             * A XCM message was sent.
+             * An XCM message failed to send.
+             **/
+            SendFailed: AugmentedEvent<ApiType, [origin: StagingXcmV5Location, destination: StagingXcmV5Location, error: XcmV3TraitsSendError, messageId: U8aFixed], {
+                origin: StagingXcmV5Location;
+                destination: StagingXcmV5Location;
+                error: XcmV3TraitsSendError;
+                messageId: U8aFixed;
+            }>;
+            /**
+             * An XCM message was sent.
              **/
             Sent: AugmentedEvent<ApiType, [origin: StagingXcmV5Location, destination: StagingXcmV5Location, message: StagingXcmV5Xcm, messageId: U8aFixed], {
                 origin: StagingXcmV5Location;
@@ -1646,6 +1687,18 @@ declare module '@polkadot/api-base/types/events' {
                 sessionIndex: u32;
             }>;
             /**
+             * Validator has been disabled.
+             **/
+            ValidatorDisabled: AugmentedEvent<ApiType, [validator: AccountId32], {
+                validator: AccountId32;
+            }>;
+            /**
+             * Validator has been re-enabled.
+             **/
+            ValidatorReenabled: AugmentedEvent<ApiType, [validator: AccountId32], {
+                validator: AccountId32;
+            }>;
+            /**
              * Generic event
              **/
             [key: string]: AugmentedEvent<ApiType>;
@@ -1708,6 +1761,13 @@ declare module '@polkadot/api-base/types/events' {
              **/
             NewAccount: AugmentedEvent<ApiType, [account: AccountId32], {
                 account: AccountId32;
+            }>;
+            /**
+             * An invalid authorized upgrade was rejected while trying to apply it.
+             **/
+            RejectedInvalidAuthorizedUpgrade: AugmentedEvent<ApiType, [codeHash: H256, error: SpRuntimeDispatchError], {
+                codeHash: H256;
+                error: SpRuntimeDispatchError;
             }>;
             /**
              * On on-chain remark happened.
