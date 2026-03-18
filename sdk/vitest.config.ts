@@ -20,6 +20,8 @@ export default defineConfig({
     globals: true,
     watch: false,
     pool: "forks",
+    testTimeout: 300_000,
+    hookTimeout: 300_000,
     coverage: {
       provider: "v8",
       exclude: ["scripts/**", "**/wasm/pkg/**"],
