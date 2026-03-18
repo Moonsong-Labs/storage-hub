@@ -333,6 +333,7 @@ impl RpcConnection for MockConnection {
             methods::RECEIVE_FILE_CHUNKS => {
                 serde_json::json!([])
             }
+            methods::TRIGGER_BUCKET_FILE_STORAGE_HEALING => serde_json::json!(()),
             methods::FINALIZED_HEAD => {
                 serde_json::json!("0x0000000000000000000000000000000000000000000000000000000000000064")
             }
