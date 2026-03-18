@@ -244,7 +244,7 @@ export class StorageHubClient {
       throw new Error(`Unknown file operation: ${operation}`);
     }
     return [
-      `StorageHub File Deletion Request`,
+      "StorageHub File Deletion Request",
       "",
       `File: ${location}`,
       `Size: ${size.toString()} bytes`,

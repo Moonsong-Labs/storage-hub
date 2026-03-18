@@ -169,7 +169,7 @@ describe("createCookieFetch", () => {
   // This is the key scenario that the Map-based jar was designed to fix.
   it("should merge cookies by name across multiple responses", async () => {
     let callCount = 0;
-    const base = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const base = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
       callCount++;
       const headers = new Headers();
       if (callCount === 1) {
@@ -197,7 +197,7 @@ describe("createCookieFetch", () => {
   // the stale value or duplicating the cookie name.
   it("should update a cookie value when the server sends a new value for the same name", async () => {
     let callCount = 0;
-    const base = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const base = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
       callCount++;
       const headers = new Headers();
       if (callCount === 1) {
