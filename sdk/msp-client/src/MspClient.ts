@@ -37,14 +37,7 @@ export class MspClient extends ModuleBase {
   ): Promise<MspClient> {
     if (!config?.baseUrl) throw new Error("MspClient.connect: baseUrl is required");
 
-    const http = new HttpClient({
-      baseUrl: config.baseUrl,
-      ...(config.timeoutMs !== undefined && { timeoutMs: config.timeoutMs }),
-      ...(config.defaultHeaders !== undefined && {
-        defaultHeaders: config.defaultHeaders
-      }),
-      ...(config.fetchImpl !== undefined && { fetchImpl: config.fetchImpl })
-    });
+    const http = new HttpClient(config);
 
     // Create a shared reference object
     const sessionProviderRef = { current: sessionProvider };
