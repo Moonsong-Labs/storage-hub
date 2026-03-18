@@ -932,9 +932,10 @@ impl Eip191Adapter {
         };
 
         let bucket_id = &context[..32];
-        let size_bytes: [u8; 8] = context[32..40]
-            .try_into()
-            .expect("slice is exactly 8 bytes");
+        // Try to extract the 8-byte file size from the context blob.
+        let Ok(size_bytes): Result<[u8; 8], _> = context[32..40].try_into() else {
+            return intention.to_vec();
+        };
         let size = u64::from_le_bytes(size_bytes);
         let location = &context[40..];
 
