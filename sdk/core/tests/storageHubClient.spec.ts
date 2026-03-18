@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import { StorageHubClient } from "../src/evm/storageHubClient.js";
 import { FileOperation } from "../src/evm/types.js";
 
-const TEST_FILE_KEY =
-  "0x93c7637a94182998665e26786728f4c52eaf612df3d7b3d54022549a08995d61" as const;
+const TEST_FILE_KEY = "0x93c7637a94182998665e26786728f4c52eaf612df3d7b3d54022549a08995d61" as const;
 const TEST_BUCKET_ID =
   "0xd99fa5fe0c6bceee920aa457feb3e67702c24ecb6f6da10935501dc04b4b6cd8" as const;
 

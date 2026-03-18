@@ -1444,14 +1444,14 @@ mod eip191_adapter_tests {
     use super::Eip191Adapter;
 
     const TEST_FILE_KEY: [u8; 32] = [
-        0x93, 0xc7, 0x63, 0x7a, 0x94, 0x18, 0x29, 0x98, 0x66, 0x5e, 0x26, 0x78, 0x67, 0x28,
-        0xf4, 0xc5, 0x2e, 0xaf, 0x61, 0x2d, 0xf3, 0xd7, 0xb3, 0xd5, 0x40, 0x22, 0x54, 0x9a,
-        0x08, 0x99, 0x5d, 0x61,
+        0x93, 0xc7, 0x63, 0x7a, 0x94, 0x18, 0x29, 0x98, 0x66, 0x5e, 0x26, 0x78, 0x67, 0x28, 0xf4,
+        0xc5, 0x2e, 0xaf, 0x61, 0x2d, 0xf3, 0xd7, 0xb3, 0xd5, 0x40, 0x22, 0x54, 0x9a, 0x08, 0x99,
+        0x5d, 0x61,
     ];
     const TEST_BUCKET_ID: [u8; 32] = [
-        0xd9, 0x9f, 0xa5, 0xfe, 0x0c, 0x6b, 0xce, 0xee, 0x92, 0x0a, 0xa4, 0x57, 0xfe, 0xb3,
-        0xe6, 0x77, 0x02, 0xc2, 0x4e, 0xcb, 0x6f, 0x6d, 0xa1, 0x09, 0x35, 0x50, 0x1d, 0xc0,
-        0x4b, 0x4b, 0x6c, 0xd8,
+        0xd9, 0x9f, 0xa5, 0xfe, 0x0c, 0x6b, 0xce, 0xee, 0x92, 0x0a, 0xa4, 0x57, 0xfe, 0xb3, 0xe6,
+        0x77, 0x02, 0xc2, 0x4e, 0xcb, 0x6f, 0x6d, 0xa1, 0x09, 0x35, 0x50, 0x1d, 0xc0, 0x4b, 0x4b,
+        0x6c, 0xd8,
     ];
 
     fn build_intention(file_key: &[u8; 32], operation: u8) -> Vec<u8> {
@@ -1496,7 +1496,10 @@ mod eip191_adapter_tests {
         let context = vec![0u8; 50];
 
         let msg = Eip191Adapter::to_human_readable(&intention, &context);
-        assert_eq!(msg, intention, "should return raw intention on invalid length");
+        assert_eq!(
+            msg, intention,
+            "should return raw intention on invalid length"
+        );
     }
 
     #[test]
@@ -1505,7 +1508,10 @@ mod eip191_adapter_tests {
         let context = vec![0u8; 30]; // less than 40 bytes
 
         let msg = Eip191Adapter::to_human_readable(&intention, &context);
-        assert_eq!(msg, intention, "should return raw intention when context is too short");
+        assert_eq!(
+            msg, intention,
+            "should return raw intention when context is too short"
+        );
     }
 
     #[test]
@@ -1514,7 +1520,10 @@ mod eip191_adapter_tests {
         let context = build_context(&TEST_BUCKET_ID, 100, b"file.txt");
 
         let msg = Eip191Adapter::to_human_readable(&intention, &context);
-        assert_eq!(msg, intention, "should return raw intention for unknown operation");
+        assert_eq!(
+            msg, intention,
+            "should return raw intention for unknown operation"
+        );
     }
 
     #[test]
@@ -1526,6 +1535,9 @@ mod eip191_adapter_tests {
         let msg_str = String::from_utf8(msg).expect("should be valid UTF-8");
 
         assert!(msg_str.contains("Size: 0 bytes"));
-        assert!(msg_str.contains("File: \n"), "empty location should produce an empty File field");
+        assert!(
+            msg_str.contains("File: \n"),
+            "empty location should produce an empty File field"
+        );
     }
 }
