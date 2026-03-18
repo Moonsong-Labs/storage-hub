@@ -223,7 +223,7 @@ export class StorageHubClient {
    *
    * @example
    * ```text
-   * StorageHub File Delete Request
+   * StorageHub File Deletion Request
    *
    * File: documents/report.pdf
    * Size: 1048576 bytes
@@ -244,7 +244,7 @@ export class StorageHubClient {
       throw new Error(`Unknown file operation: ${operation}`);
     }
     return [
-      `StorageHub File ${name} Request`,
+      `StorageHub File Deletion Request`,
       "",
       `File: ${location}`,
       `Size: ${size.toString()} bytes`,

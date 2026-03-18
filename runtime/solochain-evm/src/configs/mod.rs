@@ -941,9 +941,7 @@ impl Eip191Adapter {
         let mut msg = Vec::with_capacity(256);
 
         // Title
-        msg.extend_from_slice(b"StorageHub File ");
-        msg.extend_from_slice(operation_name);
-        msg.extend_from_slice(b" Request\n\nFile: ");
+        msg.extend_from_slice(b"StorageHub File Deletion Request\n\nFile: ");
 
         // Location (already UTF-8 bytes from the pallet's BoundedVec<u8>)
         msg.extend_from_slice(location);
