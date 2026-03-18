@@ -1,2 +1,3 @@
 # Generated at build time; should not be tracked, but included in published files via build
 src/_wasm_embed.ts
+tests/resources/*

@@ -104,7 +104,7 @@ export function OnePageDemo() {
       try {
         const currentChainIdHex = await safeProviderRequest(provider, 'eth_chainId') as string;
         currentChainId = Number.parseInt(currentChainIdHex, 16);
-      } catch (error) {
+      } catch (_error) {
         // If we can't get chain ID, assume we need to add the network
         currentChainId = 0;
       }
