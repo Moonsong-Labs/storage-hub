@@ -12,7 +12,7 @@ use axum_extra::{
     response::FileStream,
 };
 use codec::Decode;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use shc_common::types::FileMetadata;
 use tokio::sync::mpsc;
@@ -115,14 +115,29 @@ pub async fn download_by_key(
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 
-    // Check if file exists in MSP storage
-    let file_metadata = services.msp.check_file_status(&file_key).await?;
-
     // Verify user has access to the requested file
     let file_info = services
         .msp
         .get_file_info(user.address().ok(), &file_key)
         .await?;
+
+    // Trigger file storage self-healing for this bucket in case it's needed.
+    // This must happen before check_file_status so healing is triggered even when the file
+    // is missing from file storage. If the bucket was already verified, this is a no-op.
+    let rpc = services.rpc.clone();
+    let bucket_id = format!("0x{}", file_info.bucket_id);
+    tokio::spawn(async move {
+        if let Err(e) = rpc.trigger_bucket_file_storage_healing(&bucket_id).await {
+            warn!(
+                bucket_id = %bucket_id,
+                error = %e,
+                "Failed to trigger bucket file storage healing"
+            );
+        }
+    });
+
+    // Check if file exists in MSP storage
+    let file_metadata = services.msp.check_file_status(&file_key).await?;
 
     // Generate a unique session ID for the download session
     let session_id = Uuid::now_v7().to_string();
