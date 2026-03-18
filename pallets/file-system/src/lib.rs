@@ -1340,6 +1340,8 @@ pub mod pallet {
 			let max_r = T::MaxReplicationTarget::get();
 			let mut total_weight: Weight = Weight::zero();
 			let mut total_reads: u64 = 0;
+			// TODO: Replace iteration + storage reads with user-provided weight hints validated in extrinsic.
+			// Also make `StorageRequestMspResponse` and `reject` field `BoundedVec` (currently unbounded `Vec`).
 			for bucket_response in storage_request_msp_response.iter() {
 				let amount_of_files_to_accept = bucket_response.accept.as_ref().map_or(0, |accept_response| accept_response.file_keys_and_proofs.len());
 				let amount_of_files_to_reject = bucket_response.reject.len();
@@ -1447,6 +1449,7 @@ pub mod pallet {
             let max_v = T::MaxBspVolunteers::get();
             let max_r = T::MaxReplicationTarget::get();
             let (mut worst_v, mut worst_r): (u32, u32) = (0, 0);
+            // TODO: Replace iteration + storage reads with user-provided weight hints validated in extrinsic.
             for fkp in file_keys_and_proofs.iter() {
                 if let Some(meta) = StorageRequests::<T>::get(&fkp.file_key) {
                     let v: u64 = meta.bsps_volunteered.into();
@@ -1741,6 +1744,7 @@ pub mod pallet {
             let max_v = T::MaxBspVolunteers::get();
             let max_r = T::MaxReplicationTarget::get();
             let (mut worst_v, mut worst_r): (u32, u32) = (0, 0);
+            // TODO: Replace iteration + storage reads with user-provided weight hints validated in extrinsic.
             for deletion in file_deletions.iter() {
                 if let Some(meta) = StorageRequests::<T>::get(&deletion.signed_intention.file_key) {
                     let v: u64 = meta.bsps_volunteered.into();
