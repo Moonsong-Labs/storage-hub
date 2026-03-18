@@ -851,6 +851,8 @@ declare const _default: {
                 size_: string;
                 peerIds: string;
                 expiresAt: string;
+                bspsRequired: string;
+                mspId: string;
             };
             MspAcceptedStorageRequest: {
                 fileKey: string;

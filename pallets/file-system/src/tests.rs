@@ -2704,6 +2704,8 @@ mod request_storage {
                         size: 4,
                         peer_ids,
                         expires_at: next_expiration_tick_storage_request,
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
+                        msp_id: Some(msp_id),
                     }
                     .into(),
                 );
@@ -2876,6 +2878,8 @@ mod request_storage {
                         size,
                         peer_ids,
                         expires_at: next_expiration_tick_storage_request,
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
+                        msp_id: Some(msp_id),
                     }
                     .into(),
                 );
