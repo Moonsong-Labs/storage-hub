@@ -16,7 +16,7 @@ impl StorageEnableRuntime for crate::Runtime {
     type Call = crate::RuntimeCall;
     type Signature = crate::Signature;
     type Extension = crate::TxExtension;
-    type RuntimeApi = crate::RuntimeApi;
+    type RuntimeApi = crate::apis::RuntimeApi;
     type RuntimeError = crate::RuntimeError;
 }
 
