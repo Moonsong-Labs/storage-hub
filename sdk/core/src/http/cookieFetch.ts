@@ -10,19 +10,23 @@
  * maintain separate affinity.
  */
 export function createCookieFetch(baseFetch: typeof fetch): typeof fetch {
-  let cookies: string[] = [];
+  const cookieJar = new Map<string, string>();
 
   return async (input, init) => {
     const headers = new Headers(init?.headers);
-    if (cookies.length > 0) {
-      headers.set("Cookie", cookies.join("; "));
+    if (cookieJar.size > 0) {
+      headers.set("Cookie", [...cookieJar.values()].join("; "));
     }
 
     const res = await baseFetch(input, { ...init, headers });
 
     const setCookie = res.headers.getSetCookie?.();
     if (setCookie?.length) {
-      cookies = setCookie.map((c) => c.split(";", 1)[0]!);
+      for (const c of setCookie) {
+        const pair = c.split(";", 1)[0]!;
+        const name = pair.split("=", 1)[0]!;
+        cookieJar.set(name, pair);
+      }
     }
 
     return res;
