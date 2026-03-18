@@ -20,4 +20,25 @@ export interface FileInfo {
    * Will be undefined for files created via native Substrate extrinsics.
    */
   txHash?: `0x${string}`;
+  /** Rolling target replication level for this file key. Present in API responses. */
+  desiredReplicas?: number;
+  /** Current number of BSPs storing this file. Present in API responses. */
+  currentReplication?: number;
+}
+
+// Rust like Result type
+export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+export type ResultWithUnwrap<T, E> = Result<T, E> & {
+  unwrap(): T;
+};
+
+export function withUnwrap<T, E>(res: Result<T, E>): ResultWithUnwrap<T, E> {
+  return {
+    ...res,
+    unwrap() {
+      if (this.ok) return this.value;
+      throw this.error;
+    }
+  };
 }

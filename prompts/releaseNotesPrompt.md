@@ -103,6 +103,8 @@ Assume each breaking PR has a section in its body like:
        - `🟢 [MSP operators]`
        - `🟠 [BSP operators]`
        - `🟡 [Fisherman operators]`
+       - `🟤 [Indexer operators]`
+       - `🔴 [SDK users]`
      - Keep actor tags inline inside the `Who is affected` bullet text only.
      - Do **not** add a separate `Actors` subsection.
      - For **“Suggested code changes”**:

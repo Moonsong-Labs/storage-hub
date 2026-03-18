@@ -1,3 +1,4 @@
+import { createCookieFetch } from "./cookieFetch.js";
 import { HttpError, NetworkError, TimeoutError } from "./errors.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -7,6 +8,17 @@ export type HttpClientConfig = {
   timeoutMs?: number;
   defaultHeaders?: Record<string, string>;
   fetchImpl?: typeof fetch;
+  /**
+   * When `true`, the client automatically captures `Set-Cookie` response
+   * headers and sends them back as `Cookie` on subsequent requests.
+   *
+   * This is primarily useful in Node.js where `fetch` does not handle
+   * cookies, causing load-balancer sticky sessions to break. Browsers
+   * manage cookies natively, so this flag is typically unnecessary there.
+   *
+   * @default false
+   */
+  enableCookies?: boolean;
 };
 
 export type RequestOptions = {
@@ -40,7 +52,8 @@ export class HttpClient {
       Accept: "application/json",
       ...(options.defaultHeaders ?? {})
     };
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    const baseFetch = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.enableCookies ? createCookieFetch(baseFetch) : baseFetch;
   }
 
   async request<T>(

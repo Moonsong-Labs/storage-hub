@@ -240,6 +240,21 @@ impl StorageHubRpcClient {
         .await
     }
 
+    /// Trigger file storage healing for the given bucket.
+    pub async fn trigger_bucket_file_storage_healing(&self, bucket_id: &str) -> RpcResult<()> {
+        debug!(
+            target: "rpc::client::trigger_bucket_file_storage_healing",
+            bucket_id = %bucket_id,
+            "RPC call: trigger_bucket_file_storage_healing"
+        );
+
+        self.call(
+            methods::TRIGGER_BUCKET_FILE_STORAGE_HEALING,
+            jsonrpsee::rpc_params![bucket_id],
+        )
+        .await
+    }
+
     /// Retrieve the Onchain Provider ID of the MSP Node (therefore the MSP ID)
     pub async fn get_provider_id(&self) -> RpcResult<RpcProviderId> {
         debug!(target: "rpc::client::get_provider_id", "RPC call: get_provider_id");
