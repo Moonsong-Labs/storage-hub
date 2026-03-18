@@ -888,7 +888,6 @@ impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
 }
 
 /// Converts a SCALE-encoded `FileOperationIntention` into a human-readable EIP-191 message.
-/// Converts a SCALE-encoded `FileOperationIntention` plus a rich context blob into a
 /// human-readable EIP-191 message that wallets can display clearly.
 ///
 /// The wallet will show something like:
