@@ -111,6 +111,7 @@ pub type RejectedStorageRequest<Runtime> =
     pallet_file_system::types::RejectedStorageRequest<Runtime>;
 pub type StorageRequestMspAcceptedFileKeys<Runtime> =
     pallet_file_system::types::StorageRequestMspAcceptedFileKeys<Runtime>;
+pub type MaxMspRespondFileKeys<Runtime> = pallet_file_system::types::MaxMspRespondFileKeys<Runtime>;
 pub type FileKeyWithProof<Runtime> = pallet_file_system::types::FileKeyWithProof<Runtime>;
 pub type PeerIds<Runtime> = pallet_file_system::types::PeerIds<Runtime>;
 pub type FileOperationIntention<Runtime> =
