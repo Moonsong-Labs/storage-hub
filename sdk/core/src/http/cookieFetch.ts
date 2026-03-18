@@ -23,8 +23,8 @@ export function createCookieFetch(baseFetch: typeof fetch): typeof fetch {
     const setCookie = res.headers.getSetCookie?.();
     if (setCookie?.length) {
       for (const c of setCookie) {
-        const pair = c.split(";", 1)[0]!;
-        const name = pair.split("=", 1)[0]!;
+        const pair = c.split(";", 1)[0] ?? "";
+        const name = pair.split("=", 1)[0] ?? "";
         cookieJar.set(name, pair);
       }
     }

@@ -1433,9 +1433,10 @@ where
 
         // Encode the intention for signature verification
         let signed_intention_encoded = signed_intention.encode();
-        // Adapt the bytes to verify depending on the runtime configuration
+        let context = Self::build_intention_context(&bucket_id, size, &location);
         let to_verify = <T as crate::pallet::Config>::IntentionMsgAdapter::bytes_to_verify(
             &signed_intention_encoded,
+            &context,
         );
 
         let is_valid = signature.verify(&to_verify[..], &who);
@@ -1503,9 +1504,14 @@ where
 
             // Encode the intention for signature verification
             let signed_intention_encoded = deletion_request.signed_intention.encode();
-            // Adapt the bytes to verify depending on the runtime configuration
+            let context = Self::build_intention_context(
+                &deletion_request.bucket_id,
+                deletion_request.size,
+                &deletion_request.location,
+            );
             let to_verify = <T as crate::pallet::Config>::IntentionMsgAdapter::bytes_to_verify(
                 &signed_intention_encoded,
+                &context,
             );
 
             let is_valid = deletion_request
@@ -2982,6 +2988,27 @@ where
         expiration_item.set_next_expiration_tick(new_expiration_tick);
 
         Ok(new_expiration_tick)
+    }
+
+    /// Build a binary context blob that the `MessageAdapter` can use to construct
+    /// a human-readable wallet message.
+    ///
+    /// Layout: `[bucket_id bytes][8-byte size LE][location bytes]`
+    ///
+    /// `bucket_id` is fixed-width (32 bytes for H256), `size` is always 8 bytes,
+    /// and `location` occupies the remaining tail so no length prefix is needed.
+    pub(crate) fn build_intention_context(
+        bucket_id: &BucketIdFor<T>,
+        size: StorageDataUnit<T>,
+        location: &FileLocation<T>,
+    ) -> Vec<u8> {
+        let bucket_bytes = bucket_id.as_ref();
+        let size_u64: u64 = size.saturated_into();
+        let mut ctx = Vec::with_capacity(bucket_bytes.len() + 8 + location.len());
+        ctx.extend_from_slice(bucket_bytes);
+        ctx.extend_from_slice(&size_u64.to_le_bytes());
+        ctx.extend_from_slice(location.as_ref());
+        ctx
     }
 
     pub fn compute_file_key(
