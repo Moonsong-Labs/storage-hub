@@ -360,11 +360,9 @@ jobs:
           path: target/release/
       - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-          docker rm temp_storage_hub
+        uses: ./.github/workflow-templates/pull-node-image
+        with:
+          tag_as_local: "false"
       - name: Start the zombienet full network
         run: |
           chmod +x target/release/storage-hub-node
@@ -400,11 +398,9 @@ jobs:
           path: target/release/
       - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-          docker rm temp_storage_hub
+        uses: ./.github/workflow-templates/pull-node-image
+        with:
+          tag_as_local: "false"
       - name: Setup zombienet
         run: |
           chmod +x target/release/storage-hub-node
@@ -444,11 +440,9 @@ jobs:
           cd test
           bun install --frozen-lockfile
           bun run docker:build
-      - name: Pull latest node Docker image if not changed
+      - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        uses: ./.github/workflow-templates/pull-node-image
       - name: Run typegen
         run: |
           cd test
@@ -495,11 +489,9 @@ jobs:
           cd test
           bun install --frozen-lockfile
           bun run docker:build
-      - name: Pull latest node Docker image if not changed
+      - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        uses: ./.github/workflow-templates/pull-node-image
       - name: Run typegen
         run: |
           cd test
@@ -586,11 +578,9 @@ jobs:
           cd test
           bun install --frozen-lockfile
           bun run docker:build
-      - name: Pull latest node Docker image if not changed
+      - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        uses: ./.github/workflow-templates/pull-node-image
       - name: Run typegen
         run: |
           cd test
@@ -702,10 +692,9 @@ jobs:
           bun run docker:build
       - name: Pull latest node Docker image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
-
+        uses: ./.github/workflow-templates/pull-node-image
+        with:
+          extract_binary: "false"
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
@@ -793,11 +782,9 @@ jobs:
           cd test
           bun install --frozen-lockfile
           bun run docker:build
-      - name: Pull latest node Docker image if not changed
+      - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        uses: ./.github/workflow-templates/pull-node-image
       - name: Run typegen
         run: |
           cd test
@@ -884,11 +871,9 @@ jobs:
           cd test
           bun install --frozen-lockfile
           bun run docker:build
-      - name: Pull latest node Docker image if not changed
+      - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        uses: ./.github/workflow-templates/pull-node-image
       - name: Run typegen
         run: |
           cd test
@@ -971,11 +956,9 @@ jobs:
           cd test
           bun install --frozen-lockfile
           bun run docker:build
-      - name: Pull latest node Docker image if not changed
+      - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        uses: ./.github/workflow-templates/pull-node-image
       - name: Run typegen
         run: |
           cd test
@@ -1083,11 +1066,9 @@ jobs:
           cd test
           bun install --frozen-lockfile
           bun run docker:build
-      - name: Pull latest node Docker image if not changed
+      - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        uses: ./.github/workflow-templates/pull-node-image
       - name: Run typegen
         run: |
           cd test
@@ -1184,11 +1165,9 @@ jobs:
           cd test
           bun install --frozen-lockfile
           bun run docker:build
-      - name: Pull latest node Docker image if not changed
+      - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        uses: ./.github/workflow-templates/pull-node-image
       - name: Run typegen
         run: |
           cd test
@@ -1254,11 +1233,9 @@ jobs:
           cd test
           bun install
           bun run docker:build
-      - name: Pull latest node Docker image if not changed
+      - name: Pull latest node Docker image and extract binary if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
-        run: |
-          docker pull moonsonglabs/storage-hub:latest
-          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        uses: ./.github/workflow-templates/pull-node-image
       - name: Run typegen
         run: |
           cd test
