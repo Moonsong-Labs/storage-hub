@@ -1,8 +1,8 @@
 I’m working in the Moonsong-Labs/storage-hub repository.
 
-VERSION: 0.4.1
-BASE: 325c93b684224d3b93024fa0f912e175fe2380ae
-HEAD: 72400309b7fdc659f60a2af486a43a6e94de0aec
+VERSION: 0.5.0
+BASE: ea2611cb3b47e448fa2812082e130c697b66277a
+HEAD: e8903e8451fe755d5c442747ae61a6f4aca62070
 EXAMPLE_RELEASE_NOTES: @/Users/facundofarall/Desktop/Moonsong/storage-hub/.worktrees/release/v0.4/release/StorageHub-release0.4.0.md
 
 Please create **release notes** for **StorageHub VERSION** based on the existing style and structure of:
