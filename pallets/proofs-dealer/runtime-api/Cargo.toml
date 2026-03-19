@@ -6,7 +6,7 @@ homepage = { workspace = true }
 license = { workspace = true }
 name = "pallet-proofs-dealer-runtime-api"
 repository = { workspace = true }
-version = "0.4.0"
+version = "0.5.0"
 
 [lints]
 workspace = true
