@@ -65,9 +65,9 @@ pub trait WeightInfo {
 	fn issue_storage_request() -> Weight;
 	fn revoke_storage_request(n: u32, m: u32, ) -> Weight;
 	fn msp_stop_storing_bucket() -> Weight;
-	fn msp_respond_storage_requests_multiple_buckets(n: u32, m: u32, l: u32, v: u32, r: u32, ) -> Weight;
+	fn msp_respond_storage_requests_multiple_buckets(n: u32, m: u32, l: u32, ) -> Weight;
 	fn bsp_volunteer() -> Weight;
-	fn bsp_confirm_storing(n: u32, v: u32, r: u32, ) -> Weight;
+	fn bsp_confirm_storing(n: u32, ) -> Weight;
 	fn bsp_request_stop_storing() -> Weight;
 	fn bsp_confirm_stop_storing() -> Weight;
 	fn stop_storing_for_insolvent_user_bsp() -> Weight;
@@ -77,8 +77,8 @@ pub trait WeightInfo {
 	fn process_expired_storage_request_msp_accepted_or_no_msp(n: u32, ) -> Weight;
 	fn process_expired_storage_request_msp_rejected(n: u32, ) -> Weight;
 	fn process_expired_move_bucket_request() -> Weight;
-	fn delete_files_bucket(n: u32, v: u32, r: u32, ) -> Weight;
-	fn delete_files_bsp(n: u32, v: u32, r: u32, ) -> Weight;
+	fn delete_files_bucket(n: u32, ) -> Weight;
+	fn delete_files_bsp(n: u32, ) -> Weight;
 	fn delete_files_for_incomplete_storage_request_bucket(n: u32, ) -> Weight;
 	fn delete_files_for_incomplete_storage_request_bsp(n: u32, ) -> Weight;
 }
@@ -494,9 +494,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// The range of component `n` is `[1, 10]`.
 	/// The range of component `m` is `[1, 10]`.
 	/// The range of component `l` is `[1, 10]`.
-	/// The range of component `v` is `[1, MaxBspVolunteers]`.
-	/// The range of component `r` is `[1, MaxReplicationTarget]`.
-	fn msp_respond_storage_requests_multiple_buckets(n: u32, m: u32, l: u32, v: u32, r: u32, ) -> Weight {
+	fn msp_respond_storage_requests_multiple_buckets(n: u32, m: u32, l: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0 + l * (7658 ±0) + m * (2850 ±0) + n * (10488 ±0)`
 		//  Estimated: `356240 + l * (200787 ±564) + m * (4852 ±564) + n * (200787 ±564)`
@@ -593,9 +591,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:10)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[1, 10]`.
-	/// The range of component `v` is `[1, MaxBspVolunteers]`.
-	/// The range of component `r` is `[1, MaxReplicationTarget]`.
-	fn bsp_confirm_storing(n: u32, v: u32, r: u32, ) -> Weight {
+	fn bsp_confirm_storing(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `5875 + n * (33303 ±0)`
 		//  Estimated: `13545 + n * (35525 ±0)`
@@ -945,9 +941,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:10)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[1, 10]`.
-	/// The range of component `v` is `[1, MaxBspVolunteers]`.
-	/// The range of component `r` is `[1, MaxReplicationTarget]`.
-	fn delete_files_bucket(n: u32, v: u32, r: u32, ) -> Weight {
+	fn delete_files_bucket(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `3170 + n * (33399 ±0)`
 		//  Estimated: `11034 + n * (35525 ±0)`
@@ -1002,9 +996,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:10)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[1, 10]`.
-	/// The range of component `v` is `[1, MaxBspVolunteers]`.
-	/// The range of component `r` is `[1, MaxReplicationTarget]`.
-	fn delete_files_bsp(n: u32, v: u32, r: u32, ) -> Weight {
+	fn delete_files_bsp(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `4805 + n * (33553 ±0)`
 		//  Estimated: `18567 + n * (35525 ±0)`
@@ -1508,9 +1500,7 @@ impl WeightInfo for () {
 	/// The range of component `n` is `[1, 10]`.
 	/// The range of component `m` is `[1, 10]`.
 	/// The range of component `l` is `[1, 10]`.
-	/// The range of component `v` is `[1, MaxBspVolunteers]`.
-	/// The range of component `r` is `[1, MaxReplicationTarget]`.
-	fn msp_respond_storage_requests_multiple_buckets(n: u32, m: u32, l: u32, v: u32, r: u32, ) -> Weight {
+	fn msp_respond_storage_requests_multiple_buckets(n: u32, m: u32, l: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0 + l * (7658 ±0) + m * (2850 ±0) + n * (10488 ±0)`
 		//  Estimated: `356240 + l * (200787 ±564) + m * (4852 ±564) + n * (200787 ±564)`
@@ -1607,9 +1597,7 @@ impl WeightInfo for () {
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:10)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[1, 10]`.
-	/// The range of component `v` is `[1, MaxBspVolunteers]`.
-	/// The range of component `r` is `[1, MaxReplicationTarget]`.
-	fn bsp_confirm_storing(n: u32, v: u32, r: u32, ) -> Weight {
+	fn bsp_confirm_storing(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `5875 + n * (33303 ±0)`
 		//  Estimated: `13545 + n * (35525 ±0)`
@@ -1959,9 +1947,7 @@ impl WeightInfo for () {
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:10)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[1, 10]`.
-	/// The range of component `v` is `[1, MaxBspVolunteers]`.
-	/// The range of component `r` is `[1, MaxReplicationTarget]`.
-	fn delete_files_bucket(n: u32, v: u32, r: u32, ) -> Weight {
+	fn delete_files_bucket(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `3170 + n * (33399 ±0)`
 		//  Estimated: `11034 + n * (35525 ±0)`
@@ -2016,9 +2002,7 @@ impl WeightInfo for () {
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:10)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[1, 10]`.
-	/// The range of component `v` is `[1, MaxBspVolunteers]`.
-	/// The range of component `r` is `[1, MaxReplicationTarget]`.
-	fn delete_files_bsp(n: u32, v: u32, r: u32, ) -> Weight {
+	fn delete_files_bsp(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `4805 + n * (33553 ±0)`
 		//  Estimated: `18567 + n * (35525 ±0)`
