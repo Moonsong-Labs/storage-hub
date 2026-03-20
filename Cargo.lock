@@ -16685,6 +16685,7 @@ dependencies = [
  "cumulus-client-service",
  "cumulus-primitives-core 0.18.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "cumulus-primitives-storage-weight-reclaim",
+ "cumulus-relay-chain-interface",
  "fp-account",
  "frame-benchmarking 40.2.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "frame-metadata-hash-extension",

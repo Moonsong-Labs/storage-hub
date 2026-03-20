@@ -60,6 +60,7 @@ polkadot-primitives = { workspace = true }
 cumulus-client-service = { workspace = true, optional = true }
 cumulus-primitives-core = { workspace = true, optional = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true, optional = true }
+cumulus-relay-chain-interface = { workspace = true, optional = true }
 
 # Frontier
 fp-account = { workspace = true }
