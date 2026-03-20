@@ -59,6 +59,7 @@ polkadot-primitives = { workspace = true }
 # Cumulus (optional, for parachain support)
 cumulus-client-service = { workspace = true, optional = true }
 cumulus-primitives-core = { workspace = true, optional = true }
+cumulus-primitives-proof-size-hostfunction = { workspace = true, optional = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true, optional = true }
 cumulus-relay-chain-interface = { workspace = true, optional = true }
 
@@ -96,6 +97,7 @@ parachain = [
     "cumulus-client-service",
     "cumulus-primitives-core",
     "cumulus-primitives-storage-weight-reclaim",
+    "cumulus-primitives-proof-size-hostfunction",
 ]
 runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",
@@ -133,6 +135,7 @@ std = [
     "polkadot-primitives/std",
     "cumulus-primitives-core?/std",
     "cumulus-primitives-storage-weight-reclaim?/std",
+    "cumulus-primitives-proof-size-hostfunction?/std",
     "shp-constants/std",
     "shp-file-key-verifier/std",
     "shp-file-metadata/std",
