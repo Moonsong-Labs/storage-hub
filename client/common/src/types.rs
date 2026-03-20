@@ -181,11 +181,15 @@ type HostFunctions = (
 
 // Solochain host functions - used when the `parachain` feature is disabled.
 #[cfg(all(not(feature = "parachain"), not(feature = "runtime-benchmarks")))]
-type HostFunctions = sp_io::SubstrateHostFunctions;
+type HostFunctions = (
+    sp_io::SubstrateHostFunctions,
+    cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
+);
 
 #[cfg(all(not(feature = "parachain"), feature = "runtime-benchmarks"))]
 type HostFunctions = (
     sp_io::SubstrateHostFunctions,
+    cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
     frame_benchmarking::benchmarking::HostFunctions,
 );
 
