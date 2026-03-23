@@ -3,7 +3,7 @@ authors = { workspace = true }
 description = "A Precompile to manage the file-system pallet through the EVM."
 edition = "2021"
 name = "pallet-evm-precompile-file-system"
-version = "0.4.0"
+version = "0.5.0"
 
 [dependencies]
 
