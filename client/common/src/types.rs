@@ -192,7 +192,9 @@ type HostFunctions = (
 #[cfg(all(not(feature = "parachain"), feature = "runtime-benchmarks"))]
 type HostFunctions = (
     sp_io::SubstrateHostFunctions,
-    cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
+    /// Frontier expects the proof size host function to be available since all call sites call `get_proof_size` internally. There is no way to disable this in frontier yet.
+    /// The `cumulus_primitives_proof_size_hostfunction` dependency is a minimal one and does not bring in any parachain related dependencies that solochains might not want included.
+    /// The `ProofSizeExt` can be disabled by the clients block building and importing pipelines which will have the host function return a default max value.cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
     frame_benchmarking::benchmarking::HostFunctions,
 );
 
