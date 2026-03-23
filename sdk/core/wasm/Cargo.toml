@@ -4,7 +4,7 @@ edition = "2021"
 license = "Apache-2.0"
 name = "storagehub-wasm"
 repository = "https://github.com/moonsong-labs/storage-hub"
-version = "0.5.0"
+version = "0.5.1"
 
 [lib]
 crate-type = ["cdylib"]

@@ -7,7 +7,7 @@ license = { workspace = true }
 name = "shc-blockchain-service"
 publish = false
 repository = { workspace = true }
-version = "0.5.0"
+version = "0.5.1"
 
 [lib]
 

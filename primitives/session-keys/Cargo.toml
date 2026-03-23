@@ -6,7 +6,7 @@ homepage = { workspace = true }
 license = { workspace = true }
 name = "shp-session-keys"
 repository = { workspace = true }
-version = "0.5.0"
+version = "0.5.1"
 
 [dependencies]
 async-trait = { workspace = true }

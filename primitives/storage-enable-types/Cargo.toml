@@ -6,7 +6,7 @@ homepage = { workspace = true }
 license = { workspace = true }
 name = "shp-storage-enable-types"
 repository = { workspace = true }
-version = "0.5.0"
+version = "0.5.1"
 
 [lints]
 workspace = true
