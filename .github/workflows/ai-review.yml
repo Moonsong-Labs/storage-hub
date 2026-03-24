@@ -416,20 +416,17 @@ jobs:
               body,
             });
 
-      - name: Approve pull request when no issues are found
+      - name: Fail job when issues are found
         if: always()
         uses: actions/github-script@v7
         env:
           REVIEWER_NAME: ${{ matrix.name }}
-          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
         with:
           script: |
             const fs = require('fs');
 
             if (!fs.existsSync('codex-output.json') || fs.statSync('codex-output.json').size === 0) {
-              core.info('Codex output is missing; skipping approval.');
+              core.setFailed(`AI reviewer \`${process.env.REVIEWER_NAME}\` did not produce structured output.`);
               return;
             }
 
@@ -437,21 +434,11 @@ jobs:
             const findings = Array.isArray(review.findings) ? review.findings : [];
             const status = review.overall_status || 'fail';
 
-            if (status !== 'pass' || findings.length !== 0) {
-              core.info(`Skipping approval because status=${status} and findings=${findings.length}.`);
+            if (status === 'pass' && findings.length === 0) {
+              core.info(`AI reviewer \`${process.env.REVIEWER_NAME}\` found no issues.`);
               return;
             }
 
-            const body = [
-              `AI reviewer \`${process.env.REVIEWER_NAME}\` found no issues in this review run.`,
-              '',
-              `Run: [#${process.env.RUN_ID} (attempt ${process.env.RUN_ATTEMPT})](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.RUN_ID})`,
-            ].join('\n');
-
-            await github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: Number(process.env.PR_NUMBER),
-              event: 'APPROVE',
-              body,
-            });
+            core.setFailed(
+              `AI reviewer \`${process.env.REVIEWER_NAME}\` found ${findings.length} issue(s) with overall_status=\`${status}\`. See inline comments and the summary comment for details.`,
+            );
