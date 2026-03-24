@@ -1,0 +1,14 @@
+{
+  "reviewers": [
+    {
+      "name": "types-bundle-sync",
+      "prompt": "prompts/review/types-bundle-sync.md",
+      "watched_globs": [
+        "client/rpc/**",
+        "pallets/**/runtime-api/**",
+        "primitives/tx-implicits-runtime-api/**",
+        "runtime/**/src/apis.rs"
+      ]
+    }
+  ]
+}

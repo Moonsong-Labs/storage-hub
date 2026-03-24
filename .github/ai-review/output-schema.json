@@ -1,0 +1,93 @@
+{
+  "type": "object",
+  "properties": {
+    "reviewer_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "overall_status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail"
+      ]
+    },
+    "overall_explanation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "code_location": {
+            "type": "object",
+            "properties": {
+              "file_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "line_range": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "file_path",
+              "line_range"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "confidence_score",
+          "priority",
+          "code_location"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "reviewer_name",
+    "overall_status",
+    "overall_explanation",
+    "findings"
+  ],
+  "additionalProperties": false
+}

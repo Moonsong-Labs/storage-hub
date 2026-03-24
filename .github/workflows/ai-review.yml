@@ -1,0 +1,330 @@
+name: AI Review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CODEX_MODEL: ${{ vars.CODEX_MODEL || 'gpt-5.2-codex' }}
+
+jobs:
+  prepare:
+    name: Prepare AI review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      should_run: ${{ steps.resolve.outputs.should_run }}
+      skip_reason: ${{ steps.resolve.outputs.skip_reason }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      base_ref: ${{ steps.resolve.outputs.base_ref }}
+      base_sha: ${{ steps.resolve.outputs.base_sha }}
+      head_ref: ${{ steps.resolve.outputs.head_ref }}
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+      selected_prompts: ${{ steps.select.outputs.selected_prompts }}
+      selected_count: ${{ steps.select.outputs.selected_count }}
+    steps:
+      - name: Check out repository metadata
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Resolve PR context and authorise trigger
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const allowedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+            let shouldRun = false;
+            let skipReason = '';
+            let pr = null;
+
+            if (context.eventName === 'pull_request') {
+              pr = context.payload.pull_request;
+
+              if (pr.head.repo.fork) {
+                skipReason = 'Fork pull requests require a maintainer to trigger `/ai-review`.';
+              } else {
+                shouldRun = true;
+              }
+            } else if (context.eventName === 'issue_comment') {
+              const issue = context.payload.issue;
+              const commentBody = (context.payload.comment.body || '').trim();
+              const association = context.payload.comment.author_association;
+
+              if (!issue.pull_request) {
+                skipReason = 'Comment is not on a pull request.';
+              } else if (!commentBody.startsWith('/ai-review')) {
+                skipReason = 'Comment does not request AI review.';
+              } else if (!allowedAssociations.has(association)) {
+                skipReason = `Comment author association ${association} is not allowed to trigger AI review.`;
+              } else {
+                const { data } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: issue.number,
+                });
+
+                pr = data;
+                shouldRun = true;
+              }
+            } else {
+              skipReason = `Unsupported event: ${context.eventName}`;
+            }
+
+            let changedFiles = [];
+            if (shouldRun && pr) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+
+              changedFiles = files.map((file) => file.filename);
+            }
+
+            fs.writeFileSync('changed-files.json', JSON.stringify(changedFiles, null, 2));
+
+            core.setOutput('should_run', shouldRun ? 'true' : 'false');
+            core.setOutput('skip_reason', skipReason);
+            core.setOutput('pr_number', pr ? String(pr.number) : '');
+            core.setOutput('base_ref', pr ? pr.base.ref : '');
+            core.setOutput('base_sha', pr ? pr.base.sha : '');
+            core.setOutput('head_ref', pr ? pr.head.ref : '');
+            core.setOutput('head_sha', pr ? pr.head.sha : '');
+
+      - name: Select matching AI reviewers
+        id: select
+        run: |
+          set -euo pipefail
+
+          if [ "${{ steps.resolve.outputs.should_run }}" != "true" ]; then
+            echo "[]" > selected-prompts.json
+          else
+            bun ./scripts/select_ai_review_prompts.ts \
+              .github/ai-review/reviewers.json \
+              changed-files.json > selected-prompts.json
+          fi
+
+          echo "Selected reviewers:"
+          jq '.' selected-prompts.json
+
+          echo "selected_prompts=$(jq -c '.' selected-prompts.json)" >> "$GITHUB_OUTPUT"
+          echo "selected_count=$(jq 'length' selected-prompts.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Log skipped trigger
+        if: steps.resolve.outputs.should_run != 'true'
+        run: echo "${{ steps.resolve.outputs.skip_reason }}"
+
+  review:
+    name: AI review (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: needs.prepare.outputs.should_run == 'true' && needs.prepare.outputs.selected_count != '0'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.selected_prompts) }}
+    steps:
+      - name: Check out pull request merge ref
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ needs.prepare.outputs.pr_number }}/merge
+          fetch-depth: 1
+
+      - name: Fetch base and head refs
+        env:
+          BASE_REF: ${{ needs.prepare.outputs.base_ref }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "${BASE_REF}" "+refs/pull/${PR_NUMBER}/head"
+
+      - name: Build Codex review prompt
+        env:
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          REVIEWER_NAME: ${{ matrix.name }}
+          PROMPT_TEMPLATE: ${{ matrix.prompt }}
+          BASE_REF: ${{ needs.prepare.outputs.base_ref }}
+          HEAD_REF: ${{ needs.prepare.outputs.head_ref }}
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
+          MATCHED_FILES_JSON: ${{ toJson(matrix.matched_files) }}
+        run: |
+          set -euo pipefail
+
+          cp "${PROMPT_TEMPLATE}" codex-prompt.md
+
+          {
+            echo ""
+            echo "Repository: ${REPOSITORY}"
+            echo "Pull Request #: ${PR_NUMBER}"
+            echo "Reviewer: ${REVIEWER_NAME}"
+            echo "Base ref: ${BASE_REF}"
+            echo "Head ref: ${HEAD_REF}"
+            echo "Base SHA: ${BASE_SHA}"
+            echo "Head SHA: ${HEAD_SHA}"
+            echo "Matched files for this reviewer:"
+            printf '%s\n' "${MATCHED_FILES_JSON}" | jq -r '.[]'
+            echo ""
+            echo "Changed files:"
+            git --no-pager diff --name-status "${BASE_SHA}" "${HEAD_SHA}"
+            echo ""
+            echo "Unified diff (context=5):"
+            git --no-pager diff --unified=5 --stat=200 "${BASE_SHA}" "${HEAD_SHA}" > /tmp/diffstat.txt
+            git --no-pager diff --unified=5 "${BASE_SHA}" "${HEAD_SHA}" > /tmp/full.diff
+            cat /tmp/diffstat.txt
+            echo ""
+            cat /tmp/full.diff
+          } >> codex-prompt.md
+
+      - name: Run Codex structured review
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: codex-prompt.md
+          output-schema-file: .github/ai-review/output-schema.json
+          output-file: codex-output.json
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          model: ${{ env.CODEX_MODEL }}
+
+      - name: Inspect Codex output
+        if: always()
+        run: |
+          if [ -s codex-output.json ]; then
+            jq '.' codex-output.json
+          else
+            echo "Codex output file missing."
+          fi
+
+      - name: Publish inline review comments
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
+          REVIEWER_NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -s codex-output.json ]; then
+            echo "No Codex output file present; skipping inline comments."
+            exit 0
+          fi
+
+          findings_count=$(jq '.findings | length' codex-output.json)
+          if [ "${findings_count}" -eq 0 ]; then
+            echo "Codex returned no findings; skipping inline comments."
+            exit 0
+          fi
+
+          jq -c \
+            --arg commit "${HEAD_SHA}" \
+            --arg reviewer "${REVIEWER_NAME}" \
+            '.findings[] | {
+              body: ("[" + $reviewer + "] " + .title + "\n\n" + .body + "\n\nConfidence: " + (.confidence_score | tostring) + "\nPriority: P" + (.priority | tostring)),
+              commit_id: $commit,
+              path: .code_location.file_path,
+              line: .code_location.line_range.end,
+              side: "RIGHT",
+              start_line: (if .code_location.line_range.start != .code_location.line_range.end then .code_location.line_range.start else null end),
+              start_side: (if .code_location.line_range.start != .code_location.line_range.end then "RIGHT" else null end)
+            } | with_entries(select(.value != null))' codex-output.json > findings.jsonl
+
+          while IFS= read -r payload; do
+            curl --fail-with-body -sS \
+              -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}/comments" \
+              -d "${payload}"
+          done < findings.jsonl
+
+      - name: Upsert summary comment
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          REVIEWER_NAME: ${{ matrix.name }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            const marker = `<!-- ai-review:${process.env.REVIEWER_NAME} -->`;
+            let body;
+
+            if (!fs.existsSync('codex-output.json') || fs.statSync('codex-output.json').size === 0) {
+              body = [
+                marker,
+                `## AI review: \`${process.env.REVIEWER_NAME}\``,
+                '',
+                'The reviewer did not produce structured output. Please inspect the workflow run.',
+              ].join('\n');
+            } else {
+              const review = JSON.parse(fs.readFileSync('codex-output.json', 'utf8'));
+              const findingsCount = Array.isArray(review.findings) ? review.findings.length : 0;
+              const status = review.overall_status || 'fail';
+
+              body = [
+                marker,
+                `## AI review: \`${process.env.REVIEWER_NAME}\``,
+                '',
+                `Status: \`${status}\``,
+                `Findings: ${findingsCount}`,
+                '',
+                review.overall_explanation,
+              ].join('\n');
+            }
+
+            const issueNumber = Number(process.env.PR_NUMBER);
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+
+            const existingComment = comments.find((comment) => {
+              return comment.user?.type === 'Bot' && comment.body?.includes(marker);
+            });
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body,
+              });
+            }

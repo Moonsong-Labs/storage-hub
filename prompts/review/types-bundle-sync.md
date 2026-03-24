@@ -94,6 +94,11 @@ Use conservative judgement:
 
 ## Output expectations
 
+Your structured output must use:
+
+- `reviewer_name`: `types-bundle-sync`
+- `overall_status`: `pass` when no missing or incomplete `types-bundle` synchronisation work is detected, otherwise `fail`
+
 When you produce findings:
 
 - keep them actionable and specific
