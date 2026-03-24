@@ -102,7 +102,7 @@ Your structured output must use:
 When you produce findings:
 
 - keep them actionable and specific
-- cite the most relevant changed file and line range that triggered the concern
+- use the following anchor rules for `code_location`
 - explain which `types-bundle` file appears missing or incomplete
 - briefly state the likely follow-up, for example:
   - add the RPC signature to `types-bundle/src/rpc.ts`
@@ -110,6 +110,33 @@ When you produce findings:
   - add supporting exported types to `types-bundle/src/types.ts`
   - re-run `bun run --cwd test typegen`
 - add a suggested change text in the finding if the line mapping is reliable.
+
+### Anchor rules
+
+Your `code_location` must point to the Rust API declaration that introduced the downstream `types-bundle` work, not to the missing TypeScript file.
+
+- For a missing `types-bundle/src/runtime.ts` update:
+  - anchor the finding to the changed Rust runtime API declaration line where the new or changed API function is defined
+  - prefer the `fn ...` declaration line inside the runtime API crate
+  - example anchor:
+    - `pallets/providers/runtime-api/src/lib.rs` on the line `fn log_message() -> bool;`
+
+- For a missing `types-bundle/src/rpc.ts` update:
+  - anchor the finding to the changed Rust RPC declaration in `client/rpc/src/lib.rs`
+  - prefer the `#[method(name = "...")]` line
+  - if the attribute line is not changed or is not available in the diff, anchor to the immediately following `async fn ...` line
+  - example anchor:
+    - `client/rpc/src/lib.rs` on the line `#[method(name = "logMessage")]`
+    - otherwise the line `async fn log_message(&self) -> RpcResult<bool>;`
+
+- For a missing `types-bundle/src/types.ts` update:
+  - anchor the finding to the same originating Rust declaration that introduced the exposed type surface
+  - do not anchor it to `types-bundle/src/types.ts` unless that file itself is part of the diff and the issue is specifically a partial or inconsistent update inside that file
+
+- Only choose anchor lines that are present in the pull request diff.
+- Prefer a single-line anchor when possible.
+- Use a two-line range only when the declaration naturally spans both lines and both are part of the diff.
+- Do not choose nearby contextual lines, unrelated lines, or unchanged lines outside the diff.
 
 When you produce no findings:
 
