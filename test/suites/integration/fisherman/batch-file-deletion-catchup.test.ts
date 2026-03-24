@@ -6,6 +6,7 @@ import {
   shUser,
   waitFor
 } from "../../../util";
+import { sendCustomRpc } from "../../../util/rpc";
 
 /**
  * Validates fisherman only processes file deletions from FINALIZED blocks, ignoring unfinalized blocks and constructing valid forest proofs
@@ -446,11 +447,36 @@ await describeMspNet(
         containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName
       });
 
+      // Force P2P reconnection — long Docker pauses (60s+) kill gossip connections.
+      // system_addReservedPeer forces libp2p to proactively reconnect to the BSP.
+      const bspPeerId = userApi.shConsts.NODE_INFOS.bsp.expectedPeerId;
+      const bspContainer = userApi.shConsts.NODE_INFOS.bsp.containerName;
+      const bspP2pPort = userApi.shConsts.NODE_INFOS.bsp.p2pPort;
+      const fishermanRpcPort = userApi.shConsts.NODE_INFOS.fisherman.port;
+      await sendCustomRpc(
+        `http://127.0.0.1:${fishermanRpcPort}`,
+        "system_addReservedPeer",
+        [`/dns4/${bspContainer}/tcp/${bspP2pPort}/p2p/${bspPeerId}`]
+      );
+      await waitFor({
+        lambda: async () => (await fishermanApi.rpc.system.peers()).length > 0,
+        delay: 500,
+        iterations: 60
+      });
+
       // Ensure indexer has processed all finalized blocks
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
-      // Wait for fisherman to catch up to chain tip after resume
+      // Wait for fisherman to catch up to chain tip
       await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
+
+      // Force fatxpool view creation at the current block. During bulk sync, block
+      // import notifications are unreliable (polkadot-sdk README), leaving fatxpool
+      // with stale views. Sealing one more block via normal gossip triggers a
+      // reliable NewBestBlockImported notification that creates a fresh view.
+      const { blockReceipt: syncReceipt } = await userApi.block.seal();
+      await fishermanApi.wait.blockImported(syncReceipt.blockHash.toString());
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Fisherman should only process the 6 files from FINALIZED blocks
       // The 3 manually deleted files from UNFINALIZED blocks should be ignored
@@ -929,11 +955,30 @@ await describeMspNet(
         containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName
       });
 
+      // Force P2P reconnection (same as test 3 — long pause kills gossip)
+      const bspPeerId2 = userApi.shConsts.NODE_INFOS.bsp.expectedPeerId;
+      const bspContainer2 = userApi.shConsts.NODE_INFOS.bsp.containerName;
+      const bspP2pPort2 = userApi.shConsts.NODE_INFOS.bsp.p2pPort;
+      const fishermanRpcPort2 = userApi.shConsts.NODE_INFOS.fisherman.port;
+      await sendCustomRpc(
+        `http://127.0.0.1:${fishermanRpcPort2}`,
+        "system_addReservedPeer",
+        [`/dns4/${bspContainer2}/tcp/${bspP2pPort2}/p2p/${bspPeerId2}`]
+      );
+      await waitFor({
+        lambda: async () => (await fishermanApi.rpc.system.peers()).length > 0,
+        delay: 500,
+        iterations: 60
+      });
+
       // Ensure indexer has processed all finalized blocks
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
-      // Wait for fisherman to catch up to chain tip after resume
+      // Wait for fisherman to sync then force fatxpool view creation
       await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
+      const { blockReceipt: syncReceipt2 } = await userApi.block.seal();
+      await fishermanApi.wait.blockImported(syncReceipt2.blockHash.toString());
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Fisherman should only process the 6 files from FINALIZED blocks
       // The 3 manually deleted files from UNFINALIZED blocks should be ignored
