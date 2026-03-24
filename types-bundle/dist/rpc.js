@@ -318,6 +318,11 @@ export const rpcDefinitions = {
                 }
             ],
             type: "()"
+        },
+        logMessage: {
+            description: "Log a message through the storage hub client RPC and return the runtime result.",
+            params: [],
+            type: "bool"
         }
     }
 };
