@@ -699,6 +699,10 @@ declare module "@polkadot/api-base/types/calls" {
         (providerId: ProviderId | string | Uint8Array) => Observable<Option<Balance>>
       >;
       /**
+       * Log a message and return whether the runtime API call succeeded.
+       **/
+      logMessage: AugmentedCall<ApiType, () => Observable<bool>>;
+      /**
        * Query the available storage capacity.
        **/
       queryAvailableStorageCapacity: AugmentedCall<
