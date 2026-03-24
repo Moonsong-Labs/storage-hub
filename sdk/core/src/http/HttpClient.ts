@@ -1,3 +1,4 @@
+import type { FetchLike } from "./cookieFetch.js";
 import { createCookieFetch } from "./cookieFetch.js";
 import { HttpError, NetworkError, TimeoutError } from "./errors.js";
 
@@ -7,7 +8,7 @@ export type HttpClientConfig = {
   baseUrl: string;
   timeoutMs?: number;
   defaultHeaders?: Record<string, string>;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: FetchLike;
   /**
    * When `true`, the client automatically captures `Set-Cookie` response
    * headers and sends them back as `Cookie` on subsequent requests.
@@ -42,7 +43,7 @@ export class HttpClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly defaultHeaders: Record<string, string>;
-  private readonly fetchImpl: typeof fetch;
+  private readonly fetchImpl: FetchLike;
 
   constructor(options: HttpClientConfig) {
     if (!options.baseUrl) throw new Error("HttpClient: baseUrl is required");
@@ -52,7 +53,7 @@ export class HttpClient {
       Accept: "application/json",
       ...(options.defaultHeaders ?? {})
     };
-    const baseFetch = options.fetchImpl ?? fetch;
+    const baseFetch = options.fetchImpl ?? (fetch as FetchLike);
     this.fetchImpl = options.enableCookies ? createCookieFetch(baseFetch) : baseFetch;
   }
 
@@ -97,8 +98,8 @@ export class HttpClient {
       };
       const fetchFn =
         typeof globalThis !== "undefined" &&
-        this.fetchImpl === (globalThis as unknown as { fetch: typeof fetch }).fetch
-          ? (globalThis as unknown as { fetch: typeof fetch }).fetch.bind(globalThis)
+        this.fetchImpl === (globalThis as unknown as { fetch: FetchLike }).fetch
+          ? (globalThis as unknown as { fetch: FetchLike }).fetch.bind(globalThis)
           : this.fetchImpl;
       const res = await fetchFn(url, init);
 
