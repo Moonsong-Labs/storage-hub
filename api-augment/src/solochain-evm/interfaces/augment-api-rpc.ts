@@ -1199,10 +1199,6 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<LoadFileInStorageResult>
       >;
       /**
-       * Log a message through the storage hub client RPC and return the runtime result.
-       **/
-      logMessage: AugmentedRpc<() => Observable<bool>>;
-      /**
        * Send a FileKeyProof with one or more chunks to be processed locally by the node
        **/
       receiveBackendFileChunks: AugmentedRpc<

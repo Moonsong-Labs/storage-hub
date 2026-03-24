@@ -673,10 +673,6 @@ declare module '@polkadot/rpc-core/types/jsonrpc' {
              **/
             loadFileInStorage: AugmentedRpc<(file_path: Text | string, location: Text | string, owner_account_id_hex: Text | string, bucket_id: H256 | string | Uint8Array) => Observable<LoadFileInStorageResult>>;
             /**
-             * Log a message through the storage hub client RPC and return the runtime result.
-             **/
-            logMessage: AugmentedRpc<() => Observable<bool>>;
-            /**
              * Send a FileKeyProof with one or more chunks to be processed locally by the node
              **/
             receiveBackendFileChunks: AugmentedRpc<(file_key: H256 | string | Uint8Array, file_key_proof: Bytes | string | Uint8Array) => Observable<Bytes>>;

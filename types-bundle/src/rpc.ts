@@ -330,12 +330,6 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
         }
       ],
       type: "()"
-    },
-    logMessage: {
-      description:
-        "Log a message through the storage hub client RPC and return the runtime result.",
-      params: [],
-      type: "bool"
     }
   }
 };
