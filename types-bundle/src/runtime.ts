@@ -418,11 +418,6 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Result<Vec<H256>, QueryBucketsOfUserStoredByMspError>"
-  },
-  log_message: {
-    description: "Log a message and return whether the runtime API call succeeded.",
-    params: [],
-    type: "bool"
   }
 };
 
