@@ -24,11 +24,21 @@ function globToRegExp(glob: string): RegExp {
   for (let i = 0; i < glob.length; i += 1) {
     const char = glob[i];
     const nextChar = glob[i + 1];
+    const prevChar = glob[i - 1];
+    const nextNextChar = glob[i + 2];
 
     if (char === "*") {
       if (nextChar === "*") {
-        regex += ".*";
-        i += 1;
+        if (prevChar === "/" && nextNextChar === "/") {
+          regex += "(?:[^/]+/)*";
+          i += 2;
+        } else if (i === 0 && nextNextChar === "/") {
+          regex += "(?:[^/]+/)*";
+          i += 2;
+        } else {
+          regex += ".*";
+          i += 1;
+        }
       } else {
         regex += "[^/]*";
       }
