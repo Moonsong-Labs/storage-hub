@@ -222,48 +222,127 @@ jobs:
 
       - name: Publish inline review comments
         if: always()
+        uses: actions/github-script@v7
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
           HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
           REVIEWER_NAME: ${{ matrix.name }}
-        run: |
-          set -euo pipefail
+        with:
+          script: |
+            const fs = require('fs');
 
-          if [ ! -s codex-output.json ]; then
-            echo "No Codex output file present; skipping inline comments."
-            exit 0
-          fi
+            const skippedFindingsPath = 'skipped-inline-findings.json';
+            fs.writeFileSync(skippedFindingsPath, '[]\n');
 
-          findings_count=$(jq '.findings | length' codex-output.json)
-          if [ "${findings_count}" -eq 0 ]; then
-            echo "Codex returned no findings; skipping inline comments."
-            exit 0
-          fi
+            if (!fs.existsSync('codex-output.json') || fs.statSync('codex-output.json').size === 0) {
+              core.info('No Codex output file present; skipping inline comments.');
+              return;
+            }
 
-          jq -c \
-            --arg commit "${HEAD_SHA}" \
-            --arg reviewer "${REVIEWER_NAME}" \
-            '.findings[] | {
-              body: ("[" + $reviewer + "] " + .title + "\n\n" + .body + "\n\nConfidence: " + (.confidence_score | tostring) + "\nPriority: P" + (.priority | tostring)),
-              commit_id: $commit,
-              path: .code_location.file_path,
-              line: .code_location.line_range.end,
-              side: "RIGHT",
-              start_line: (if .code_location.line_range.start != .code_location.line_range.end then .code_location.line_range.start else null end),
-              start_side: (if .code_location.line_range.start != .code_location.line_range.end then "RIGHT" else null end)
-            } | with_entries(select(.value != null))' codex-output.json > findings.jsonl
+            const review = JSON.parse(fs.readFileSync('codex-output.json', 'utf8'));
+            const findings = Array.isArray(review.findings) ? review.findings : [];
 
-          while IFS= read -r payload; do
-            curl --fail-with-body -sS \
-              -X POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}/comments" \
-              -d "${payload}"
-          done < findings.jsonl
+            if (findings.length === 0) {
+              core.info('Codex returned no findings; skipping inline comments.');
+              return;
+            }
+
+            function getCommentableRightSideLines(patch) {
+              const lines = new Set();
+
+              if (!patch) {
+                return lines;
+              }
+
+              let currentNewLine = null;
+              for (const patchLine of patch.split('\n')) {
+                const hunkHeader = patchLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+                if (hunkHeader) {
+                  currentNewLine = Number(hunkHeader[1]);
+                  continue;
+                }
+
+                if (currentNewLine === null || patchLine.startsWith('\\')) {
+                  continue;
+                }
+
+                if (patchLine.startsWith('+') && !patchLine.startsWith('+++')) {
+                  lines.add(currentNewLine);
+                  currentNewLine += 1;
+                  continue;
+                }
+
+                if (patchLine.startsWith(' ')) {
+                  lines.add(currentNewLine);
+                  currentNewLine += 1;
+                  continue;
+                }
+
+                if (patchLine.startsWith('-') && !patchLine.startsWith('---')) {
+                  continue;
+                }
+              }
+
+              return lines;
+            }
+
+            const prNumber = Number(process.env.PR_NUMBER);
+            const prFiles = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+
+            const commentableLinesByPath = new Map(
+              prFiles.map((file) => [file.filename, getCommentableRightSideLines(file.patch)]),
+            );
+
+            const skippedFindings = [];
+            let postedInlineCount = 0;
+
+            for (const finding of findings) {
+              const filePath = finding.code_location?.file_path;
+              const line = finding.code_location?.line_range?.end;
+              const commentableLines = commentableLinesByPath.get(filePath);
+
+              if (!filePath || typeof line !== 'number' || !commentableLines?.has(line)) {
+                skippedFindings.push({
+                  ...finding,
+                  skip_reason: 'GitHub could not resolve the requested line on the pull request diff.',
+                });
+                continue;
+              }
+
+              const body =
+                `[${process.env.REVIEWER_NAME}] ${finding.title}\n\n` +
+                `${finding.body}\n\n` +
+                `Confidence: ${finding.confidence_score}\n` +
+                `Priority: P${finding.priority}`;
+
+              try {
+                await github.rest.pulls.createReviewComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  commit_id: process.env.HEAD_SHA,
+                  path: filePath,
+                  line,
+                  side: 'RIGHT',
+                  body,
+                });
+
+                postedInlineCount += 1;
+              } catch (error) {
+                skippedFindings.push({
+                  ...finding,
+                  skip_reason: error instanceof Error ? error.message : 'Failed to publish inline comment.',
+                });
+              }
+            }
+
+            fs.writeFileSync(skippedFindingsPath, `${JSON.stringify(skippedFindings, null, 2)}\n`);
+            core.info(`Posted ${postedInlineCount} inline comments; ${skippedFindings.length} findings were kept for the summary comment.`);
 
       - name: Upsert summary comment
         if: always()
@@ -277,6 +356,11 @@ jobs:
 
             const marker = `<!-- ai-review:${process.env.REVIEWER_NAME} -->`;
             let body;
+            let skippedFindings = [];
+
+            if (fs.existsSync('skipped-inline-findings.json') && fs.statSync('skipped-inline-findings.json').size > 0) {
+              skippedFindings = JSON.parse(fs.readFileSync('skipped-inline-findings.json', 'utf8'));
+            }
 
             if (!fs.existsSync('codex-output.json') || fs.statSync('codex-output.json').size === 0) {
               body = [
@@ -289,8 +373,7 @@ jobs:
               const review = JSON.parse(fs.readFileSync('codex-output.json', 'utf8'));
               const findingsCount = Array.isArray(review.findings) ? review.findings.length : 0;
               const status = review.overall_status || 'fail';
-
-              body = [
+              const summaryLines = [
                 marker,
                 `## AI review: \`${process.env.REVIEWER_NAME}\``,
                 '',
@@ -298,7 +381,25 @@ jobs:
                 `Findings: ${findingsCount}`,
                 '',
                 review.overall_explanation,
-              ].join('\n');
+              ];
+
+              if (skippedFindings.length > 0) {
+                summaryLines.push('');
+                summaryLines.push('### Findings not posted inline');
+                summaryLines.push('');
+
+                for (const finding of skippedFindings) {
+                  const filePath = finding.code_location?.file_path ?? 'unknown file';
+                  const start = finding.code_location?.line_range?.start;
+                  const end = finding.code_location?.line_range?.end;
+                  const lineRange = start && end ? `${start}-${end}` : 'unknown line';
+
+                  summaryLines.push(`- \`${filePath}:${lineRange}\` - **${finding.title}**`);
+                  summaryLines.push(`  ${finding.body}`);
+                }
+              }
+
+              body = summaryLines.join('\n');
             }
 
             const issueNumber = Number(process.env.PR_NUMBER);
