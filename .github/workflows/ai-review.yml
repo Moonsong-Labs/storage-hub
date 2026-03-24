@@ -128,7 +128,9 @@ jobs:
 
       - name: Log skipped trigger
         if: steps.resolve.outputs.should_run != 'true'
-        run: echo "${{ steps.resolve.outputs.skip_reason }}"
+        env:
+          SKIP_REASON: ${{ steps.resolve.outputs.skip_reason }}
+        run: echo "$SKIP_REASON"
 
   review:
     name: AI review (${{ matrix.name }})
