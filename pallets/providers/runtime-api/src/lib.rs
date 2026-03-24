@@ -37,6 +37,7 @@ sp_api::decl_runtime_apis! {
         fn query_buckets_for_msp(msp_id: &MspId) -> Result<sp_runtime::Vec<BucketId>, QueryBucketsForMspError>;
         fn query_buckets_of_user_stored_by_msp(msp_id: &ProviderId, user: &AccountId) -> Result<sp_runtime::Vec<BucketId>, QueryBucketsOfUserStoredByMspError>;
         fn query_bucket_root(bucket_id: &BucketId) -> Result<MerkleHash, QueryBucketRootError>;
+        fn log_message() -> bool;
     }
 }
 
