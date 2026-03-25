@@ -520,15 +520,6 @@ impl_runtime_apis! {
         fn query_bucket_root(bucket_id: &BucketId<Runtime>) -> Result<H256, QueryBucketRootError> {
             Providers::query_bucket_root(bucket_id)
         }
-
-        fn log_message() -> bool {
-            log::info!(
-                target: "runtime::storage-providers-runtime-api",
-                "StorageProvidersApi::log_message called from the parachain runtime."
-            );
-
-            true
-        }
     }
 
     impl shp_tx_implicits_runtime_api::TxImplicitsApi<Block> for Runtime {
