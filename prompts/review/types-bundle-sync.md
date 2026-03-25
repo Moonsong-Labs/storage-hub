@@ -15,7 +15,9 @@ This repository already documents the expected follow-up work:
 
 - if a `RuntimeApi` or RPC call is updated, the corresponding function signatures in `types-bundle/src/rpc.ts` and `types-bundle/src/runtime.ts` should also be updated
 - any new supporting structs or error enums may need updates in `types-bundle/src/types.ts`
-- the follow-up validation step is `bun run --cwd test typegen`
+- the type-generation flow for `types-bundle` updates is documented in:
+  - `README.md`
+  - `test/README.md`
 
 Treat that rule as authoritative for this review.
 
@@ -104,11 +106,13 @@ When you produce findings:
 - keep them actionable and specific
 - use the following anchor rules for `code_location`
 - explain which `types-bundle` file appears missing or incomplete
-- briefly state the likely follow-up, for example:
+- briefly state the likely code follow-up, for example:
   - add the RPC signature to `types-bundle/src/rpc.ts`
   - add the runtime API signature to `types-bundle/src/runtime.ts`
   - add supporting exported types to `types-bundle/src/types.ts`
-  - re-run `bun run --cwd test typegen`
+- separate code changes from validation guidance
+- follow the documented type-generation flow in `README.md` and `test/README.md`
+- do not reduce type-generation guidance to only `bun run --cwd test typegen` if the documented workflow requires build prerequisites first
 
 ## Remediation expectations
 
@@ -154,7 +158,11 @@ When you use `agent_prompt`:
 - make the prompt implementation-oriented
 - mention the exact files that likely need updating
 - mention the specific RPC or runtime API name involved
-- mention `bun run --cwd test typegen` when relevant
+- structure the prompt so that:
+  - the required code changes come first
+  - the type-generation steps come afterwards under a separate `Type Generation:` section
+- when mentioning type-generation, follow the documented type-generation flow in `README.md` and `test/README.md`
+- do not collapse a multi-step documented type-generation flow into a single shorter command
 - set `suggested_code` to `null`
 
 ### When to use `none`
