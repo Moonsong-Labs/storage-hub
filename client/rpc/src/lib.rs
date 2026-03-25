@@ -425,9 +425,6 @@ pub trait StorageHubClientApi {
         &self,
         bucket_id: shp_types::Hash,
     ) -> RpcResult<()>;
-
-    #[method(name = "logMessage")]
-    async fn log_message(&self) -> RpcResult<bool>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -1651,19 +1648,6 @@ where
             .await;
 
         Ok(())
-    }
-
-    async fn log_message(&self) -> RpcResult<bool> {
-        info!(
-            target: LOG_TARGET,
-            "log_message RPC called."
-        );
-
-        let api = self.client.runtime_api();
-        let at_hash = self.client.info().best_hash;
-        let result = api.log_message(at_hash).map_err(into_rpc_error)?;
-
-        Ok(result)
     }
 }
 
