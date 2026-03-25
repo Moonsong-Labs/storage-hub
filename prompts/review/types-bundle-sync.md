@@ -109,7 +109,77 @@ When you produce findings:
   - add the runtime API signature to `types-bundle/src/runtime.ts`
   - add supporting exported types to `types-bundle/src/types.ts`
   - re-run `bun run --cwd test typegen`
-- add a suggested change text in the finding if the line mapping is reliable.
+
+## Remediation expectations
+
+For every finding, you must choose exactly one remediation mode:
+
+- `inline_suggestion`
+- `agent_prompt`
+- `none`
+
+### When to use `inline_suggestion`
+
+Use `inline_suggestion` only when all of the following are true:
+
+- the fix is small, local, and low-ambiguity
+- the fix can be expressed as a direct replacement on the commented line or immediate hunk
+- you are confident the replacement is syntactically valid
+- the change does not require coordinated edits across multiple files
+
+When you use `inline_suggestion`:
+
+- set `fix_mode` to `inline_suggestion`
+- set `fix_explanation` to one short sentence explaining why an inline suggestion is appropriate
+- provide `suggested_code`
+- keep `suggested_code` to the replacement lines only
+- do not include markdown fences in `suggested_code`
+- do not include explanatory prose inside `suggested_code`
+- do not provide `agent_prompt`
+
+### When to use `agent_prompt`
+
+Use `agent_prompt` when the fix is not safe or practical as a GitHub inline suggestion, especially when:
+
+- the fix likely spans multiple files
+- the issue is anchored on Rust code but the actual change belongs in `types-bundle`
+- the correct change depends on nearby repository patterns
+- the fix requires updating `types-bundle/src/rpc.ts`, `types-bundle/src/runtime.ts`, `types-bundle/src/types.ts`, or running `bun run --cwd test typegen`
+
+When you use `agent_prompt`:
+
+- set `fix_mode` to `agent_prompt`
+- set `fix_explanation` to one short sentence explaining why an agent prompt is more appropriate
+- provide a concise, copy-pasteable prompt for an AI coding agent such as Cursor, Codex, or Claude Code
+- make the prompt implementation-oriented
+- mention the exact files that likely need updating
+- mention the specific RPC or runtime API name involved
+- mention `bun run --cwd test typegen` when relevant
+- do not provide `suggested_code`
+
+### When to use `none`
+
+Use `none` only if you have a valid finding but cannot responsibly suggest either:
+
+- a safe local inline replacement, or
+- a meaningful agent prompt
+
+This should be rare.
+
+When you use `none`:
+
+- set `fix_mode` to `none`
+- set `fix_explanation` to one short sentence explaining why no remediation text is being suggested
+- do not provide `suggested_code`
+- do not provide `agent_prompt`
+
+### Reviewer-specific bias for this prompt
+
+For `types-bundle-sync`, prefer `agent_prompt` by default.
+
+Use `inline_suggestion` only for very small, obvious, local follow-up edits.
+
+If the missing fix likely touches more than one file, always use `agent_prompt`.
 
 ### Anchor rules
 
@@ -137,6 +207,15 @@ Your `code_location` must point to the Rust API declaration that introduced the 
 - Prefer a single-line anchor when possible.
 - Use a two-line range only when the declaration naturally spans both lines and both are part of the diff.
 - Do not choose nearby contextual lines, unrelated lines, or unchanged lines outside the diff.
+
+### Remediation fields in structured output
+
+For each finding:
+
+- set `fix_mode` to `inline_suggestion`, `agent_prompt`, or `none`
+- set `fix_explanation` to one short sentence explaining why that mode was chosen
+- if `fix_mode` is `inline_suggestion`, include `suggested_code`
+- if `fix_mode` is `agent_prompt`, include `agent_prompt`
 
 When you produce no findings:
 

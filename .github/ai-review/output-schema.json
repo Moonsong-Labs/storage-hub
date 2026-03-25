@@ -34,10 +34,28 @@
             "minimum": 0,
             "maximum": 1
           },
+          "fix_mode": {
+            "type": "string",
+            "enum": [
+              "inline_suggestion",
+              "agent_prompt",
+              "none"
+            ]
+          },
+          "fix_explanation": {
+            "type": "string",
+            "minLength": 1
+          },
           "priority": {
             "type": "integer",
             "minimum": 0,
             "maximum": 3
+          },
+          "suggested_code": {
+            "type": "string"
+          },
+          "agent_prompt": {
+            "type": "string"
           },
           "code_location": {
             "type": "object",
@@ -76,6 +94,8 @@
           "title",
           "body",
           "confidence_score",
+          "fix_mode",
+          "fix_explanation",
           "priority",
           "code_location"
         ],

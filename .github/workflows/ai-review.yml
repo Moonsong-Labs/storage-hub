@@ -286,6 +286,39 @@ jobs:
               return lines;
             }
 
+            function renderRemediation(finding) {
+              const fixMode = finding.fix_mode || 'none';
+              const fixExplanation = finding.fix_explanation || '';
+
+              if (fixMode === 'inline_suggestion' && finding.suggested_code) {
+                return (
+                  `\n\nRemediation mode: \`${fixMode}\`\n` +
+                  `${fixExplanation}\n\n` +
+                  `Suggested fix:\n` +
+                  '```suggestion\n' +
+                  `${finding.suggested_code}\n` +
+                  '```'
+                );
+              }
+
+              if (fixMode === 'agent_prompt' && finding.agent_prompt) {
+                return (
+                  `\n\nRemediation mode: \`${fixMode}\`\n` +
+                  `${fixExplanation}\n\n` +
+                  `Suggested agent prompt:\n` +
+                  '```text\n' +
+                  `${finding.agent_prompt}\n` +
+                  '```'
+                );
+              }
+
+              if (fixExplanation) {
+                return `\n\nRemediation mode: \`${fixMode}\`\n${fixExplanation}`;
+              }
+
+              return '';
+            }
+
             const prNumber = Number(process.env.PR_NUMBER);
             const prFiles = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
@@ -318,7 +351,8 @@ jobs:
                 `[${process.env.REVIEWER_NAME}] ${finding.title}\n\n` +
                 `${finding.body}\n\n` +
                 `Confidence: ${finding.confidence_score}\n` +
-                `Priority: P${finding.priority}`;
+                `Priority: P${finding.priority}` +
+                renderRemediation(finding);
 
               try {
                 await github.rest.pulls.createReviewComment({
@@ -394,6 +428,42 @@ jobs:
                 summaryLines.push('### Findings not posted inline');
                 summaryLines.push('');
 
+                function renderSummaryRemediation(finding) {
+                  const fixMode = finding.fix_mode || 'none';
+                  const fixExplanation = finding.fix_explanation || '';
+
+                  if (fixMode === 'inline_suggestion' && finding.suggested_code) {
+                    return [
+                      `  Remediation mode: \`${fixMode}\``,
+                      `  ${fixExplanation}`,
+                      '  Suggested fix:',
+                      '  ```suggestion',
+                      ...String(finding.suggested_code).split('\n').map((line) => `  ${line}`),
+                      '  ```',
+                    ];
+                  }
+
+                  if (fixMode === 'agent_prompt' && finding.agent_prompt) {
+                    return [
+                      `  Remediation mode: \`${fixMode}\``,
+                      `  ${fixExplanation}`,
+                      '  Suggested agent prompt:',
+                      '  ```text',
+                      ...String(finding.agent_prompt).split('\n').map((line) => `  ${line}`),
+                      '  ```',
+                    ];
+                  }
+
+                  if (fixExplanation) {
+                    return [
+                      `  Remediation mode: \`${fixMode}\``,
+                      `  ${fixExplanation}`,
+                    ];
+                  }
+
+                  return [];
+                }
+
                 for (const finding of skippedFindings) {
                   const filePath = finding.code_location?.file_path ?? 'unknown file';
                   const start = finding.code_location?.line_range?.start;
@@ -402,6 +472,7 @@ jobs:
 
                   summaryLines.push(`- \`${filePath}:${lineRange}\` - **${finding.title}**`);
                   summaryLines.push(`  ${finding.body}`);
+                  summaryLines.push(...renderSummaryRemediation(finding));
                 }
               }
 
