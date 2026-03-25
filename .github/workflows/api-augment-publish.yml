@@ -21,13 +21,13 @@ jobs:
     steps:
       - name: Checkout (manual)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.inputs.sha }}
 
       - name: Checkout (push)
         if: github.event_name != 'workflow_dispatch'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Bun & cache
         uses: ./.github/workflow-templates/setup-bun
