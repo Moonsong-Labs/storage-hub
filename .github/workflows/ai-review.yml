@@ -109,16 +109,13 @@ jobs:
 
       - name: Select matching AI reviewers
         id: select
+        if: steps.resolve.outputs.should_run == 'true'
         run: |
           set -euo pipefail
 
-          if [ "${{ steps.resolve.outputs.should_run }}" != "true" ]; then
-            echo "[]" > selected-prompts.json
-          else
-            bun ./scripts/select_ai_review_prompts.ts \
-              .github/ai-review/reviewers.json \
-              changed-files.json > selected-prompts.json
-          fi
+          bun ./scripts/select_ai_review_prompts.ts \
+            .github/ai-review/reviewers.json \
+            changed-files.json > selected-prompts.json
 
           echo "Selected reviewers:"
           jq '.' selected-prompts.json
