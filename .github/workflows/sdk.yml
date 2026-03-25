@@ -31,7 +31,7 @@ jobs:
       is_published_event: ${{ steps.set_is_published.outputs.is_published_event }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Determine version (for publish)
@@ -75,7 +75,7 @@ jobs:
       CARGO_TERM_COLOR: always
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Bun & cache
         uses: ./.github/workflow-templates/setup-bun
         env:
@@ -140,7 +140,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Bun & cache
         uses: ./.github/workflow-templates/setup-bun
         env:
@@ -190,7 +190,7 @@ jobs:
       CARGO_TERM_COLOR: always
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Bun & cache
         uses: ./.github/workflow-templates/setup-bun
         env:
@@ -267,7 +267,7 @@ jobs:
       CI: "true"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Bun & cache
         uses: ./.github/workflow-templates/setup-bun
         env:
@@ -297,7 +297,7 @@ jobs:
       VERSION: ${{ needs.setup.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Bun & cache
         uses: ./.github/workflow-templates/setup-bun
         env:

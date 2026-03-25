@@ -3,18 +3,18 @@ name: Version Guard (api-augment, sdk, types-bundle)
 on:
   pull_request:
     paths:
-      - 'api-augment/**'
-      - 'sdk/core/**'
-      - 'sdk/msp-client/**'
-      - 'sdk/package.json'
-      - 'types-bundle/**'
+      - "api-augment/**"
+      - "sdk/core/**"
+      - "sdk/msp-client/**"
+      - "sdk/package.json"
+      - "types-bundle/**"
 
 jobs:
   check-version-bumps:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout PR and fetch base
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -152,4 +152,3 @@ jobs:
               process.exit(1);
             }
           '
-
