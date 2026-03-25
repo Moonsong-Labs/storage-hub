@@ -989,9 +989,7 @@ await describeMspNet(
           );
           if (bspOnChainInfo.isNone) return false;
           const onChainRoot = bspOnChainInfo.unwrap().root.toString();
-          const localRoot = (
-            await newBspApi.rpc.storagehubclient.getForestRoot(null)
-          ).toString();
+          const localRoot = (await newBspApi.rpc.storagehubclient.getForestRoot(null)).toString();
           return onChainRoot === localRoot;
         },
         iterations: 30,

@@ -105,7 +105,9 @@ await describeBspNet(
       if (lastTickAfterReorg < nextChallengeTick) {
         await userApi.block.seal({ finaliseBlock: false });
         lastTickAfterReorg = (
-          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.DUMMY_BSP_ID)
+          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+            ShConsts.DUMMY_BSP_ID
+          )
         ).asOk.toNumber();
       }
       assert(
@@ -145,7 +147,6 @@ await describeBspNet(
         `Proof should have been re-included after finality reorg. ` +
           `Last proven tick: ${lastTickAfterFinality}, expected >= ${tickBspSubmittedProofForBeforeReorg}`
       );
-
     });
 
     it("BSP file confirmation is reorged out and Forest root is rolled back accordingly", async () => {
@@ -216,7 +217,6 @@ await describeBspNet(
           return onChainBspForestRoot === localBspForestRoot;
         }
       });
-
     });
 
     it("New non best block built with Forest root change is ignored", async () => {

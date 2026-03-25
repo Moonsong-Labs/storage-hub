@@ -165,7 +165,9 @@ await describeBspNet(
         // Proof not yet on-chain — seal to include from pool
         await userApi.block.seal({ finaliseBlock: false });
         lastTickAfterReorg = (
-          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.DUMMY_BSP_ID)
+          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+            ShConsts.DUMMY_BSP_ID
+          )
         ).asOk.toNumber();
         assert(
           lastTickAfterReorg >= nextChallengeTick,

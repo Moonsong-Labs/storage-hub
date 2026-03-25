@@ -453,11 +453,9 @@ await describeMspNet(
       const bspContainer = userApi.shConsts.NODE_INFOS.bsp.containerName;
       const bspP2pPort = userApi.shConsts.NODE_INFOS.bsp.p2pPort;
       const fishermanRpcPort = userApi.shConsts.NODE_INFOS.fisherman.port;
-      await sendCustomRpc(
-        `http://127.0.0.1:${fishermanRpcPort}`,
-        "system_addReservedPeer",
-        [`/dns4/${bspContainer}/tcp/${bspP2pPort}/p2p/${bspPeerId}`]
-      );
+      await sendCustomRpc(`http://127.0.0.1:${fishermanRpcPort}`, "system_addReservedPeer", [
+        `/dns4/${bspContainer}/tcp/${bspP2pPort}/p2p/${bspPeerId}`
+      ]);
       await waitFor({
         lambda: async () => (await fishermanApi.rpc.system.peers()).length > 0,
         delay: 500,
@@ -960,11 +958,9 @@ await describeMspNet(
       const bspContainer2 = userApi.shConsts.NODE_INFOS.bsp.containerName;
       const bspP2pPort2 = userApi.shConsts.NODE_INFOS.bsp.p2pPort;
       const fishermanRpcPort2 = userApi.shConsts.NODE_INFOS.fisherman.port;
-      await sendCustomRpc(
-        `http://127.0.0.1:${fishermanRpcPort2}`,
-        "system_addReservedPeer",
-        [`/dns4/${bspContainer2}/tcp/${bspP2pPort2}/p2p/${bspPeerId2}`]
-      );
+      await sendCustomRpc(`http://127.0.0.1:${fishermanRpcPort2}`, "system_addReservedPeer", [
+        `/dns4/${bspContainer2}/tcp/${bspP2pPort2}/p2p/${bspPeerId2}`
+      ]);
       await waitFor({
         lambda: async () => (await fishermanApi.rpc.system.peers()).length > 0,
         delay: 500,
