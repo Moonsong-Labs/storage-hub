@@ -172,8 +172,7 @@ await describeMspNet(
         // MSP accept was re-included in the reorg block (fatxpool auto-re-inclusion).
         // The ordering test (deletions before accept) is not possible — the accept
         // already executed. Verify the accept succeeded (file2 no longer pending).
-        const pendingRequests =
-          await userApi.call.fileSystemApi.pendingStorageRequestsByMsp(mspId);
+        const pendingRequests = await userApi.call.fileSystemApi.pendingStorageRequestsByMsp(mspId);
         const file2StillPending = Array.from(pendingRequests).some(
           ([fileKey]) => fileKey.toHex() === file2Key
         );
