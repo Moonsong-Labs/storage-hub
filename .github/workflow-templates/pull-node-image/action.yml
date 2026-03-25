@@ -1,0 +1,34 @@
+name: Pull node Docker image from registry
+description: >
+  Pulls the latest storage-hub node image from Docker Hub,
+  optionally tags it as storage-hub:local and/or extracts the
+  node binary into target/release/.
+
+inputs:
+  tag_as_local:
+    description: "Tag the pulled image as storage-hub:local for Docker Compose"
+    default: "true"
+    required: false
+  extract_binary:
+    description: "Extract the node binary from the image into target/release/"
+    default: "true"
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Pull and prepare node image
+      shell: bash
+      run: |
+        docker pull moonsonglabs/storage-hub:latest
+
+        if [[ "${{ inputs.tag_as_local }}" == "true" ]]; then
+          docker tag moonsonglabs/storage-hub:latest storage-hub:local
+        fi
+
+        if [[ "${{ inputs.extract_binary }}" == "true" ]]; then
+          mkdir -p target/release
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+        fi

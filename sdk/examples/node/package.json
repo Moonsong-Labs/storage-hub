@@ -1,7 +1,7 @@
 {
   "name": "@storagehub-sdk/example-node",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "start": "bun run src/index.ts",
@@ -9,6 +9,7 @@
     "msp": "bun run src/msp-demo.ts",
     "test": "bun run src/downloadTest.ts",
     "test:concurrent": "bash scripts/concurrent-sdkTest.sh",
+    "siwe-test": "tsx src/siwe-sdk-test.ts",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {

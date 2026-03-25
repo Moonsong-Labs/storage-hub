@@ -1174,6 +1174,13 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// HashSet tracking file keys currently in the pending respond storage request queue.
     /// Used for O(1) deduplication when queueing new requests.
     pub(crate) pending_respond_storage_request_file_keys: HashSet<MerkleTrieHash<Runtime>>,
+    /// Set of bucket IDs whose forest root has been verified since last restart.
+    ///
+    /// On first access to a bucket (mutation or pending storage request), we compare
+    /// the local forest root to the on-chain root. If they match, the bucket ID is
+    /// added here and `CheckBucketFileStorage` is emitted to self-heal file storage.
+    /// Subsequent accesses skip verification via O(1) set lookup.
+    pub(crate) verified_buckets: HashSet<BucketId<Runtime>>,
 }
 
 impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
@@ -1186,6 +1193,7 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
             file_key_statuses: HashMap::new(),
             pending_respond_storage_requests: VecDeque::new(),
             pending_respond_storage_request_file_keys: HashSet::new(),
+            verified_buckets: HashSet::new(),
         }
     }
 }

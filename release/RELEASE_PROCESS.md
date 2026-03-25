@@ -53,6 +53,8 @@ git diff --stat 05d269a26d11c1ed8a6d917b3e08ff3b5d3d4b22..HEAD
 
 ### 4. Update version numbers
 
+On minor/major releases, the version number update should be done in the `main` branch. On patch releases, the version number update should be done in the `release/vX.Y` branch.
+
 Should be done using the [bump_versions.ts](https://github.com/Moonsong-Labs/storage-hub/blob/main/release/bump_versions.ts) script.
 
 - Once all the changes that have to be included are in the `release/vX.Y` branch, checkout to the `release/vX.Y` branch and modify the version numbers in [versions.json](https://github.com/Moonsong-Labs/storage-hub/blob/main/release/versions.json).
@@ -63,7 +65,7 @@ bun release/bump_versions.ts
 ```
 
 - You'll see the summary of the changes that have been made, and in the git diff you'll see changes in the `package.json` and `Cargo.toml` files.
-- Commit the changes and push to the `release/vX.Y` branch. These commits exist in the `release/vX.Y` branch, but not in `main`, so they are not included in the next minor/major release. Only when a new minor/major release is cut, this process is done in the `main` branch. So the `main` branch will always have the `vX.Y.0` version number, where `X.Y` is the last minor/major release.
+- Commit the changes and push to the `release/vX.Y` branch. These commits exist in the `release/vX.Y` branch, but not in `main` (unless it is a minor/major release), so they are not included in the next minor/major release. Only when a new minor/major release is cut, this process is done in the `main` branch. So the `main` branch will always have the `vX.Y.0` version number, where `X.Y` is the last minor/major release.
 - The SHA of this last commit with the bumped version numbers is the `HEAD` commit for the next step.
 
 ### 5. Fill release notes

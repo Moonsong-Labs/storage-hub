@@ -19,9 +19,12 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     globals: true,
     watch: false,
+    pool: "threads",
+    testTimeout: 300_000,
+    hookTimeout: 300_000,
     coverage: {
       provider: "v8",
-      exclude: ["scripts/**", "**/wasm/pkg/**"],
+      exclude: ["scripts/**", "**/wasm/pkg/**", "**/dist/**", "**/coverage/**", "**/node_modules/**", "**/tests/resources/**"],
       reporter: ["text", "html"],
       all: true,
       thresholds: {

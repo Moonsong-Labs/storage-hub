@@ -60,7 +60,7 @@ pub mod pallet {
             fungible::*,
             nonfungibles_v2::{Create, Destroy, Inspect as NonFungiblesInspect},
         },
-        Blake2_128Concat,
+        Blake2_128Concat, BoundedBTreeMap,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
@@ -159,6 +159,7 @@ pub mod pallet {
             + Default
             + MaybeDisplay
             + From<u32>
+            + Into<u32>
             + Into<u64>
             + Into<Self::ThresholdType>
             + Copy
@@ -383,6 +384,20 @@ pub mod pallet {
         #[pallet::constant]
         type MaxReplicationTarget: Get<u32>;
 
+        /// Maximum number of BSPs that can volunteer for a single storage request.
+        ///
+        /// This bounds the per-file BSP volunteer map independently from `MaxReplicationTarget`.
+        /// Must be >= MaxReplicationTarget to allow enough BSPs to fill any storage request.
+        #[pallet::constant]
+        type MaxBspVolunteers: Get<u32>;
+
+        /// Maximum number of file keys an MSP can accept per bucket in a single
+        /// `msp_respond_storage_requests_multiple_buckets` call.
+        ///
+        /// Bounds [`StorageRequestMspAcceptedFileKeys::file_keys_and_proofs`].
+        #[pallet::constant]
+        type MaxMspRespondFileKeys: Get<u32>;
+
         /// The amount of ticks that the user has to pay upfront when issuing a storage request.
         ///
         /// This is to compensate the system load that the process of file retrieval will have on the network.
@@ -420,21 +435,18 @@ pub mod pallet {
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, MerkleHash<T>, StorageRequestMetadata<T>>;
 
-    /// A double map from file key to the BSP IDs of the BSPs that volunteered to store the file to whether that BSP has confirmed storing it.
+    /// BSP volunteer/confirmation state for each active storage request.
     ///
-    /// Any BSP under a file key prefix is considered to be a volunteer and can be removed at any time.
-    /// Once a BSP submits a valid proof via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
-    ///
-    /// When a storage request is expired or removed, the corresponding file key prefix in this map is removed.
+    /// Maps a file key to the set of BSPs that have volunteered or confirmed storing
+    /// the file. The value is `false` for volunteered-only and `true` for confirmed.
+    /// This map is created when the first BSP volunteers and removed when the storage
+    /// request is cleaned up.
     #[pallet::storage]
-    pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
+    pub type StorageRequestBsps<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         MerkleHash<T>,
-        Blake2_128Concat,
-        ProviderIdFor<T>,
-        StorageRequestBspsMetadata<T>,
-        OptionQuery,
+        BoundedBTreeMap<ProviderIdFor<T>, bool, MaxBspVolunteers<T>>,
     >;
 
     /// Bookkeeping of the buckets containing open storage requests.
@@ -644,6 +656,8 @@ pub mod pallet {
             size: StorageDataUnit<T>,
             peer_ids: PeerIds<T>,
             expires_at: TickNumber<T>,
+            bsps_required: ReplicationTargetType<T>,
+            msp_id: Option<ProviderIdFor<T>>,
         },
         /// Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
         ///
@@ -1080,6 +1094,9 @@ pub mod pallet {
         /// Operation is currently paused.
         #[codec(index = 69)]
         UserOperationPaused,
+        /// Too many BSPs have already volunteered for the storage request.
+        #[codec(index = 70)]
+        TooManyBspVolunteers,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1285,9 +1302,10 @@ pub mod pallet {
         /// Revoke storage request
         #[pallet::call_index(7)]
         #[pallet::weight({
-          let confirmed = StorageRequests::<T>::get(file_key).map_or(0, |metadata| metadata.bsps_confirmed.into());
-          let weight = T::WeightInfo::revoke_storage_request(confirmed as u32);
-
+          let meta = StorageRequests::<T>::get(file_key);
+          let volunteered = meta.as_ref().map_or(0u64, |s| s.bsps_volunteered.into()) as u32;
+          let confirmed = meta.as_ref().map_or(0u64, |s| s.bsps_confirmed.into()) as u32;
+          let weight = T::WeightInfo::revoke_storage_request(volunteered, confirmed);
           weight.saturating_add(T::DbWeight::get().reads_writes(1, 0))
         })]
         pub fn revoke_storage_request(
@@ -1317,14 +1335,50 @@ pub mod pallet {
         /// wasn't storing it before.
         #[pallet::call_index(8)]
         #[pallet::weight({
-			let total_weight: Weight = Weight::zero();
+			let max_v = T::MaxBspVolunteers::get();
+			let max_r = T::MaxReplicationTarget::get();
+			let mut total_weight: Weight = Weight::zero();
+			let mut total_reads: u64 = 0;
+			// TODO: Replace iteration + storage reads with user-provided weight hints validated in extrinsic.
+			// Also make `StorageRequestMspResponse` and `reject` field `BoundedVec` (currently unbounded `Vec`).
 			for bucket_response in storage_request_msp_response.iter() {
 				let amount_of_files_to_accept = bucket_response.accept.as_ref().map_or(0, |accept_response| accept_response.file_keys_and_proofs.len());
 				let amount_of_files_to_reject = bucket_response.reject.len();
 
-				total_weight.saturating_add(T::WeightInfo::msp_respond_storage_requests_multiple_buckets(1, amount_of_files_to_accept as u32, amount_of_files_to_reject as u32));
+				let mut worst_v: u32 = 0;
+				let mut worst_r: u32 = 0;
+				if let Some(accept) = &bucket_response.accept {
+					for fkp in accept.file_keys_and_proofs.iter() {
+						total_reads += 1;
+						if let Some(meta) = StorageRequests::<T>::get(&fkp.file_key) {
+							let v: u64 = meta.bsps_volunteered.into();
+							let r: u64 = meta.bsps_required.into();
+							worst_v = worst_v.max(v as u32);
+							worst_r = worst_r.max(r as u32);
+						} else {
+							worst_v = max_v;
+							worst_r = max_r;
+						}
+					}
+				}
+				for rejected in bucket_response.reject.iter() {
+					total_reads += 1;
+					if let Some(meta) = StorageRequests::<T>::get(&rejected.file_key) {
+						let v: u64 = meta.bsps_volunteered.into();
+						let r: u64 = meta.bsps_required.into();
+						worst_v = worst_v.max(v as u32);
+						worst_r = worst_r.max(r as u32);
+					} else {
+						worst_v = max_v;
+						worst_r = max_r;
+					}
+				}
+
+				total_weight = total_weight.saturating_add(
+					T::WeightInfo::msp_respond_storage_requests_multiple_buckets(1, amount_of_files_to_accept as u32, amount_of_files_to_reject as u32, worst_v, worst_r)
+				);
 			}
-			total_weight
+			total_weight.saturating_add(T::DbWeight::get().reads(total_reads))
 		})]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
@@ -1389,7 +1443,26 @@ pub mod pallet {
 
         /// Used by a BSP to confirm they are storing data of a storage request.
         #[pallet::call_index(11)]
-        #[pallet::weight(T::WeightInfo::bsp_confirm_storing(file_keys_and_proofs.len() as u32))]
+        #[pallet::weight({
+            let n = file_keys_and_proofs.len() as u32;
+            let max_v = T::MaxBspVolunteers::get();
+            let max_r = T::MaxReplicationTarget::get();
+            let (mut worst_v, mut worst_r): (u32, u32) = (0, 0);
+            // TODO: Replace iteration + storage reads with user-provided weight hints validated in extrinsic.
+            for fkp in file_keys_and_proofs.iter() {
+                if let Some(meta) = StorageRequests::<T>::get(&fkp.file_key) {
+                    let v: u64 = meta.bsps_volunteered.into();
+                    let r: u64 = meta.bsps_required.into();
+                    worst_v = worst_v.max(v as u32);
+                    worst_r = worst_r.max(r as u32);
+                } else {
+                    worst_v = max_v;
+                    worst_r = max_r;
+                }
+            }
+            T::WeightInfo::bsp_confirm_storing(n, worst_v, worst_r)
+                .saturating_add(T::DbWeight::get().reads(n as u64))
+        })]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
             non_inclusion_forest_proof: ForestProof<T>,
@@ -1667,11 +1740,27 @@ pub mod pallet {
         #[pallet::call_index(17)]
         #[pallet::weight({
             let n = file_deletions.len() as u32;
-            if bsp_id.is_none() {
-                T::WeightInfo::delete_files_bucket(n)
-            } else {
-                T::WeightInfo::delete_files_bsp(n)
+            let max_v = T::MaxBspVolunteers::get();
+            let max_r = T::MaxReplicationTarget::get();
+            let (mut worst_v, mut worst_r): (u32, u32) = (0, 0);
+            // TODO: Replace iteration + storage reads with user-provided weight hints validated in extrinsic.
+            for deletion in file_deletions.iter() {
+                if let Some(meta) = StorageRequests::<T>::get(&deletion.signed_intention.file_key) {
+                    let v: u64 = meta.bsps_volunteered.into();
+                    let r: u64 = meta.bsps_required.into();
+                    worst_v = worst_v.max(v as u32);
+                    worst_r = worst_r.max(r as u32);
+                } else {
+                    worst_v = max_v;
+                    worst_r = max_r;
+                }
             }
+            let base = if bsp_id.is_none() {
+                T::WeightInfo::delete_files_bucket(n, worst_v, worst_r)
+            } else {
+                T::WeightInfo::delete_files_bsp(n, worst_v, worst_r)
+            };
+            base.saturating_add(T::DbWeight::get().reads(n as u64))
         })]
         pub fn delete_files(
             origin: OriginFor<T>,
@@ -1776,6 +1865,7 @@ pub mod pallet {
                 T::UltraHighSecurityReplicationTarget::get();
             let max_replication_target: ReplicationTargetType<T> =
                 T::MaxReplicationTarget::get().into();
+            let max_bsp_volunteers: ReplicationTargetType<T> = T::MaxBspVolunteers::get().into();
             let storage_request_ttl = T::StorageRequestTtl::get();
             let tick_range_to_max_threshold = T::TickRangeToMaximumThreshold::get();
             let min_wait_for_stop_storing = T::MinWaitForStopStoring::get();
@@ -1809,6 +1899,10 @@ pub mod pallet {
             assert!(
                 max_replication_target >= ultra_high_security_replication_target,
                 "Max replication target cannot be smaller than the most secure replication target."
+            );
+            assert!(
+                max_bsp_volunteers >= max_replication_target,
+                "MaxBspVolunteers must be >= MaxReplicationTarget so storage requests can be fulfilled."
             );
 
             assert!(

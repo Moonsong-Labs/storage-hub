@@ -249,10 +249,10 @@ cumulus-pallet-xcmp-queue = { git = "https://github.com/paritytech/polkadot-sdk.
 cumulus-primitives-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2506", default-features = false }
 cumulus-primitives-core = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2506", default-features = false }
 cumulus-primitives-parachain-inherent = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2506", default-features = false }
+cumulus-primitives-proof-size-hostfunction = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2506", default-features = false }
 cumulus-primitives-storage-weight-reclaim = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2506", default-features = false }
 cumulus-primitives-utility = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2506", default-features = false }
 cumulus-relay-chain-interface = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2506", default-features = false }
-
 
 # Frontier (wasm)
 ethereum = { version = "0.18.2", default-features = false }

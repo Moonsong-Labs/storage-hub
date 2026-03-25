@@ -1261,16 +1261,23 @@ pub trait TreasuryCutCalculator {
 }
 
 /// Trait to adapt a given message into the corresponding bytes that comply with a given protocol (e.g., EIP-191) before verification.
+///
+/// `intention` contains the SCALE-encoded core struct (e.g. `FileOperationIntention`).
+/// `context` carries additional metadata (location, bucket, size) that enriches the
+/// human-readable representation shown to wallets.  Adapters that do not need the
+/// extra context (e.g. the identity adapter used in tests) may ignore it.
 pub trait MessageAdapter {
     /// Returns the exact bytes that will be passed to `signature.verify(&bytes[..], &signer)`.
-    fn bytes_to_verify(message: &[u8]) -> Vec<u8>;
+    fn bytes_to_verify(intention: &[u8], context: &[u8]) -> Vec<u8>;
 }
 
-/// The IdentityAdapter is a default implementation that returns the message as is.
+/// The IdentityAdapter is a default implementation that returns the intention as is,
+/// ignoring any extra context. This preserves backward-compatible behaviour for
+/// runtimes and tests that do not need wallet-friendly messages.
 pub struct IdentityAdapter;
 impl MessageAdapter for IdentityAdapter {
-    fn bytes_to_verify(message: &[u8]) -> Vec<u8> {
-        message.to_vec()
+    fn bytes_to_verify(intention: &[u8], _context: &[u8]) -> Vec<u8> {
+        intention.to_vec()
     }
 }
 

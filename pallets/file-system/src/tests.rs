@@ -5,14 +5,14 @@ use crate::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
         FileKeyWithProof, FileLocation, FileMetadata, FileOperation, FileOperationIntention,
         IncompleteStorageRequestMetadata, MoveBucketRequestMetadata, MspStorageRequestStatus,
-        PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
-        StorageRequestTtl, ThresholdType, TickNumber, UserOperationPauseFlags, ValuePropId,
+        PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
+        ThresholdType, TickNumber, UserOperationPauseFlags, ValuePropId,
     },
     weights::WeightInfo,
     Config, Error, Event, IncompleteStorageRequests, NextAvailableStorageRequestExpirationTick,
-    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
-    StorageRequests, UserOperationPauseFlagsStorage,
+    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestBsps,
+    StorageRequestExpirations, StorageRequests, UserOperationPauseFlagsStorage,
 };
 use codec::Encode;
 use core::cmp::max;
@@ -25,6 +25,7 @@ use frame_support::{
         Hooks, OriginTrait,
     },
     weights::Weight,
+    BoundedBTreeMap,
 };
 use pallet_payment_streams::types::UnitsProvidedFor;
 use pallet_proofs_dealer::ProviderToProofSubmissionRecord;
@@ -722,7 +723,7 @@ mod delete_bucket_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key: FileSystem::compute_file_key(
                                     owner.clone(),
                                     bucket_id,
@@ -810,7 +811,7 @@ mod delete_bucket_tests {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: FileSystem::compute_file_key(
                                         owner.clone(),
                                         bucket_id,
@@ -987,7 +988,7 @@ mod delete_bucket_tests {
 					vec![StorageRequestMspBucketResponse {
 						bucket_id,
 						accept: Some(StorageRequestMspAcceptedFileKeys {
-							file_keys_and_proofs: vec![FileKeyWithProof {
+							file_keys_and_proofs: bounded_vec![FileKeyWithProof {
 								file_key: FileSystem::compute_file_key(
 									owner.clone(),
 									bucket_id,
@@ -1327,7 +1328,7 @@ mod request_move_bucket {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -2703,6 +2704,8 @@ mod request_storage {
                         size: 4,
                         peer_ids,
                         expires_at: next_expiration_tick_storage_request,
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
+                        msp_id: Some(msp_id),
                     }
                     .into(),
                 );
@@ -2875,6 +2878,8 @@ mod request_storage {
                         size,
                         peer_ids,
                         expires_at: next_expiration_tick_storage_request,
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
+                        msp_id: Some(msp_id),
                     }
                     .into(),
                 );
@@ -3415,14 +3420,11 @@ mod revoke_storage_request {
 
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // Check StorageRequestBsps storage for confirmed BSPs
+                // Check inline bsps for confirmed BSPs
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: false,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(false)
                 );
 
                 // Dispatch a signed extrinsic.
@@ -3498,7 +3500,7 @@ mod msp_respond_storage_request {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3553,7 +3555,7 @@ mod msp_respond_storage_request {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3788,7 +3790,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: first_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: first_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3803,7 +3805,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: second_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: second_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3939,7 +3941,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: first_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: first_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3954,7 +3956,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: second_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key: second_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4100,7 +4102,7 @@ mod msp_respond_storage_request {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4161,7 +4163,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4232,7 +4234,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4306,7 +4308,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4381,7 +4383,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![],
@@ -4462,7 +4464,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![],
@@ -4534,7 +4536,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4603,7 +4605,7 @@ mod msp_respond_storage_request {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4624,7 +4626,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4704,7 +4706,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4783,7 +4785,7 @@ mod msp_respond_storage_request {
                         vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -5301,12 +5303,9 @@ mod bsp_volunteer {
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: false,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(false)
                 );
 
                 // Assert that the correct event was deposited
@@ -5397,12 +5396,9 @@ mod bsp_volunteer {
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: false,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(false)
                 );
 
 				// Calculate how much should the BSP have gotten from the user's deposit.
@@ -5523,12 +5519,9 @@ mod bsp_volunteer {
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: false,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(false)
                 );
 
                 // Assert that the correct event was deposited
@@ -5789,7 +5782,7 @@ mod bsp_confirm {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -6303,7 +6296,6 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 								),
@@ -6312,12 +6304,9 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 let file_key = FileSystem::compute_file_key(
@@ -6670,7 +6659,6 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -6679,12 +6667,9 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 let new_root = Providers::get_root(bsp_id).unwrap();
@@ -6818,7 +6803,6 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -6827,12 +6811,9 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 let new_root = Providers::get_root(bsp_id).unwrap();
@@ -6979,12 +6960,8 @@ mod bsp_confirm {
                     &file_key
                 ));
 
-                // Assert that the StorageRequestBsps storage for this file key was drained
-                assert!(
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(file_key)
-                        .next()
-                        .is_none()
-                );
+                // Assert that the storage request was removed (inline bsps removed with it)
+                assert!(file_system::StorageRequests::<Test>::get(file_key).is_none());
 
                 // Assert that the storage request was removed from the expiration queue
                 assert!(!StorageRequestExpirations::<Test>::get(
@@ -7216,12 +7193,9 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 // Assert that the storage was updated
@@ -7240,7 +7214,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -7368,12 +7341,9 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 // Assert that the storage was updated
@@ -7392,7 +7362,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -7523,12 +7492,9 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 // Assert that the storage was updated
@@ -7547,7 +7513,6 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						// The deposit paid should have been updated after paying the BSP that volunteered.
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
@@ -7770,12 +7735,9 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 // Assert that the storage was updated
@@ -7822,7 +7784,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -7982,12 +7945,9 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 // Assert that the storage was updated
@@ -8040,7 +8000,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -8181,12 +8142,9 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 // Assert that the storage was updated
@@ -8250,7 +8208,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -8459,12 +8418,9 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 // Assert that the storage was updated
@@ -8511,7 +8467,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -8718,21 +8675,15 @@ mod bsp_stop_storing {
 				assert_eq!(amount_provided, 2 * size);
 
                 // Assert that the RequestStorageBsps now contains the BSP under both location
-                assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(first_file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+				assert_eq!(
+                    file_system::StorageRequestBsps::<Test>::get(first_file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 				assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(second_file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(second_file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 // Assert that the storage was updated
@@ -8789,7 +8740,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequestBsps::<Test>::get(first_file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(first_file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -9011,7 +8963,8 @@ mod bsp_stop_storing {
                 ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key)
+                    .map_or(true, |m| !m.contains_key(&bsp_id)));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -9867,14 +9820,11 @@ mod stop_storing_for_insolvent_user {
                     })
                 );
 
-                // Assert that the RequestStorageBsps was updated
+                // Assert that the inline bsps was updated
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 let file_key = FileSystem::compute_file_key(
@@ -10013,6 +9963,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
 				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
                 let current_tick_plus_storage_request_ttl =
@@ -10049,7 +10000,7 @@ mod stop_storing_for_insolvent_user {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(&bsp_account_id).unwrap(),
+                    bsp_id,
                     file_key,
                 )
                 .unwrap();
@@ -10090,7 +10041,7 @@ mod stop_storing_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -10312,14 +10263,11 @@ mod stop_storing_for_insolvent_user {
                     })
                 );
 
-                // Assert that the RequestStorageBsps was updated
+                // Assert that the inline bsps was updated
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 let new_root = Providers::get_root(bsp_id).unwrap();
@@ -10601,14 +10549,11 @@ mod stop_storing_for_insolvent_user {
                     })
                 );
 
-                // Assert that the RequestStorageBsps was updated
+                // Assert that the inline bsps was updated
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 let file_key = FileSystem::compute_file_key(
@@ -10870,14 +10815,11 @@ mod stop_storing_for_insolvent_user {
                     })
                 );
 
-                // Assert that the RequestStorageBsps was updated
+                // Assert that the inline bsps was updated
                 assert_eq!(
-                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                        .expect("BSP should exist in storage"),
-                    StorageRequestBspsMetadata::<Test> {
-                        confirmed: true,
-                        _phantom: Default::default()
-                    }
+                    file_system::StorageRequestBsps::<Test>::get(file_key)
+                        .and_then(|m| m.get(&bsp_id).copied()),
+                    Some(true)
                 );
 
                 let file_key = FileSystem::compute_file_key(
@@ -11086,7 +11028,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -11289,7 +11231,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -11563,7 +11505,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -11730,7 +11672,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -11966,7 +11908,7 @@ mod msp_stop_storing_bucket {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -13655,7 +13597,7 @@ mod delete_file_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -14054,8 +13996,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(storage_request.bsps_confirmed, 1);
 
-                // BSP is in StorageRequestBsps
-                let initial_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                // BSP is in inline bsps map
+                let initial_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(initial_bsps.len(), 1, "Should have 1 BSP associated with storage request initially");
                 assert_eq!(initial_bsps[0].0, bsp_id, "BSP should be associated with storage request");
 
@@ -14081,7 +14023,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     "Storage request should be removed from bucket associations"
                 );
                 // All BSPs should be removed from storage request associations
-                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14270,9 +14212,11 @@ mod delete_files_for_incomplete_storage_request_tests {
                 let storage_request = StorageRequests::<Test>::get(&file_key2).unwrap();
                 assert_eq!(storage_request.bsps_confirmed, 1);
 
-                // Verify BSP is in StorageRequestBsps for file2
+                // Verify BSP is in inline bsps for file2
                 let initial_bsps_file2: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key2).collect();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key2)
+                        .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                        .unwrap_or_default();
                 assert_eq!(
                     initial_bsps_file2.len(),
                     1,
@@ -14296,8 +14240,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                         .is_none(),
                     "Storage request should be removed from bucket associations"
                 );
-                let final_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key1).collect();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key1)
+                    .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                    .unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14312,8 +14257,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                         .is_none(),
                     "Storage request should be removed from bucket associations"
                 );
-                let final_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key2).collect();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key2)
+                    .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                    .unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14496,9 +14442,10 @@ mod delete_files_for_incomplete_storage_request_tests {
                     "Storage request should have 2 confirmed BSPs"
                 );
 
-                // Both BSPs are in StorageRequestBsps
-                let initial_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                // Both BSPs are in inline bsps map
+                let initial_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key)
+                    .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                    .unwrap_or_default();
                 assert_eq!(
                     initial_bsps.len(),
                     2,
@@ -14533,8 +14480,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                         .is_none(),
                     "Storage request should be removed from bucket associations"
                 );
-                let final_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key)
+                    .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                    .unwrap_or_default();
                 assert!(
                     final_bsps.is_empty(),
                     "No BSPs should remain associated with the storage request after deletion"
@@ -14549,7 +14497,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(
                     incomplete_storage_request.pending_bsp_removals,
-                    vec![bsp2_id, bsp1_id]
+                    vec![bsp1_id, bsp2_id]
                 );
                 assert!(!incomplete_storage_request.pending_bucket_removal);
 
@@ -14767,7 +14715,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -14889,7 +14837,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -15040,7 +14988,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -15294,7 +15242,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed, file_key));
 
                 // Verify BSP volunteered
-                let volunteered_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                let volunteered_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(volunteered_bsps.len(), 1, "BSP should have volunteered");
                 assert_eq!(volunteered_bsps[0].0, bsp_id, "Correct BSP should have volunteered");
 
@@ -15314,7 +15262,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 );
 
                 // 2. BSP associations should be completely cleaned up
-                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
 
                 // 3. Bucket storage requests should be cleaned up
@@ -15386,7 +15334,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 );
 
                 // 2. BSP associations should be completely cleaned up
-                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
 
                 // 3. Bucket storage requests should be cleaned up
@@ -15461,7 +15409,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 );
 
                 // 2. BSP associations should be completely cleaned up
-                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
 
                 // 3. Bucket storage requests should be cleaned up
@@ -15524,7 +15472,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -15556,7 +15504,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 );
 
                 // 2. BSP associations should be completely cleaned up
-                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::get(&file_key).map(|m| m.iter().map(|(k, v)| (*k, *v)).collect()).unwrap_or_default();
                 assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
 
                 // 3. Bucket storage requests should be cleaned up
@@ -15625,6 +15573,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 // Manually update storage request to simulate MSP confirming with inclusion proof
                 // (file already existed in bucket from a previous storage request)
                 let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let mut bsps = BoundedBTreeMap::new();
+                let _ = bsps.try_insert(bsp_id, true);
                 StorageRequests::<Test>::insert(
                     file_key,
                     StorageRequestMetadata {
@@ -15643,6 +15593,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                         deposit_paid: 0,
                     },
                 );
+                StorageRequestBsps::<Test>::insert(&file_key, bsps);
 
                 // Delete file from bucket (simulating bucket deletion before storage request is fulfilled)
                 // This should create an incomplete storage request
@@ -15913,7 +15864,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![file_key_with_proof],
+                            file_keys_and_proofs: bounded_vec![file_key_with_proof],
                             forest_proof: CompactProof {
                                 encoded_nodes: vec![file_key.as_ref().to_vec()],
                             },
@@ -16047,7 +15998,9 @@ mod delete_files_for_incomplete_storage_request_tests {
 
                 // Verify BSP volunteered
                 let volunteered_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                    file_system::StorageRequestBsps::<Test>::get(&file_key)
+                        .map(|m| m.iter().map(|(k, v)| (*k, *v)).collect())
+                        .unwrap_or_default();
                 assert_eq!(volunteered_bsps.len(), 1, "BSP should have volunteered");
                 assert_eq!(
                     volunteered_bsps[0].0, bsp_id,
@@ -16327,7 +16280,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(
                     incomplete_storage_request.pending_bsp_removals,
-                    vec![bsp2_id, bsp_id]
+                    vec![bsp_id, bsp2_id]
                 );
                 assert!(!incomplete_storage_request.pending_bucket_removal);
 

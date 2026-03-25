@@ -5,6 +5,22 @@ export type { EvmWriteOptions, StorageHubClientOptions } from "./evm/types.js";
 export { FileOperation, ReplicationLevel } from "./evm/types.js";
 export { FileManager } from "./file-manager.js";
 export { HttpClient, type HttpClientConfig, type RequestOptions } from "./http/HttpClient.js";
+export { decryptFile, encryptFile, generateEncryptionKey } from "./encryption.js";
+export type {
+  DecryptFileParams,
+  EncryptFileParams,
+  GeneratedEncryptionKey
+} from "./encryption.js";
+export {
+  createEncryptionHeader,
+  readEncryptionHeader,
+  isEncrypted,
+  type EncryptedFileState,
+  type EncryptedFileInfo
+} from "./encryption/cbor.js";
+export type { EncryptionHeaderParams, EncryptionHeaderV1 } from "./encryption/cbor.js";
+export { blake2s_256 } from "./encryption/hash.js";
+export { BaseNonce, DEK, IKM, Salt } from "./encryption/types.js";
 export { initWasm } from "./init.js";
 export type { FileInfo } from "./types.js";
 export {

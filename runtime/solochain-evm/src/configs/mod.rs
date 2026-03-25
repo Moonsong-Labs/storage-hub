@@ -885,21 +885,101 @@ impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
     }
 }
 
-// Converts a given signed message in a EIP-191 compliant message bytes to verify.
-/// EIP-191: https://eips.ethereum.org/EIPS/eip-191
-/// "\x19Ethereum Signed Message:\n" + len(message) + message"
+/// Converts a SCALE-encoded `FileOperationIntention` into a human-readable EIP-191 message.
+/// human-readable EIP-191 message that wallets can display clearly.
+///
+/// The wallet will show something like:
+/// ```text
+/// StorageHub File Deletion Request
+///
+/// File: documents/report.pdf
+/// Size: 1048576 bytes
+/// Bucket: 0xabcdef…
+/// File Key: 0x1c64fd…
+/// Action: Delete
+/// ```
+///
+/// EIP-191: <https://eips.ethereum.org/EIPS/eip-191>
 pub struct Eip191Adapter;
+
+impl Eip191Adapter {
+    const HEX_CHARS: &'static [u8; 16] = b"0123456789abcdef";
+
+    fn hex_encode(bytes: &[u8], out: &mut Vec<u8>) {
+        for &b in bytes {
+            out.push(Self::HEX_CHARS[(b >> 4) as usize]);
+            out.push(Self::HEX_CHARS[(b & 0x0f) as usize]);
+        }
+    }
+
+    /// Build a human-readable UTF-8 message from the SCALE-encoded intention + context.
+    ///
+    /// **Intention layout** (33 bytes): `[32-byte file_key][1-byte operation_index]`
+    /// **Context layout**: `[32-byte bucket_id][8-byte size LE][N-byte location UTF-8]`
+    ///
+    /// Falls back to raw intention bytes when layouts are unexpected.
+    fn to_human_readable(intention: &[u8], context: &[u8]) -> Vec<u8> {
+        if intention.len() != 33 || context.len() < 40 {
+            return intention.to_vec();
+        }
+
+        let file_key = &intention[..32];
+        let operation_name: &[u8] = match intention[32] {
+            0 => b"Delete",
+            _ => return intention.to_vec(),
+        };
+
+        let bucket_id = &context[..32];
+        // Try to extract the 8-byte file size from the context blob.
+        let Ok(size_bytes): Result<[u8; 8], _> = context[32..40].try_into() else {
+            return intention.to_vec();
+        };
+        let size = u64::from_le_bytes(size_bytes);
+        let location = &context[40..];
+
+        let mut msg = Vec::with_capacity(256);
+
+        // Title
+        msg.extend_from_slice(b"StorageHub File Deletion Request\n\nFile: ");
+
+        // Location (already UTF-8 bytes from the pallet's BoundedVec<u8>)
+        msg.extend_from_slice(location);
+
+        // Size
+        msg.extend_from_slice(b"\nSize: ");
+        let mut size_buf = itoa::Buffer::new();
+        msg.extend_from_slice(size_buf.format(size).as_bytes());
+        msg.extend_from_slice(b" bytes");
+
+        // Bucket
+        msg.extend_from_slice(b"\nBucket: 0x");
+        Self::hex_encode(bucket_id, &mut msg);
+
+        // File key
+        msg.extend_from_slice(b"\nFile Key: 0x");
+        Self::hex_encode(file_key, &mut msg);
+
+        // Action
+        msg.extend_from_slice(b"\nAction: ");
+        msg.extend_from_slice(operation_name);
+
+        msg
+    }
+}
+
 impl shp_traits::MessageAdapter for Eip191Adapter {
-    fn bytes_to_verify(message: &[u8]) -> Vec<u8> {
+    fn bytes_to_verify(intention: &[u8], context: &[u8]) -> Vec<u8> {
+        let human_message = Self::to_human_readable(intention, context);
+
         const PREFIX: &str = "\x19Ethereum Signed Message:\n";
-        let len = message.len();
+        let len = human_message.len();
         let mut len_string_buffer = itoa::Buffer::new();
         let len_string = len_string_buffer.format(len);
 
         let mut eth_message = Vec::with_capacity(PREFIX.len() + len_string.len() + len);
         eth_message.extend_from_slice(PREFIX.as_bytes());
         eth_message.extend_from_slice(len_string.as_bytes());
-        eth_message.extend_from_slice(message);
+        eth_message.extend_from_slice(&human_message);
         eth_message
     }
 }
@@ -960,6 +1040,8 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget;
     type MaxReplicationTarget =
         runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
+    type MaxBspVolunteers = ConstU32<1000>;
+    type MaxMspRespondFileKeys = ConstU32<10>;
     type TickRangeToMaximumThreshold =
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type OffchainSignature = Signature;
@@ -1349,5 +1431,108 @@ pub mod benchmark_helpers {
             let dummy_signature = ecdsa::Signature::from_raw([0u8; 65]);
             Signature::from(MultiSignature::Ecdsa(dummy_signature))
         }
+    }
+}
+
+#[cfg(test)]
+mod eip191_adapter_tests {
+    use super::Eip191Adapter;
+
+    const TEST_FILE_KEY: [u8; 32] = [
+        0x93, 0xc7, 0x63, 0x7a, 0x94, 0x18, 0x29, 0x98, 0x66, 0x5e, 0x26, 0x78, 0x67, 0x28, 0xf4,
+        0xc5, 0x2e, 0xaf, 0x61, 0x2d, 0xf3, 0xd7, 0xb3, 0xd5, 0x40, 0x22, 0x54, 0x9a, 0x08, 0x99,
+        0x5d, 0x61,
+    ];
+    const TEST_BUCKET_ID: [u8; 32] = [
+        0xd9, 0x9f, 0xa5, 0xfe, 0x0c, 0x6b, 0xce, 0xee, 0x92, 0x0a, 0xa4, 0x57, 0xfe, 0xb3, 0xe6,
+        0x77, 0x02, 0xc2, 0x4e, 0xcb, 0x6f, 0x6d, 0xa1, 0x09, 0x35, 0x50, 0x1d, 0xc0, 0x4b, 0x4b,
+        0x6c, 0xd8,
+    ];
+
+    fn build_intention(file_key: &[u8; 32], operation: u8) -> Vec<u8> {
+        let mut intention = file_key.to_vec();
+        intention.push(operation);
+        intention
+    }
+
+    fn build_context(bucket_id: &[u8; 32], size: u64, location: &[u8]) -> Vec<u8> {
+        let mut context = bucket_id.to_vec();
+        context.extend_from_slice(&size.to_le_bytes());
+        context.extend_from_slice(location);
+        context
+    }
+
+    fn to_hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    #[test]
+    fn happy_path_delete_operation() {
+        let size: u64 = 1048576;
+        let location = b"documents/report.pdf";
+
+        let intention = build_intention(&TEST_FILE_KEY, 0);
+        let context = build_context(&TEST_BUCKET_ID, size, location);
+
+        let msg = Eip191Adapter::to_human_readable(&intention, &context);
+        let msg_str = String::from_utf8(msg).expect("should be valid UTF-8");
+
+        assert!(msg_str.starts_with("StorageHub File Deletion Request\n"));
+        assert!(msg_str.contains("File: documents/report.pdf"));
+        assert!(msg_str.contains("Size: 1048576 bytes"));
+        assert!(msg_str.contains(&format!("Bucket: 0x{}", to_hex(&TEST_BUCKET_ID))));
+        assert!(msg_str.contains(&format!("File Key: 0x{}", to_hex(&TEST_FILE_KEY))));
+        assert!(msg_str.contains("Action: Delete"));
+    }
+
+    #[test]
+    fn fallback_on_short_intention() {
+        let intention = vec![0u8; 10];
+        let context = vec![0u8; 50];
+
+        let msg = Eip191Adapter::to_human_readable(&intention, &context);
+        assert_eq!(
+            msg, intention,
+            "should return raw intention on invalid length"
+        );
+    }
+
+    #[test]
+    fn fallback_on_short_context() {
+        let intention = build_intention(&TEST_FILE_KEY, 0);
+        let context = vec![0u8; 30]; // less than 40 bytes
+
+        let msg = Eip191Adapter::to_human_readable(&intention, &context);
+        assert_eq!(
+            msg, intention,
+            "should return raw intention when context is too short"
+        );
+    }
+
+    #[test]
+    fn fallback_on_unknown_operation() {
+        let intention = build_intention(&TEST_FILE_KEY, 99);
+        let context = build_context(&TEST_BUCKET_ID, 100, b"file.txt");
+
+        let msg = Eip191Adapter::to_human_readable(&intention, &context);
+        assert_eq!(
+            msg, intention,
+            "should return raw intention for unknown operation"
+        );
+    }
+
+    #[test]
+    fn zero_size_and_empty_location() {
+        let intention = build_intention(&TEST_FILE_KEY, 0);
+        let context = build_context(&TEST_BUCKET_ID, 0, b"");
+
+        let msg = Eip191Adapter::to_human_readable(&intention, &context);
+        let msg_str = String::from_utf8(msg).expect("should be valid UTF-8");
+
+        assert!(msg_str.contains("Size: 0 bytes"));
+        assert!(
+            msg_str.contains("File: \n"),
+            "empty location should produce an empty File field"
+        );
     }
 }

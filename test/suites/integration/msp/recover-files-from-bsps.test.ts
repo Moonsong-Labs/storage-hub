@@ -170,6 +170,9 @@ await describeMspNet(
       // Build another block to trigger block import notification, after coming out of sync mode.
       await userApi.block.seal();
 
+      // Explicitly trigger the lazy bucket file storage healing check.
+      await mspApi.rpc.storagehubclient.triggerBucketFileStorageHealing(files[0].bucketId);
+
       // Ensure the new bucket-check task reports the expected success message.
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
@@ -229,6 +232,9 @@ await describeMspNet(
 
       // Build another block to trigger block import notification, after coming out of sync mode.
       await userApi.block.seal();
+
+      // Explicitly trigger the lazy bucket file storage healing check.
+      await mspApi.rpc.storagehubclient.triggerBucketFileStorageHealing(files[0].bucketId);
 
       // MSP should recover all three files.
       for (const f of files) {
@@ -354,6 +360,9 @@ await describeMspNet(
       // Build another block to trigger block import notification, after coming out of sync mode.
       await userApi.block.seal();
 
+      // Explicitly trigger the lazy bucket file storage healing check.
+      await mspApi.rpc.storagehubclient.triggerBucketFileStorageHealing(newFile.bucketId);
+
       // The MSP should attempt recovery but fail, since BSP two/three are not trusted by them.
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
@@ -475,6 +484,10 @@ await describeMspNet(
       mspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
       await userApi.wait.nodeCatchUpToChainTip(mspApi);
       await userApi.block.seal();
+
+      // Explicitly trigger the lazy bucket file storage healing check.
+      assert(recoverableFile, "Recoverable file metadata not set");
+      await mspApi.rpc.storagehubclient.triggerBucketFileStorageHealing(recoverableFile.bucketId);
 
       // Recovery should be skipped gracefully because indexer is unavailable.
       await userApi.docker.waitForLog({

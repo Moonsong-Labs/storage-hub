@@ -82,6 +82,7 @@ await describeMspNet(
     // Track reconnected APIs
     let newMspApi: EnrichedBspApi;
     let newBspApi: EnrichedBspApi;
+    let fishermanApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
@@ -96,7 +97,7 @@ await describeMspNet(
         createFishermanApi,
         "Fisherman API not available. Ensure `fisherman` is set to `true` in the network configuration."
       );
-      await createFishermanApi();
+      fishermanApi = await createFishermanApi();
 
       // Connect to standalone indexer node
       assert(
@@ -194,8 +195,15 @@ await describeMspNet(
         }
       });
 
-      // Wait for indexer to process the finalized block
+      // Wait for standalone indexer to process the finalized block.
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      // Sync the fisherman node to the chain tip and propagate finality.
+      // The fisherman has its own dedicated Postgres + Indexer that must be in sync
+      // before it can generate valid deletion proofs.
+      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
+      const file1FinalHash = await userApi.rpc.chain.getFinalizedHead();
+      await fishermanApi.block.finaliseBlock(file1FinalHash.toString());
     });
 
     it("Pauses MSP, requests file deletion, and fisherman completes deletion", async () => {
@@ -401,8 +409,13 @@ await describeMspNet(
         }
       });
 
-      // Wait for indexer to process
+      // Wait for standalone indexer to process the finalized block.
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      // Sync the fisherman node to the chain tip and propagate finality.
+      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
+      const file2FinalHash = await userApi.rpc.chain.getFinalizedHead();
+      await fishermanApi.block.finaliseBlock(file2FinalHash.toString());
     });
 
     it("Pauses BSP, requests file deletion, and fisherman completes deletion", async () => {

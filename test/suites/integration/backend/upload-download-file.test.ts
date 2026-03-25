@@ -4,7 +4,13 @@ import path from "node:path";
 import type { H256 } from "@polkadot/types/interfaces";
 import { u8aToHex } from "@polkadot/util";
 import * as $ from "scale-codec";
-import { bspKey, describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
+import {
+  bspKey,
+  describeMspNet,
+  type EnrichedBspApi,
+  getContainerPeerId,
+  waitFor
+} from "../../../util";
 import type { FileInfo, HealthResponse } from "../../../util/backend";
 import { BACKEND_URI } from "../../../util/backend/consts";
 import { fetchJwtToken } from "../../../util/backend/jwt";
@@ -22,9 +28,10 @@ await describeMspNet(
     initialised: false,
     runtimeType: "solochain",
     indexer: true,
-    backend: true
+    backend: true,
+    networkConfig: "rocksdb"
   },
-  ({ before, createMsp1Api, createUserApi, it }) => {
+  ({ after, before, createApi, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
     let uploadedFileKeyHex: string;
@@ -48,6 +55,10 @@ await describeMspNet(
       } else {
         throw new Error("MSP API for first MSP not available");
       }
+    });
+
+    after(() => {
+      msp1Api.disconnect();
     });
 
     it("Postgres DB is ready", async () => {
@@ -504,6 +515,100 @@ await describeMspNet(
       assert(
         downloadedBuffer.equals(originalFileBuffer),
         "Downloaded file contents should match the uploaded file"
+      );
+    });
+
+    it("Should self-heal file storage and recover a deleted file on download attempt", async () => {
+      assert(uploadedFileKeyHex, "Upload test must complete successfully");
+      assert(originalFileBuffer, "Original file buffer must be available");
+      assert(userJWT, "User authenticated with the backend");
+
+      // Step 1: Remove the file from MSP's file storage directly
+      await msp1Api.rpc.storagehubclient.removeFilesFromFileStorage([fileKey]);
+
+      // Step 2: Verify the file is no longer in file storage
+      await waitFor({
+        lambda: async () =>
+          !(await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
+
+      // Step 3: Restart the MSP to clear the in-memory verified_buckets set.
+      // Without this, the healing trigger would be a no-op since the bucket was
+      // already verified during the earlier upload/download tests.
+      await msp1Api.disconnect();
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
+
+      // Wait for MSP RPC to respond
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
+
+      // Wait for MSP to be idle
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        searchString: "💤 Idle",
+        timeout: 20000,
+        tail: 50
+      });
+
+      // Reconnect MSP API
+      msp1Api = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
+
+      // Ensure MSP catches up to the chain tip
+      await userApi.wait.nodeCatchUpToChainTip(msp1Api);
+
+      // Seal a block so the MSP's blockchain service processes a block import
+      // notification and sets caught_up = true. Without this, the healing command
+      // would be silently skipped.
+      await userApi.block.seal();
+
+      // Wait for the MSP to actually process the sealed block before proceeding.
+      // This ensures caught_up = true is set before the download triggers healing.
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        searchString: "processed successfully",
+        timeout: 10000,
+        tail: 5
+      });
+
+      // Step 4: Attempt to download — should fail because file is missing from storage.
+      // This triggers file storage self-healing for the bucket via the backend.
+      const failedResponse = await fetch(`${BACKEND_URI}/download/${uploadedFileKeyHex}`, {
+        headers: {
+          Authorization: `Bearer ${userJWT}`
+        }
+      });
+      assert(
+        failedResponse.status !== 200,
+        "Download should fail when file is missing from storage"
+      );
+
+      // Step 5: Wait for the healing task to recover the file from BSPs
+      await waitFor({
+        lambda: async () =>
+          (await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound,
+        iterations: 300,
+        delay: 1000
+      });
+
+      // Step 6: Download again — should now succeed
+      const healedResponse = await fetch(`${BACKEND_URI}/download/${uploadedFileKeyHex}`, {
+        headers: {
+          Authorization: `Bearer ${userJWT}`
+        }
+      });
+      strictEqual(healedResponse.status, 200, "Download should succeed after healing");
+
+      const arrayBuffer = await healedResponse.arrayBuffer();
+      const downloadedBuffer = Buffer.from(arrayBuffer);
+      strictEqual(
+        downloadedBuffer.length,
+        originalFileBuffer.length,
+        "Healed file length should match original"
+      );
+      assert(
+        downloadedBuffer.equals(originalFileBuffer),
+        "Healed file contents should match original"
       );
     });
   }
