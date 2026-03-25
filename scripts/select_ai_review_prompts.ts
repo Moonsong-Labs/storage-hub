@@ -18,53 +18,8 @@ type SelectedReviewer = {
   matched_files: string[];
 };
 
-function globToRegExp(glob: string): RegExp {
-  let regex = "^";
-
-  for (let i = 0; i < glob.length; i += 1) {
-    const char = glob[i];
-    const nextChar = glob[i + 1];
-    const prevChar = glob[i - 1];
-    const nextNextChar = glob[i + 2];
-
-    if (char === "*") {
-      if (nextChar === "*") {
-        if (prevChar === "/" && nextNextChar === "/") {
-          regex += "(?:[^/]+/)*";
-          i += 2;
-        } else if (i === 0 && nextNextChar === "/") {
-          regex += "(?:[^/]+/)*";
-          i += 2;
-        } else {
-          regex += ".*";
-          i += 1;
-        }
-      } else {
-        regex += "[^/]*";
-      }
-      continue;
-    }
-
-    if (char === "?") {
-      regex += "[^/]";
-      continue;
-    }
-
-    if (/[|\\{}()[\]^$+?.]/.test(char)) {
-      regex += `\\${char}`;
-      continue;
-    }
-
-    regex += char;
-  }
-
-  regex += "$";
-
-  return new RegExp(regex);
-}
-
 function matchesAny(path: string, patterns: string[]): boolean {
-  return patterns.some((pattern) => globToRegExp(pattern).test(path));
+  return patterns.some((pattern) => new Bun.Glob(pattern).match(path));
 }
 
 async function readJsonFile<T>(path: string): Promise<T> {
