@@ -38,7 +38,7 @@
     },
     "sdk": {
       "name": "@storagehub-sdk/root",
-      "version": "0.7.0",
+      "version": "0.7.3",
       "devDependencies": {
         "@biomejs/biome": "2.2.4",
         "@vitest/coverage-v8": "^3.2.4",
@@ -50,7 +50,7 @@
     },
     "sdk/core": {
       "name": "@storagehub-sdk/core",
-      "version": "0.7.0",
+      "version": "0.7.3",
       "dependencies": {
         "@noble/ciphers": "^2.1.1",
         "@noble/hashes": "^2.0.1",
@@ -79,7 +79,7 @@
     },
     "sdk/examples/demo-app": {
       "name": "demo-app",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "dependencies": {
         "@heroicons/react": "^2.2.0",
         "@polkadot/types": "^12.4.2",
@@ -108,7 +108,7 @@
     },
     "sdk/examples/nextjs": {
       "name": "nextjs",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "dependencies": {
         "@polkadot/types": "^16.4.7",
         "@storagehub-sdk/core": ">=0.0.5",
@@ -129,7 +129,7 @@
     },
     "sdk/examples/node": {
       "name": "@storagehub-sdk/example-node",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "dependencies": {
         "@storagehub-sdk/core": "workspace:*",
         "@storagehub-sdk/msp-client": "workspace:*",
@@ -144,7 +144,7 @@
     },
     "sdk/msp-client": {
       "name": "@storagehub-sdk/msp-client",
-      "version": "0.7.0",
+      "version": "0.7.3",
       "devDependencies": {
         "@storagehub-sdk/core": "workspace:*",
         "viem": ">=2.38.3",

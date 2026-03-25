@@ -9483,7 +9483,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-bucket-nfts"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-benchmarking 41.0.1",
  "frame-support 41.0.1",
@@ -9564,7 +9564,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-cr-randomness"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-support 41.0.1",
  "frame-system 41.0.2",
@@ -9769,7 +9769,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-evm-precompile-file-system"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "fp-account",
  "fp-evm",
@@ -9841,7 +9841,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-file-system"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-benchmarking 41.0.1",
  "frame-support 41.0.1",
@@ -9876,7 +9876,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-file-system-runtime-api"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -10218,7 +10218,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-payment-streams"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-benchmarking 41.0.1",
  "frame-support 41.0.1",
@@ -10244,7 +10244,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-payment-streams-runtime-api"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -10270,7 +10270,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-proofs-dealer"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-benchmarking 41.0.1",
  "frame-support 41.0.1",
@@ -10299,7 +10299,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-proofs-dealer-runtime-api"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -10330,7 +10330,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-randomness"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-benchmarking 41.0.1",
  "frame-support 41.0.1",
@@ -10726,7 +10726,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-storage-providers"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-benchmarking 41.0.1",
  "frame-support 41.0.1",
@@ -10754,7 +10754,7 @@ dependencies = [
 
 [[package]]
 name = "pallet-storage-providers-runtime-api"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -16354,7 +16354,7 @@ dependencies = [
 
 [[package]]
 name = "sh-msp-backend"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -16368,7 +16368,7 @@ dependencies = [
 
 [[package]]
 name = "sh-msp-backend-lib"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "alloy-core 0.8.26",
  "alloy-signer",
@@ -16438,7 +16438,7 @@ dependencies = [
 
 [[package]]
 name = "sh-parachain-runtime"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "cumulus-pallet-aura-ext",
  "cumulus-pallet-parachain-system 0.21.2",
@@ -16527,7 +16527,7 @@ dependencies = [
 
 [[package]]
 name = "sh-solochain-evm-runtime"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "cumulus-pallet-aura-ext",
  "cumulus-pallet-parachain-system 0.21.2",
@@ -16627,7 +16627,7 @@ dependencies = [
 
 [[package]]
 name = "sh-xcm-simulator"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "cumulus-pallet-aura-ext",
  "cumulus-pallet-parachain-system 0.21.2",
@@ -16793,7 +16793,7 @@ dependencies = [
 
 [[package]]
 name = "shc-actors-derive"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "once_cell",
  "proc-macro2",
@@ -16805,7 +16805,7 @@ dependencies = [
 
 [[package]]
 name = "shc-actors-framework"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -16823,7 +16823,7 @@ dependencies = [
 
 [[package]]
 name = "shc-blockchain-service"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "array-bytes 6.2.3",
@@ -16878,7 +16878,7 @@ dependencies = [
 
 [[package]]
 name = "shc-blockchain-service-db"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "diesel",
@@ -16901,7 +16901,7 @@ dependencies = [
 
 [[package]]
 name = "shc-client"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "array-bytes 6.2.3",
@@ -16975,7 +16975,7 @@ dependencies = [
 
 [[package]]
 name = "shc-common"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "bigdecimal",
@@ -16983,7 +16983,9 @@ dependencies = [
  "bytes",
  "cumulus-client-service",
  "cumulus-primitives-core 0.19.0",
+ "cumulus-primitives-proof-size-hostfunction 0.13.0",
  "cumulus-primitives-storage-weight-reclaim",
+ "cumulus-relay-chain-interface",
  "fp-account",
  "frame-benchmarking 41.0.1",
  "frame-metadata-hash-extension",
@@ -17040,7 +17042,7 @@ dependencies = [
 
 [[package]]
 name = "shc-file-manager"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bincode",
  "hash-db",
@@ -17064,7 +17066,7 @@ dependencies = [
 
 [[package]]
 name = "shc-file-transfer-service"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "array-bytes 6.2.3",
@@ -17094,7 +17096,7 @@ dependencies = [
 
 [[package]]
 name = "shc-fisherman-service"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "diesel",
@@ -17124,7 +17126,7 @@ dependencies = [
 
 [[package]]
 name = "shc-forest-manager"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -17152,7 +17154,7 @@ dependencies = [
 
 [[package]]
 name = "shc-indexer-db"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -17179,7 +17181,7 @@ dependencies = [
 
 [[package]]
 name = "shc-indexer-service"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "array-bytes 6.2.3",
@@ -17229,7 +17231,7 @@ dependencies = [
 
 [[package]]
 name = "shc-rpc"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "array-bytes 6.2.3",
  "async-trait",
@@ -17279,7 +17281,7 @@ dependencies = [
 
 [[package]]
 name = "shc-telemetry"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "log",
  "substrate-prometheus-endpoint",
@@ -17295,7 +17297,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shp-constants"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "sp-core 37.0.0",
  "sp-runtime 42.0.0",
@@ -17303,7 +17305,7 @@ dependencies = [
 
 [[package]]
 name = "shp-data-price-updater"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-support 41.0.1",
  "parity-scale-codec",
@@ -17317,7 +17319,7 @@ dependencies = [
 
 [[package]]
 name = "shp-file-key-verifier"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bincode",
  "frame-support 41.0.1",
@@ -17337,7 +17339,7 @@ dependencies = [
 
 [[package]]
 name = "shp-file-metadata"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "hex",
  "num-bigint",
@@ -17352,7 +17354,7 @@ dependencies = [
 
 [[package]]
 name = "shp-forest-verifier"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bincode",
  "frame-support 41.0.1",
@@ -17369,14 +17371,14 @@ dependencies = [
 
 [[package]]
 name = "shp-opaque"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "sp-runtime 42.0.0",
 ]
 
 [[package]]
 name = "shp-session-keys"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -17389,7 +17391,7 @@ dependencies = [
 
 [[package]]
 name = "shp-storage-enable-types"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-system 41.0.2",
  "pallet-balances 42.0.0",
@@ -17410,7 +17412,7 @@ dependencies = [
 
 [[package]]
 name = "shp-traits"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "frame-support 41.0.1",
  "parity-scale-codec",
@@ -17423,7 +17425,7 @@ dependencies = [
 
 [[package]]
 name = "shp-treasury-funding"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "log",
  "shp-traits",
@@ -17433,7 +17435,7 @@ dependencies = [
 
 [[package]]
 name = "shp-tx-implicits-runtime-api"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -17444,7 +17446,7 @@ dependencies = [
 
 [[package]]
 name = "shp-types"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "sp-core 37.0.0",
  "sp-runtime 42.0.0",
@@ -19501,7 +19503,7 @@ dependencies = [
 
 [[package]]
 name = "storage-hub-node"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "array-bytes 6.2.3",
@@ -19630,7 +19632,7 @@ dependencies = [
 
 [[package]]
 name = "storagehub-wasm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "hex",
  "parity-scale-codec",
