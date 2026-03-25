@@ -171,9 +171,16 @@ await describeMspNet(
       if (!mspAcceptInPool) {
         // MSP accept was re-included in the reorg block (fatxpool auto-re-inclusion).
         // The ordering test (deletions before accept) is not possible — the accept
-        // already executed. Verify the accept succeeded and file is stored.
-        const file1Stored = await userApi.call.fileSystemApi.isFileInFileSystem(file1Key);
-        assert(file1Stored.isTrue, "File 1 should be stored (MSP accept was re-included in fork)");
+        // already executed. Verify the accept succeeded (file2 no longer pending).
+        const pendingRequests =
+          await userApi.call.fileSystemApi.pendingStorageRequestsByMsp(mspId);
+        const file2StillPending = Array.from(pendingRequests).some(
+          ([fileKey]) => fileKey.toHex() === file2Key
+        );
+        assert(
+          !file2StillPending,
+          "File 2 should no longer be pending (MSP accept was re-included in fork)"
+        );
         return;
       }
 

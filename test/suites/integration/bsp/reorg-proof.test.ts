@@ -144,7 +144,7 @@ await describeBspNet(
       const lastTickAfterFinality = lastTickResultAfterFinality.asOk.toNumber();
       assert(
         lastTickAfterFinality >= tickBspSubmittedProofForBeforeReorg,
-        `Proof should have been re-included after finality reorg. ` +
+        "Proof should have been re-included after finality reorg. " +
           `Last proven tick: ${lastTickAfterFinality}, expected >= ${tickBspSubmittedProofForBeforeReorg}`
       );
     });
@@ -172,13 +172,6 @@ await describeBspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.wait.bspVolunteer();
       await userApi.block.seal();
-
-      // Save the BSP Forest root before confirming the storage request.
-      const onChainBspInfoBeforeResult = await userApi.call.storageProvidersApi.getBspInfo(
-        ShConsts.DUMMY_BSP_ID
-      );
-      assert(onChainBspInfoBeforeResult.isOk);
-      const onChainBspForestRootBefore = onChainBspInfoBeforeResult.asOk.root.toString();
 
       // Wait for the BSP to send the confirm storage extrinsic, and then seal a block,
       // without finalising it, to be able to reorg it out.
