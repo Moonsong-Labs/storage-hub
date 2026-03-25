@@ -135,7 +135,7 @@ When you use `inline_suggestion`:
 - keep `suggested_code` to the replacement lines only
 - do not include markdown fences in `suggested_code`
 - do not include explanatory prose inside `suggested_code`
-- do not provide `agent_prompt`
+- set `agent_prompt` to `null`
 
 ### When to use `agent_prompt`
 
@@ -155,7 +155,7 @@ When you use `agent_prompt`:
 - mention the exact files that likely need updating
 - mention the specific RPC or runtime API name involved
 - mention `bun run --cwd test typegen` when relevant
-- do not provide `suggested_code`
+- set `suggested_code` to `null`
 
 ### When to use `none`
 
@@ -170,8 +170,8 @@ When you use `none`:
 
 - set `fix_mode` to `none`
 - set `fix_explanation` to one short sentence explaining why no remediation text is being suggested
-- do not provide `suggested_code`
-- do not provide `agent_prompt`
+- set `suggested_code` to `null`
+- set `agent_prompt` to `null`
 
 ### Reviewer-specific bias for this prompt
 
@@ -214,8 +214,10 @@ For each finding:
 
 - set `fix_mode` to `inline_suggestion`, `agent_prompt`, or `none`
 - set `fix_explanation` to one short sentence explaining why that mode was chosen
-- if `fix_mode` is `inline_suggestion`, include `suggested_code`
-- if `fix_mode` is `agent_prompt`, include `agent_prompt`
+- always include both `suggested_code` and `agent_prompt`
+- if `fix_mode` is `inline_suggestion`, include `suggested_code` and set `agent_prompt` to `null`
+- if `fix_mode` is `agent_prompt`, include `agent_prompt` and set `suggested_code` to `null`
+- if `fix_mode` is `none`, set both `suggested_code` and `agent_prompt` to `null`
 
 When you produce no findings:
 

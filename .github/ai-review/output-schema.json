@@ -52,10 +52,16 @@
             "maximum": 3
           },
           "suggested_code": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "agent_prompt": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "code_location": {
             "type": "object",
@@ -97,6 +103,8 @@
           "fix_mode",
           "fix_explanation",
           "priority",
+          "suggested_code",
+          "agent_prompt",
           "code_location"
         ],
         "additionalProperties": false
