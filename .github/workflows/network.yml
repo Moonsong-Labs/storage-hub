@@ -47,7 +47,7 @@ jobs:
       FORCE_BACKEND_PUBLISH_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'force-backend-publish') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Check if the node needs rebuild
@@ -122,7 +122,7 @@ jobs:
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -182,7 +182,7 @@ jobs:
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -235,7 +235,7 @@ jobs:
     name: "Push node Docker image to Docker Hub"
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Download node binary from artefacts
         uses: actions/download-artifact@v4
         with:
@@ -279,7 +279,7 @@ jobs:
     name: "Push backend Docker image to Docker Hub"
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Download backend binary from artefacts
         uses: actions/download-artifact@v4
         with:
@@ -327,7 +327,7 @@ jobs:
   #     run:
   #       working-directory: test
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v5
   # - uses: ./.github/workflow-templates/setup-bun
   #     - name: Pull Docker image
   #       run: docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image-tag }}
@@ -349,7 +349,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
       - run: mkdir -p target/release/
       - name: Get node binary from artefacts if changed
@@ -387,7 +387,7 @@ jobs:
     timeout-minutes: 30
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
       - run: mkdir -p target/release/
       - name: Get node binary from artefacts if changed
@@ -423,7 +423,7 @@ jobs:
       matrix:
         shard: [1, 2]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
       - run: mkdir -p target/release/
       - name: Get node binary from artefacts if changed
@@ -470,7 +470,7 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
@@ -559,7 +559,7 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
@@ -645,7 +645,7 @@ jobs:
       matrix:
         shard: [1]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
@@ -763,7 +763,7 @@ jobs:
       matrix:
         shard: [1, 2]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
@@ -852,7 +852,7 @@ jobs:
       matrix:
         shard: [1, 2]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
@@ -937,7 +937,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
@@ -1021,7 +1021,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
@@ -1146,7 +1146,7 @@ jobs:
     name: "Check Rust/TS bindings are up to date"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 22
@@ -1189,7 +1189,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
@@ -1214,7 +1214,7 @@ jobs:
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
         with:
           node_version: 23
