@@ -51,7 +51,6 @@ diesel::table! {
         id -> Int8,
         account -> Bytea,
         file_key -> Bytea,
-        bucket_id -> Int8,
         onchain_bucket_id -> Bytea,
         location -> Bytea,
         fingerprint -> Bytea,

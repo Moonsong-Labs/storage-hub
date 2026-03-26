@@ -104,7 +104,7 @@ impl MockRepository {
         // Create 3 buckets, one per MSP
         // Bucket 1: For MOCK_ADDRESS and DUMMY_MSP_ID, as expected by SDK tests
         let bucket1_hash = Hash::from_slice(&test::bucket::BUCKET1_BUCKET_ID);
-        let bucket1 = this
+        let _bucket1 = this
             .create_bucket(
                 &MOCK_ADDRESS.to_string(),
                 Some(msp1.id),
@@ -118,7 +118,7 @@ impl MockRepository {
         // Bucket 2: For MSP 2
         let bucket2_user = random_bytes_32();
         let bucket2_hash = random_hash();
-        let bucket2 = this
+        let _bucket2 = this
             .create_bucket(
                 &hex::encode(bucket2_user),
                 Some(msp2.id),
@@ -132,7 +132,7 @@ impl MockRepository {
         // Bucket 3: For MSP 3
         let bucket3_user = random_bytes_32();
         let bucket3_hash = random_hash();
-        let bucket3 = this
+        let _bucket3 = this
             .create_bucket(
                 &hex::encode(bucket3_user),
                 Some(msp3.id),
@@ -151,7 +151,6 @@ impl MockRepository {
         this.create_file(
             MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file1_key,
-            bucket1.id,
             &bucket1_hash,
             b"/Reports/Q1-2024.pdf", // expected by the SDK tests
             &random_bytes_32(),
@@ -165,7 +164,6 @@ impl MockRepository {
         this.create_file(
             MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file2_key,
-            bucket1.id,
             &bucket1_hash,
             b"/Thesis/chapter1.pdf", // expected by the SDK tests
             &random_bytes_32(),
@@ -180,7 +178,6 @@ impl MockRepository {
         this.create_file(
             MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file3_key,
-            bucket1.id,
             &bucket1_hash,
             b"files/e2e-bucket/adolphus.jpg", // expected by the SDK tests
             &test::file::BUCKET1_FILE3_FINGERPRINT,
@@ -194,7 +191,6 @@ impl MockRepository {
         this.create_file(
             &bucket2_user,
             &file2_key,
-            bucket2.id,
             &bucket2_hash,
             b"vacation/beach.jpg",
             &random_bytes_32(),
@@ -208,7 +204,6 @@ impl MockRepository {
         this.create_file(
             &bucket3_user,
             &file3_key,
-            bucket3.id,
             &bucket3_hash,
             b"code/src/main.rs",
             &random_bytes_32(),
@@ -314,7 +309,7 @@ impl IndexerOps for MockRepository {
 
     async fn get_files_by_bucket(
         &self,
-        bucket: i64,
+        bucket: &Hash,
         limit: i64,
         offset: i64,
     ) -> RepositoryResult<Vec<File>> {
@@ -322,7 +317,7 @@ impl IndexerOps for MockRepository {
 
         Ok(files
             .values()
-            .filter(|f| f.bucket_id == bucket)
+            .filter(|f| f.onchain_bucket_id.as_slice() == bucket.as_bytes())
             .skip(offset as usize)
             .take(limit as usize)
             .cloned()
@@ -364,10 +359,10 @@ impl IndexerOps for MockRepository {
 
         // Get all buckets that belong to this MSP
         let buckets = self.buckets.read().await;
-        let bucket_ids: Vec<i64> = buckets
+        let bucket_ids: Vec<Vec<u8>> = buckets
             .values()
             .filter(|b| b.msp_id == Some(msp.id))
-            .map(|b| b.id)
+            .map(|b| b.onchain_bucket_id.clone())
             .collect();
         drop(buckets);
 
@@ -375,7 +370,7 @@ impl IndexerOps for MockRepository {
         let files = self.files.read().await;
         let distinct_file_keys: std::collections::HashSet<Vec<u8>> = files
             .values()
-            .filter(|f| bucket_ids.contains(&f.bucket_id))
+            .filter(|f| bucket_ids.contains(&f.onchain_bucket_id))
             .map(|f| f.file_key.clone())
             .collect();
 
@@ -557,7 +552,6 @@ impl IndexerOpsMut for MockRepository {
         &self,
         account: &[u8],
         file_key: &Hash,
-        bucket_id: i64,
         onchain_bucket_id: &Hash,
         location: &[u8],
         fingerprint: &[u8],
@@ -565,12 +559,19 @@ impl IndexerOpsMut for MockRepository {
     ) -> RepositoryResult<File> {
         let id = self.next_id();
         let now = Utc::now().naive_utc();
+        let bucket_id = {
+            let buckets = self.buckets.read().await;
+            buckets
+                .values()
+                .find(|b| b.onchain_bucket_id == onchain_bucket_id.as_bytes())
+                .map(|b| b.id)
+                .ok_or_else(|| RepositoryError::not_found("Bucket"))?
+        };
 
         let file = File {
             id,
             account: account.to_vec(),
             file_key: file_key.as_bytes().to_vec(),
-            bucket_id,
             onchain_bucket_id: onchain_bucket_id.as_bytes().to_vec(),
             location: location.to_vec(),
             fingerprint: fingerprint.to_vec(),
@@ -608,16 +609,19 @@ impl IndexerOpsMut for MockRepository {
         let file_to_remove = files
             .values()
             .find(|f| f.file_key == file_key.as_bytes())
-            .map(|f| (f.id, f.bucket_id, f.size));
+            .map(|f| (f.id, f.onchain_bucket_id.clone(), f.size));
 
-        if let Some((id, bucket_id, size)) = file_to_remove {
+        if let Some((id, onchain_bucket_id, size)) = file_to_remove {
             files.remove(&id);
             drop(files);
 
             // Update bucket statistics
             let now = Utc::now().naive_utc();
             let mut buckets = self.buckets.write().await;
-            if let Some(bucket) = buckets.get_mut(&bucket_id) {
+            if let Some(bucket) = buckets
+                .values_mut()
+                .find(|b| b.onchain_bucket_id == onchain_bucket_id)
+            {
                 bucket.file_count = bucket.file_count.saturating_sub(1);
                 bucket.total_size -= BigDecimal::from(size);
                 bucket.updated_at = now;
@@ -768,7 +772,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            bucket.id,
             &bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
@@ -780,7 +783,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            bucket.id,
             &bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
@@ -792,7 +794,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            bucket.id,
             &bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
@@ -803,7 +804,7 @@ pub mod tests {
 
         // Create another bucket with a file
         let other_bucket_hash = random_hash();
-        let other_bucket = repo
+        let _other_bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
@@ -817,7 +818,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            other_bucket.id,
             &other_bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
@@ -828,7 +828,7 @@ pub mod tests {
 
         // Retrieve files from the first bucket only
         let files = repo
-            .get_files_by_bucket(bucket.id, 10, 0)
+            .get_files_by_bucket(&bucket_hash, 10, 0)
             .await
             .expect("should retrieve files by bucket");
 
@@ -836,7 +836,7 @@ pub mod tests {
 
         // Verify the other bucket's file is not included
         for file in &files {
-            assert_eq!(file.bucket_id, bucket.id);
+            assert_eq!(file.onchain_bucket_id, bucket.onchain_bucket_id);
         }
     }
 
@@ -845,7 +845,7 @@ pub mod tests {
         let repo = MockRepository::new();
 
         let bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
-        let bucket = repo
+        let _bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
@@ -861,7 +861,6 @@ pub mod tests {
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &random_hash(),
-                bucket.id,
                 &file1_bucket_hash,
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
@@ -875,7 +874,6 @@ pub mod tests {
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &random_hash(),
-                bucket.id,
                 &file2_bucket_hash,
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
@@ -889,7 +887,6 @@ pub mod tests {
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &random_hash(),
-                bucket.id,
                 &file3_bucket_hash,
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
@@ -900,7 +897,7 @@ pub mod tests {
 
         // Test limit
         let limited_files = repo
-            .get_files_by_bucket(bucket.id, 2, 0)
+            .get_files_by_bucket(&bucket_hash, 2, 0)
             .await
             .expect("should retrieve limited files");
 
@@ -910,7 +907,7 @@ pub mod tests {
 
         // Test offset
         let offset_files = repo
-            .get_files_by_bucket(bucket.id, 10, 1)
+            .get_files_by_bucket(&bucket_hash, 10, 1)
             .await
             .expect("should retrieve files with offset");
 
@@ -920,7 +917,7 @@ pub mod tests {
 
         // Test limit and offset combined
         let paginated_files = repo
-            .get_files_by_bucket(bucket.id, 1, 1)
+            .get_files_by_bucket(&bucket_hash, 1, 1)
             .await
             .expect("should retrieve paginated files");
 
@@ -933,7 +930,7 @@ pub mod tests {
         let repo = MockRepository::new();
 
         let bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
-        let empty_bucket = repo
+        let _empty_bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
@@ -945,7 +942,7 @@ pub mod tests {
             .expect("should create bucket");
 
         let empty_files = repo
-            .get_files_by_bucket(empty_bucket.id, 10, 0)
+            .get_files_by_bucket(&bucket_hash, 10, 0)
             .await
             .expect("should handle empty bucket");
 
@@ -958,7 +955,7 @@ pub mod tests {
 
         // Use a bucket ID that doesn't exist
         let non_existent_files = repo
-            .get_files_by_bucket(999999, 10, 0)
+            .get_files_by_bucket(&random_hash(), 10, 0)
             .await
             .expect("should handle non-existent bucket");
 
@@ -1334,7 +1331,6 @@ pub mod tests {
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &file_key,
-                bucket.id,
                 &bucket_onchain_id,
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
@@ -1350,14 +1346,14 @@ pub mod tests {
 
         assert_eq!(file.id, created_file.id);
         assert_eq!(file.file_key, file_key.as_bytes());
-        assert_eq!(file.bucket_id, bucket.id);
+        assert_eq!(file.onchain_bucket_id, bucket.onchain_bucket_id);
     }
 
     #[tokio::test]
     async fn get_file_by_file_key_not_found() {
         let repo = MockRepository::new();
         let bucket_onchain_id = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
-        let bucket = repo
+        let _bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
@@ -1370,7 +1366,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            bucket.id,
             &bucket_onchain_id,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,

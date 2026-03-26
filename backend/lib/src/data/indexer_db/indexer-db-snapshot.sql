@@ -761,14 +761,6 @@ CREATE INDEX idx_bucket_blockchain_id ON public.bucket USING btree (onchain_buck
 CREATE INDEX idx_bucket_msp_id ON public.bucket USING btree (msp_id);
 
 
---
--- Name: idx_file_bucket_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_file_bucket_id ON public.file USING btree (bucket_id);
-
-
---
 -- Name: idx_file_deletion_status; Type: INDEX; Schema: public; Owner: -
 --
 

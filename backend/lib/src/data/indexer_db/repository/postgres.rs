@@ -130,7 +130,7 @@ impl IndexerOps for Repository {
 
     async fn get_files_by_bucket(
         &self,
-        bucket: i64,
+        bucket: &Hash,
         limit: i64,
         offset: i64,
     ) -> RepositoryResult<Vec<File>> {
@@ -138,7 +138,7 @@ impl IndexerOps for Repository {
 
         // Same as File::get_by_bucket_id but with pagination
         let files = file::table
-            .filter(file::bucket_id.eq(bucket))
+            .filter(file::onchain_bucket_id.eq(bucket.as_bytes()))
             .limit(limit)
             .offset(offset)
             .load(&mut conn)
@@ -233,7 +233,7 @@ impl IndexerOps for Repository {
         let cutoff = chrono::Utc::now().naive_utc() - chrono::Duration::seconds(window_secs as i64);
 
         let (total, accepted): (i64, i64) = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .inner_join(bucket::table.on(file::onchain_bucket_id.eq(bucket::onchain_bucket_id)))
             .left_join(
                 msp_file::table.on(file::id
                     .eq(msp_file::file_id)
@@ -362,7 +362,6 @@ impl IndexerOpsMut for Repository {
         &self,
         account: &[u8],
         file_key: &Hash,
-        bucket_id: i64,
         onchain_bucket_id: &Hash,
         location: &[u8],
         fingerprint: &[u8],
@@ -374,7 +373,6 @@ impl IndexerOpsMut for Repository {
             &mut conn,
             account.to_vec(),
             file_key.as_bytes().to_vec(),
-            bucket_id,
             onchain_bucket_id.as_bytes().to_vec(),
             location.to_vec(),
             fingerprint.to_vec(),
@@ -464,9 +462,9 @@ mod tests {
             test_helpers::{
                 setup_test_db,
                 snapshot_move_bucket::{
-                    BSP_NUM, BSP_ONE_ONCHAIN_ID, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_ID,
-                    BUCKET_NAME, BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY,
-                    FILE_ONE_LOCATION, MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID,
+                    BSP_NUM, BSP_ONE_ONCHAIN_ID, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_NAME,
+                    BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY, FILE_ONE_LOCATION,
+                    MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID,
                     MSP_TWO_ONCHAIN_ID, SNAPSHOT_SQL,
                 },
             },
@@ -590,22 +588,20 @@ mod tests {
         // Add a second bucket with one file to verify filtering
         // These values are arbitrary placeholders - the exact values don't matter for this test
         let additional_bucket_id = random_hash();
-        let additional_bucket = repo
-            .create_bucket(
-                "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
-                Some(MSP_TWO_ID),
-                b"other-bucket",
-                &additional_bucket_id,
-                false,
-            )
-            .await
-            .expect("Failed to create additional bucket");
+        repo.create_bucket(
+            "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
+            Some(MSP_TWO_ID),
+            b"other-bucket",
+            &additional_bucket_id,
+            false,
+        )
+        .await
+        .expect("Failed to create additional bucket");
 
         // Add a file to the second bucket
         repo.create_file(
             &random_bytes_32(),
             &random_hash(),
-            additional_bucket.id,
             &additional_bucket_id,
             b"file.txt",
             &random_bytes_32(),
@@ -616,7 +612,7 @@ mod tests {
 
         // Test getting all files in bucket #1
         let bucket1_files = repo
-            .get_files_by_bucket(BUCKET_ID, 100, 0)
+            .get_files_by_bucket(&Hash::from_slice(BUCKET_ONCHAIN_ID.as_slice()), 100, 0)
             .await
             .expect("Failed to get bucket #1 files");
 
@@ -629,14 +625,14 @@ mod tests {
         // Verify all files belong to bucket #1
         for file in &bucket1_files {
             assert_eq!(
-                file.bucket_id, BUCKET_ID,
+                file.onchain_bucket_id, BUCKET_ONCHAIN_ID,
                 "All files should belong to bucket #1"
             );
         }
 
         // Test getting files in other bucket
         let bucket2_files = repo
-            .get_files_by_bucket(additional_bucket.id, 100, 0)
+            .get_files_by_bucket(&additional_bucket_id, 100, 0)
             .await
             .expect("Failed to get other bucket files");
 
@@ -645,7 +641,8 @@ mod tests {
         // Verify the file belongs to bucket #2
         for file in &bucket2_files {
             assert_eq!(
-                file.bucket_id, additional_bucket.id,
+                file.onchain_bucket_id,
+                additional_bucket_id.as_bytes(),
                 "File should belong to other bucket"
             );
         }
@@ -662,7 +659,7 @@ mod tests {
 
         // Test with limit
         let limited_files = repo
-            .get_files_by_bucket(BUCKET_ID, 2, 0)
+            .get_files_by_bucket(&Hash::from_slice(BUCKET_ONCHAIN_ID.as_slice()), 2, 0)
             .await
             .expect("Failed to get limited files");
         assert!(
@@ -672,7 +669,7 @@ mod tests {
 
         // Test with offset
         let offset_files = repo
-            .get_files_by_bucket(BUCKET_ID, 100, 1)
+            .get_files_by_bucket(&Hash::from_slice(BUCKET_ONCHAIN_ID.as_slice()), 100, 1)
             .await
             .expect("Failed to get offset files");
         assert_ne!(
@@ -682,7 +679,7 @@ mod tests {
 
         // Test limit and offset combined
         let paginated_files = repo
-            .get_files_by_bucket(BUCKET_ID, 1, 1)
+            .get_files_by_bucket(&Hash::from_slice(BUCKET_ONCHAIN_ID.as_slice()), 1, 1)
             .await
             .expect("Failed to get offset files");
         assert!(
@@ -722,19 +719,19 @@ mod tests {
             .await
             .expect("Failed to get MSP");
 
-        let empty_bucket = repo
-            .create_bucket(
-                "0xemptybucketuser",
-                Some(empty_msp.id),
-                b"empty-bucket",
-                &random_hash(),
-                false,
-            )
-            .await
-            .expect("Failed to create empty bucket");
+        let empty_bucket_onchain_id = random_hash();
+        repo.create_bucket(
+            "0xemptybucketuser",
+            Some(empty_msp.id),
+            b"empty-bucket",
+            &empty_bucket_onchain_id,
+            false,
+        )
+        .await
+        .expect("Failed to create empty bucket");
 
         let files = repo
-            .get_files_by_bucket(empty_bucket.id, 100, 0)
+            .get_files_by_bucket(&empty_bucket_onchain_id, 100, 0)
             .await
             .expect("should handle empty bucket");
 
@@ -742,7 +739,7 @@ mod tests {
 
         // Verify that other buckets still have files
         let bucket1_files = repo
-            .get_files_by_bucket(BUCKET_ID, 100, 0)
+            .get_files_by_bucket(&Hash::from_slice(BUCKET_ONCHAIN_ID.as_slice()), 100, 0)
             .await
             .expect("Failed to get bucket 1 files");
 
@@ -764,7 +761,7 @@ mod tests {
 
         // Test getting all files in bucket
         let files = repo
-            .get_files_by_bucket(123456, 100, 0)
+            .get_files_by_bucket(&random_hash(), 100, 0)
             .await
             .expect("should handle non-existent bucket");
 

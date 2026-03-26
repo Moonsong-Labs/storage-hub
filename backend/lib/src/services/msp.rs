@@ -607,7 +607,7 @@ impl MspService {
         // TODO: pagination doesn't account for path filtering
         let files = self
             .postgres
-            .get_bucket_files(bucket.id, Some(limit), Some(offset))
+            .get_bucket_files(&bucket.onchain_bucket_id, Some(limit), Some(offset))
             .await?;
 
         // Create hierarchy based on location segments
@@ -1780,7 +1780,7 @@ mod tests {
                         .expect("should create MSP");
 
                     // Create a test bucket for the mock user
-                    let bucket = client
+                    let _bucket = client
                         .create_bucket(
                             &MOCK_ADDRESS.to_string(),
                             Some(msp.id),
@@ -1795,7 +1795,6 @@ mod tests {
                         .create_file(
                             MOCK_ADDRESS.to_string().as_bytes(),
                             random_bytes_32().as_slice(),
-                            bucket.id,
                             &bucket_id,
                             "sample-file.txt".as_bytes(),
                             random_bytes_32().as_slice(),
@@ -1836,7 +1835,7 @@ mod tests {
                         .expect("should create MSP");
 
                     // Create a test bucket for the mock user
-                    let bucket = client
+                    let _bucket = client
                         .create_bucket(
                             &MOCK_ADDRESS.to_string(),
                             Some(msp.id),
@@ -1851,7 +1850,6 @@ mod tests {
                         .create_file(
                             MOCK_ADDRESS.to_string().as_bytes(),
                             random_bytes_32().as_slice(),
-                            bucket.id,
                             &bucket_id,
                             "sample-file.txt".as_bytes(),
                             random_bytes_32().as_slice(),
@@ -1903,7 +1901,7 @@ mod tests {
                         .expect("should create MSP");
 
                     // Create a test bucket for the mock user
-                    let bucket = client
+                    let _bucket = client
                         .create_bucket(
                             &MOCK_ADDRESS.to_string(),
                             Some(msp.id),
@@ -1918,7 +1916,6 @@ mod tests {
                         .create_file(
                             MOCK_ADDRESS.to_string().as_bytes(),
                             &file_key,
-                            bucket.id,
                             &bucket_id,
                             "sample-file.txt".as_bytes(),
                             random_bytes_32().as_slice(),

@@ -405,14 +405,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 bsps_required,
                 msp_id,
             } => {
-                let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec())
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "NewStorageRequest (get bucket)".to_string(),
-                    })?;
-
                 let mut sql_peer_ids = Vec::new();
                 for peer_id in peer_ids {
                     sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await.map_err(
@@ -494,7 +486,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     conn,
                     who,
                     file_key.as_ref().to_vec(),
-                    bucket.id,
                     bucket_id.as_ref().to_vec(),
                     location.to_vec(),
                     fingerprint.as_ref().to_vec(),
@@ -537,19 +528,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         );
 
                         // Recreate the file record from the metadata in the event
-                        let bucket = Bucket::get_by_onchain_bucket_id(
-                            conn,
-                            file_metadata.bucket_id().to_vec(),
-                        )
-                        .await
-                        .map_err(|e| {
-                            IndexBlockError::EventIndexingDatabaseError {
-                                database_error: e,
-                                block_number: block_number.saturated_into(),
-                                event_name: "MspAcceptedStorageRequest (get bucket)".to_string(),
-                            }
-                        })?;
-
                         let size: u64 = file_metadata.file_size();
                         let size: i64 = size.saturated_into();
 
@@ -575,7 +553,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             conn,
                             file_metadata.owner().clone(),
                             file_key.as_ref().to_vec(),
-                            bucket.id,
                             file_metadata.bucket_id().clone(),
                             file_metadata.location().clone(),
                             file_metadata.fingerprint().as_ref().to_vec(),
@@ -882,19 +859,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             );
 
                             // Recreate the file record from the metadata in the event
-                            let bucket = Bucket::get_by_onchain_bucket_id(
-                                conn,
-                                file_metadata.bucket_id().to_vec(),
-                            )
-                            .await
-                            .map_err(|e| {
-                                IndexBlockError::EventIndexingDatabaseError {
-                                    database_error: e,
-                                    block_number: block_number.saturated_into(),
-                                    event_name: "BspConfirmedStoring (get bucket)".to_string(),
-                                }
-                            })?;
-
                             let size: u64 = file_metadata.file_size();
                             let size: i64 = size.saturated_into();
 
@@ -920,7 +884,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                                 conn,
                                 file_metadata.owner().clone(),
                                 file_key.as_ref().to_vec(),
-                                bucket.id,
                                 file_metadata.bucket_id().clone(),
                                 file_metadata.location().clone(),
                                 file_metadata.fingerprint().as_ref().to_vec(),

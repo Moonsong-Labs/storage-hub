@@ -3,7 +3,7 @@ use diesel_async::RunQueryDsl;
 
 use crate::{
     models::Msp,
-    schema::{bucket, file, msp, msp_file},
+    schema::{file, msp, msp_file},
     types::OnchainMspId,
     DbConnection,
 };
@@ -165,8 +165,7 @@ impl MspFile {
         // Only create MSP-file associations for files that are in the bucket's forest,
         // as files could have been deleted while the bucket was orphaned from a MSP.
         let file_ids: Vec<i64> = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
-            .filter(bucket::onchain_bucket_id.eq(bucket_id))
+            .filter(file::onchain_bucket_id.eq(bucket_id))
             .filter(file::is_in_bucket.eq(true))
             .select(file::id)
             .load(conn)
