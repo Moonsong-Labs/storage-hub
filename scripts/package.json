@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "select:ai-review-prompts": "bun run ./select_ai_review_prompts.ts",
     "find:file-deletions": "bun run ./find_file_deletions.ts",
     "remove:files-from-forest-storage": "bun run ./remove_files_from_forest_storage.ts"
   },
@@ -13,6 +14,7 @@
     "@storagehub/types-bundle": "workspace:*"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.11",
     "tsx": "4.20.5"
   },
   "engines": {
