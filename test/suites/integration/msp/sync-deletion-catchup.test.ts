@@ -811,19 +811,14 @@ await describeMspNet(
       await newMspApi.wait.blockImported(finalisedBlockHash.toString());
       await newMspApi.block.finaliseBlock(finalisedBlockHash.toString());
 
-      // fatxpool behavior is non-deterministic (polkadot-sdk#5479): the deletion txs may
-      // have been auto-re-included in the reorg block (deletion persists) or reverted
-      // (file returns to forest). Both are valid — verify MSP local state is consistent
-      // with the on-chain state after sync.
+      // File should be back in MSP forest (deletion was reverted by reorg)
       await waitFor({
         lambda: async () => {
-          const onChainBucketInfo = await userApi.query.providers.buckets(file3.bucketId);
-          if (onChainBucketInfo.isNone) return false;
-          const onChainRoot = onChainBucketInfo.unwrap().root.toString();
-          const localRoot = (
-            await newMspApi.rpc.storagehubclient.getForestRoot(file3.bucketId)
-          ).toString();
-          return onChainRoot === localRoot;
+          const inMspForest = await newMspApi.rpc.storagehubclient.isFileInForest(
+            file3.bucketId,
+            file3.fileKey
+          );
+          return inMspForest.isTrue;
         },
         iterations: 30,
         delay: 500
@@ -979,18 +974,14 @@ await describeMspNet(
       await newBspApi.wait.blockImported(finalisedBlockHash.toString());
       await newBspApi.block.finaliseBlock(finalisedBlockHash.toString());
 
-      // fatxpool behavior is non-deterministic (polkadot-sdk#5479): the deletion txs may
-      // have been auto-re-included in the reorg block (deletion persists) or reverted.
-      // Verify BSP local state is consistent with on-chain state after sync.
+      // File should be back in BSP forest (deletion was reverted by reorg)
       await waitFor({
         lambda: async () => {
-          const bspOnChainInfo = await userApi.query.providers.backupStorageProviders(
-            userApi.shConsts.DUMMY_BSP_ID
+          const inBspForest = await newBspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            file3.fileKey
           );
-          if (bspOnChainInfo.isNone) return false;
-          const onChainRoot = bspOnChainInfo.unwrap().root.toString();
-          const localRoot = (await newBspApi.rpc.storagehubclient.getForestRoot(null)).toString();
-          return onChainRoot === localRoot;
+          return inBspForest.isTrue;
         },
         iterations: 30,
         delay: 500

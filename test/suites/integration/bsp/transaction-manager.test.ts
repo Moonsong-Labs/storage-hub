@@ -94,7 +94,7 @@ await describeBspNet(
       });
     });
 
-    it("Transaction watcher detects implicit retraction after reorg (fatxpool)", async () => {
+    it("Transaction watcher logs Retracted status after reorg and resubmits proof", async () => {
       // Ensure we have a finalized head
       await userApi.block.seal();
 
@@ -137,43 +137,31 @@ await describeBspNet(
         timeout: 10000
       });
 
-      // Reorg away from the last block by creating a longer fork.
-      // fatxpool intentionally suppresses Retracted events (polkadot-sdk#5479).
-      // The behavior is non-deterministic: the tx may be auto-re-included in the
-      // fork blocks (second InBlock = implicit retraction) OR returned to the pool
-      // via retraction re-import.
+      // Reorg away from the last block by creating a longer fork
+      // This will cause the transaction to be retracted
       await userApi.block.reOrgWithLongerChain();
 
       // Wait for the BSP to catch up to the reorg
       const newBestBlockHash = (await userApi.rpc.chain.getHeader()).hash.toString();
       await bspApi.wait.blockImported(newBestBlockHash);
 
-      // Check if the proof was already accepted (fatxpool may auto-re-include it
-      // in fork blocks — polkadot-sdk#5479). If not yet, seal to include from pool.
-      let lastTickAfterReorg = (
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.DUMMY_BSP_ID)
-      ).asOk.toNumber();
+      // Check for the `Retracted` log since the block was reorged out
+      await bspApi.docker.waitForLog({
+        containerName: "storage-hub-sh-bsp-1",
+        searchString: `Transaction with nonce ${nonce} was retracted from block`,
+        timeout: 10000
+      });
 
-      if (lastTickAfterReorg >= nextChallengeTick) {
-        // Proof was re-included in fork blocks — check for implicit retraction log
-        await bspApi.docker.waitForLog({
-          containerName: "storage-hub-sh-bsp-1",
-          searchString: `Transaction with nonce ${nonce} was implicitly retracted and re-included in block`,
-          timeout: 10000
-        });
-      } else {
-        // Proof not yet on-chain — seal to include from pool
-        await userApi.block.seal({ finaliseBlock: false });
-        lastTickAfterReorg = (
-          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
-            ShConsts.DUMMY_BSP_ID
-          )
-        ).asOk.toNumber();
-        assert(
-          lastTickAfterReorg >= nextChallengeTick,
-          `Proof should have been accepted after seal (lastTick=${lastTickAfterReorg}, expected >= ${nextChallengeTick})`
-        );
-      }
+      // Verify that the transaction is back in the tx pool after reorg
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
+
+      // Seal the block with the resubmitted transaction
+      const { events: eventsFork2 } = await userApi.block.seal({ finaliseBlock: false });
+      await userApi.assert.eventPresent("proofsDealer", "ProofAccepted", eventsFork2);
     });
 
     it("Transaction watcher logs Usurped status when replaced by higher-tip transaction", async () => {
@@ -268,7 +256,7 @@ await describeBspNet(
       const challengePeriod = (
         await userApi.call.proofsDealerApi.getChallengePeriod(ShConsts.DUMMY_BSP_ID)
       ).asOk.toNumber();
-      if (nextChallengeTick <= currentBlock + 2) {
+      if (nextChallengeTick < currentBlock + 2) {
         nextChallengeTick += challengePeriod;
       }
       await userApi.block.skipTo(nextChallengeTick - 2, { finalised: true });
@@ -338,26 +326,14 @@ await describeBspNet(
       await userApi.node.dropTxn(volunteerHash as `0x${string}`);
       await bspApi.node.dropTxn(volunteerHash as `0x${string}`);
 
-      // Verify the Invalid log was emitted for the volunteer
+      // Verify the Invalid log was emitted
       await bspApi.docker.waitForLog({
         containerName: "storage-hub-sh-bsp-1",
         searchString: `Transaction with nonce ${volunteerNonce} is invalid`,
         timeout: 10000
       });
 
-      // Also drop the submitProof (nonce N+1). With fatxpool, cascading invalidation is
-      // asynchronous (polkadot-sdk#5496) so the submitProof may or may not have been
-      // removed yet by the background revalidation worker.
-      for (const api of [userApi, bspApi]) {
-        try {
-          await api.node.dropTxn({ module: "proofsDealer", method: "submitProof" });
-        } catch {
-          // Already removed by fatxpool's async cascade
-        }
-      }
-
-      // Verify the submitProof is gone from both pools.
-      // (The volunteer may already have a retry in the pool — that's expected and tested below.)
+      // The submit proof should have also been dropped because it's no longer valid
       await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
@@ -371,6 +347,13 @@ await describeBspNet(
         checkTxPool: true,
         assertLength: 0,
         exactLength: true
+      });
+
+      // Verify the Invalid log was emitted for the submit proof transaction
+      await bspApi.docker.waitForLog({
+        containerName: "storage-hub-sh-bsp-1",
+        searchString: `Transaction with nonce ${submitProofNonce} is invalid`,
+        timeout: 10000
       });
 
       // The BSP will retry submitting the volunteer up to max_try_count times (default: 3)
@@ -402,7 +385,11 @@ await describeBspNet(
           `Retry volunteer attempt ${retryAttempt + 1} should use the same nonce to fill the gap`
         );
 
-        // Drop the retry volunteer transaction from both pools
+        // Drop the retry volunteer transaction
+        // Order matters: drop from USER first, then BSP. When USER drops bspVolunteer (nonce n),
+        // it automatically drops submitProof (nonce n+1) since it becomes invalid. If BSP drops
+        // first and retries immediately, it gossips the new bspVolunteer to USER, which replaces
+        // the old one but leaves submitProof valid in USER's pool.
         await userApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
         await bspApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
       }
