@@ -11,7 +11,7 @@ use shc_common::types::{FileMetadata, Fingerprint};
 
 use crate::{
     models::{Bucket, MultiAddress},
-    schema::{file, file_peer_id, msp_file},
+    schema::{bucket, file, file_peer_id, msp_file},
     DbConnection,
 };
 

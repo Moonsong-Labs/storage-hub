@@ -462,9 +462,9 @@ mod tests {
             test_helpers::{
                 setup_test_db,
                 snapshot_move_bucket::{
-                    BSP_NUM, BSP_ONE_ONCHAIN_ID, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_ID,
-                    BUCKET_NAME, BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY,
-                    FILE_ONE_LOCATION, MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID,
+                    BSP_NUM, BSP_ONE_ONCHAIN_ID, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_NAME,
+                    BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY, FILE_ONE_LOCATION,
+                    MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID,
                     MSP_TWO_ONCHAIN_ID, SNAPSHOT_SQL,
                 },
             },
