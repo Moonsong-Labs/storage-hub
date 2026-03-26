@@ -1780,7 +1780,7 @@ mod tests {
                         .expect("should create MSP");
 
                     // Create a test bucket for the mock user
-                    let bucket = client
+                    let _bucket = client
                         .create_bucket(
                             &MOCK_ADDRESS.to_string(),
                             Some(msp.id),
@@ -1835,7 +1835,7 @@ mod tests {
                         .expect("should create MSP");
 
                     // Create a test bucket for the mock user
-                    let bucket = client
+                    let _bucket = client
                         .create_bucket(
                             &MOCK_ADDRESS.to_string(),
                             Some(msp.id),
@@ -1901,7 +1901,7 @@ mod tests {
                         .expect("should create MSP");
 
                     // Create a test bucket for the mock user
-                    let bucket = client
+                    let _bucket = client
                         .create_bucket(
                             &MOCK_ADDRESS.to_string(),
                             Some(msp.id),

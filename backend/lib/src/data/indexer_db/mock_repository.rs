@@ -804,7 +804,7 @@ pub mod tests {
 
         // Create another bucket with a file
         let other_bucket_hash = random_hash();
-        let other_bucket = repo
+        let _other_bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
@@ -845,7 +845,7 @@ pub mod tests {
         let repo = MockRepository::new();
 
         let bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
-        let bucket = repo
+        let _bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
@@ -930,7 +930,7 @@ pub mod tests {
         let repo = MockRepository::new();
 
         let bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
-        let empty_bucket = repo
+        let _empty_bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
@@ -1315,7 +1315,7 @@ pub mod tests {
     async fn get_file_by_file_key() {
         let repo = MockRepository::new();
         let bucket_onchain_id = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
-        let bucket = repo
+        let _bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
