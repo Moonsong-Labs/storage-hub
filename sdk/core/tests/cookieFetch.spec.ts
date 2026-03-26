@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { FetchLike } from "../src/http/cookieFetch.js";
 import { createCookieFetch } from "../src/http/cookieFetch.js";
 
 /**
@@ -7,7 +8,7 @@ import { createCookieFetch } from "../src/http/cookieFetch.js";
  * so this is best for tests where the server reply doesn't need to change
  * between calls.
  */
-function mockFetch(setCookieHeaders: string[] = []): typeof fetch {
+function mockFetch(setCookieHeaders: string[] = []): FetchLike {
   return vi.fn(async () => {
     const headers = new Headers();
     headers.append("Content-Type", "application/json");
@@ -72,7 +73,7 @@ describe("createCookieFetch", () => {
     const withoutCookie = mockFetch([]);
 
     let callCount = 0;
-    const base: typeof fetch = async (input, init) => {
+    const base: FetchLike = async (input, init) => {
       callCount++;
       // Only the first response sets a cookie; subsequent ones are cookie-free.
       if (callCount === 1) return withCookie(input, init);
@@ -115,7 +116,7 @@ describe("createCookieFetch", () => {
       Object.defineProperty(headers, "getSetCookie", { value: undefined });
       return new Response("{}", { status: 200, headers });
     });
-    const fetchWithCookies = createCookieFetch(base as unknown as typeof fetch);
+    const fetchWithCookies = createCookieFetch(base as FetchLike);
 
     await fetchWithCookies("https://example.com/first");
     await fetchWithCookies("https://example.com/second");
@@ -178,7 +179,7 @@ describe("createCookieFetch", () => {
         headers.append("Set-Cookie", "affinity=node-1");
       }
       return new Response("{}", { status: 200, headers });
-    }) as unknown as typeof fetch;
+    }) as FetchLike;
 
     const fetchWithCookies = createCookieFetch(base);
 
@@ -206,7 +207,7 @@ describe("createCookieFetch", () => {
         headers.append("Set-Cookie", "session=new-value");
       }
       return new Response("{}", { status: 200, headers });
-    }) as unknown as typeof fetch;
+    }) as FetchLike;
 
     const fetchWithCookies = createCookieFetch(base);
 

@@ -198,14 +198,36 @@ From here you can interact via the websockets exposed in the direct links, in th
 ## Generating new Type Interfaces
 
 This repo uses polkadot{.js} [TS Type Generation](https://polkadot.js.org/docs/api/examples/promise/typegeni) AKA `api-augment`.
-To generate new type interfaces run the following in `/test`:
+
+First build the node binary from the repository root:
+
+```sh
+cargo build --release
+```
+
+### Linux
+
+Then, in `/test`, run:
 
 ```sh
 bun run typegen
 ```
 
-> [!TIP]  
-> Like with other commands, this assumes you have built a node binary and Docker image before executing this activity.
+### macOS
+
+If you are creating new type interfaces locally on macOS, run the full cross-build and Docker-backed flow in `/test`:
+
+```sh
+bun install
+bun run crossbuild:mac
+bun run docker:build
+bun run crossbuild:mac:backend
+bun run docker:build:backend
+bun run typegen
+```
+
+> [!TIP]
+> Do not reduce this workflow to only `bun run typegen` when the generated interfaces depend on updated runtime metadata. The node build, and on macOS the documented cross-build and Docker image steps, are part of the expected type-generation flow.
 
 ## Misc
 
