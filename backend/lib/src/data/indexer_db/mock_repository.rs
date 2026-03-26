@@ -104,7 +104,7 @@ impl MockRepository {
         // Create 3 buckets, one per MSP
         // Bucket 1: For MOCK_ADDRESS and DUMMY_MSP_ID, as expected by SDK tests
         let bucket1_hash = Hash::from_slice(&test::bucket::BUCKET1_BUCKET_ID);
-        let bucket1 = this
+        let _bucket1 = this
             .create_bucket(
                 &MOCK_ADDRESS.to_string(),
                 Some(msp1.id),
@@ -118,7 +118,7 @@ impl MockRepository {
         // Bucket 2: For MSP 2
         let bucket2_user = random_bytes_32();
         let bucket2_hash = random_hash();
-        let bucket2 = this
+        let _bucket2 = this
             .create_bucket(
                 &hex::encode(bucket2_user),
                 Some(msp2.id),
@@ -132,7 +132,7 @@ impl MockRepository {
         // Bucket 3: For MSP 3
         let bucket3_user = random_bytes_32();
         let bucket3_hash = random_hash();
-        let bucket3 = this
+        let _bucket3 = this
             .create_bucket(
                 &hex::encode(bucket3_user),
                 Some(msp3.id),
@@ -572,7 +572,6 @@ impl IndexerOpsMut for MockRepository {
             id,
             account: account.to_vec(),
             file_key: file_key.as_bytes().to_vec(),
-            bucket_id,
             onchain_bucket_id: onchain_bucket_id.as_bytes().to_vec(),
             location: location.to_vec(),
             fingerprint: fingerprint.to_vec(),
@@ -610,16 +609,19 @@ impl IndexerOpsMut for MockRepository {
         let file_to_remove = files
             .values()
             .find(|f| f.file_key == file_key.as_bytes())
-            .map(|f| (f.id, f.bucket_id, f.size));
+            .map(|f| (f.id, f.onchain_bucket_id.clone(), f.size));
 
-        if let Some((id, bucket_id, size)) = file_to_remove {
+        if let Some((id, onchain_bucket_id, size)) = file_to_remove {
             files.remove(&id);
             drop(files);
 
             // Update bucket statistics
             let now = Utc::now().naive_utc();
             let mut buckets = self.buckets.write().await;
-            if let Some(bucket) = buckets.get_mut(&bucket_id) {
+            if let Some(bucket) = buckets
+                .values_mut()
+                .find(|b| b.onchain_bucket_id == onchain_bucket_id)
+            {
                 bucket.file_count = bucket.file_count.saturating_sub(1);
                 bucket.total_size -= BigDecimal::from(size);
                 bucket.updated_at = now;
