@@ -1,0 +1,80 @@
+id: 1
+name: StorageHub
+description: >
+  Substrate-based decentralized storage runtime designed to be pluggable into
+  any consensus blockchain ecosystem. Implements a dual MSP/BSP provider model
+  where Main Storage Providers handle primary data retrieval and bucket
+  management, while Backup Storage Providers supply network-level redundancy.
+  Storage integrity is enforced through a challenge-based proof-of-storage
+  system using Merkle Patricia Forest proofs. Providers are compensated via
+  on-chain payment streams gated by proof submission (pay-for-proof). The
+  off-chain client uses an actor-based architecture for concurrent, isolated
+  service management. Two runtime variants demonstrate pluggability: a Polkadot
+  parachain (cumulus) and a standalone EVM-compatible chain (Frontier).
+status: canonical
+intent:
+  kind: system
+  summary: >
+    Decentralized storage runtime with dual MSP/BSP economics, challenge-based
+    proofs, and pluggable consensus via Substrate.
+  source: human
+  goals:
+    - Verifiable storage integrity through cryptographic proofs
+    - Economically aligned dual-provider model (MSP for retrieval, BSP for redundancy)
+    - Pluggable into any consensus blockchain via Substrate runtime
+    - Low-friction developer onboarding via SDK and REST API
+    - Scalable proof and payment cycles under growing storage demand
+  non_goals:
+    - No compute/execution capabilities (no smart contracts in storage layer)
+    - No permanent/immutable storage (pay-as-you-go via payment streams)
+  rationale: >
+    Existing decentralized storage solutions lack deep integration with
+    blockchain ecosystems and have suboptimal economic models. StorageHub
+    differentiates through its dual MSP/BSP provider model that creates
+    a two-sided market (MSPs compete on service quality, BSPs on price),
+    its challenge-based proof system that is more tightly integrated with
+    the blockchain runtime, and its Substrate-based architecture that makes
+    it pluggable into any consensus mechanism.
+constraints:
+  - 1
+  - 2
+  - 3
+  - 5
+  - 14
+  - 17
+children:
+  - shape: 2
+    role: subsystem
+  - shape: 3
+    role: subsystem
+  - shape: 4
+    role: subsystem
+  - shape: 5
+    role: subsystem
+  - shape: 6
+    role: subsystem
+  - shape: 7
+    role: subsystem
+  - shape: 40
+    role: feature
+  - shape: 41
+    role: feature
+  - shape: 42
+    role: feature
+  - shape: 43
+    role: feature
+  - shape: 50
+    role: data-flow
+  - shape: 51
+    role: data-flow
+  - shape: 52
+    role: data-flow
+realization:
+  - bindings:
+      - scheme: uri
+        value: Cargo.toml
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: CLAUDE.md
+    role: supporting

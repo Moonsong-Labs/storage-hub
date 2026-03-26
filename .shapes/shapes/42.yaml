@@ -1,0 +1,39 @@
+id: 42
+name: Payment Flow
+description: >
+  Economic flow from user billing to provider compensation:
+  (1) PaymentStreams charges users based on fixed-rate (constant per tick)
+  or dynamic-rate (amount_giga_units * AccumulatedPriceIndex delta) streams.
+  (2) Charges gated by proof submission — providers charge via
+  charge_payment_streams only when they have valid proof records.
+  (3) Treasury cut applied via LinearThenPowerOfTwoTreasuryCutCalculator
+  based on system utilization (IdealUtilisationRate threshold).
+  (4) Insolvent users flagged in UsersWithoutFunds with cooldown period.
+  (5) Provider batch charging triggered from client tasks.
+status: canonical
+intent:
+  kind: feature
+  summary: >
+    User billing via payment streams — proof-gated charging, treasury cuts,
+    insolvency handling.
+  source: human
+  goals:
+    - Continuous pay-as-you-go billing aligned with storage usage
+    - Economic incentive alignment via pay-for-proof gating
+    - Fair treasury funding proportional to network utilization
+  data_flow: >
+    proof submitted → LastChargeableInfo updated → provider calls
+    charge_payment_streams → user balance debited → treasury cut applied →
+    provider credited. If balance insufficient → flag UserWithoutFunds →
+    cooldown → providers may stop serving.
+constraints:
+  - 2
+  - 5
+parents:
+  - id: 1
+    role: feature
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/payment-streams/src/lib.rs
+    role: primary

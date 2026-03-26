@@ -1,0 +1,37 @@
+id: 32
+name: Tick System
+description: >
+  Abstract pausable/resumable time layer governing provider operations.
+  Defined by the StorageHubTickGetter trait in shp-traits. Ticks are NOT
+  1:1 with block numbers — they represent a controllable time dimension
+  that can be paused and resumed in critical moments where the network of
+  BSPs and MSPs operations need to be frozen. Used by ProofsDealer for
+  challenge period calculation, PaymentStreams for charging intervals,
+  and FileSystem for storage request expiration (StorageRequestTtl).
+status: canonical
+intent:
+  kind: interface
+  summary: >
+    Pausable/resumable time abstraction for provider operations —
+    independent of block numbers.
+  source: human
+  goals:
+    - Decouple provider operation timing from block production
+    - Enable pausing/resuming of provider obligations during network events
+    - Consistent time reference across ProofsDealer, PaymentStreams, FileSystem
+  rationale: >
+    Block numbers advance regardless of network conditions. Ticks provide
+    a control layer where the protocol can pause challenge deadlines and
+    payment charging during network upgrades, emergency situations, or
+    other critical moments without stopping block production.
+constraints:
+  - 1
+  - 16
+parents:
+  - id: 4
+    role: interface
+realization:
+  - bindings:
+      - scheme: uri
+        value: primitives/traits/src/lib.rs
+    role: primary

@@ -1,0 +1,45 @@
+id: 22
+name: Forest Manager
+description: >
+  Merkle Patricia Forest storage manager for providers. Implements the
+  ForestStorage trait for file key insertion/deletion, proof generation,
+  and metadata retrieval. ForestStorageHandler manages multiple forest
+  instances (one per BSP, one per MSP bucket). Uses ForestWritePermitGuard
+  to serialize write access to Merkle tries, preventing concurrent mutation
+  corruption. Dual backends: RocksDB (production) and in-memory (testing).
+status: canonical
+intent:
+  kind: module
+  summary: >
+    Merkle Patricia Forest management — proof generation, key operations,
+    serialized writes.
+  source: human
+  goals:
+    - Correct Merkle forest state management with proof generation
+    - "Multiple forest instances per provider (MSP: per-bucket, BSP: single)"
+    - Serialized write access via permit guards
+  rationale: >
+    The Merkle Patricia Forest is the core data structure for proof-of-storage.
+    Choosing MPF over alternatives (MMR, simple Merkle trees) was driven by
+    key-value proof support (existence AND non-existence), Substrate trie
+    compatibility, and efficient incremental updates.
+constraints:
+  - 1
+  - 10
+  - 13
+parents:
+  - id: 3
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/forest-manager/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/forest-manager/src/rocksdb.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: client/forest-manager/src/traits.rs
+    role: supporting

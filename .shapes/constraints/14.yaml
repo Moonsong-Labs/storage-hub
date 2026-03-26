@@ -1,0 +1,31 @@
+id: 14
+name: Non-Goals Boundary
+description: >
+  Explicit scope boundary defining what StorageHub deliberately does NOT
+  do. This prevents scope creep that would compromise the focused storage
+  economics model.
+kind: boundary
+rule: >
+  StorageHub MUST NOT implement compute/execution capabilities (no smart
+  contract execution engine within the storage layer, no compute-over-data,
+  no MapReduce). StorageHub MUST NOT offer permanent/immutable storage
+  guarantees — data retention is governed by payment streams and provider
+  agreements, requiring ongoing payment. Unlike Arweave, there is no
+  pay-once-store-forever model.
+enforcement: manual
+status: canonical
+intent:
+  kind: boundary
+  summary: >
+    No compute/execution, no permanent storage — StorageHub is purely
+    pay-as-you-go storage.
+  source: human
+  rationale: >
+    Adding compute would split focus and complicate the economic model.
+    Permanent storage requires a fundamentally different economic design
+    (endowment model) that conflicts with the pay-for-proof model.
+    Both would dilute the core differentiator.
+  impact_if_violated:
+    - Economic model becomes incoherent (pay-for-proof + permanent storage conflict)
+    - Engineering focus diluted across storage AND compute
+    - Competitive positioning blurred

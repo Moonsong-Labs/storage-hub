@@ -1,0 +1,39 @@
+id: 15
+name: no_std Compatibility
+description: >
+  Substrate runtimes execute in a WASM sandbox that does not provide std.
+  All primitives crates are shared between runtime (WASM) and client
+  (native), so they must compile under both targets.
+kind: requirement
+rule: >
+  All crates under /primitives/ (prefixed shp-*) MUST compile under
+  no_std with #![cfg_attr(not(feature = "std"), no_std)]. They MUST
+  NOT depend on std-only crates without feature gating behind
+  #[cfg(feature = "std")]. This includes shp-traits, shp-types,
+  shp-forest-verifier, shp-file-key-verifier, shp-file-metadata,
+  shp-constants, shp-data-price-updater, and all other shp-* crates.
+enforcement: machine
+status: canonical
+intent:
+  kind: requirement
+  summary: >
+    All primitives (shp-*) crates must compile under no_std for WASM
+    runtime compatibility.
+  source: human
+  rationale: >
+    The Substrate runtime compiles to WASM for on-chain execution.
+    WASM does not provide std. Any std dependency in primitives breaks
+    runtime compilation. The feature-gated approach allows std usage
+    in native builds while maintaining WASM compatibility.
+  impact_if_violated:
+    - Runtime WASM compilation fails
+    - Cannot deploy runtime upgrades
+realization:
+  - bindings:
+      - scheme: uri
+        value: primitives/traits/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: primitives/types/src/lib.rs
+    role: supporting

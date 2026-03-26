@@ -1,0 +1,45 @@
+id: 50
+name: Event-Driven Dispatch Flow
+description: >
+  Primary control flow for all reactive client behavior:
+  (1) Blockchain service receives block import notifications from the node.
+  (2) Extracts and decodes StorageEnableEvents from the block.
+  (3) Emits typed events via ActorEventBus (e.g., NewStorageRequest,
+  MultipleNewChallengeSeeds, AcceptedBspVolunteer, SlashableProvider).
+  (4) EventBusListeners in task modules subscribe to relevant events.
+  (5) Tasks execute business logic (proof generation, file storage, etc.).
+  (6) Tasks submit extrinsics back via BlockchainServiceCommandInterface.
+  This pub/sub pattern decouples event producers from consumers, allowing
+  new task modules to be added without modifying the blockchain service.
+status: canonical
+intent:
+  kind: data-flow
+  summary: >
+    Block events → event bus → task handlers → extrinsic submission.
+  source: human
+  goals:
+    - Decoupled event processing via pub/sub
+    - Reliable event ordering (block-by-block processing)
+    - Extensible — new task handlers without modifying event source
+  data_flow: >
+    block import notification → blockchain-service decodes events →
+    ActorEventBus.emit(typed_event) → EventBusListener receives →
+    EventHandler.handle() executes task → BlockchainServiceCommand
+    submits extrinsic
+constraints:
+  - 6
+  - 10
+  - 11
+  - 12
+parents:
+  - id: 1
+    role: data-flow
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/handler.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/actors-framework/src/event_bus.rs
+    role: supporting

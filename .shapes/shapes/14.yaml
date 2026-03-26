@@ -1,0 +1,34 @@
+id: 14
+name: Randomness Pallet
+description: >
+  Provides relay-chain-sourced BABE randomness to the StorageHub runtime
+  via a mandatory inherent (set_babe_randomness). Updates two randomness
+  sources: LatestOneEpochAgoRandomness (safely delayed by one epoch) and
+  LatestParentBlockRandomness (current block's parent). Used by ProofsDealer
+  for challenge seed generation and by Providers for registration randomness.
+  Pallet index: 43 (parachain), 83 (solochain-EVM).
+status: canonical
+intent:
+  kind: module
+  summary: >
+    Relay chain BABE randomness via inherent — challenge seeds and
+    registration randomness.
+  source: human
+  goals:
+    - Provide verifiable randomness sourced from relay chain BABE consensus
+    - Two randomness windows (one-epoch-ago for safety, parent for freshness)
+  rationale: >
+    On-chain randomness is critical for fair challenge distribution and
+    unpredictable provider ID generation. Relay chain BABE provides
+    randomness that is harder to manipulate than parachain-local sources.
+constraints:
+  - 6
+  - 7
+parents:
+  - id: 2
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/randomness/src/lib.rs
+    role: primary

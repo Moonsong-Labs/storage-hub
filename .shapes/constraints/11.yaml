@@ -1,0 +1,41 @@
+id: 11
+name: Command/Actor/Task Pattern
+description: >
+  All client-side reactive behavior follows an established pattern that
+  makes the codebase predictable and maintainable. Deviating from this
+  pattern leads to unmaintainable code and subtle concurrency bugs.
+kind: guideline
+rule: >
+  All client services MUST follow the established pattern: (1) Commands
+  define the message types an actor accepts (as an enum); (2) Events
+  define what the actor emits via the event bus; (3) Handler implements
+  the Actor trait and handle_message dispatch; (4) Tasks implement
+  EventHandler<E> for specific event types and contain the business logic.
+  Storage access follows typed column families (ScaleEncodedCf,
+  SingleScaleEncodedValueCf). New services MUST mirror existing service
+  structure.
+enforcement: manual
+status: canonical
+intent:
+  kind: guideline
+  summary: >
+    All client services follow Commands → Events → Handler → Tasks pattern.
+  source: human
+  rationale: >
+    Consistency across all services makes the codebase predictable.
+    The pattern separates concerns cleanly: commands define the interface,
+    handlers manage message routing, and tasks contain the business logic.
+    Past deviations created hard-to-debug concurrency issues.
+  impact_if_violated:
+    - Inconsistent service structure makes codebase harder to navigate
+    - Concurrency bugs from bypassing the actor message passing model
+    - Difficulty onboarding new contributors
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/commands.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/handler.rs
+    role: supporting

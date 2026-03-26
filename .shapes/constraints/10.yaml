@@ -1,0 +1,37 @@
+id: 10
+name: Actor Non-Blocking
+description: >
+  The actor-based client architecture depends on each actor's event loop
+  remaining responsive. A blocked actor stops processing all its messages,
+  which can cascade to deadlock the entire system when other actors are
+  waiting for responses.
+kind: guideline
+rule: >
+  No actor's handle_message implementation may perform blocking I/O,
+  unbounded computation, or hold the actor's event loop for longer than
+  necessary. Long-running work MUST be spawned as a separate task via
+  TaskSpawner. Actors MUST NOT call .await on operations that could
+  block indefinitely within their message handler. File I/O, network
+  requests, and proof generation MUST be offloaded to spawned tasks.
+enforcement: manual
+status: canonical
+intent:
+  kind: guideline
+  summary: >
+    Never block the actor event loop — offload long work to spawned tasks.
+  source: human
+  rationale: >
+    Identified as a critical anti-pattern. A blocked actor stops processing
+    all its messages. Since actors communicate via message passing, a single
+    blocked actor can cascade to deadlock the entire client. The actor model
+    was chosen specifically for concurrency isolation, and blocking negates
+    this benefit.
+  impact_if_violated:
+    - Single blocked actor cascades to system-wide deadlock
+    - Message queues grow unbounded, consuming memory
+    - Time-sensitive operations (proof submission) miss deadlines
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/actors-framework/src/actor.rs
+    role: primary

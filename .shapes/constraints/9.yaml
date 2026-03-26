@@ -1,0 +1,44 @@
+id: 9
+name: Type Generation Consistency
+description: >
+  TypeScript type definitions consumed by the SDK, test infrastructure, and
+  types-bundle must stay in sync with runtime API and pallet event changes.
+  Stale generated types cause silent failures in integration tests and
+  SDK usage.
+kind: requirement
+rule: >
+  After any change to runtime APIs, RPC definitions, or pallet event/error
+  types, the TypeScript type generation (bun run --cwd test typegen) MUST
+  be re-run and the resulting types committed. The types-bundle files
+  (types-bundle/src/rpc.ts and types-bundle/src/runtime.ts) MUST be
+  updated when RuntimeAPIs or RPC calls change.
+enforcement: manual
+status: canonical
+intent:
+  kind: requirement
+  summary: >
+    Generated TypeScript types must be re-generated and committed after
+    any runtime API or event type change.
+  source: human
+  rationale: >
+    The TypeScript type chain (runtime → typegen → types-bundle → SDK →
+    tests) is a critical path. A stale link silently produces incorrect
+    encoding/decoding, causing test failures or SDK bugs that are hard
+    to trace back to the type mismatch.
+  impact_if_violated:
+    - Integration tests fail with cryptic type errors
+    - SDK produces incorrectly encoded extrinsics
+    - Types-bundle RPC definitions don't match runtime
+realization:
+  - bindings:
+      - scheme: uri
+        value: types-bundle/src/rpc.ts
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: types-bundle/src/runtime.ts
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: test/package.json
+    role: supporting

@@ -1,0 +1,49 @@
+id: 4
+name: Shared Primitives
+description: >
+  The shp-* crate family providing no_std-compatible types, trait interfaces,
+  and verifiers shared between the on-chain runtime and off-chain client.
+  This is the architectural spine of StorageHub — all cross-pallet
+  communication goes through traits defined here (ReadBucketsInterface,
+  MutateStorageProvidersInterface, ProofsDealerInterface, PaymentStreamsInterface,
+  CommitmentVerifier, StorageHubTickGetter, etc.). Also includes concrete
+  implementations like forest-verifier and file-key-verifier.
+status: canonical
+intent:
+  kind: module
+  summary: >
+    no_std-compatible types, traits, and verifiers shared between runtime
+    and client — the architectural spine.
+  source: human
+  goals:
+    - Define cross-pallet trait interfaces as the sole communication path
+    - Maintain no_std compatibility for WASM runtime compilation
+    - Provide concrete proof verification implementations
+  rationale: >
+    Trait-based interfaces decouple pallets from each other's internal
+    implementation. This was a deliberate architectural choice to prevent
+    the tight coupling that makes pallet changes risky. Primitives are
+    the contract boundary.
+constraints:
+  - 6
+  - 15
+  - 16
+parents:
+  - id: 1
+    role: subsystem
+children:
+  - shape: 30
+    role: interface
+  - shape: 31
+    role: module
+  - shape: 32
+    role: interface
+realization:
+  - bindings:
+      - scheme: uri
+        value: primitives/traits/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: primitives/types/src/lib.rs
+    role: supporting

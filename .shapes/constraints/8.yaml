@@ -1,0 +1,42 @@
+id: 8
+name: Dual Runtime Parity
+description: >
+  StorageHub demonstrates its value proposition as a pluggable storage
+  runtime by maintaining two runtime variants: a parachain (cumulus-based)
+  and a solochain-EVM (Frontier-based). Both MUST include the same six
+  core pallets with identical logic to prevent divergence bugs.
+kind: requirement
+rule: >
+  Both runtime variants (runtime/parachain and runtime/solochain-evm)
+  MUST include the same six core StorageHub pallets (Providers, FileSystem,
+  ProofsDealer, Randomness, PaymentStreams, BucketNfts) with identical
+  pallet crate versions and configuration. The solochain-EVM variant
+  additionally includes Frontier EVM pallets and the FileSystem precompile.
+  Any change to a core pallet MUST be verified against both runtimes
+  (cargo check for both, integration tests for both).
+enforcement: manual
+status: canonical
+intent:
+  kind: requirement
+  summary: >
+    Both runtime variants share identical core pallet logic — changes
+    must be verified against both.
+  source: human
+  rationale: >
+    StorageHub's pluggability into any consensus blockchain is a core
+    differentiator. Maintaining two runtimes proves this and catches
+    integration issues early. Divergence would undermine the value
+    proposition and create hard-to-find bugs.
+  impact_if_violated:
+    - Behavior divergence between parachain and solochain deployments
+    - Bugs in one runtime not caught by tests for the other
+    - Undermines StorageHub's pluggable runtime value proposition
+realization:
+  - bindings:
+      - scheme: uri
+        value: runtime/parachain/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: runtime/solochain-evm/src/lib.rs
+    role: primary

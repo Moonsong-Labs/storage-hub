@@ -1,0 +1,47 @@
+id: 51
+name: File Chunk Data Path
+description: >
+  Data path for file content through the system:
+  Upload: User splits file into chunks (SDK/client) → chunks transferred
+  via libp2p request-response (file-transfer-service, 2 MiB batch limit) →
+  received chunks stored in file-manager (RocksDB) with fingerprint
+  verification → on completion, file metadata inserted into forest-manager
+  Merkle trie → forest root submitted on-chain via bsp_confirm_storing
+  or msp_respond_storage_requests.
+  Download: Reverse path — forest-manager locates file key → file-manager
+  reads chunks → file-transfer-service sends via libp2p.
+status: canonical
+intent:
+  kind: data-flow
+  summary: >
+    File chunks: SDK → libp2p → file-manager → forest-manager → on-chain root.
+  source: human
+  goals:
+    - End-to-end chunk integrity verification
+    - Memory-bounded transfer with backpressure
+    - Atomic forest root update on completion
+  data_flow: >
+    Upload: split into chunks → P2P transfer (2 MiB batches) → RocksDB
+    storage → fingerprint verify → insert into Merkle forest → submit
+    root on-chain.
+    Download: query forest → read chunks from RocksDB → P2P transfer →
+    reassemble at client.
+constraints:
+  - 1
+  - 13
+parents:
+  - id: 1
+    role: data-flow
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/file-transfer-service/src/handler.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/file-manager/src/rocksdb.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: client/forest-manager/src/rocksdb.rs
+    role: supporting

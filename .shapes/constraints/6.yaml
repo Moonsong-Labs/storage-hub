@@ -1,0 +1,52 @@
+id: 6
+name: Encoding Stability
+description: >
+  StorageHub pallets enforce strict SCALE encoding stability for events and
+  errors. This was driven equally by three concerns: off-chain client
+  compatibility (SDK and types-bundle must decode events correctly),
+  cross-runtime upgrade safety (both parachain and solochain-EVM variants
+  must decode identically), and indexer data integrity (historical events
+  stored in Postgres must remain decodable after runtime upgrades).
+kind: invariant
+rule: >
+  For all six core StorageHub pallets (Providers, FileSystem, ProofsDealer,
+  Randomness, PaymentStreams, BucketNfts): (a) all event and error variants
+  MUST use explicit #[codec(index = N)] attributes; (b) assigned indices
+  MUST never change or be reused for a different variant; (c) the fields
+  (types, count, order) of existing variants MUST NOT change; (d) breaking
+  changes MUST add new Vx-suffixed variants (e.g., NewStorageRequestV2)
+  using the next available index, keeping the old variant for backward
+  compatibility.
+enforcement: manual
+status: canonical
+intent:
+  kind: invariant
+  summary: >
+    Event and error encoding is immutable once deployed — indices pinned,
+    fields frozen, changes via new variants only.
+  source: human
+  rationale: >
+    All three downstream consumers (client SDK, indexer Postgres DB,
+    cross-runtime decoders) rely on stable encoding. Changing an index
+    or field silently corrupts historical data and breaks deployed clients.
+  impact_if_violated:
+    - Off-chain clients crash or misinterpret events after runtime upgrade
+    - Indexer database contains corrupted historical records
+    - SDK type definitions become incompatible with runtime
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/file-system/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/providers/src/lib.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/lib.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: pallets/payment-streams/src/lib.rs
+    role: supporting

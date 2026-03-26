@@ -1,0 +1,57 @@
+id: 20
+name: Blockchain Service
+description: >
+  Central client actor interfacing with the blockchain. Processes block import
+  and finality notifications, detects chain reorganizations (parent hash
+  comparison against last processed block in RocksDB), dispatches decoded
+  on-chain events to the event bus, and manages transaction submission with
+  retry strategies, priority tipping, and nonce management. Has role-specific
+  handlers: handler_bsp.rs for BSP operations (volunteer, confirm storing,
+  submit proofs, charge fees) and handler_msp.rs for MSP operations (respond
+  to storage requests, manage buckets).
+status: canonical
+intent:
+  kind: service
+  summary: >
+    Central actor for blockchain interaction — event dispatch, transaction
+    management, reorg detection.
+  source: human
+  goals:
+    - Reliable block-by-block event processing with reorg detection
+    - Transaction submission with automatic retry and tipping
+    - Role-specific event handling (BSP vs MSP)
+    - Persistent state tracking in RocksDB for crash recovery
+  rationale: >
+    Centralizing blockchain interaction in one actor ensures consistent
+    event ordering, single point of nonce management, and reliable reorg
+    detection. The role-specific handlers keep BSP and MSP logic separated
+    while sharing the common blockchain interface.
+constraints:
+  - 10
+  - 11
+  - 12
+  - 13
+parents:
+  - id: 3
+    role: service
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/handler.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/handler_bsp.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/handler_msp.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/state.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/commands.rs
+    role: supporting

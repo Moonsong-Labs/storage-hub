@@ -1,0 +1,38 @@
+id: 30
+name: shp-traits
+description: >
+  Central trait library defining all cross-pallet and cross-layer interfaces.
+  Includes ReadBucketsInterface, MutateBucketsInterface,
+  ReadStorageProvidersInterface, MutateStorageProvidersInterface,
+  ReadChallengeableProvidersInterface, MutateChallengeableProvidersInterface,
+  ProofsDealerInterface, PaymentStreamsInterface, CommitmentVerifier,
+  StorageHubTickGetter, FileMetadataInterface, UpdateStoragePrice,
+  TreasuryCutCalculator, ProofSubmittersInterface, SystemMetricsInterface,
+  and CommitRevealRandomnessInterface. This is the architectural spine
+  that all pallets implement and all consumers depend on.
+status: canonical
+intent:
+  kind: interface
+  summary: >
+    Cross-pallet trait interfaces — the architectural spine of StorageHub.
+  source: human
+  goals:
+    - Decouple pallets from each other's internal implementation
+    - Provide stable API contracts between runtime and client
+    - Enable generic programming over provider types and storage operations
+  rationale: >
+    Trait-based interfaces prevent direct storage access across pallets,
+    which was identified as a banned anti-pattern. Each pallet implements
+    traits from shp-traits and consumes other pallets only through those
+    traits, enabling independent evolution.
+constraints:
+  - 15
+  - 16
+parents:
+  - id: 4
+    role: interface
+realization:
+  - bindings:
+      - scheme: uri
+        value: primitives/traits/src/lib.rs
+    role: primary

@@ -1,0 +1,42 @@
+id: 31
+name: Proof Verifiers
+description: >
+  Concrete implementations of CommitmentVerifier for the two proof types
+  in StorageHub. shp-forest-verifier verifies forest-level proofs (existence
+  and non-existence of file keys in a Merkle Patricia Trie). shp-file-key-verifier
+  verifies chunk-level proofs (specific chunk existence within a file).
+  These are the verification engines used by the ProofsDealer pallet for
+  on-chain proof validation. The choice of Merkle Patricia Trie was driven
+  by key-value proof support, Substrate trie compatibility (sp_trie), and
+  efficient incremental updates.
+status: canonical
+intent:
+  kind: module
+  summary: >
+    Forest-level and chunk-level proof verification via Merkle Patricia Trie.
+  source: human
+  goals:
+    - Verify existence AND non-existence of file keys in forest
+    - Verify specific chunk integrity within files
+    - Efficient on-chain verification (logarithmic proof size)
+  rationale: >
+    MPF was chosen over Merkle Mountain Ranges and simple Merkle trees
+    because it supports both existence and non-existence proofs (critical
+    for deletion verification), leverages Substrate's existing sp_trie
+    infrastructure, and allows incremental updates without full tree
+    rebuilds.
+constraints:
+  - 1
+  - 15
+parents:
+  - id: 4
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: primitives/forest-verifier/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: primitives/file-key-verifier/src/lib.rs
+    role: primary

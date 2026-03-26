@@ -1,0 +1,42 @@
+id: 3
+name: User Data Sovereignty
+description: >
+  Users retain full ownership and control over their stored data regardless
+  of which providers are serving it. Bucket owners control access via NFT-based
+  read permissions, can request file deletion at any time, can move buckets
+  between MSPs, and can toggle privacy settings. No provider can hold user
+  data hostage or prevent deletion.
+kind: invariant
+rule: >
+  Only the bucket owner (or holders of the bucket's read-access NFT from
+  BucketNfts) can authorize data access. Users MUST be able to: (1) delete
+  files via request_delete_file(), (2) delete empty buckets via
+  delete_bucket(), (3) move buckets between MSPs via request_move_bucket(),
+  (4) control read access via update_bucket_privacy() and share_access().
+  These operations MUST NOT require provider cooperation beyond standard
+  proof submission.
+enforcement: machine
+status: canonical
+intent:
+  kind: invariant
+  summary: >
+    Users always retain control over their data — access, deletion, migration,
+    and privacy.
+  source: human
+  rationale: >
+    In a decentralized storage network, users must not be at the mercy of
+    any single provider. Data sovereignty ensures that the network serves
+    users, not the other way around.
+  impact_if_violated:
+    - Users cannot delete their own data (regulatory/GDPR risk)
+    - Provider lock-in — users cannot migrate between MSPs
+    - Privacy violations — unauthorized data access
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/file-system/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/bucket-nfts/src/lib.rs
+    role: supporting

@@ -1,0 +1,35 @@
+id: 23
+name: File Transfer Service
+description: >
+  P2P file transfer via libp2p request-response protocol. Generates a
+  genesis-hash-based protocol ID for network isolation. Manages a
+  memory-bounded request queue (MAX_QUEUED_REQUESTS_MEMORY_BYTES = 8GB)
+  with configurable timeouts (15s). Transfers file chunks in batches
+  (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE). Validates trusted MSP lists for
+  upload authorization.
+status: canonical
+intent:
+  kind: service
+  summary: >
+    P2P file chunk transfer via libp2p with memory-bounded queuing and
+    batch transfers.
+  source: human
+  goals:
+    - Reliable chunk transfer between users and providers via libp2p
+    - Memory-bounded queuing to prevent OOM under load
+    - Network isolation via genesis-hash-based protocol IDs
+constraints:
+  - 10
+  - 13
+parents:
+  - id: 3
+    role: service
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/file-transfer-service/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/file-transfer-service/src/handler.rs
+    role: supporting

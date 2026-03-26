@@ -1,0 +1,38 @@
+id: 4
+name: Proof Completeness
+description: >
+  The challenge system must ensure that every file stored in the network is
+  eventually challenged and proven. No file can permanently escape the
+  challenge cycle. Random challenges are distributed across providers
+  proportional to their stake, and checkpoint challenges periodically
+  require all providers to respond.
+kind: invariant
+rule: >
+  The ProofsDealer pallet MUST issue RandomChallengesPerBlock random
+  challenges every block (via on_poll) and checkpoint challenges every
+  CheckpointChallengePeriod ticks that all providers must respond to.
+  The challenge period for each provider is inversely proportional to
+  their stake (StakeToChallengePeriod / stake, minimum MinChallengePeriod).
+  Over sufficient time, every file key in every provider's forest MUST
+  have a non-zero probability of being challenged.
+enforcement: machine
+status: canonical
+intent:
+  kind: invariant
+  summary: >
+    Every stored file must eventually be challenged — no file escapes
+    the proof cycle.
+  source: human
+  rationale: >
+    If certain files could avoid challenges, providers could selectively
+    drop rarely-challenged files while continuing to charge for them.
+    Complete coverage ensures uniform storage reliability.
+  impact_if_violated:
+    - Selective file dropping by providers goes undetected
+    - Storage reliability becomes probabilistic rather than guaranteed
+    - Users cannot trust that all their files are maintained
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/lib.rs
+    role: primary

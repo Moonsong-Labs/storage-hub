@@ -1,0 +1,44 @@
+id: 7
+name: SDK and Types Bundle
+description: >
+  TypeScript SDK and types-bundle providing the developer-facing interface
+  for StorageHub integration. The SDK includes @storage-hub/sdk-core (file
+  encryption via AES-GCM, file management, HTTP abstraction, EVM contract
+  wrappers, wallet abstraction) and @storage-hub/msp-client (MSP service
+  integration wrapping the backend HTTP API). The types-bundle defines
+  custom RPC methods (storagehubclient.*), runtime API types, and type
+  overrides for Polkadot.js compatibility.
+status: canonical
+intent:
+  kind: service
+  summary: >
+    TypeScript SDK and types-bundle for developer integration with
+    StorageHub.
+  source: human
+  goals:
+    - Low-friction developer onboarding for StorageHub integration
+    - Type-safe client for both Substrate and EVM interactions
+    - File encryption and wallet abstraction
+  rationale: >
+    Developers need a high-level SDK to integrate storage without
+    understanding Substrate internals. The types-bundle ensures
+    Polkadot.js correctly encodes/decodes StorageHub's custom types.
+constraints:
+  - 6
+  - 9
+parents:
+  - id: 1
+    role: subsystem
+realization:
+  - bindings:
+      - scheme: uri
+        value: sdk/core/src/
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: sdk/msp-client/src/MspClient.ts
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: types-bundle/src/
+    role: supporting

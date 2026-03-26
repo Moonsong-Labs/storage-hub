@@ -1,0 +1,45 @@
+id: 13
+name: PaymentStreams Pallet
+description: >
+  Manages billing between users and providers via fixed-rate and dynamic-rate
+  payment streams. Fixed-rate streams charge a constant amount per tick.
+  Dynamic-rate streams charge based on amount_provided_giga_units *
+  price_per_giga_unit using an AccumulatedPriceIndex for efficient batch
+  calculation. Charges are gated by proof submission (pay-for-proof invariant).
+  Treasury cut applied via LinearThenPowerOfTwoTreasuryCutCalculator based
+  on system utilization. Detects user insolvency with cooldown period.
+  Pallet index: 44 (parachain), 84 (solochain-EVM).
+status: canonical
+intent:
+  kind: module
+  summary: >
+    Fixed-rate and dynamic-rate payment streams with proof-gated charging
+    and treasury cuts.
+  source: human
+  goals:
+    - Flexible billing (fixed-rate for predictability, dynamic-rate for efficiency)
+    - Proof-gated charging (pay-for-proof economic invariant)
+    - Automatic insolvency detection and provider notification
+    - Treasury funding based on network utilization
+  rationale: >
+    Payment streams provide a continuous, pay-as-you-go billing model that
+    aligns with the non-goal of no permanent storage. The dual stream types
+    serve different use cases: fixed-rate for predictable budgets, dynamic-rate
+    for market-responsive pricing.
+constraints:
+  - 2
+  - 5
+  - 6
+  - 7
+parents:
+  - id: 2
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/payment-streams/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/payment-streams/src/types.rs
+    role: supporting

@@ -1,0 +1,42 @@
+id: 24
+name: Indexer Service
+description: >
+  Blockchain event indexer storing decoded events into PostgreSQL via Diesel
+  ORM. Operates in three modes: Full (all events), Lite (essential storage
+  operations only), and Fishing (events relevant to fishermen for deletion
+  monitoring). Schema tracked via 20+ versioned Diesel migrations. Provides
+  queryable storage for the backend API and fisherman service.
+status: canonical
+intent:
+  kind: service
+  summary: >
+    Blockchain event indexer into Postgres — Full, Lite, and Fishing modes.
+  source: human
+  goals:
+    - Fast queryable access to historical blockchain events
+    - Multi-mode operation for different use cases
+    - Schema evolution via versioned migrations
+  rationale: >
+    On-chain storage queries are expensive and limited. The indexer provides
+    fast SQL-based queries for the backend API (file metadata lookups,
+    provider state) and fisherman service (deletion target discovery).
+constraints:
+  - 6
+  - 10
+  - 11
+parents:
+  - id: 3
+    role: service
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/indexer-service/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/indexer-service/src/handler.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: client/indexer-db/src/lib.rs
+    role: supporting

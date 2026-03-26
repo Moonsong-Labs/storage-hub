@@ -1,0 +1,43 @@
+id: 5
+name: Test Infrastructure
+description: >
+  Docker-based TypeScript integration test infrastructure supporting multiple
+  test modes: solo-node, bspnet (small BSP test network), fullnet (complete
+  network with multiple providers), and zombienet (parachain topology testing).
+  Uses @polkadot/api with generated types, testcontainers/dockerode for
+  container lifecycle, and EnrichedBspApi wrappers for ergonomic test
+  assertions. Test utilities include deterministic block sealing, container
+  IP discovery, BSP backlog draining, and file checksum verification.
+status: canonical
+intent:
+  kind: service
+  summary: >
+    Docker-based TypeScript integration tests with bspnet, fullnet, and
+    zombienet modes.
+  source: human
+  goals:
+    - Reproducible integration testing via Docker containers
+    - Multiple test scopes (solo-node through full parachain network)
+    - Ergonomic test API via EnrichedBspApi wrappers
+  rationale: >
+    Docker-based testing ensures environment consistency and CI
+    reproducibility. Multiple modes allow testing at different granularity
+    levels — solo-node for fast feedback, fullnet for end-to-end validation.
+constraints:
+  - 9
+parents:
+  - id: 1
+    role: subsystem
+realization:
+  - bindings:
+      - scheme: uri
+        value: test/suites/
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: test/util/
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: test/package.json
+    role: supporting

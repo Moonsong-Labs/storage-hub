@@ -1,0 +1,38 @@
+id: 21
+name: File Manager
+description: >
+  On-disk file chunk storage with dual backends: RocksDB for production and
+  in-memory HashMap for testing. Implements the FileStorage trait for chunk
+  write (insert with fingerprint tracking), read (get chunks, generate partial
+  roots), and delete operations. Tracks file completion status, partial Merkle
+  roots, and chunk metadata.
+status: canonical
+intent:
+  kind: module
+  summary: >
+    File chunk storage with RocksDB/in-memory backends — read, write, delete
+    with fingerprint verification.
+  source: human
+  goals:
+    - Reliable chunk-level file storage with integrity verification
+    - Swappable backends (RocksDB production, in-memory testing)
+    - Partial root computation for progressive verification
+constraints:
+  - 1
+  - 10
+parents:
+  - id: 3
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/file-manager/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/file-manager/src/rocksdb.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: client/file-manager/src/traits.rs
+    role: supporting

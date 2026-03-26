@@ -1,0 +1,53 @@
+id: 1
+name: Data Integrity
+description: >
+  Every file stored in the StorageHub network must have its integrity
+  cryptographically verifiable through the Merkle Patricia Forest proof system.
+  This is the foundational guarantee that gives the storage network its value —
+  without verifiable integrity, storage promises are meaningless. The challenge
+  system continuously tests that providers actually hold the data they claim to
+  store.
+kind: invariant
+rule: >
+  A provider MUST be able to produce a valid forest proof (existence or
+  non-existence) for any challenged file key, and a valid key proof (chunk
+  proof) for any challenged chunk index, within the provider's challenge
+  period. Forest proofs are verified by ForestVerifier (shp-forest-verifier)
+  and key proofs by KeyVerifier (shp-file-key-verifier). Failure to produce
+  a valid proof within ChallengeTicksTolerance ticks triggers slashing.
+enforcement: machine
+status: canonical
+intent:
+  kind: invariant
+  summary: >
+    Cryptographic proof-of-storage guarantees that every stored file is
+    retrievable and intact.
+  source: human
+  rationale: >
+    Core system guarantee from day one. The challenge-based proof system
+    turns storage promises into cryptographic guarantees. Without this,
+    providers could claim to store data without actually doing so.
+  impact_if_violated:
+    - Providers could collect fees without storing data
+    - Users lose the guarantee that their files are recoverable
+    - The entire economic model collapses (pay-for-proof becomes meaningless)
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: primitives/forest-verifier/src/lib.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: primitives/file-key-verifier/src/lib.rs
+    role: supporting
+evidence:
+  - id: proofs-dealer-tests
+    type: test
+    bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/tests.rs
+    trusted: true

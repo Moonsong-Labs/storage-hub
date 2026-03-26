@@ -1,0 +1,61 @@
+id: 2
+name: Runtime Subsystem
+description: >
+  The on-chain Substrate runtime layer comprising two variants: a Polkadot
+  parachain (cumulus-based, for shared security and XCM interoperability)
+  and a solochain-EVM (Frontier-based, for standalone EVM-compatible
+  deployments). Both share six core storage pallets with identical logic,
+  differing only in consensus mechanism and additional infrastructure
+  pallets. The runtime enforces storage economics, proof verification,
+  payment streams, and provider lifecycle on-chain.
+status: canonical
+intent:
+  kind: service
+  summary: >
+    On-chain runtime with two variants (parachain + solochain-EVM) sharing
+    six core storage pallets.
+  source: human
+  goals:
+    - Enforce storage economics and proof verification on-chain
+    - Maintain parity between parachain and solochain-EVM variants
+    - Support forkless runtime upgrades via WASM
+  non_goals:
+    - The runtime does not handle off-chain file storage or transfer
+  rationale: >
+    Two runtime variants prove StorageHub's pluggability thesis. The
+    parachain targets Polkadot ecosystem integration, the solochain-EVM
+    targets standalone deployments with Ethereum tooling compatibility.
+constraints:
+  - 6
+  - 7
+  - 8
+  - 14
+parents:
+  - id: 1
+    role: subsystem
+children:
+  - shape: 10
+    role: module
+  - shape: 11
+    role: module
+  - shape: 12
+    role: module
+  - shape: 13
+    role: module
+  - shape: 14
+    role: module
+  - shape: 15
+    role: module
+  - shape: 16
+    role: module
+  - shape: 17
+    role: interface
+realization:
+  - bindings:
+      - scheme: uri
+        value: runtime/parachain/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: runtime/solochain-evm/src/lib.rs
+    role: primary

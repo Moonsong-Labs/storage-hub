@@ -1,0 +1,44 @@
+id: 41
+name: Challenge-Proof Cycle
+description: >
+  Periodic challenge-response flow enforcing storage integrity:
+  (1) ProofsDealer on_poll generates random challenges from per-tick seeds
+  (RandomChallengesPerBlock per block). (2) Checkpoint challenges issued
+  every CheckpointChallengePeriod ticks require all providers to respond.
+  (3) Providers submit forest proofs and key proofs within their
+  stake-proportional challenge period (StakeToChallengePeriod / stake,
+  minimum MinChallengePeriod). (4) Proofs verified on-chain via
+  ForestVerifier and KeyVerifier. (5) Successful submissions recorded
+  in ValidProofSubmittersLastTicks (cached for 3 ticks). (6) Missed
+  deadlines trigger slashing via Providers pallet.
+status: canonical
+intent:
+  kind: feature
+  summary: >
+    Random and checkpoint challenges → proof submission → verification →
+    slashing for failures.
+  source: human
+  goals:
+    - Every file eventually challenged (proof completeness)
+    - Stake-proportional challenge periods
+    - Automatic slashing for non-compliance
+  data_flow: >
+    on_poll → generate challenges from seed → assign deadlines →
+    provider submits proof → ForestVerifier/KeyVerifier verify →
+    record in ProofSubmitters → missed deadline → slash
+constraints:
+  - 1
+  - 2
+  - 4
+parents:
+  - id: 1
+    role: feature
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/utils.rs
+    role: supporting

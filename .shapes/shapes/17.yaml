@@ -1,0 +1,36 @@
+id: 17
+name: EVM Bridge Interface
+description: >
+  FileSystem precompile exposing StorageHub storage operations to Solidity
+  smart contracts via the Frontier EVM stack. Maps Substrate extrinsics
+  (issueBucketCreateRequest, issueStorageRequest, fileDeletionRequest,
+  bspConfirmStoring, etc.) to precompile function selectors and emits
+  EVM-compatible log events (BucketCreated, StorageRequestIssued, etc.)
+  with keccak256 topic selectors. Only active in the solochain-EVM
+  runtime variant.
+status: canonical
+intent:
+  kind: interface
+  summary: >
+    EVM precompile bridging Solidity contracts to FileSystem pallet
+    operations.
+  source: human
+  goals:
+    - Enable Solidity contracts to interact with StorageHub storage
+    - Emit standard EVM logs for client-side event monitoring
+    - Type-safe mapping between EVM types and Substrate types
+  rationale: >
+    The EVM bridge enables the Ethereum developer ecosystem to use
+    StorageHub storage without learning Substrate. This lowers the
+    barrier for the solochain-EVM deployment target.
+constraints:
+  - 6
+  - 8
+parents:
+  - id: 2
+    role: interface
+realization:
+  - bindings:
+      - scheme: uri
+        value: precompiles/pallet-file-system/src/lib.rs
+    role: primary

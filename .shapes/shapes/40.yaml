@@ -1,0 +1,47 @@
+id: 40
+name: File Storage Lifecycle
+description: >
+  End-to-end workflow for storing a file in the StorageHub network:
+  (1) User calls issue_storage_request with file fingerprint, size, and
+  replication target. (2) BSPs volunteer via bsp_volunteer — eligibility
+  determined by Hash(BSP_ID || file_key) threshold compared against
+  reputation-weighted eligibility value that grows over ticks, giving
+  higher-reputation BSPs earlier access. (3) User sends file chunks via
+  P2P file-transfer-service. (4) MSP accepts file into bucket via
+  msp_respond_storage_requests_multiple_buckets with Merkle proof.
+  (5) BSPs confirm storing via bsp_confirm_storing, inserting file key
+  into their forest and updating the on-chain root. (6) PaymentStreams
+  creates billing streams. Covers both MSP (primary retrieval) and BSP
+  (backup redundancy) paths.
+status: canonical
+intent:
+  kind: feature
+  summary: >
+    Complete file storage flow — request, volunteer, transfer, confirm,
+    pay.
+  source: human
+  goals:
+    - Reliable file ingestion from user request to confirmed storage
+    - Probabilistic BSP distribution via hash-based thresholds
+    - Atomic payment stream creation on storage confirmation
+  data_flow: >
+    issue_storage_request → bsp_volunteer (threshold check) → P2P chunk
+    transfer → msp_respond_storage_requests → bsp_confirm_storing →
+    create_payment_stream
+constraints:
+  - 1
+  - 2
+  - 3
+  - 5
+parents:
+  - id: 1
+    role: feature
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/file-system/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/file-system/src/utils.rs
+    role: supporting

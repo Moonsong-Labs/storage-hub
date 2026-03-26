@@ -1,0 +1,37 @@
+id: 17
+name: Monorepo Coherence
+description: >
+  The StorageHub monorepo must remain buildable as a single unit. Dependency
+  version drift between workspace members has historically caused
+  hard-to-debug compilation failures, especially during Polkadot SDK
+  upgrades.
+kind: guideline
+rule: >
+  The workspace MUST be buildable with a single cargo build --release
+  for all Rust crates and bun install for all TypeScript packages.
+  Workspace dependency versions MUST be defined in the root Cargo.toml
+  [workspace.dependencies] section. All Polkadot SDK dependencies MUST
+  track a single release branch/tag (currently stable2506). Frontier
+  dependencies MUST also be pinned to a consistent release tag.
+enforcement: manual
+status: canonical
+intent:
+  kind: guideline
+  summary: >
+    Single cargo build --release builds all Rust — workspace deps
+    centralized, SDK branch unified.
+  source: human
+  rationale: >
+    Substrate projects with scattered dependency versions suffer from
+    type mismatches at crate boundaries (e.g., two different versions
+    of sp_runtime producing incompatible types). Centralizing versions
+    in [workspace.dependencies] prevents this class of bugs.
+  impact_if_violated:
+    - Type mismatches between crates using different dependency versions
+    - Build failures from incompatible transitive dependencies
+    - Polkadot SDK upgrade becomes exponentially harder
+realization:
+  - bindings:
+      - scheme: uri
+        value: Cargo.toml
+    role: primary

@@ -1,0 +1,43 @@
+id: 5
+name: Deposit Safety
+description: >
+  All deposits in the system (provider sign-up deposits, storage request
+  deposits, payment stream deposits, bucket creation deposits) are held
+  using the frame_support hold::Mutate mechanism. Deposits are always
+  returnable under defined conditions and can only be slashed through
+  the explicit proof-failure slashing path.
+kind: invariant
+rule: >
+  Provider deposits (SpMinDeposit) MUST be held via hold::Mutate and
+  returned on clean sign-off (msp_sign_off / bsp_sign_off). Payment
+  stream deposits (BaseDeposit + rate * NewStreamDeposit) MUST be
+  returned on stream deletion. Storage request deposits MUST be returned
+  when the request is fulfilled or revoked. Deposits MUST only be slashed
+  through accrued_failed_proof_submissions tracked by ProofsDealer.
+  No code path may permanently lock deposits without a defined release
+  mechanism.
+enforcement: machine
+status: canonical
+intent:
+  kind: invariant
+  summary: >
+    Deposits are always returnable under defined conditions — no permanent
+    fund locks.
+  source: human
+  rationale: >
+    Incorrect deposit handling leads to locked funds or economic exploits.
+    The hold mechanism provides a safe, auditable deposit lifecycle with
+    clear hold/release/slash semantics.
+  impact_if_violated:
+    - User or provider funds permanently locked on-chain
+    - Economic exploits via deposit manipulation
+    - Loss of trust in the network's financial guarantees
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/providers/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/payment-streams/src/lib.rs
+    role: supporting

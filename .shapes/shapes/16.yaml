@@ -1,0 +1,33 @@
+id: 16
+name: ProviderRandomness Pallet
+description: >
+  Commit-reveal randomness scheme for providers. Currently NOT integrated
+  into either runtime (TODO in both runtime/parachain and runtime/solochain-evm).
+  The runtime uses MockCrRandomness (no-op) as a placeholder. Will implement
+  CommitRevealRandomnessInterface with seed mixing, verification, and
+  generation for provider-specific randomness needs.
+status: proposed
+intent:
+  kind: module
+  summary: >
+    Commit-reveal randomness for providers — not yet integrated, currently
+    mocked.
+  source: human
+  goals:
+    - Provider-specific randomness via commit-reveal scheme
+    - Prevent randomness manipulation by individual providers
+  rationale: >
+    Relay chain randomness (from Randomness pallet) is suitable for
+    system-wide operations but commit-reveal provides per-provider
+    randomness that cannot be predicted by other participants.
+constraints:
+  - 6
+  - 7
+parents:
+  - id: 2
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/provider-randomness/src/lib.rs
+    role: primary

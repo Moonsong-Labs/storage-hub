@@ -1,0 +1,49 @@
+id: 10
+name: Providers Pallet
+description: >
+  Manages MSP and BSP registration, lifecycle, and state. Implements two-step
+  sign-up (request → confirm with randomness-derived ProviderId), sign-off,
+  capacity management, value propositions (MSP pricing/commitment), reputation
+  weights (BSP), multiaddress management, and bucket storage tracking.
+  ProviderId = Hash(AccountId + randomness). Central registry consumed by
+  all other StorageHub pallets via ReadProvidersInterface and
+  MutateProvidersInterface traits. Pallet index: 40 (parachain), 80 (solochain-EVM).
+status: canonical
+intent:
+  kind: module
+  summary: >
+    MSP/BSP registration, capacity, value propositions, and reputation —
+    the central provider registry.
+  source: human
+  goals:
+    - Two-step registration with randomness-derived provider IDs
+    - Separate MSP and BSP state with distinct economics
+    - Deposit-backed provider commitments
+    - Reputation-weighted BSP selection eligibility
+  rationale: >
+    The dual MSP/BSP model creates separation of concerns (MSPs optimize
+    for retrieval, BSPs for cheap bulk storage), incentive alignment (MSPs
+    have direct user relationships, BSPs are network-level redundancy),
+    fault isolation (independent failure domains), and market dynamics
+    (two-sided market driving efficiency).
+constraints:
+  - 2
+  - 5
+  - 6
+  - 7
+parents:
+  - id: 2
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/providers/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/providers/src/types.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: pallets/providers/src/utils.rs
+    role: supporting

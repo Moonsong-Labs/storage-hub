@@ -1,0 +1,43 @@
+id: 12
+name: Reorg Detection
+description: >
+  The blockchain service must detect chain reorganizations to prevent
+  client state from diverging from chain state. This was established
+  after a critical bug where undetected reorgs caused client state
+  corruption — the off-chain state believed it had processed events
+  from a block that was no longer canonical.
+kind: requirement
+rule: >
+  The blockchain service MUST detect chain reorganizations by comparing
+  the parent hash of each new block notification against the last
+  processed block hash stored in RocksDB (LastProcessedBlockCf). On
+  reorg detection, the service MUST reprocess events from the fork
+  point. The LastProcessedBlockCf MUST store both block number AND
+  block hash, not just the number, to enable parent hash comparison.
+enforcement: machine
+status: canonical
+intent:
+  kind: requirement
+  summary: >
+    Detect chain reorgs by comparing parent hashes and reprocess from
+    the fork point.
+  source: human
+  rationale: >
+    Past incident: client state corruption from undetected
+    reorganizations. The off-chain client processed events from a block
+    that was later reorged away, causing divergence between client state
+    and chain state. The fix was adding reorg detection with full block
+    info persistence.
+  impact_if_violated:
+    - Client state diverges from chain state after reorg
+    - File storage operations based on reorged events fail silently
+    - Provider proofs reference non-canonical state
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/state.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/blockchain-service/src/handler.rs
+    role: supporting

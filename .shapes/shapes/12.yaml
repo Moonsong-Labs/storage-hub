@@ -1,0 +1,51 @@
+id: 12
+name: ProofsDealer Pallet
+description: >
+  Implements the challenge-response proof system that ensures providers
+  maintain stored data. Generates random challenges from per-tick seeds,
+  checkpoint challenges (all providers must respond), and priority challenges
+  (admin-issued). Verifies forest proofs (ForestVerifier) and key proofs
+  (KeyVerifier) using Merkle Patricia Trie verification. Tracks provider
+  deadlines (stake-proportional challenge periods), records valid proof
+  submitters (ValidProofSubmittersLastTicks), and triggers slashing for
+  missed proofs. The on_poll hook drives the entire challenge cycle.
+  Pallet index: 42 (parachain), 82 (solochain-EVM).
+status: canonical
+intent:
+  kind: module
+  summary: >
+    Challenge-response proof system — random/checkpoint challenges,
+    proof verification, deadline tracking, slashing.
+  source: human
+  goals:
+    - Continuous random challenges ensuring every file is eventually tested
+    - Stake-proportional challenge periods (higher stake = longer period)
+    - On-chain verification of Merkle Patricia Forest proofs
+    - Automatic slashing for missed proof deadlines
+  rationale: >
+    The challenge system is the enforcement mechanism for the entire storage
+    network. Without continuous proofs, providers could accept payment
+    without maintaining data. Randomized challenges prevent predictive
+    gaming, and checkpoint challenges ensure periodic full coverage.
+constraints:
+  - 1
+  - 2
+  - 4
+  - 6
+  - 7
+parents:
+  - id: 2
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/types.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/utils.rs
+    role: supporting

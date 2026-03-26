@@ -1,0 +1,42 @@
+id: 2
+name: Pay-for-Proof
+description: >
+  The economic invariant that ensures providers are only compensated when they
+  have demonstrated they still hold the data. Payment stream charges are gated
+  by the ProofsDealer pallet's proof submission tracking — a provider that
+  fails to submit proofs cannot charge users and accumulates slashing
+  penalties. This creates a direct economic link between storage obligation
+  fulfillment and revenue.
+kind: invariant
+rule: >
+  Payment stream charges via charge_payment_streams() MUST only succeed when
+  the provider has a valid entry in ValidProofSubmittersLastTicks for the
+  corresponding tick range. The PaymentStreams pallet reads ProofSubmitters
+  data from the ProofsDealer pallet to gate charging eligibility. A provider
+  that misses proof submissions MUST NOT be paid and MUST accumulate
+  accrued_failed_proof_submissions leading to slashing.
+enforcement: machine
+status: canonical
+intent:
+  kind: invariant
+  summary: >
+    Providers earn revenue only by proving they hold the data they were
+    paid to store.
+  source: human
+  rationale: >
+    Without pay-for-proof, rational providers would accept payment without
+    actually storing data. This invariant aligns economic incentives with
+    storage obligations, making honest storage the profit-maximizing strategy.
+  impact_if_violated:
+    - Providers collect fees without storing data (free-rider problem)
+    - Network storage reliability degrades to zero
+    - Users have no assurance their data is being maintained
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/payment-streams/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/proofs-dealer/src/lib.rs
+    role: supporting

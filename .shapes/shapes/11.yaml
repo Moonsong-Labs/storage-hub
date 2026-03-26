@@ -1,0 +1,49 @@
+id: 11
+name: FileSystem Pallet
+description: >
+  Orchestrates the file storage lifecycle on-chain: storage requests, BSP
+  volunteering (Hash(BSP_ID||file_key) threshold with reputation-weighted
+  eligibility that grows over ticks), MSP response (accepting files into
+  buckets with proof), BSP confirmation, deletion requests, and bucket
+  CRUD/movement between MSPs. Tracks Merkle Forest roots for MSPs (per bucket)
+  and BSPs (single forest). Manages storage request TTLs, replication targets,
+  and BSP volunteer tracking. Pallet index: 41 (parachain), 81 (solochain-EVM).
+status: canonical
+intent:
+  kind: module
+  summary: >
+    File storage lifecycle orchestration — requests, volunteering, confirmation,
+    deletion, and bucket management.
+  source: human
+  goals:
+    - Complete file lifecycle from upload request through confirmed storage
+    - Deterministic BSP selection via hash-based threshold + reputation weighting
+    - Configurable replication targets for different security levels
+    - Safe file deletion with deposit-incentivized proofs
+  rationale: >
+    Centralizing file orchestration in one pallet provides a single source of
+    truth for storage request state while delegating provider management to
+    Providers pallet and proof verification to ProofsDealer. The BSP
+    volunteering threshold mechanism probabilistically distributes files
+    across BSPs while giving higher-reputation BSPs priority.
+constraints:
+  - 1
+  - 3
+  - 6
+  - 7
+parents:
+  - id: 2
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/file-system/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/file-system/src/types.rs
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: pallets/file-system/src/utils.rs
+    role: supporting

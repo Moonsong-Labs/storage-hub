@@ -1,0 +1,43 @@
+id: 26
+name: Actors Framework
+description: >
+  Generic actor framework (shc-actors-framework) providing the foundational
+  abstractions for all client services. Defines the Actor trait (with
+  handle_message, Message associated type, EventLoop), ActorEventLoop for
+  message dispatch, TaskSpawner for offloading long-running work, ActorHandle
+  (cloneable sender wrapping MPSC channel), and EventBus with broadcast
+  channels for pub/sub inter-actor communication. EventBusListener provides
+  semaphore-based concurrency control (MAX_TASKS_SPAWNED_PER_QUEUE) and
+  distinguishes critical vs non-critical events. Includes metrics integration
+  for tracking pending/success/failure events.
+status: canonical
+intent:
+  kind: module
+  summary: >
+    Actor framework — Actor trait, EventBus, TaskSpawner, ActorHandle
+    abstractions.
+  source: human
+  goals:
+    - Clean actor abstraction with typed messages and event buses
+    - Concurrency control via semaphore-bounded event handlers
+    - Metrics integration for observability
+  rationale: >
+    A generic framework ensures all services follow the same concurrency
+    patterns. The framework enforces the Command/Actor/Task pattern
+    structurally, making deviations harder.
+constraints:
+  - 10
+  - 11
+  - 13
+parents:
+  - id: 3
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/actors-framework/src/actor.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/actors-framework/src/event_bus.rs
+    role: primary

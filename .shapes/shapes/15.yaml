@@ -1,0 +1,36 @@
+id: 15
+name: BucketNfts Pallet
+description: >
+  NFT-based read-access control for private storage buckets. When a bucket
+  is made private, a read-access group (NFT collection via pallet-nfts)
+  is created. Bucket owners can grant read access by minting NFTs for
+  specific accounts, optionally restricted to regex-based file path
+  patterns. Access revocation is handled by burning NFTs.
+  Pallet index: 45 (parachain), 85 (solochain-EVM).
+status: canonical
+intent:
+  kind: module
+  summary: >
+    NFT-based bucket read-access control with regex file path patterns.
+  source: human
+  goals:
+    - Fine-grained read access control via NFT membership
+    - Optional regex-based file path restrictions per access grant
+    - Composable access control leveraging pallet-nfts
+  rationale: >
+    NFT-based access control makes permissions transferable, composable
+    with other NFT-aware protocols, and queryable on-chain. This is more
+    flexible than a simple ACL and enables marketplace dynamics around
+    data access.
+constraints:
+  - 3
+  - 6
+  - 7
+parents:
+  - id: 2
+    role: module
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/bucket-nfts/src/lib.rs
+    role: primary

@@ -1,0 +1,38 @@
+id: 7
+name: Pallet Index Immutability
+description: >
+  Pallet indices are baked into SCALE-encoded event addresses and extrinsic
+  call IDs. Changing them after deployment breaks all downstream decoders,
+  historical transaction parsing, and client extrinsic construction.
+kind: invariant
+rule: >
+  The #[runtime::pallet_index(N)] value for each core StorageHub pallet
+  MUST never change once deployed. Parachain indices: Providers=40,
+  FileSystem=41, ProofsDealer=42, Randomness=43, PaymentStreams=44,
+  BucketNfts=45. Solochain-EVM indices: Providers=80, FileSystem=81,
+  ProofsDealer=82, Randomness=83, PaymentStreams=84, BucketNfts=85.
+enforcement: manual
+status: canonical
+intent:
+  kind: invariant
+  summary: >
+    Runtime pallet indices are permanent — changing them breaks all
+    event decoding and extrinsic construction.
+  source: human
+  rationale: >
+    Pallet indices appear in every encoded extrinsic and event. They are
+    the addressing scheme for the runtime's module system. Changing an
+    index is equivalent to renaming every function in a public API.
+  impact_if_violated:
+    - All deployed clients construct invalid extrinsics
+    - Historical block explorers and indexers misparse events
+    - Types-bundle and SDK become incompatible with runtime
+realization:
+  - bindings:
+      - scheme: uri
+        value: runtime/parachain/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: runtime/solochain-evm/src/lib.rs
+    role: supporting

@@ -1,0 +1,48 @@
+id: 52
+name: Cross-Runtime Type Flow
+description: >
+  Flow of type definitions from runtime to downstream consumers:
+  (1) Pallets define events, errors, and types in Rust.
+  (2) TypeScript type generation (bun run --cwd test typegen) produces
+  api-augment type definitions.
+  (3) types-bundle (types-bundle/src/rpc.ts, runtime.ts) provides custom
+  RPC method definitions and runtime API types.
+  (4) SDK consumes types for client-side interaction.
+  (5) Integration tests consume types for assertion and extrinsic
+  construction.
+  A stale link in this chain silently produces incorrect encoding/decoding.
+status: canonical
+intent:
+  kind: data-flow
+  summary: >
+    Rust pallet types → typegen → types-bundle → SDK/tests.
+  source: human
+  goals:
+    - Consistent type definitions from runtime through to SDK
+    - Automated type generation to prevent manual drift
+  failure_modes:
+    - Stale typegen after runtime change → silent encoding errors in tests
+    - types-bundle not updated after new RPC → SDK cannot call new methods
+    - API-augment mismatch → integration tests construct invalid extrinsics
+  data_flow: >
+    Pallet Rust types → typegen → api-augment TypeScript → types-bundle
+    (rpc.ts, runtime.ts) → SDK → integration tests
+constraints:
+  - 6
+  - 9
+parents:
+  - id: 1
+    role: data-flow
+realization:
+  - bindings:
+      - scheme: uri
+        value: types-bundle/src/rpc.ts
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: types-bundle/src/runtime.ts
+    role: supporting
+  - bindings:
+      - scheme: uri
+        value: test/package.json
+    role: supporting

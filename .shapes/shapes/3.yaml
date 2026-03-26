@@ -1,0 +1,68 @@
+id: 3
+name: Client Subsystem
+description: >
+  Off-chain actor-based client running alongside the StorageHub node. Each
+  service is an isolated actor communicating via typed messages and a broadcast
+  event bus. The actor framework (shc-actors-framework) provides Actor trait,
+  ActorEventLoop, TaskSpawner, and EventBus abstractions. Services handle
+  blockchain event processing, file storage, Merkle forest management, P2P
+  file transfer, event indexing, and fisherman monitoring. Role-specific
+  behavior (BSP vs MSP) is handled via handler specialization.
+status: canonical
+intent:
+  kind: service
+  summary: >
+    Actor-based off-chain client with isolated services for storage,
+    proofs, file transfer, and indexing.
+  source: human
+  goals:
+    - Concurrency isolation between independent services
+    - Reactive event-driven processing of blockchain state changes
+    - Reliable transaction management with retry and tipping
+    - Scaling flexibility for future distribution
+  non_goals:
+    - Does not implement consensus or block production
+  rationale: >
+    The actor model was chosen for concurrency isolation (each service has
+    independent state and failure domains) and scaling flexibility (actors
+    can be distributed across threads or nodes in the future). Alternative
+    approaches (simple service loop, async task pool) lacked the isolation
+    guarantees needed for safe concurrent state management.
+constraints:
+  - 10
+  - 11
+  - 12
+  - 13
+parents:
+  - id: 1
+    role: subsystem
+children:
+  - shape: 20
+    role: service
+  - shape: 21
+    role: module
+  - shape: 22
+    role: module
+  - shape: 23
+    role: service
+  - shape: 24
+    role: service
+  - shape: 25
+    role: service
+  - shape: 26
+    role: module
+  - shape: 27
+    role: interface
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/src/handler.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/common/src/traits.rs
+    role: supporting

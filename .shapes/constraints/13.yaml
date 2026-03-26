@@ -1,0 +1,42 @@
+id: 13
+name: Concurrency Isolation
+description: >
+  The actor model was chosen specifically for concurrency isolation.
+  Each actor owns its mutable state exclusively. Shared state between
+  actors must go through safe channels. Violating actor boundaries
+  negates the concurrency safety the architecture provides.
+kind: guideline
+rule: >
+  Each actor MUST own its mutable state exclusively. Shared state
+  between actors MUST be accessed through Arc<RwLock<>> or message
+  passing, never through raw shared mutable references. Forest write
+  operations MUST use the ForestWritePermitGuard pattern to serialize
+  access to Merkle tries. Event bus channels provide the primary
+  inter-actor communication mechanism.
+enforcement: manual
+status: canonical
+intent:
+  kind: guideline
+  summary: >
+    Actors own state exclusively — shared access via Arc<RwLock<>> or
+    message passing only.
+  source: human
+  rationale: >
+    The actor model gives concurrency isolation by design. Breaking
+    isolation (e.g., sharing raw mutable state) reintroduces the data
+    races and deadlocks that the actor model was chosen to avoid.
+    ForestWritePermitGuard specifically prevents concurrent Merkle
+    trie mutations.
+  impact_if_violated:
+    - Data races on shared mutable state
+    - Deadlocks from inconsistent lock ordering
+    - Corrupted Merkle forests from concurrent trie mutations
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/actors-framework/src/actor.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/actors-framework/src/event_bus.rs
+    role: supporting

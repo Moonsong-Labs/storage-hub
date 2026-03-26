@@ -1,0 +1,34 @@
+id: 27
+name: StorageEnableRuntime Interface
+description: >
+  The StorageEnableRuntime trait bundle in shc-common that acts as the
+  capability boundary between the client and runtime. Groups all required
+  runtime API traits (FileSystemApi, StorageProvidersApi, ProofsDealerApi,
+  PaymentStreamsApi, TxImplicitsApi) into a single bound, enabling the
+  client to be generic over the concrete runtime. This allows the same
+  client code to work with both parachain and solochain-EVM runtimes.
+status: canonical
+intent:
+  kind: interface
+  summary: >
+    Trait bundle grouping all runtime APIs — makes client generic over
+    runtime variant.
+  source: human
+  goals:
+    - Single trait bound for all runtime API requirements
+    - Client code works identically with parachain and solochain-EVM
+  rationale: >
+    Without this abstraction, the client would need conditional compilation
+    or separate codepaths for each runtime variant. The trait bundle
+    provides a clean generic boundary.
+constraints:
+  - 8
+  - 16
+parents:
+  - id: 3
+    role: interface
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/common/src/traits.rs
+    role: primary

@@ -1,0 +1,38 @@
+id: 6
+name: Backend API
+description: >
+  Axum-based REST API server for MSP operations. Provides HTTP endpoints for
+  file upload/download sessions (chunked), authentication (JWT with substrate
+  and Ethereum multi-way signing), health monitoring (liveness/readiness
+  probes), and MSP service management. Connects to PostgreSQL via the
+  indexer-db crate for queried data and to the StorageHub node via RPC.
+status: canonical
+intent:
+  kind: service
+  summary: >
+    REST API for MSP file operations, auth, and health — connects to
+    Postgres and node RPC.
+  source: human
+  goals:
+    - Provide HTTP interface for MSP file upload/download
+    - Multi-auth support (substrate signing + Ethereum signing)
+    - Health probes for orchestration
+  rationale: >
+    MSPs need an HTTP API to serve storage clients that don't interact
+    directly with the blockchain. The backend bridges web-standard HTTP
+    to Substrate RPC calls and indexed data queries.
+constraints:
+  - 2
+  - 3
+parents:
+  - id: 1
+    role: subsystem
+realization:
+  - bindings:
+      - scheme: uri
+        value: backend/lib/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: backend/lib/src/services/
+    role: primary

@@ -1,0 +1,35 @@
+id: 25
+name: Fisherman Service
+description: >
+  Monitors the blockchain for file deletion requests and constructs inclusion
+  proofs for providers to remove file keys from their Merkle forests. Operates
+  on configurable batch intervals with cooldown periods and deletion limits.
+  Uses BatchDeletionPermitGuard for concurrency control. Tracks consecutive
+  no-work cycles to prevent idle resource consumption.
+status: canonical
+intent:
+  kind: service
+  summary: >
+    File deletion monitoring with batch proof construction and permit-based
+    concurrency.
+  source: human
+  goals:
+    - Automated file deletion processing for providers
+    - Efficient batch operations with configurable intervals
+    - Concurrency-safe permit-based deletion
+constraints:
+  - 1
+  - 10
+  - 11
+parents:
+  - id: 3
+    role: service
+realization:
+  - bindings:
+      - scheme: uri
+        value: client/fisherman-service/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: client/fisherman-service/src/handler.rs
+    role: supporting

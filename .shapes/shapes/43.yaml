@@ -1,0 +1,40 @@
+id: 43
+name: Bucket Management
+description: >
+  Bucket lifecycle operations: creation (with MSP value proposition selection
+  and BucketDeposit), privacy control (toggle via update_bucket_privacy,
+  creates NFT collection via BucketNfts for private buckets), movement
+  between MSPs (request_move_bucket → msp_respond_move_bucket_request →
+  data transfer), deletion (must be empty, returns deposit), and size
+  tracking (increase/decrease via storage operations). Buckets are the
+  organizational unit grouping files under a user-MSP relationship.
+status: canonical
+intent:
+  kind: feature
+  summary: >
+    Bucket CRUD, privacy control, MSP migration, and NFT-based access.
+  source: human
+  goals:
+    - Clean bucket lifecycle with deposit management
+    - Seamless MSP migration without data loss
+    - Fine-grained access control via NFT collections
+  data_flow: >
+    create_bucket → assign to MSP with value proposition → store files →
+    optional: update_bucket_privacy (creates NFT collection) →
+    optional: request_move_bucket → msp_respond_move_bucket_request →
+    delete_bucket (must be empty)
+constraints:
+  - 1
+  - 3
+parents:
+  - id: 1
+    role: feature
+realization:
+  - bindings:
+      - scheme: uri
+        value: pallets/file-system/src/lib.rs
+    role: primary
+  - bindings:
+      - scheme: uri
+        value: pallets/bucket-nfts/src/lib.rs
+    role: supporting

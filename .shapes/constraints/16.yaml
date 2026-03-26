@@ -1,0 +1,38 @@
+id: 16
+name: Trait Interface Stability
+description: >
+  The shp-traits crate is the contract boundary between runtime pallets
+  and off-chain client services. Trait signatures are consumed by multiple
+  pallets and client crates. Uncoordinated changes break compilation
+  across all consumers.
+kind: policy
+rule: >
+  Trait signatures in shp-traits (especially associated types and method
+  signatures) MUST be treated as stable public API once consumed by both
+  a pallet and a client service. Breaking changes to trait interfaces
+  require coordinated updates across ALL consumers (pallets, client
+  services, primitives). New functionality SHOULD be added as new trait
+  methods with default implementations or as new traits, rather than
+  modifying existing signatures.
+enforcement: manual
+status: canonical
+intent:
+  kind: policy
+  summary: >
+    shp-traits signatures are stable public API — breaking changes need
+    coordinated consumer updates.
+  source: human
+  rationale: >
+    shp-traits is the architectural spine connecting 6 pallets and 7
+    client services. A signature change in a single trait method can
+    require modifications across 10+ crates. Treating them as stable
+    API forces deliberate, coordinated evolution.
+  impact_if_violated:
+    - Cascading compilation failures across pallets and client crates
+    - Uncoordinated updates leave some consumers out of sync
+    - Difficult-to-merge PRs touching many crates simultaneously
+realization:
+  - bindings:
+      - scheme: uri
+        value: primitives/traits/src/lib.rs
+    role: primary
