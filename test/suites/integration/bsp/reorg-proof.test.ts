@@ -430,21 +430,12 @@ await describeBspNet(
         finaliseBlock: true
       });
 
-      // fatxpool may auto-re-include bspConfirmStoring in the fork block (polkadot-sdk#5479).
-      // Check if the file was already confirmed by comparing the forest root.
-      const bspInfoAfterReorg = await userApi.call.storageProvidersApi.getBspInfo(
-        ShConsts.DUMMY_BSP_ID
-      );
-      assert(bspInfoAfterReorg.isOk);
-      const rootAfterReorg = bspInfoAfterReorg.asOk.root.toString();
-      if (rootAfterReorg !== rootAfterFirstConfirm) {
-        // bspConfirmStoring was auto-re-included — root already updated. Just seal a block.
-        await userApi.block.seal({ finaliseBlock: false });
-      } else {
-        // bspConfirmStoring returned to pool — wait for it and seal.
-        await userApi.wait.bspStored({ sealBlock: false });
-        await userApi.block.seal({ finaliseBlock: false });
-      }
+      // Wait for the reorged out storage confirmation transaction to be in the tx pool again.
+      // Then build a block with it, on top of the above finalised block.
+      // Still, this won't trigger a reorg in the BSP. This block will be at the same height
+      // of the current best block for the BSP.
+      await userApi.wait.bspStored({ sealBlock: false });
+      await userApi.block.seal({ finaliseBlock: false });
 
       // Seal another block with the confirm deletion transaction.
       // This is finally the block that triggers the reorg in the BSP.

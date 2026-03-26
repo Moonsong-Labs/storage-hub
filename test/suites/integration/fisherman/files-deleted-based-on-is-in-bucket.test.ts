@@ -537,9 +537,6 @@ await describeMspNet(
       // Create API connection to BSP two for forest root verification
       bspTwoApi = await createApi(`ws://127.0.0.1:${bspTwoRpcPort}`);
 
-      // Wait for BSP two to catch up after onboarding (blocks were sealed during registration)
-      await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
-
       // Step 5: Issue second storage request for same file
       const fingerprint = userApi.shConsts.TEST_ARTEFACTS[source].fingerprint;
       const fileSize = userApi.shConsts.TEST_ARTEFACTS[source].size;
