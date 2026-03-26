@@ -625,8 +625,7 @@ mod tests {
         // Verify all files belong to bucket #1
         for file in &bucket1_files {
             assert_eq!(
-                file.onchain_bucket_id,
-                BUCKET_ONCHAIN_ID,
+                file.onchain_bucket_id, BUCKET_ONCHAIN_ID,
                 "All files should belong to bucket #1"
             );
         }
