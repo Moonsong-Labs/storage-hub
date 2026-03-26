@@ -449,16 +449,8 @@ await describeMspNet(
       // Ensure indexer has processed all finalized blocks
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
-      // Wait for fisherman to catch up to chain tip
+      // Wait for fisherman to catch up to chain tip after resume
       await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
-
-      // Force fatxpool view creation at the current block. During bulk sync, block
-      // import notifications are unreliable (polkadot-sdk README), leaving fatxpool
-      // with stale views. Sealing one more block via normal gossip triggers a
-      // reliable NewBestBlockImported notification that creates a fresh view.
-      const { blockReceipt: syncReceipt } = await userApi.block.seal();
-      await fishermanApi.wait.blockImported(syncReceipt.blockHash.toString());
-      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Fisherman should only process the 6 files from FINALIZED blocks
       // The 3 manually deleted files from UNFINALIZED blocks should be ignored
@@ -940,11 +932,8 @@ await describeMspNet(
       // Ensure indexer has processed all finalized blocks
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
-      // Wait for fisherman to sync then force fatxpool view creation
+      // Wait for fisherman to catch up to chain tip after resume
       await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
-      const { blockReceipt: syncReceipt2 } = await userApi.block.seal();
-      await fishermanApi.wait.blockImported(syncReceipt2.blockHash.toString());
-      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Fisherman should only process the 6 files from FINALIZED blocks
       // The 3 manually deleted files from UNFINALIZED blocks should be ignored
