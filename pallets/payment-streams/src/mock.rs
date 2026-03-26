@@ -227,7 +227,6 @@ impl CommitRevealRandomnessInterface for MockCommitRevealRandomness {
 }
 
 impl pallet_storage_providers::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type FileMetadataManager = MockFileMetadataManager;
@@ -407,7 +406,6 @@ parameter_types! {
 }
 
 impl pallet_proofs_dealer::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersPallet = StorageProviders;
     type NativeBalance = Balances;
@@ -483,7 +481,6 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
 }
 
 impl crate::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type NativeBalance = Balances;
     type ProvidersPallet = StorageProviders;

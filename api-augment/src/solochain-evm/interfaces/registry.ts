@@ -160,6 +160,7 @@ import type {
   PalletSessionCall,
   PalletSessionError,
   PalletSessionEvent,
+  PalletSessionHistoricalPalletEvent,
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
   PalletStorageProvidersCall,
@@ -415,6 +416,7 @@ declare module "@polkadot/types/types/registry" {
     PalletSessionCall: PalletSessionCall;
     PalletSessionError: PalletSessionError;
     PalletSessionEvent: PalletSessionEvent;
+    PalletSessionHistoricalPalletEvent: PalletSessionHistoricalPalletEvent;
     PalletStorageProvidersBackupStorageProvider: PalletStorageProvidersBackupStorageProvider;
     PalletStorageProvidersBucket: PalletStorageProvidersBucket;
     PalletStorageProvidersCall: PalletStorageProvidersCall;

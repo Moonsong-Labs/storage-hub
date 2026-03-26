@@ -159,7 +159,6 @@ impl Get<AccountId> for TreasuryAccount {
 
 // Payment streams pallet:
 impl pallet_payment_streams::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
@@ -217,7 +216,6 @@ impl CommitRevealRandomnessInterface for MockCommitRevealRandomness {
 
 // Storage Providers pallet:
 impl pallet_storage_providers::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
@@ -346,7 +344,6 @@ parameter_types! {
 }
 
 impl crate::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;

@@ -405,6 +405,7 @@ const addContainer = async (
     Cmd: [
       "--dev",
       "--sealing=manual",
+      "--pool-type=single-state",
       "--provider",
       `--provider-type=${providerType}`,
       `--name=${containerName}`,

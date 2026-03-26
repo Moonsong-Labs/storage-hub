@@ -46,7 +46,6 @@ use sp_blockchain::HeaderBackend;
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{Deserialize, KeyTypeId, Serialize};
-use sp_runtime_interface::pass_by::PassByInner;
 
 pub mod remote_file;
 use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
@@ -655,7 +654,7 @@ where
 
         // Remove all files with the given prefix from the file storage.
         write_file_storage
-            .delete_files_with_prefix(&prefix.inner())
+            .delete_files_with_prefix(&prefix.0)
             .map_err(into_rpc_error)?;
 
         info!(

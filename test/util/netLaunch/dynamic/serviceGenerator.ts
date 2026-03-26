@@ -144,7 +144,7 @@ export function generateNodeService(
   args.push("--rpc-cors=all");
   args.push(`--node-key=${identity.nodeKey}`);
   args.push("--keystore-path=/keystore");
-  args.push("--sealing=manual");
+  args.push("--sealing=manual", "--pool-type=single-state");
   args.push("--base-path=/data");
 
   // Add provider-specific args for BSP/MSP (not fisherman)
@@ -312,6 +312,7 @@ export function generateIndexerService(
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Docker compose env var substitution
     "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
     "--sealing=manual",
+    "--pool-type=single-state",
     "--base-path=/data",
     "--indexer",
     `--indexer-database-url=${dbUrl}`
@@ -380,6 +381,7 @@ export function generateUserService(
     "--rpc-methods=unsafe",
     "--rpc-cors=all",
     "--sealing=manual",
+    "--pool-type=single-state",
     `--port=${p2pPort}`,
     `--node-key=${identity.nodeKey}`,
     "--keystore-path=/keystore",

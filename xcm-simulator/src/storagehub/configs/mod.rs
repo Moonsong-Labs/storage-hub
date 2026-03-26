@@ -194,7 +194,6 @@ impl pallet_sudo::Config for Runtime {
 }
 
 impl mock_message_queue::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type XcmExecutor = XcmExecutor<XcmConfig>;
 }
 
@@ -217,6 +216,7 @@ impl cumulus_pallet_parachain_system::Config for Runtime {
     type CheckAssociatedRelayNumber = RelayNumberMonotonicallyIncreases;
     type ConsensusHook = ConsensusHook;
     type SelectCore = DefaultCoreSelector<Runtime>;
+    type RelayParentOffset = ConstU32<0>;
 }
 pub(crate) type ConsensusHook = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
     Runtime,
@@ -466,7 +466,6 @@ parameter_types! {
 
 /// Configure the randomness pallet
 impl pallet_randomness::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
     type BabeBlockGetter = BlockNumberGetter;
     type WeightInfo = ();
@@ -541,7 +540,6 @@ impl pallet_storage_providers::benchmarking::BenchmarkHelpers<Runtime>
 }
 
 impl pallet_storage_providers::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_storage_providers::weights::SubstrateWeight<Runtime>;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
@@ -618,7 +616,6 @@ impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perbill> for Runtime {
 }
 
 impl pallet_payment_streams::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_payment_streams::weights::SubstrateWeight<Runtime>;
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
@@ -769,7 +766,6 @@ parameter_types! {
 }
 
 impl pallet_proofs_dealer::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_proofs_dealer::weights::SubstrateWeight<Runtime>;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
@@ -880,7 +876,6 @@ parameter_types! {
 
 /// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_file_system::weights::SubstrateWeight<Runtime>;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
@@ -1041,7 +1036,6 @@ impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
 }
 
 impl pallet_bucket_nfts::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_bucket_nfts::weights::SubstrateWeight<Runtime>;
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
