@@ -1315,7 +1315,7 @@ pub mod tests {
     async fn get_file_by_file_key() {
         let repo = MockRepository::new();
         let bucket_onchain_id = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
-        let _bucket = repo
+        let bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
@@ -1353,7 +1353,7 @@ pub mod tests {
     async fn get_file_by_file_key_not_found() {
         let repo = MockRepository::new();
         let bucket_onchain_id = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
-        let bucket = repo
+        let _bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
