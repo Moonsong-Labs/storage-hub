@@ -607,7 +607,7 @@ impl MspService {
         // TODO: pagination doesn't account for path filtering
         let files = self
             .postgres
-            .get_bucket_files(bucket.id, Some(limit), Some(offset))
+            .get_bucket_files(&bucket.onchain_bucket_id, Some(limit), Some(offset))
             .await?;
 
         // Create hierarchy based on location segments

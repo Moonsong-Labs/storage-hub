@@ -560,25 +560,12 @@ impl File {
         Ok(())
     }
 
-    pub async fn get_by_bucket_id<'a>(
-        conn: &mut DbConnection<'a>,
-        bucket_id: i64,
-    ) -> Result<Vec<Self>, diesel::result::Error> {
-        let files = file::table
-            .filter(file::bucket_id.eq(bucket_id))
-            .load(conn)
-            .await?;
-        Ok(files)
-    }
-
     pub async fn get_by_onchain_bucket_id<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bucket_id: Vec<u8>,
     ) -> Result<Vec<Self>, diesel::result::Error> {
         let files = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
-            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
-            .select(File::as_select())
+            .filter(file::onchain_bucket_id.eq(onchain_bucket_id))
             .load(conn)
             .await?;
         Ok(files)
@@ -650,7 +637,7 @@ impl File {
     ) -> Result<Vec<Self>, diesel::result::Error> {
         let account = user_account.as_ref().to_vec();
         let files = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .inner_join(bucket::table.on(file::onchain_bucket_id.eq(bucket::onchain_bucket_id)))
             .filter(file::account.eq(account))
             .filter(bucket::msp_id.eq(msp_id))
             .select(File::as_select())
@@ -673,8 +660,7 @@ impl File {
         is_in_bucket: Option<bool>,
     ) -> Result<Vec<FileMetadataQuery>, diesel::result::Error> {
         let mut query = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
-            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .filter(file::onchain_bucket_id.eq(onchain_bucket_id))
             .into_boxed();
 
         // Filter by is_in_bucket if provided
@@ -800,7 +786,6 @@ impl File {
         let offset = offset.unwrap_or(0);
 
         let mut query = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
             .filter(file::deletion_status.eq(FileDeletionStatus::InProgress as i32))
             .into_boxed();
 
@@ -962,12 +947,12 @@ impl File {
         let file_key = file_key.as_ref().to_vec();
         let onchain_bucket_id = onchain_bucket_id.as_ref().to_vec();
 
-        // Get the file info (bucket ID and size) from one of the file records since
-        // all records should have the same values
-        let file_info: Option<(i64, i64)> = file::table
+        // Get the file size from one of the file records since all records for the same
+        // file key and bucket should have the same size.
+        let file_size: Option<i64> = file::table
             .filter(file::file_key.eq(&file_key))
             .filter(file::onchain_bucket_id.eq(&onchain_bucket_id))
-            .select((file::bucket_id, file::size))
+            .select(file::size)
             .first(conn)
             .await
             .optional()?;
@@ -981,10 +966,24 @@ impl File {
             .await?;
 
         // Update the bucket stats to reflect the change in bucket membership
-        if let Some((bucket_id, file_size)) = file_info {
+        if let Some(file_size) = file_size {
             match is_in_bucket {
-                true => Bucket::increment_file_count_and_size(conn, bucket_id, file_size).await?,
-                false => Bucket::decrement_file_count_and_size(conn, bucket_id, file_size).await?,
+                true => {
+                    Bucket::increment_file_count_and_size(
+                        conn,
+                        onchain_bucket_id.clone(),
+                        file_size,
+                    )
+                    .await?
+                }
+                false => {
+                    Bucket::decrement_file_count_and_size(
+                        conn,
+                        onchain_bucket_id.clone(),
+                        file_size,
+                    )
+                    .await?
+                }
             }
         }
 

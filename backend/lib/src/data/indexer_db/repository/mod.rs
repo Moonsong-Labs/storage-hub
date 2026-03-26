@@ -118,10 +118,10 @@ pub trait IndexerOps: Send + Sync {
     /// Retrieve all the files belonging to the given bucket
     ///
     /// # Arguments
-    /// * `bucket` - the Bucket (database) ID to search
+    /// * `bucket` - the Bucket on-chain ID to search
     async fn get_files_by_bucket(
         &self,
-        bucket: i64,
+        bucket: &Hash,
         limit: i64,
         offset: i64,
     ) -> RepositoryResult<Vec<File>>;

@@ -314,7 +314,7 @@ impl IndexerOps for MockRepository {
 
     async fn get_files_by_bucket(
         &self,
-        bucket: i64,
+        bucket: &Hash,
         limit: i64,
         offset: i64,
     ) -> RepositoryResult<Vec<File>> {
@@ -322,7 +322,7 @@ impl IndexerOps for MockRepository {
 
         Ok(files
             .values()
-            .filter(|f| f.bucket_id == bucket)
+            .filter(|f| f.onchain_bucket_id.as_slice() == bucket.as_bytes())
             .skip(offset as usize)
             .take(limit as usize)
             .cloned()
@@ -364,10 +364,10 @@ impl IndexerOps for MockRepository {
 
         // Get all buckets that belong to this MSP
         let buckets = self.buckets.read().await;
-        let bucket_ids: Vec<i64> = buckets
+        let bucket_ids: Vec<Vec<u8>> = buckets
             .values()
             .filter(|b| b.msp_id == Some(msp.id))
-            .map(|b| b.id)
+            .map(|b| b.onchain_bucket_id.clone())
             .collect();
         drop(buckets);
 
@@ -375,7 +375,7 @@ impl IndexerOps for MockRepository {
         let files = self.files.read().await;
         let distinct_file_keys: std::collections::HashSet<Vec<u8>> = files
             .values()
-            .filter(|f| bucket_ids.contains(&f.bucket_id))
+            .filter(|f| bucket_ids.contains(&f.onchain_bucket_id))
             .map(|f| f.file_key.clone())
             .collect();
 
@@ -828,7 +828,7 @@ pub mod tests {
 
         // Retrieve files from the first bucket only
         let files = repo
-            .get_files_by_bucket(bucket.id, 10, 0)
+            .get_files_by_bucket(&bucket_hash, 10, 0)
             .await
             .expect("should retrieve files by bucket");
 
@@ -900,7 +900,7 @@ pub mod tests {
 
         // Test limit
         let limited_files = repo
-            .get_files_by_bucket(bucket.id, 2, 0)
+            .get_files_by_bucket(&bucket_hash, 2, 0)
             .await
             .expect("should retrieve limited files");
 
@@ -910,7 +910,7 @@ pub mod tests {
 
         // Test offset
         let offset_files = repo
-            .get_files_by_bucket(bucket.id, 10, 1)
+            .get_files_by_bucket(&bucket_hash, 10, 1)
             .await
             .expect("should retrieve files with offset");
 
@@ -920,7 +920,7 @@ pub mod tests {
 
         // Test limit and offset combined
         let paginated_files = repo
-            .get_files_by_bucket(bucket.id, 1, 1)
+            .get_files_by_bucket(&bucket_hash, 1, 1)
             .await
             .expect("should retrieve paginated files");
 
@@ -945,7 +945,7 @@ pub mod tests {
             .expect("should create bucket");
 
         let empty_files = repo
-            .get_files_by_bucket(empty_bucket.id, 10, 0)
+            .get_files_by_bucket(&bucket_hash, 10, 0)
             .await
             .expect("should handle empty bucket");
 
@@ -958,7 +958,7 @@ pub mod tests {
 
         // Use a bucket ID that doesn't exist
         let non_existent_files = repo
-            .get_files_by_bucket(999999, 10, 0)
+            .get_files_by_bucket(&random_hash(), 10, 0)
             .await
             .expect("should handle non-existent bucket");
 
