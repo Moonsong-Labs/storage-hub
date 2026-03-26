@@ -516,9 +516,5 @@ impl_runtime_apis! {
         fn query_bucket_root(bucket_id: &BucketId<Runtime>) -> Result<H256, QueryBucketRootError> {
             Providers::query_bucket_root(bucket_id)
         }
-
-        fn log_runtime_api_message() {
-            log::info!(target: "runtime::api::providers", "StorageProvidersApi::log_runtime_api_message called");
-        }
     }
 }

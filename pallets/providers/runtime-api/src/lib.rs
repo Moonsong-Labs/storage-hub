@@ -5,7 +5,7 @@ use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
 sp_api::decl_runtime_apis! {
-    #[api_version(2)]
+    #[api_version(1)]
     pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, MspId, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance, BucketId, Multiaddresses, ValuePropositionWithId, MerkleHash>
     where
         BlockNumber: Codec,
@@ -37,7 +37,6 @@ sp_api::decl_runtime_apis! {
         fn query_buckets_for_msp(msp_id: &MspId) -> Result<sp_runtime::Vec<BucketId>, QueryBucketsForMspError>;
         fn query_buckets_of_user_stored_by_msp(msp_id: &ProviderId, user: &AccountId) -> Result<sp_runtime::Vec<BucketId>, QueryBucketsOfUserStoredByMspError>;
         fn query_bucket_root(bucket_id: &BucketId) -> Result<MerkleHash, QueryBucketRootError>;
-        fn log_runtime_api_message();
     }
 }
 
