@@ -520,6 +520,11 @@ impl_runtime_apis! {
         fn query_bucket_root(bucket_id: &BucketId<Runtime>) -> Result<H256, QueryBucketRootError> {
             Providers::query_bucket_root(bucket_id)
         }
+
+        fn log_runtime_api_message() {
+            let foo = 7 + 8;
+            log::info!(target: "runtime::api::providers", "StorageProvidersApi::log_runtime_api_message called: {}", foo);
+        }
     }
 
     impl shp_tx_implicits_runtime_api::TxImplicitsApi<Block> for Runtime {
