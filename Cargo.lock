@@ -10105,7 +10105,6 @@ dependencies = [
  "frame-benchmarking 40.2.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "frame-support 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "frame-system 40.2.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
- "hex",
  "log",
  "pallet-balances 41.1.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "parity-scale-codec",
@@ -16412,7 +16411,6 @@ dependencies = [
  "staging-xcm 16.2.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "staging-xcm-builder 20.1.1 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
  "staging-xcm-executor 19.1.4 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2503)",
- "uuid",
  "xcm-runtime-apis",
  "xcm-simulator",
 ]

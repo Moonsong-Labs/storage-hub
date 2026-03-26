@@ -21,7 +21,6 @@ log = { workspace = true }
 num-bigint = { workspace = true }
 scale-info = { workspace = true }
 smallvec = { workspace = true }
-uuid = { version = "1.18", features = ["v7"] }
 
 # Local
 pallet-bucket-nfts = { workspace = true }
