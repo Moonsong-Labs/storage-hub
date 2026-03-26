@@ -18,6 +18,14 @@
         "primitives/tx-implicits-runtime-api/**",
         "runtime/**/src/apis.rs"
       ]
+    },
+    {
+      "name": "use-workspace-deps",
+      "prompt": "prompts/review/use-workspace-deps.md",
+      "watched_globs": [
+        "Cargo.toml",
+        "**/Cargo.toml"
+      ]
     }
   ]
 }
