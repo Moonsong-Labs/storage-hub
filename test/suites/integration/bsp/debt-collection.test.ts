@@ -1,14 +1,7 @@
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
 import { BN } from "@polkadot/util";
-import {
-  bob,
-  describeBspNet,
-  drainBspBacklog,
-  type EnrichedBspApi,
-  fetchEvent,
-  ShConsts
-} from "../../../util";
+import { bob, describeBspNet, type EnrichedBspApi, fetchEvent, ShConsts } from "../../../util";
 
 await describeBspNet(
   "BSPNet: Collect users debt",
@@ -102,23 +95,15 @@ await describeBspNet(
       let currentBlock = await userApi.rpc.chain.getBlock();
       let currentBlockNumber = currentBlock.block.header.number.toNumber();
       if (nextChallengeTick > currentBlockNumber) {
-        // Advance to the challenge tick.
+        // Advance to the next challenge tick if needed
         await userApi.block.skipTo(nextChallengeTick);
-
-        // Wait for all 3 BSPs to sync to the chain tip after rapid advancement.
-        // During skipTo, blocks are sealed faster than P2P gossip delivers them.
-        // BSPs must catch up before they can submit proofs for the challenge tick.
-        await userApi.wait.nodeCatchUpToChainTip(bspApi);
-        await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
-        await userApi.wait.nodeCatchUpToChainTip(bspThreeApi);
       }
 
       await userApi.assert.extrinsicPresent({
         method: "submitProof",
         module: "proofsDealer",
         checkTxPool: true,
-        assertLength: 3,
-        timeout: 30000
+        assertLength: 3
       });
 
       // Check that no Providers have submitted a valid proof yet.
@@ -717,13 +702,6 @@ await describeBspNet(
     });
 
     it("BSP correctly deletes all files from an insolvent user", async () => {
-      // Drain any accumulated proof/charge backlog from previous tests before
-      // waiting for stopStoringForInsolventUser extrinsics.
-      await drainBspBacklog(userApi, {
-        bspIds: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID],
-        stopOnMethod: "stopStoringForInsolventUser"
-      });
-
       // We execute this loop three times since that's the amount of files the user has stored with the BSPs
       for (let i = 0; i < 3; i++) {
         console.log("Removing file from insolvent user, loop: ", i + 1);
@@ -735,7 +713,7 @@ await describeBspNet(
             module: "fileSystem",
             checkTxPool: true,
             assertLength: 3,
-            timeout: 30000
+            timeout: 10000
           });
 
           // We check for each BSP which file key it's deleting and print it

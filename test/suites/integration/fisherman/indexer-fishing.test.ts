@@ -1,17 +1,14 @@
 import assert from "node:assert";
 import { BN } from "@polkadot/util";
 import {
-  assertEventPresent,
   bspKey,
   describeMspNet,
-  drainBspBacklog,
   type EnrichedBspApi,
   hexToBuffer,
   ShConsts,
   type SqlClient,
   shUser,
-  waitFor,
-  waitForExtrinsicAndSeal
+  waitFor
 } from "../../../util";
 
 /**
@@ -274,22 +271,22 @@ await describeMspNet(
       const cooldown = currentBlockNumber + minWaitForStopStoring + 1;
       await userApi.block.skipTo(cooldown);
 
-      // Wait for BSP to sync to the chain tip after rapid block advancement.
-      await userApi.wait.nodeCatchUpToChainTip(bspApi);
-
-      // Seal blocks in a loop until bspConfirmStopStoring appears and is included.
-      // Continuous block production is needed so the BSP's block-import handler can
-      // process its forest-write queue towards the confirm extrinsic.
-      const bspConfirmStopStoringEvents = await waitForExtrinsicAndSeal(userApi, {
+      // The BSP will automatically submit bspConfirmStopStoring after the cooldown
+      // Wait for it to appear in the tx pool and seal
+      await userApi.wait.waitForTxInPool({
         module: "fileSystem",
         method: "bspConfirmStopStoring"
       });
-      assertEventPresent(
-        userApi,
+
+      const bspConfirmStopStoringResult = await userApi.block.seal();
+
+      await userApi.assert.eventPresent(
         "fileSystem",
         "BspConfirmStoppedStoring",
-        bspConfirmStopStoringEvents
+        bspConfirmStopStoringResult.events
       );
+
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
 
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
@@ -392,16 +389,7 @@ await describeMspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
 
-      await userApi.block.skipTo(currentBlockNumber + 100, {
-        watchForBspProofs: [userApi.shConsts.DUMMY_BSP_ID]
-      });
-
-      // Seal an extra block to refresh fatxpool's view after rapid block production.
-      // Without this, subsequent tests may see stale txpool state.
-      await userApi.block.seal();
-
-      // Drain any accumulated backlog from rapid advancement.
-      await drainBspBacklog(userApi, { bspIds: [userApi.shConsts.DUMMY_BSP_ID] });
+      await userApi.block.skipTo(currentBlockNumber + 100);
 
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
