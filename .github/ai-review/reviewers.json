@@ -1,6 +1,15 @@
 {
   "reviewers": [
     {
+      "name": "no-panic-in-runtime",
+      "prompt": "prompts/review/no-panic-in-runtime.md",
+      "watched_globs": [
+        "pallets/**/*.rs",
+        "runtime/**/*.rs",
+        "primitives/**/*.rs"
+      ]
+    },
+    {
       "name": "types-bundle-sync",
       "prompt": "prompts/review/types-bundle-sync.md",
       "watched_globs": [
