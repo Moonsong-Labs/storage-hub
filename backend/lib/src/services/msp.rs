@@ -1795,7 +1795,6 @@ mod tests {
                         .create_file(
                             MOCK_ADDRESS.to_string().as_bytes(),
                             random_bytes_32().as_slice(),
-                            bucket.id,
                             &bucket_id,
                             "sample-file.txt".as_bytes(),
                             random_bytes_32().as_slice(),
@@ -1851,7 +1850,6 @@ mod tests {
                         .create_file(
                             MOCK_ADDRESS.to_string().as_bytes(),
                             random_bytes_32().as_slice(),
-                            bucket.id,
                             &bucket_id,
                             "sample-file.txt".as_bytes(),
                             random_bytes_32().as_slice(),
@@ -1918,7 +1916,6 @@ mod tests {
                         .create_file(
                             MOCK_ADDRESS.to_string().as_bytes(),
                             &file_key,
-                            bucket.id,
                             &bucket_id,
                             "sample-file.txt".as_bytes(),
                             random_bytes_32().as_slice(),

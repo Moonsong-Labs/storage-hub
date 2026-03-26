@@ -362,7 +362,6 @@ impl IndexerOpsMut for Repository {
         &self,
         account: &[u8],
         file_key: &Hash,
-        bucket_id: i64,
         onchain_bucket_id: &Hash,
         location: &[u8],
         fingerprint: &[u8],
@@ -374,7 +373,6 @@ impl IndexerOpsMut for Repository {
             &mut conn,
             account.to_vec(),
             file_key.as_bytes().to_vec(),
-            bucket_id,
             onchain_bucket_id.as_bytes().to_vec(),
             location.to_vec(),
             fingerprint.to_vec(),
@@ -590,22 +588,20 @@ mod tests {
         // Add a second bucket with one file to verify filtering
         // These values are arbitrary placeholders - the exact values don't matter for this test
         let additional_bucket_id = random_hash();
-        let additional_bucket = repo
-            .create_bucket(
-                "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
-                Some(MSP_TWO_ID),
-                b"other-bucket",
-                &additional_bucket_id,
-                false,
-            )
-            .await
-            .expect("Failed to create additional bucket");
+        repo.create_bucket(
+            "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
+            Some(MSP_TWO_ID),
+            b"other-bucket",
+            &additional_bucket_id,
+            false,
+        )
+        .await
+        .expect("Failed to create additional bucket");
 
         // Add a file to the second bucket
         repo.create_file(
             &random_bytes_32(),
             &random_hash(),
-            additional_bucket.id,
             &additional_bucket_id,
             b"file.txt",
             &random_bytes_32(),

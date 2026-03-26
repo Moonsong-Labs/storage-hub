@@ -188,7 +188,6 @@ impl File {
         conn: &mut DbConnection<'a>,
         account: impl Into<Vec<u8>>,
         file_key: impl Into<Vec<u8>>,
-        bucket_id: i64,
         onchain_bucket_id: impl Into<Vec<u8>>,
         location: impl Into<Vec<u8>>,
         fingerprint: impl Into<Vec<u8>>,
@@ -201,12 +200,19 @@ impl File {
         bsps_required: i32,
         desired_replicas: i32,
     ) -> Result<Self, diesel::result::Error> {
+        let onchain_bucket_id = onchain_bucket_id.into();
+        let bucket_id: i64 = bucket::table
+            .filter(bucket::onchain_bucket_id.eq(&onchain_bucket_id))
+            .select(bucket::id)
+            .first(conn)
+            .await?;
+
         let file = diesel::insert_into(file::table)
             .values((
                 file::account.eq(account.into()),
                 file::file_key.eq(file_key.into()),
                 file::bucket_id.eq(bucket_id),
-                file::onchain_bucket_id.eq(onchain_bucket_id.into()),
+                file::onchain_bucket_id.eq(onchain_bucket_id),
                 file::location.eq(location.into()),
                 file::fingerprint.eq(fingerprint.into()),
                 file::size.eq(size),

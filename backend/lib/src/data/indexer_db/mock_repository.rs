@@ -151,7 +151,6 @@ impl MockRepository {
         this.create_file(
             MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file1_key,
-            bucket1.id,
             &bucket1_hash,
             b"/Reports/Q1-2024.pdf", // expected by the SDK tests
             &random_bytes_32(),
@@ -165,7 +164,6 @@ impl MockRepository {
         this.create_file(
             MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file2_key,
-            bucket1.id,
             &bucket1_hash,
             b"/Thesis/chapter1.pdf", // expected by the SDK tests
             &random_bytes_32(),
@@ -180,7 +178,6 @@ impl MockRepository {
         this.create_file(
             MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file3_key,
-            bucket1.id,
             &bucket1_hash,
             b"files/e2e-bucket/adolphus.jpg", // expected by the SDK tests
             &test::file::BUCKET1_FILE3_FINGERPRINT,
@@ -194,7 +191,6 @@ impl MockRepository {
         this.create_file(
             &bucket2_user,
             &file2_key,
-            bucket2.id,
             &bucket2_hash,
             b"vacation/beach.jpg",
             &random_bytes_32(),
@@ -208,7 +204,6 @@ impl MockRepository {
         this.create_file(
             &bucket3_user,
             &file3_key,
-            bucket3.id,
             &bucket3_hash,
             b"code/src/main.rs",
             &random_bytes_32(),
@@ -557,7 +552,6 @@ impl IndexerOpsMut for MockRepository {
         &self,
         account: &[u8],
         file_key: &Hash,
-        bucket_id: i64,
         onchain_bucket_id: &Hash,
         location: &[u8],
         fingerprint: &[u8],
@@ -565,6 +559,14 @@ impl IndexerOpsMut for MockRepository {
     ) -> RepositoryResult<File> {
         let id = self.next_id();
         let now = Utc::now().naive_utc();
+        let bucket_id = {
+            let buckets = self.buckets.read().await;
+            buckets
+                .values()
+                .find(|b| b.onchain_bucket_id == onchain_bucket_id.as_bytes())
+                .map(|b| b.id)
+                .ok_or_else(|| RepositoryError::not_found("Bucket"))?
+        };
 
         let file = File {
             id,
@@ -768,7 +770,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            bucket.id,
             &bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
@@ -780,7 +781,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            bucket.id,
             &bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
@@ -792,7 +792,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            bucket.id,
             &bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
@@ -817,7 +816,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            other_bucket.id,
             &other_bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
@@ -861,7 +859,6 @@ pub mod tests {
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &random_hash(),
-                bucket.id,
                 &file1_bucket_hash,
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
@@ -875,7 +872,6 @@ pub mod tests {
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &random_hash(),
-                bucket.id,
                 &file2_bucket_hash,
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
@@ -889,7 +885,6 @@ pub mod tests {
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &random_hash(),
-                bucket.id,
                 &file3_bucket_hash,
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
@@ -1334,7 +1329,6 @@ pub mod tests {
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &file_key,
-                bucket.id,
                 &bucket_onchain_id,
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
@@ -1370,7 +1364,6 @@ pub mod tests {
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
-            bucket.id,
             &bucket_onchain_id,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,

@@ -254,7 +254,6 @@ pub trait IndexerOpsMut: IndexerOps {
     /// # Arguments
     /// * `account` - Owner account
     /// * `file_key` - Unique file key
-    /// * `bucket_id` - Database ID of the bucket
     /// * `onchain_bucket_id` - Onchain bucket identifier
     /// * `location` - File location/path
     /// * `fingerprint` - File fingerprint
@@ -263,7 +262,6 @@ pub trait IndexerOpsMut: IndexerOps {
         &self,
         account: &[u8],
         file_key: &Hash,
-        bucket_id: i64,
         onchain_bucket_id: &Hash,
         location: &[u8],
         fingerprint: &[u8],

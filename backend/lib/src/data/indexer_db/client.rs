@@ -383,7 +383,6 @@ impl DBClient {
         &self,
         account: &[u8],
         file_key: &[u8],
-        bucket_id: i64,
         onchain_bucket_id: &[u8],
         location: &[u8],
         fingerprint: &[u8],
@@ -395,7 +394,6 @@ impl DBClient {
             .create_file(
                 account,
                 &file_hash,
-                bucket_id,
                 &bucket_hash,
                 location,
                 fingerprint,
