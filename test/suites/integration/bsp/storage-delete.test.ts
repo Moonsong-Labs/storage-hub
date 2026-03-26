@@ -1,5 +1,12 @@
 import assert, { strictEqual } from "node:assert";
-import { bspKey, describeBspNet, type EnrichedBspApi, waitFor } from "../../../util";
+import {
+  assertEventPresent,
+  bspKey,
+  describeBspNet,
+  type EnrichedBspApi,
+  waitFor,
+  waitForExtrinsicAndSeal
+} from "../../../util";
 
 await describeBspNet(
   "BSPNet: Stop storing file and other BSPs taking the relay",
@@ -130,19 +137,22 @@ await describeBspNet(
         .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
       const cooldown = currentBlockNumber + minWaitForStopStoring + 1;
 
-      // Wait until the BSP is allowed to confirm the stop storing
+      // Wait until the BSP is allowed to confirm the stop storing.
       await userApi.block.skipTo(cooldown);
 
-      // The BSP will automatically submit bspConfirmStopStoring after the cooldown
-      // Wait for it to appear in the tx pool and seal
-      await userApi.wait.waitForTxInPool({
+      // Wait for BSP to sync to the chain tip after rapid block advancement.
+      // This is critical: during skipTo, blocks are sealed faster than P2P gossip
+      // delivers them to the BSP. The BSP must catch up and process all blocks
+      // (including proof submissions for missed deadlines) before it can reach
+      // the bspConfirmStopStoring item in its forest-write queue.
+      await userApi.wait.nodeCatchUpToChainTip(bspApi);
+
+      // Seal blocks in a loop until bspConfirmStopStoring appears and is included.
+      const events = await waitForExtrinsicAndSeal(userApi, {
         module: "fileSystem",
         method: "bspConfirmStopStoring"
       });
-
-      await userApi.block.seal();
-
-      await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+      assertEventPresent(userApi, "fileSystem", "BspConfirmStoppedStoring", events);
     });
   }
 );

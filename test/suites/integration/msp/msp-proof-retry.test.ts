@@ -236,6 +236,9 @@ await describeMspNet(
         containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
       });
 
+      // Wait for MSP to catch up to chain tip after being resumed
+      await userApi.wait.nodeCatchUpToChainTip(mspApi);
+
       // Phase 8: Wait for MSP accept extrinsic in pool
       await userApi.wait.mspResponseInTxPool(1);
 

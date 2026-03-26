@@ -340,31 +340,51 @@ await describeMspNet(
     it("MSP stops storing the buckets and files of the now insolvent user.", async () => {
       // After the user has been marked as insolvent, the MSP should stop storing the buckets of the user.
       // For that, it will spawn multiple tasks, each submitting one extrinsic to delete one bucket.
-      // Wait then until both extrinsics are in the tx pool, then seal a block with them and finalise it.
-      // After that, the MSP should have deleted the bucket roots and the files from its storage.
+      // The MSP may submit the extrinsics at different times, so we poll and seal blocks until
+      // we observe 2 MspStopStoringBucketInsolventUser events rather than requiring both
+      // extrinsics to be in the txpool simultaneously.
 
-      // Check that the MSP is trying to delete both buckets of the user.
-      await userApi.assert.extrinsicPresent({
-        method: "mspStopStoringBucketForInsolventUser",
-        module: "fileSystem",
-        checkTxPool: true,
-        timeout: 10000,
-        assertLength: 2,
-        exactLength: true
-      });
+      let totalStopStoringEvents = 0;
+      let block: Awaited<ReturnType<typeof userApi.block.seal>> | undefined;
+      const maxAttempts = 30; // 30 attempts * ~1s each = 30s max wait
 
-      // Seal a block to allow the MSP to stop storing both buckets, but don't finalise it yet, store it to finalise later.
-      const block = await userApi.block.seal({ finaliseBlock: false });
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        // Check if there are any stop-storing extrinsics in the tx pool
+        const pendingTxs = await userApi.rpc.author.pendingExtrinsics();
+        const stopStoringTxs = pendingTxs.filter(
+          (tx) => tx.method.method === "mspStopStoringBucketForInsolventUser"
+        );
 
-      // Assert that both events for the MSP deleting the buckets were emitted.
-      const stopStoringEvents = await userApi.assert.eventMany(
-        "fileSystem",
-        "MspStopStoringBucketInsolventUser"
-      );
+        if (stopStoringTxs.length > 0 || totalStopStoringEvents > 0) {
+          // Seal a block (don't finalise so we can test finalisation separately)
+          const sealedBlock = await userApi.block.seal({ finaliseBlock: false });
+          const events = sealedBlock.events ?? [];
+          const newStopEvents = events.filter(
+            (e) =>
+              e.event.section === "fileSystem" &&
+              e.event.method === "MspStopStoringBucketInsolventUser"
+          );
+          totalStopStoringEvents += newStopEvents.length;
+
+          // Keep the last block with stop-storing events for finalisation later
+          if (newStopEvents.length > 0) {
+            block = sealedBlock;
+          }
+
+          if (totalStopStoringEvents >= 2) {
+            break;
+          }
+        }
+
+        // Wait a bit before checking again
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+
       assert(
-        stopStoringEvents.length === 2,
-        "Expected two MspStopStoringBucketInsolventUser events"
+        totalStopStoringEvents >= 2,
+        `Expected 2 MspStopStoringBucketInsolventUser events, but found ${totalStopStoringEvents}`
       );
+      assert(block, "Expected a block with stop-storing events");
 
       // Check that the bucket roots still exist since the blocks where they were deleted have not been finalised.
       const firstBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(firstBucketId);

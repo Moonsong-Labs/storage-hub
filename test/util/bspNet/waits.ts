@@ -8,6 +8,139 @@ import { sealBlock } from "./block";
 import type { WaitForTxOptions } from "./test-api";
 
 /**
+ * Drains accumulated BSP backlog transactions (proof submissions, charges, etc.)
+ * by repeatedly sealing blocks until no more higher-priority transactions remain.
+ *
+ * The BSP's forest-write lock has a priority ordering:
+ *   1. submitProof (highest)
+ *   2. bspConfirmStoring
+ *   3. stopStoringForInsolventUser
+ *   4. bspConfirmStopStoring
+ *   5. requestBspStopStoring (lowest)
+ *
+ * After rapid block advancement via `skipTo`, lower-priority actions (like
+ * bspConfirmStopStoring) can be blocked by accumulated higher-priority transactions.
+ * This function drains those by sealing blocks until the backlog clears.
+ *
+ * Uses both txpool polling AND the runtime API (`getNextTickToSubmitProofFor`)
+ * for deterministic proof detection — the runtime API sees through the BSP's
+ * internal queue that txpool polling cannot observe.
+ *
+ * @param api - The ApiPromise instance (user/block-producer node).
+ * @param options.maxRounds - Maximum drain iterations (default: 50, ~25s budget).
+ * @param options.delayMs - Delay between empty polls (default: 500ms).
+ * @param options.bspIds - BSP provider IDs to check for overdue proofs via runtime API.
+ * @param options.stopOnMethod - If set, stop draining immediately when this extrinsic method
+ *   appears in the tx pool. This prevents the drain from consuming extrinsics that a test
+ *   needs to observe (e.g. "bspConfirmStopStoring").
+ */
+export const drainBspBacklog = async (
+  api: ApiPromise,
+  options?: { maxRounds?: number; delayMs?: number; bspIds?: string[]; stopOnMethod?: string }
+) => {
+  const { maxRounds = 50, delayMs = 500, bspIds = [], stopOnMethod } = options ?? {};
+  // Only drain truly background transactions that tests never directly assert on.
+  // Do NOT include bspConfirmStoring or stopStoringForInsolventUser — those are
+  // reactive extrinsics that tests may want to observe in the txpool.
+  const priorityMethods = new Set(["submitProof", "chargeMultipleUsersPaymentStreams"]);
+  let consecutiveIdle = 0;
+  const idleThreshold = 5;
+
+  for (let round = 0; round < maxRounds; round++) {
+    // Check txpool for the target extrinsic — if present, stop immediately so
+    // the caller's subsequent sealBlock includes it.
+    if (stopOnMethod) {
+      const poolTxs = await api.rpc.author.pendingExtrinsics();
+      if (poolTxs.some((tx) => tx.method.method === stopOnMethod)) {
+        break;
+      }
+    }
+
+    // Check txpool for higher-priority transactions
+    const pendingTxs = await api.rpc.author.pendingExtrinsics();
+    const hasPriorityTx = pendingTxs.some((tx) => priorityMethods.has(tx.method.method));
+
+    // Check runtime API: does any BSP have overdue proofs?
+    let bspHasOverdueProof = false;
+    if (!hasPriorityTx && bspIds.length > 0) {
+      const currentBlockNumber = (await api.rpc.chain.getHeader()).number.toNumber();
+      for (const bspId of bspIds) {
+        try {
+          const result = await api.call.proofsDealerApi.getNextTickToSubmitProofFor(bspId);
+          if (result.isOk && result.asOk.toNumber() <= currentBlockNumber) {
+            bspHasOverdueProof = true;
+            break;
+          }
+        } catch {
+          // Provider may not have submitted a proof yet — skip
+        }
+      }
+    }
+
+    if (hasPriorityTx || bspHasOverdueProof) {
+      await sealBlock(api);
+      consecutiveIdle = 0;
+    } else {
+      consecutiveIdle++;
+      if (consecutiveIdle >= idleThreshold) break;
+      await sleep(delayMs);
+    }
+  }
+};
+
+/**
+ * Waits for a specific extrinsic by continuously sealing blocks until the
+ * expected extrinsic appears in the txpool and is sealed into a block. Unlike
+ * waitForTxInPool, this keeps producing blocks — which is critical because the
+ * BSP's forest-write lock processing is triggered by block import notifications.
+ *
+ * Use this instead of waitForTxInPool when the BSP needs continuous block
+ * production to process its internal queue (e.g., after drainBspBacklog).
+ */
+export const waitForExtrinsicAndSeal = async (
+  api: ApiPromise,
+  options: {
+    module: string;
+    method: string;
+    maxIterations?: number;
+    delayMs?: number;
+    checkQuantity?: number;
+  }
+): Promise<EventRecord[]> => {
+  const { module, method, maxIterations = 60, delayMs = 500, checkQuantity } = options;
+
+  for (let i = 0; i < maxIterations; i++) {
+    // Check txpool for the target extrinsic
+    const pendingTxs = await api.rpc.author.pendingExtrinsics();
+    const targetTxs = pendingTxs.filter(
+      (tx) => tx.method.section === module && tx.method.method === method
+    );
+
+    if (checkQuantity && targetTxs.length >= checkQuantity) {
+      // All expected extrinsics are in the pool — seal and return events
+      const { events } = await sealBlock(api);
+      return events ?? [];
+    }
+
+    if (!checkQuantity && targetTxs.length > 0) {
+      // At least one target extrinsic found — seal and return events
+      const { events } = await sealBlock(api);
+      return events ?? [];
+    }
+
+    // Target not in pool yet — seal an empty block to keep BSP processing.
+    // This triggers the BSP's block-import handler, allowing it to work through
+    // its forest-write queue towards the target extrinsic.
+    await sealBlock(api);
+    await sleep(delayMs);
+  }
+
+  throw new Error(
+    `Failed to find ${module}.${method} after ${maxIterations} iterations (${(maxIterations * delayMs) / 1000}s)`
+  );
+};
+
+/**
  * Generic function to wait for a transaction in the pool.
  *
  * If the expected amount of extrinsics is 0, this function will return immediately.

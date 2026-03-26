@@ -1,7 +1,15 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { bspKey, describeBspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
+import {
+  assertEventPresent,
+  bspKey,
+  describeBspNet,
+  type EnrichedBspApi,
+  shUser,
+  waitFor,
+  waitForExtrinsicAndSeal
+} from "../../../util";
 
 await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -156,31 +164,22 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
     const cooldown = currentBlockNumber + minWaitForStopStoring + 1;
     await userApi.block.skipTo(cooldown);
 
-    // The BSP will automatically submit bspConfirmStopStoring after the cooldown.
-    // Wait for each confirm to appear in the tx pool and seal it.
-    // Note: The BSP may also need to submit proofs which have priority, so we check for those first.
-    for (let i = 0; i < fileKeys.length; i++) {
-      // Check if there's a pending submitProof extrinsic and seal it first if so.
-      // Proof submissions have priority over confirm stop storing.
-      let pendingTxs = await userApi.rpc.author.pendingExtrinsics();
-      let proofTxs = pendingTxs.filter((tx) => tx.method.method === "submitProof");
-      while (proofTxs.length > 0) {
-        await userApi.block.seal();
-        pendingTxs = await userApi.rpc.author.pendingExtrinsics();
-        proofTxs = pendingTxs.filter((tx) => tx.method.method === "submitProof");
-      }
+    // Wait for BSP to sync to the chain tip after rapid block advancement.
+    // During skipTo, blocks are sealed faster than P2P gossip delivers them.
+    // The BSP must catch up and process all blocks (including proof submissions
+    // for missed deadlines) before it can reach bspConfirmStopStoring in its queue.
+    await userApi.wait.nodeCatchUpToChainTip(bspApi);
 
-      // Wait for BSP to automatically submit confirm stop storing
-      await userApi.wait.waitForTxInPool({
+    // The BSP will automatically submit bspConfirmStopStoring after the cooldown.
+    // Seal blocks in a loop for each confirm — continuous block production is needed
+    // so the BSP's block-import handler can process its forest-write queue.
+    for (let i = 0; i < fileKeys.length; i++) {
+      // Seal blocks until bspConfirmStopStoring appears and is included.
+      const events = await waitForExtrinsicAndSeal(userApi, {
         module: "fileSystem",
         method: "bspConfirmStopStoring"
       });
-
-      // Seal the block with the confirm
-      await userApi.block.seal();
-
-      // Check for the confirm stopped storing event.
-      await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+      assertEventPresent(userApi, "fileSystem", "BspConfirmStoppedStoring", events);
 
       // Wait for BSP to update its local Forest root as a consequence of the confirmed stop storing extrinsic.
       await waitFor({
@@ -322,31 +321,19 @@ await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, cre
       const cooldown = currentBlockNumber + minWaitForStopStoring;
       await userApi.block.skipTo(cooldown);
 
-      // The BSP will automatically submit bspConfirmStopStoring after the cooldown.
-      // Wait for each confirm to appear in the tx pool and seal it.
-      // Note: The BSP may also need to submit proofs which have priority, so we check for those first.
-      for (let i = 0; i < fileKeys.length; i++) {
-        // Check if there's a pending submitProof extrinsic and seal it first if so.
-        // Proof submissions have priority over confirm stop storing.
-        let pendingTxs = await userApi.rpc.author.pendingExtrinsics();
-        let proofTxs = pendingTxs.filter((tx) => tx.method.method === "submitProof");
-        while (proofTxs.length > 0) {
-          await userApi.block.seal();
-          pendingTxs = await userApi.rpc.author.pendingExtrinsics();
-          proofTxs = pendingTxs.filter((tx) => tx.method.method === "submitProof");
-        }
+      // Seal an extra block to refresh fatxpool's view after rapid block production.
+      await userApi.block.seal();
 
-        // Wait for BSP to automatically submit confirm stop storing
-        await userApi.wait.waitForTxInPool({
+      // The BSP will automatically submit bspConfirmStopStoring after the cooldown.
+      // Seal blocks in a loop for each confirm — continuous block production is needed
+      // so the BSP's block-import handler can process its forest-write queue.
+      for (let i = 0; i < fileKeys.length; i++) {
+        // Seal blocks until bspConfirmStopStoring appears and is included.
+        const events = await waitForExtrinsicAndSeal(userApi, {
           module: "fileSystem",
           method: "bspConfirmStopStoring"
         });
-
-        // Seal the block with the confirm
-        await userApi.block.seal();
-
-        // Check for the confirm stopped storing event.
-        await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+        assertEventPresent(userApi, "fileSystem", "BspConfirmStoppedStoring", events);
 
         // Wait for BSP to update its local Forest root as a consequence of the confirmed stop storing extrinsic.
         await waitFor({

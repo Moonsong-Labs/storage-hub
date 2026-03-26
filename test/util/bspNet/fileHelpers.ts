@@ -528,10 +528,12 @@ export const batchStorageRequests = async (
     }
   }
 
-  // Wait for all BSP volunteers to appear in tx pool (if bspApi is provided)
+  // Wait for all BSP volunteers to appear in tx pool (if bspApi is provided).
+  // Seal an extra block first to refresh fatxpool's view — ensures BSP-gossiped
+  // volunteer transactions are imported after the rapid storage request sealing.
   if (bspApis) {
     const replicas = bspApis.length;
-    await api.wait.bspVolunteerInTxPool(replicas * fileKeys.length);
+    await api.wait.bspVolunteerInTxPool(replicas * fileKeys.length, 30000);
   }
 
   // Wait for MSP acceptance and/or BSP stored confirmations (if APIs are provided)

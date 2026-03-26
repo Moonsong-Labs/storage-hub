@@ -153,7 +153,7 @@ await describeMspNet(
       // MSP completes file storage locally
       await mspApi.wait.fileStorageComplete(file1.fileKey);
 
-      // Ensure acceptance and BSP volunteer -> stored
+      // Ensure acceptance and BSP volunteer -> stored.
       await userApi.wait.mspResponseInTxPool();
       await userApi.wait.bspVolunteer(1);
       await userApi.wait.bspStored({ expectedExts: 1, sealBlock: true });
@@ -384,7 +384,7 @@ await describeMspNet(
       // MSP completes file storage locally
       await newMspApi.wait.fileStorageComplete(file2.fileKey);
 
-      // Ensure MSP accepts the storage request
+      // Ensure MSP accepts the storage request.
       await userApi.wait.mspResponseInTxPool();
       await userApi.wait.bspVolunteer(1);
       await userApi.wait.bspStored({ expectedExts: 1, sealBlock: true });

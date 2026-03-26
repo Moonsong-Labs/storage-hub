@@ -275,10 +275,16 @@ await describeBspNet(
 
         // Checking volunteering and confirming for the low reputation BSP
         // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
-        await userApi.block.skipTo(lowReputationVolunteerTick - 1);
+        // Skip to one block before the extra seal so we arrive at the correct tick.
+        await userApi.block.skipTo(lowReputationVolunteerTick - 2);
 
         // Wait for the BSP to catch up to the new block height after skipping
         await userApi.wait.nodeCatchUpToChainTip(bspDownApi);
+
+        // Seal an extra block to refresh fatxpool's view after rapid block production.
+        // This brings us to lowReputationVolunteerTick - 1, so the BSP can volunteer
+        // at lowReputationVolunteerTick when the next block is sealed.
+        await userApi.block.seal();
 
         await userApi.wait.bspVolunteer(1);
         const matchedEvents = await userApi.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
@@ -376,10 +382,16 @@ await describeBspNet(
 
         // Then wait for the second BSP to volunteer and confirm storing the file
         // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
-        await userApi.block.skipTo(bsp2VolunteerTick - 1);
+        // Skip to one block before the extra seal so we arrive at the correct tick.
+        await userApi.block.skipTo(bsp2VolunteerTick - 2);
 
         // Wait for BSP two to catch up to the new block height after skipping
         await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
+
+        // Seal an extra block to refresh fatxpool's view after rapid block production.
+        // This brings us to bsp2VolunteerTick - 1, so BSP two can volunteer
+        // at bsp2VolunteerTick when the next block is sealed.
+        await userApi.block.seal();
 
         await userApi.wait.bspVolunteer(1);
         await bspTwoApi.wait.fileStorageComplete(fileKey);
