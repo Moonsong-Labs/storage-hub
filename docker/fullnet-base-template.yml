@@ -25,6 +25,7 @@ services:
         "--node-key=0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be",
         "--keystore-path=/keystore",
         "--sealing=manual",
+        "--pool-type=single-state",
         "--base-path=/data",
       ]
   sh-msp-1:
@@ -55,6 +56,7 @@ services:
         "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
         "--keystore-path=/keystore",
         "--sealing=manual",
+        "--pool-type=single-state",
         "--base-path=/data",
         "--msp-charging-period=12",
         "--msp-distribute-files",
@@ -89,6 +91,7 @@ services:
         "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
         "--keystore-path=/keystore",
         "--sealing=manual",
+        "--pool-type=single-state",
         "--base-path=/data",
         "--msp-charging-period=12",
         "--msp-distribute-files",
@@ -121,6 +124,7 @@ services:
         "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
         "--keystore-path=/keystore",
         "--sealing=manual",
+        "--pool-type=single-state",
         "--base-path=/data",
       ]
 
@@ -147,6 +151,7 @@ services:
         "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
         "--keystore-path=/keystore",
         "--sealing=manual",
+        "--pool-type=single-state",
         "--base-path=/data",
         "--fisherman",
         "--fisherman-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub",
@@ -173,6 +178,7 @@ services:
         "--node-key=0x33b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b316",
         "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
         "--sealing=manual",
+        "--pool-type=single-state",
         "--base-path=/data",
         "--indexer",
         "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub",
