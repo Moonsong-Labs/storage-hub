@@ -834,7 +834,7 @@ pub mod tests {
 
         // Verify the other bucket's file is not included
         for file in &files {
-            assert_eq!(file.bucket_id, bucket.id);
+            assert_eq!(file.onchain_bucket_id, bucket.onchain_bucket_id);
         }
     }
 
@@ -1344,7 +1344,7 @@ pub mod tests {
 
         assert_eq!(file.id, created_file.id);
         assert_eq!(file.file_key, file_key.as_bytes());
-        assert_eq!(file.bucket_id, bucket.id);
+        assert_eq!(file.onchain_bucket_id, bucket.onchain_bucket_id);
     }
 
     #[tokio::test]

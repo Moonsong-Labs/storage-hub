@@ -11,7 +11,7 @@ use shc_common::types::{FileMetadata, Fingerprint};
 
 use crate::{
     models::{Bucket, MultiAddress},
-    schema::{bucket, file, file_peer_id, msp_file},
+    schema::{file, file_peer_id, msp_file},
     DbConnection,
 };
 
@@ -101,7 +101,6 @@ pub struct File {
     /// Owner of the file.
     pub account: Vec<u8>,
     pub file_key: Vec<u8>,
-    pub bucket_id: i64,
     pub onchain_bucket_id: Vec<u8>,
     pub location: Vec<u8>,
     pub fingerprint: Vec<u8>,
@@ -201,17 +200,11 @@ impl File {
         desired_replicas: i32,
     ) -> Result<Self, diesel::result::Error> {
         let onchain_bucket_id = onchain_bucket_id.into();
-        let bucket_id: i64 = bucket::table
-            .filter(bucket::onchain_bucket_id.eq(&onchain_bucket_id))
-            .select(bucket::id)
-            .first(conn)
-            .await?;
 
         let file = diesel::insert_into(file::table)
             .values((
                 file::account.eq(account.into()),
                 file::file_key.eq(file_key.into()),
-                file::bucket_id.eq(bucket_id),
                 file::onchain_bucket_id.eq(onchain_bucket_id),
                 file::location.eq(location.into()),
                 file::fingerprint.eq(fingerprint.into()),
