@@ -582,7 +582,7 @@ where
         );
 
         let capacity_plus_one = msp.capacity + T::StorageDataUnit::one();
-        log::info!(target: "providers::utils", "capacity_plus_one: {}", capacity_plus_one);
+        log::info!(target: "providers::utils", "capacity_plus_one: {:?}", capacity_plus_one);
 
         // Check that enough time has passed since the last capacity change
         ensure!(
