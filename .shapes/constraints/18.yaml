@@ -1,0 +1,48 @@
+id: 18
+name: Extrinsic Input Adversariality
+description: |
+  Substrate runtimes execute in a trustless adversarial environment where any account can submit
+  any extrinsic with any parameters. The runtime must never assume good faith from callers.
+  This constraint governs what the runtime can and cannot treat as trusted input, which is
+  critical for any feature involving disputes, reports, or punitive actions.
+kind: invariant
+rule: |
+  All extrinsic parameters MUST be treated as adversarial input from an untrusted caller.
+  The runtime can only trust: (1) the signer's identity (via ensure_signed), (2) on-chain
+  state it reads directly from storage, and (3) cryptographic proofs verified against on-chain
+  commitments (e.g., Merkle roots stored in pallet storage). The runtime CANNOT verify who
+  generated a proof or who served data off-chain — it can only verify whether a proof is
+  valid against a known on-chain root. Off-chain attribution ("provider X served me bad data")
+  is not cryptographically verifiable on-chain and must not be treated as evidence for
+  punitive state changes.
+enforcement: manual
+status: canonical
+intent:
+  kind: invariant
+  summary: |
+    Extrinsic inputs are adversarial — runtime can only trust signer identity, on-chain state,
+    and proofs verified against on-chain commitments.
+  source: human
+  impact_if_violated:
+  - Providers can be framed and slashed using fabricated evidence
+  - Economic attacks become possible by submitting crafted proofs that fail verification
+  - Trust assumptions leak from off-chain context into on-chain logic
+  rationale: |
+    In a trustless blockchain environment, the runtime has no way to verify claims about
+    off-chain events. A caller saying "this provider served me corrupted data" and providing
+    a proof cannot be trusted — the caller could have fabricated the proof. The runtime can
+    verify a proof is valid against an on-chain root, but it cannot verify who produced
+    the proof or under what circumstances.
+realization:
+- bindings:
+  - scheme: uri
+    value: pallets/file-system/src/lib.rs
+  role: supporting
+- bindings:
+  - scheme: uri
+    value: pallets/providers/src/lib.rs
+  role: supporting
+- bindings:
+  - scheme: uri
+    value: pallets/proofs-dealer/src/lib.rs
+  role: supporting
