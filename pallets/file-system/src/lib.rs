@@ -444,6 +444,18 @@ pub mod pallet {
     /// the file. The value is `false` for volunteered-only and `true` for confirmed.
     /// This map is created when the first BSP volunteers and removed when the storage
     /// request is cleaned up.
+    ///
+    /// ## Benchmarking note
+    ///
+    /// This is a [`BoundedBTreeMap`] whose PoV cost is always charged at [`MaxEncodedLen`]
+    /// (i.e. assuming `MaxBspVolunteers` entries) regardless of how many BSPs are actually
+    /// present. Currently, all extrinsic paths interact with this map via whole-map
+    /// operations (`get`, `set`, `remove`) and do **not** perform per-BSP storage
+    /// reads/writes, so the number of volunteers has no statistically significant impact
+    /// on ref_time or PoV. If future logic is added that iterates over individual BSPs
+    /// in this map and performs additional storage reads or writes for each one, the
+    /// volunteer count **must** be re-introduced as a `Linear` benchmark component so
+    /// the weight function can account for the per-BSP cost.
     #[pallet::storage]
     pub type StorageRequestBsps<T: Config> = StorageMap<
         _,
@@ -1338,50 +1350,16 @@ pub mod pallet {
         /// wasn't storing it before.
         #[pallet::call_index(8)]
         #[pallet::weight({
-			let max_v = T::MaxBspVolunteers::get();
-			let max_r = T::MaxReplicationTarget::get();
 			let mut total_weight: Weight = Weight::zero();
-			let mut total_reads: u64 = 0;
-			// TODO: Replace iteration + storage reads with user-provided weight hints validated in extrinsic.
-			// Also make `StorageRequestMspResponse` and `reject` field `BoundedVec` (currently unbounded `Vec`).
 			for bucket_response in storage_request_msp_response.iter() {
 				let amount_of_files_to_accept = bucket_response.accept.as_ref().map_or(0, |accept_response| accept_response.file_keys_and_proofs.len());
 				let amount_of_files_to_reject = bucket_response.reject.len();
 
-				let mut worst_v: u32 = 0;
-				let mut worst_r: u32 = 0;
-				if let Some(accept) = &bucket_response.accept {
-					for fkp in accept.file_keys_and_proofs.iter() {
-						total_reads += 1;
-						if let Some(meta) = StorageRequests::<T>::get(&fkp.file_key) {
-							let v: u64 = meta.bsps_volunteered.into();
-							let r: u64 = meta.bsps_required.into();
-							worst_v = worst_v.max(v as u32);
-							worst_r = worst_r.max(r as u32);
-						} else {
-							worst_v = max_v;
-							worst_r = max_r;
-						}
-					}
-				}
-				for rejected in bucket_response.reject.iter() {
-					total_reads += 1;
-					if let Some(meta) = StorageRequests::<T>::get(&rejected.file_key) {
-						let v: u64 = meta.bsps_volunteered.into();
-						let r: u64 = meta.bsps_required.into();
-						worst_v = worst_v.max(v as u32);
-						worst_r = worst_r.max(r as u32);
-					} else {
-						worst_v = max_v;
-						worst_r = max_r;
-					}
-				}
-
 				total_weight = total_weight.saturating_add(
-					T::WeightInfo::msp_respond_storage_requests_multiple_buckets(1, amount_of_files_to_accept as u32, amount_of_files_to_reject as u32, worst_v, worst_r)
+					T::WeightInfo::msp_respond_storage_requests_multiple_buckets(1, amount_of_files_to_accept as u32, amount_of_files_to_reject as u32)
 				);
 			}
-			total_weight.saturating_add(T::DbWeight::get().reads(total_reads))
+			total_weight
 		})]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
@@ -1448,23 +1426,7 @@ pub mod pallet {
         #[pallet::call_index(11)]
         #[pallet::weight({
             let n = file_keys_and_proofs.len() as u32;
-            let max_v = T::MaxBspVolunteers::get();
-            let max_r = T::MaxReplicationTarget::get();
-            let (mut worst_v, mut worst_r): (u32, u32) = (0, 0);
-            // TODO: Replace iteration + storage reads with user-provided weight hints validated in extrinsic.
-            for fkp in file_keys_and_proofs.iter() {
-                if let Some(meta) = StorageRequests::<T>::get(&fkp.file_key) {
-                    let v: u64 = meta.bsps_volunteered.into();
-                    let r: u64 = meta.bsps_required.into();
-                    worst_v = worst_v.max(v as u32);
-                    worst_r = worst_r.max(r as u32);
-                } else {
-                    worst_v = max_v;
-                    worst_r = max_r;
-                }
-            }
-            T::WeightInfo::bsp_confirm_storing(n, worst_v, worst_r)
-                .saturating_add(T::DbWeight::get().reads(n as u64))
+            T::WeightInfo::bsp_confirm_storing(n)
         })]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
@@ -1743,27 +1705,11 @@ pub mod pallet {
         #[pallet::call_index(17)]
         #[pallet::weight({
             let n = file_deletions.len() as u32;
-            let max_v = T::MaxBspVolunteers::get();
-            let max_r = T::MaxReplicationTarget::get();
-            let (mut worst_v, mut worst_r): (u32, u32) = (0, 0);
-            // TODO: Replace iteration + storage reads with user-provided weight hints validated in extrinsic.
-            for deletion in file_deletions.iter() {
-                if let Some(meta) = StorageRequests::<T>::get(&deletion.signed_intention.file_key) {
-                    let v: u64 = meta.bsps_volunteered.into();
-                    let r: u64 = meta.bsps_required.into();
-                    worst_v = worst_v.max(v as u32);
-                    worst_r = worst_r.max(r as u32);
-                } else {
-                    worst_v = max_v;
-                    worst_r = max_r;
-                }
-            }
-            let base = if bsp_id.is_none() {
-                T::WeightInfo::delete_files_bucket(n, worst_v, worst_r)
+            if bsp_id.is_none() {
+                T::WeightInfo::delete_files_bucket(n)
             } else {
-                T::WeightInfo::delete_files_bsp(n, worst_v, worst_r)
-            };
-            base.saturating_add(T::DbWeight::get().reads(n as u64))
+                T::WeightInfo::delete_files_bsp(n)
+            }
         })]
         pub fn delete_files(
             origin: OriginFor<T>,

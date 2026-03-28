@@ -622,30 +622,20 @@ mod benchmarks {
                     .unwrap()
             },
         >,
-        v: Linear<
-            1,
-            {
-                Into::<u64>::into(T::MaxBspVolunteers::get())
-                    .try_into()
-                    .unwrap()
-            },
-        >,
-        r: Linear<
-            1,
-            {
-                Into::<u64>::into(T::MaxReplicationTarget::get())
-                    .try_into()
-                    .unwrap()
-            },
-        >,
     ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
-        // n = buckets, m = file keys accept per bucket, l = file keys reject per bucket, v = volunteers, r = replication target
+        // n = buckets, m = file keys accept per bucket, l = file keys reject per bucket
         let amount_of_buckets_to_accept: u32 = n.into();
         let amount_of_file_keys_to_accept_per_bucket: u32 = m.into();
         let amount_of_file_keys_to_reject_per_bucket: u32 = l.into();
-        let volunteer_count: u32 = v.into();
-        let replication_target: u32 = r.into();
+        // Volunteer count and replication target are fixed at worst-case values instead of being
+        // benchmark `Linear` components. They were removed as components because they impact
+        // neither ref_time (no per-BSP computation or storage I/O — the accept, reject, and
+        // cleanup paths only perform whole-map operations: `get`, `set`, `remove`) nor PoV
+        // (`StorageRequestBsps` is a `BoundedBTreeMap` whose PoV cost is always charged at
+        // `MaxEncodedLen` regardless of actual entries).
+        let volunteer_count: u32 = T::MaxBspVolunteers::get();
+        let replication_target: u32 = T::MaxReplicationTarget::get();
 
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
@@ -996,28 +986,18 @@ mod benchmarks {
     #[benchmark]
     fn bsp_confirm_storing(
         n: Linear<1, 10>,
-        v: Linear<
-            1,
-            {
-                Into::<u64>::into(T::MaxBspVolunteers::get())
-                    .try_into()
-                    .unwrap()
-            },
-        >,
-        r: Linear<
-            1,
-            {
-                Into::<u64>::into(T::MaxReplicationTarget::get())
-                    .try_into()
-                    .unwrap()
-            },
-        >,
     ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
-        // Get from the linear variables: file count n, volunteer count v, replication target r
+        // Get from the linear variables: file count n
         let amount_of_files_to_confirm_storing: u32 = n.into();
-        let volunteer_count: u32 = v.into();
-        let replication_target: u32 = r.into();
+        // Volunteer count and replication target are fixed at worst-case values instead of being
+        // benchmark `Linear` components. They were removed as components because they impact
+        // neither ref_time (no per-BSP computation or storage I/O — the confirm-storing path
+        // only performs whole-map operations: `get`, `set`, `remove` on `StorageRequestBsps`)
+        // nor PoV (`StorageRequestBsps` is a `BoundedBTreeMap` whose PoV cost is always charged
+        // at `MaxEncodedLen` regardless of actual entries).
+        let volunteer_count: u32 = T::MaxBspVolunteers::get();
+        let replication_target: u32 = T::MaxReplicationTarget::get();
 
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
@@ -2550,27 +2530,17 @@ mod benchmarks {
     #[benchmark]
     fn delete_files_bucket(
         n: Linear<1, 10>,
-        v: Linear<
-            1,
-            {
-                Into::<u64>::into(T::MaxBspVolunteers::get())
-                    .try_into()
-                    .unwrap()
-            },
-        >,
-        r: Linear<
-            1,
-            {
-                Into::<u64>::into(T::MaxReplicationTarget::get())
-                    .try_into()
-                    .unwrap()
-            },
-        >,
     ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         let number_of_file_keys: u32 = n.into();
-        let volunteer_count: u32 = v.into();
-        let replication_target: u32 = r.into();
+        // Volunteer count and replication target are fixed at worst-case values instead of being
+        // benchmark `Linear` components. They were removed as components because they impact
+        // neither ref_time (no per-BSP computation or storage I/O — the delete-files-from-bucket
+        // path calls `cleanup_storage_request` which only performs a single
+        // `StorageRequestBsps::remove()`) nor PoV (`StorageRequestBsps` is a `BoundedBTreeMap`
+        // whose PoV cost is always charged at `MaxEncodedLen` regardless of actual entries).
+        let volunteer_count: u32 = T::MaxBspVolunteers::get();
+        let replication_target: u32 = T::MaxReplicationTarget::get();
 
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
@@ -2892,27 +2862,17 @@ mod benchmarks {
     #[benchmark]
     fn delete_files_bsp(
         n: Linear<1, 10>,
-        v: Linear<
-            1,
-            {
-                Into::<u64>::into(T::MaxBspVolunteers::get())
-                    .try_into()
-                    .unwrap()
-            },
-        >,
-        r: Linear<
-            1,
-            {
-                Into::<u64>::into(T::MaxReplicationTarget::get())
-                    .try_into()
-                    .unwrap()
-            },
-        >,
     ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         let number_of_file_keys: u32 = n.into();
-        let volunteer_count: u32 = v.into();
-        let replication_target: u32 = r.into();
+        // Volunteer count and replication target are fixed at worst-case values instead of being
+        // benchmark `Linear` components. They were removed as components because they impact
+        // neither ref_time (no per-BSP computation or storage I/O — the delete-files-from-bsp
+        // path calls `cleanup_storage_request` which only performs a single
+        // `StorageRequestBsps::remove()`) nor PoV (`StorageRequestBsps` is a `BoundedBTreeMap`
+        // whose PoV cost is always charged at `MaxEncodedLen` regardless of actual entries).
+        let volunteer_count: u32 = T::MaxBspVolunteers::get();
+        let replication_target: u32 = T::MaxReplicationTarget::get();
 
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
