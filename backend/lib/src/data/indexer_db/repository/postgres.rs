@@ -136,7 +136,6 @@ impl IndexerOps for Repository {
     ) -> RepositoryResult<Vec<File>> {
         let mut conn = self.pool.get().await?;
 
-        // Same as File::get_by_bucket_id but with pagination
         let files = file::table
             .filter(file::onchain_bucket_id.eq(bucket.as_bytes()))
             .limit(limit)
