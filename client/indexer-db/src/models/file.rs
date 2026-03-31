@@ -970,7 +970,7 @@ impl File {
                 true => {
                     Bucket::increment_file_count_and_size(
                         conn,
-                        onchain_bucket_id.clone(),
+                        &onchain_bucket_id,
                         file_size,
                     )
                     .await?
@@ -978,7 +978,7 @@ impl File {
                 false => {
                     Bucket::decrement_file_count_and_size(
                         conn,
-                        onchain_bucket_id.clone(),
+                        &onchain_bucket_id,
                         file_size,
                     )
                     .await?

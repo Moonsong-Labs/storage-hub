@@ -177,7 +177,7 @@ impl Bucket {
     /// Increment file count and update total size
     pub async fn increment_file_count_and_size<'a>(
         conn: &mut DbConnection<'a>,
-        onchain_bucket_id: Vec<u8>,
+        onchain_bucket_id: &[u8],
         file_size: i64,
     ) -> Result<(), diesel::result::Error> {
         let size_decimal = BigDecimal::from(file_size);
@@ -195,7 +195,7 @@ impl Bucket {
     /// Decrement file count and update total size
     pub async fn decrement_file_count_and_size<'a>(
         conn: &mut DbConnection<'a>,
-        onchain_bucket_id: Vec<u8>,
+        onchain_bucket_id: &[u8],
         file_size: i64,
     ) -> Result<(), diesel::result::Error> {
         let size_decimal = BigDecimal::from(file_size);
