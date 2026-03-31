@@ -968,20 +968,12 @@ impl File {
         if let Some(file_size) = file_size {
             match is_in_bucket {
                 true => {
-                    Bucket::increment_file_count_and_size(
-                        conn,
-                        &onchain_bucket_id,
-                        file_size,
-                    )
-                    .await?
+                    Bucket::increment_file_count_and_size(conn, &onchain_bucket_id, file_size)
+                        .await?
                 }
                 false => {
-                    Bucket::decrement_file_count_and_size(
-                        conn,
-                        &onchain_bucket_id,
-                        file_size,
-                    )
-                    .await?
+                    Bucket::decrement_file_count_and_size(conn, &onchain_bucket_id, file_size)
+                        .await?
                 }
             }
         }
