@@ -984,9 +984,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn bsp_confirm_storing(
-        n: Linear<1, 10>,
-    ) -> Result<(), BenchmarkError> {
+    fn bsp_confirm_storing(n: Linear<1, 10>) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         // Get from the linear variables: file count n
         let amount_of_files_to_confirm_storing: u32 = n.into();
@@ -2528,9 +2526,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn delete_files_bucket(
-        n: Linear<1, 10>,
-    ) -> Result<(), BenchmarkError> {
+    fn delete_files_bucket(n: Linear<1, 10>) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         let number_of_file_keys: u32 = n.into();
         // Volunteer count and replication target are fixed at worst-case values instead of being
@@ -2860,9 +2856,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn delete_files_bsp(
-        n: Linear<1, 10>,
-    ) -> Result<(), BenchmarkError> {
+    fn delete_files_bsp(n: Linear<1, 10>) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         let number_of_file_keys: u32 = n.into();
         // Volunteer count and replication target are fixed at worst-case values instead of being
