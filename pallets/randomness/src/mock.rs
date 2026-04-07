@@ -128,7 +128,6 @@ impl BlockNumberProvider for BlockNumberGetter {
 }
 
 impl Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
     type BabeBlockGetter = BlockNumberGetter;
     type WeightInfo = ();

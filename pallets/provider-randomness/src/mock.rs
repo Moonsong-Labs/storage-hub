@@ -138,7 +138,6 @@ parameter_types! {
 
 // Storage Providers pallet:
 impl pallet_storage_providers::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
@@ -304,7 +303,6 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
 
 // Payment streams pallet:
 impl pallet_payment_streams::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
@@ -336,7 +334,6 @@ parameter_types! {
 
 // Proofs dealer pallet:
 impl pallet_proofs_dealer::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
@@ -492,7 +489,6 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
 
 // Commit-reveal randomness pallet:
 impl Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type SeedCommitment = H256;
     type Seed = H256;

@@ -12,7 +12,7 @@ use frame_support::{
     weights::{Weight, WeightMeter},
     BoundedBTreeSet,
 };
-use frame_system::pallet_prelude::BlockNumberFor;
+use frame_system::pallet_prelude::{AccountIdFor, BlockNumberFor};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError,
     GetNextDeadlineTickError, GetProofSubmissionRecordError,
@@ -30,14 +30,14 @@ use sp_runtime::{
 use crate::{
     pallet,
     types::{
-        AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor,
-        ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
-        CheckpointChallengePeriodFor, CustomChallenge, ForestVerifierFor, ForestVerifierProofFor,
-        KeyFor, KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
-        MaxSlashableProvidersPerTickFor, MaxSubmittersPerTickFor, MinChallengePeriodFor,
-        PriorityChallengesFeeFor, Proof, ProofSubmissionRecord, ProviderIdFor, ProvidersPalletFor,
-        RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
-        StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
+        BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengeTicksToleranceFor,
+        ChallengesFeeFor, ChallengesQueueLengthFor, CheckpointChallengePeriodFor, CustomChallenge,
+        ForestVerifierFor, ForestVerifierProofFor, KeyFor, KeyVerifierFor, KeyVerifierProofFor,
+        MaxCustomChallengesPerBlockFor, MaxSlashableProvidersPerTickFor, MaxSubmittersPerTickFor,
+        MinChallengePeriodFor, PriorityChallengesFeeFor, Proof, ProofSubmissionRecord,
+        ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
+        RandomnessProviderFor, StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor,
+        TreasuryAccountFor,
     },
     weights::WeightInfo,
     ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,

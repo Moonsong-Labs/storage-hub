@@ -374,12 +374,12 @@ pub fn run() -> Result<()> {
                         let partials = new_partial_parachain(&config, dev_service)?;
                         let db = partials.backend.expose_db();
                         let storage = partials.backend.expose_storage();
-                        cmd.run(config, partials.client.clone(), db, storage)
+                        cmd.run(config, partials.client.clone(), db, storage, None)
                     } else if config.chain_spec.is_solochain_evm() {
                         let partials = new_partial_solochain_evm(&config, dev_service)?;
                         let db = partials.backend.expose_db();
                         let storage = partials.backend.expose_storage();
-                        cmd.run(config, partials.client.clone(), db, storage)
+                        cmd.run(config, partials.client.clone(), db, storage, None)
                     } else {
                         unreachable!("Invalid chain spec")
                     }

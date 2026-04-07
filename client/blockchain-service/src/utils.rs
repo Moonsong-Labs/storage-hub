@@ -1368,6 +1368,24 @@ where
         } else if let Some(tx) = self.transaction_manager.pending.get_mut(&nonce) {
             // Only update status if this is the current transaction
             if tx.hash == tx_hash {
+                // Detect implicit retraction by fatxpool (fork-aware transaction pool).
+                // fatxpool intentionally suppresses Retracted events (polkadot-sdk#5479).
+                // When a second InBlock arrives for a different block hash, it means the
+                // original block was reorged out and the tx was re-included in a new fork
+                // block.
+                if let TransactionStatus::InBlock((ref new_block, _)) = status {
+                    if let TransactionStatus::InBlock((ref old_block, _)) = tx.latest_status {
+                        if old_block != new_block {
+                            warn!(
+                                target: LOG_TARGET,
+                                "🔄 Transaction with nonce {} was implicitly retracted and re-included in block: {:?} \
+                                (previously in block: {:?}). This is expected fatxpool behavior during reorgs.",
+                                nonce, new_block, old_block
+                            );
+                        }
+                    }
+                }
+
                 debug!(
                     target: LOG_TARGET,
                     "📊 Transaction with nonce {} (hash: {:?}) status updated: {:?}",

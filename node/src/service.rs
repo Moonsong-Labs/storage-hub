@@ -1493,16 +1493,17 @@ where
             ));
     }
 
-    let (relay_chain_interface, collator_key) = build_relay_chain_interface(
-        polkadot_config,
-        &parachain_config,
-        telemetry_worker_handle,
-        &mut task_manager,
-        collator_options.clone(),
-        hwbench.clone(),
-    )
-    .await
-    .map_err(|e| sc_service::Error::Application(Box::new(e)))?;
+    let (relay_chain_interface, collator_key, _relay_network_service, _relay_req_receiver) =
+        build_relay_chain_interface(
+            polkadot_config,
+            &parachain_config,
+            telemetry_worker_handle,
+            &mut task_manager,
+            collator_options.clone(),
+            hwbench.clone(),
+        )
+        .await
+        .map_err(|e| sc_service::Error::Application(Box::new(e)))?;
 
     let validator = parachain_config.role.is_authority();
     let prometheus_registry = parachain_config.prometheus_registry().cloned();
@@ -1520,6 +1521,7 @@ where
             relay_chain_interface: relay_chain_interface.clone(),
             import_queue: params.import_queue,
             sybil_resistance_level: CollatorSybilResistance::Resistant, // because of Aura
+            metrics: sc_network::NotificationMetrics::new(prometheus_registry.as_ref()),
         })
         .await?;
 
@@ -1661,6 +1663,7 @@ where
         relay_chain_slot_duration,
         recovery_handle: Box::new(overseer_handle.clone()),
         sync_service: sync_service.clone(),
+        prometheus_registry: prometheus_registry.as_ref(),
     })?;
 
     if validator {
@@ -1734,18 +1737,20 @@ where
     }
 
     // Create relay chain interface
-    let (relay_chain_interface, _collator_key) = build_relay_chain_interface(
-        polkadot_config,
-        &parachain_config,
-        telemetry_worker_handle,
-        &mut task_manager,
-        collator_options.clone(),
-        hwbench.clone(),
-    )
-    .await
-    .map_err(|e| sc_service::Error::Application(Box::new(e)))?;
+    let (relay_chain_interface, _collator_key, _relay_network_service, _relay_req_receiver) =
+        build_relay_chain_interface(
+            polkadot_config,
+            &parachain_config,
+            telemetry_worker_handle,
+            &mut task_manager,
+            collator_options.clone(),
+            hwbench.clone(),
+        )
+        .await
+        .map_err(|e| sc_service::Error::Application(Box::new(e)))?;
 
     let transaction_pool = params.transaction_pool.clone();
+    let prometheus_registry = parachain_config.prometheus_registry().cloned();
 
     let (network, system_rpc_tx, tx_handler_controller, sync_service) =
         build_network(BuildNetworkParams {
@@ -1758,13 +1763,11 @@ where
             relay_chain_interface: relay_chain_interface.clone(),
             import_queue: params.import_queue,
             sybil_resistance_level: CollatorSybilResistance::Resistant, // because of Aura
+            metrics: sc_network::NotificationMetrics::new(prometheus_registry.as_ref()),
         })
         .await?;
 
     // No need for offchain workers in maintenance mode
-
-    // Get prometheus registry for metrics
-    let prometheus_registry = parachain_config.prometheus_registry().cloned();
 
     // Get the base path for the node (the RocksDB root path)
     let base_path = parachain_config.base_path.path().to_path_buf().clone();

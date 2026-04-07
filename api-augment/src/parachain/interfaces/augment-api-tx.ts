@@ -2017,6 +2017,8 @@ declare module "@polkadot/api-base/types/submittable" {
                 relayChainState?: any;
                 downwardMessages?: any;
                 horizontalMessages?: any;
+                relayParentDescendants?: any;
+                collatorPeerId?: any;
               }
             | string
             | Uint8Array

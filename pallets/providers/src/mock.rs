@@ -146,7 +146,6 @@ impl GetBabeData<u64, H256> for BabeDataGetter {
 }
 
 impl pallet_randomness::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
     type BabeBlockGetter = BlockNumberGetter;
     type WeightInfo = ();
@@ -177,7 +176,6 @@ parameter_types! {
 
 // Proofs dealer pallet:
 impl pallet_proofs_dealer::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersPallet = StorageProviders;
     type NativeBalance = Balances;
@@ -292,7 +290,6 @@ where
 
 // Payment streams pallet:
 impl pallet_payment_streams::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type NativeBalance = Balances;
     type ProvidersPallet = StorageProviders;
@@ -361,7 +358,6 @@ impl CommitRevealRandomnessInterface for MockCommitRevealRandomness {
 
 // Storage providers pallet:
 impl crate::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;

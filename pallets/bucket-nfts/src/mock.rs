@@ -252,7 +252,6 @@ impl ProofsDealerInterface for MockProofsDealer {
 pub(crate) type ReplicationTargetType = u32;
 
 impl pallet_file_system::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type Providers = Providers;
     type ProofDealer = MockProofsDealer;
@@ -377,7 +376,6 @@ impl pallet_nfts::Config for Test {
 
 // Payment streams pallet:
 impl pallet_payment_streams::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
@@ -436,7 +434,6 @@ impl StorageHubTickGetter for MockStorageHubTickGetter {
 }
 
 impl pallet_storage_providers::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
@@ -518,7 +515,6 @@ impl Get<AccountId> for TreasuryAccount {
 }
 
 impl crate::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]

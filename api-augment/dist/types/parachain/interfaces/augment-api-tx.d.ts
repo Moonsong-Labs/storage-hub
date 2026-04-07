@@ -1464,6 +1464,8 @@ declare module '@polkadot/api-base/types/submittable' {
                 relayChainState?: any;
                 downwardMessages?: any;
                 horizontalMessages?: any;
+                relayParentDescendants?: any;
+                collatorPeerId?: any;
             } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [CumulusPrimitivesParachainInherentParachainInherentData]>;
             sudoSendUpwardMessage: AugmentedSubmittable<(message: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
             /**
