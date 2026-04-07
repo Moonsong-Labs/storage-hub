@@ -174,22 +174,23 @@ impl DBClient {
     /// Get the files of the given bucket with pagination
     pub async fn get_bucket_files(
         &self,
-        bucket: i64,
+        bucket_onchain_id: &[u8],
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Vec<File>> {
+        let bucket_hash = shp_types::Hash::from_slice(bucket_onchain_id);
         let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
         let offset = offset.unwrap_or(0);
         debug!(
             target: "indexer_db::client::get_bucket_files",
-            bucket_id = bucket,
+            bucket_id = %bucket_hash,
             limit = limit,
             offset = offset,
             "Fetching bucket files"
         );
 
         self.repository
-            .get_files_by_bucket(bucket, limit, offset)
+            .get_files_by_bucket(&bucket_hash, limit, offset)
             .await
             .map_err(Into::into)
     }
@@ -382,7 +383,6 @@ impl DBClient {
         &self,
         account: &[u8],
         file_key: &[u8],
-        bucket_id: i64,
         onchain_bucket_id: &[u8],
         location: &[u8],
         fingerprint: &[u8],
@@ -394,7 +394,6 @@ impl DBClient {
             .create_file(
                 account,
                 &file_hash,
-                bucket_id,
                 &bucket_hash,
                 location,
                 fingerprint,
