@@ -9,7 +9,9 @@
  * Each invocation returns an independent cookie store, so separate clients
  * maintain separate affinity.
  */
-export function createCookieFetch(baseFetch: typeof fetch): typeof fetch {
+export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+export function createCookieFetch(baseFetch: FetchLike): FetchLike {
   const cookieJar = new Map<string, string>();
 
   return async (input, init) => {

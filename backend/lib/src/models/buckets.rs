@@ -212,7 +212,6 @@ mod tests {
             id: 1,
             account: vec![],
             file_key: file_key.to_vec(),
-            bucket_id: 1,
             onchain_bucket_id: vec![],
             location: location.as_bytes().to_vec(),
             fingerprint: vec![],

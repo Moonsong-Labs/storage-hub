@@ -3,6 +3,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "types": ["bun"],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true

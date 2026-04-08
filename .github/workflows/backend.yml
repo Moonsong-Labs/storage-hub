@@ -3,14 +3,14 @@ name: Backend CI
 on:
   pull_request:
     paths:
-      - 'backend/**'
-      - '.github/workflows/backend.yml'
+      - "backend/**"
+      - ".github/workflows/backend.yml"
   push:
     branches:
       - main
     paths:
-      - 'backend/**'
-      - '.github/workflows/backend.yml'
+      - "backend/**"
+      - ".github/workflows/backend.yml"
   workflow_dispatch:
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
     name: "Check backend format with rustfmt"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
       - name: Rustfmt Check Backend
         run: |

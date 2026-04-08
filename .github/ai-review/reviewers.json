@@ -1,0 +1,31 @@
+{
+  "reviewers": [
+    {
+      "name": "no-panic-in-runtime",
+      "prompt": "prompts/review/no-panic-in-runtime.md",
+      "watched_globs": [
+        "pallets/**/*.rs",
+        "runtime/**/*.rs",
+        "primitives/**/*.rs"
+      ]
+    },
+    {
+      "name": "types-bundle-sync",
+      "prompt": "prompts/review/types-bundle-sync.md",
+      "watched_globs": [
+        "client/rpc/**",
+        "pallets/**/runtime-api/**",
+        "primitives/tx-implicits-runtime-api/**",
+        "runtime/**/src/apis.rs"
+      ]
+    },
+    {
+      "name": "use-workspace-deps",
+      "prompt": "prompts/review/use-workspace-deps.md",
+      "watched_globs": [
+        "Cargo.toml",
+        "**/Cargo.toml"
+      ]
+    }
+  ]
+}

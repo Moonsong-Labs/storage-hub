@@ -82,10 +82,33 @@ Navigate to the `/types-bundle` package and make your changes to `/src/rpc.ts` a
 
 Any new Structs or ErrorEnums can be defined at `/src/types.ts` , using existing examples for guidance, and any new branded types as well.
 
-Now, navigate to the `/test` directory and run:
+After updating `types-bundle`, validate the change using the documented type generation flow.
+
+First build the node binary from the repository root:
+
+```sh
+cargo build --release
+```
+
+#### Linux
+
+Then run type generation:
 
 ```sh
 bun run --cwd test typegen
+```
+
+#### macOS
+
+If you are running locally on macOS, perform the full cross-build and Docker-backed type-generation flow from the `/test` directory:
+
+```sh
+bun install
+bun run crossbuild:mac
+bun run docker:build
+bun run crossbuild:mac:backend
+bun run docker:build:backend
+bun run typegen
 ```
 
 From there you should be able to see the new RPC in your tests for the `EnrichedBspApi` object.

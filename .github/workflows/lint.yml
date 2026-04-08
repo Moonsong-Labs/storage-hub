@@ -16,7 +16,7 @@ jobs:
     name: "Check format with rustfmt"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
       - name: Rustfmt Check
         run: cargo fmt --all -- --check
@@ -25,7 +25,7 @@ jobs:
     name: "Check lint with clippy"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
       - uses: Swatinem/rust-cache@v2
         with:
@@ -44,7 +44,7 @@ jobs:
     name: "Check format with biome"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
       - run: bun install --frozen-lockfile
       - run: bun run fmt
@@ -53,7 +53,7 @@ jobs:
     name: "Check lint with biome"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
       - run: bun install --frozen-lockfile
       - run: bun run lint
@@ -62,7 +62,7 @@ jobs:
     name: "Typecheck with tsc"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/workflow-templates/setup-bun
       - run: bun install --frozen-lockfile
       - run: |
