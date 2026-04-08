@@ -230,6 +230,18 @@ declare module '@polkadot/api-base/types/storage' {
              * the file. The value is `false` for volunteered-only and `true` for confirmed.
              * This map is created when the first BSP volunteers and removed when the storage
              * request is cleaned up.
+             *
+             * ## Benchmarking note
+             *
+             * This is a [`BoundedBTreeMap`] whose PoV cost is always charged at [`MaxEncodedLen`]
+             * (i.e. assuming `MaxBspVolunteers` entries) regardless of how many BSPs are actually
+             * present. Currently, all extrinsic paths interact with this map via whole-map
+             * operations (`get`, `set`, `remove`) and do **not** perform per-BSP storage
+             * reads/writes, so the number of volunteers has no statistically significant impact
+             * on ref_time or PoV. If future logic is added that iterates over individual BSPs
+             * in this map and performs additional storage reads or writes for each one, the
+             * volunteer count **must** be re-introduced as a `Linear` benchmark component so
+             * the weight function can account for the per-BSP cost.
              **/
             storageRequestBsps: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<BTreeMap<H256, bool>>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
             /**
