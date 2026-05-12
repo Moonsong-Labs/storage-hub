@@ -26,6 +26,43 @@
         "Cargo.toml",
         "**/Cargo.toml"
       ]
+    },
+    {
+      "name": "breaking-changes-documentation",
+      "prompt": "prompts/review/breaking-changes-documentation.md",
+      "watched_globs": [
+        "node/src/**/*.rs",
+        "runtime/**/src/lib.rs",
+        "runtime/**/src/apis.rs",
+        "pallets/**/runtime-api/**",
+        "client/rpc/**",
+        "client/src/builder.rs",
+        "configs/*.toml"
+      ]
+    },
+    {
+      "name": "config-example-sync",
+      "prompt": "prompts/review/config-example-sync.md",
+      "watched_globs": [
+        "node/src/cli.rs",
+        "node/src/command.rs",
+        "configs/*.toml",
+        "backend/bin/**/*.rs"
+      ]
+    },
+    {
+      "name": "runtime-event-error-encoding-stability",
+      "prompt": "prompts/review/runtime-event-error-encoding-stability.md",
+      "watched_globs": [
+        "pallets/providers/src/**/*.rs",
+        "pallets/file-system/src/**/*.rs",
+        "pallets/proofs-dealer/src/**/*.rs",
+        "pallets/randomness/src/**/*.rs",
+        "pallets/payment-streams/src/**/*.rs",
+        "pallets/bucket-nfts/src/**/*.rs",
+        "runtime/parachain/src/lib.rs",
+        "runtime/solochain-evm/src/lib.rs"
+      ]
     }
   ]
 }

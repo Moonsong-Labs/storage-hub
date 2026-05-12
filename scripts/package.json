@@ -5,7 +5,9 @@
   "scripts": {
     "select:ai-review-prompts": "bun run ./select_ai_review_prompts.ts",
     "find:file-deletions": "bun run ./find_file_deletions.ts",
-    "remove:files-from-forest-storage": "bun run ./remove_files_from_forest_storage.ts"
+    "remove:files-from-forest-storage": "bun run ./remove_files_from_forest_storage.ts",
+    "extract:pr-comments": "bun run ./extract_pr_comments.ts",
+    "extract:recurring-comments": "bun run ./extract_recurring_comments.ts"
   },
   "dependencies": {
     "@polkadot/api": "^16.4.7",
