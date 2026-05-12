@@ -157,6 +157,18 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin "${BASE_REF}" "+refs/pull/${PR_NUMBER}/head"
 
+      - name: Fetch pull request description
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          gh pr view "${PR_NUMBER}" --repo "${REPOSITORY}" --json body --jq '.body // ""' > pr-body.txt
+          if [ ! -s pr-body.txt ]; then
+            echo "(no pull request description)" > pr-body.txt
+          fi
+
       - name: Build Codex review prompt
         env:
           REPOSITORY: ${{ github.repository }}
@@ -184,6 +196,12 @@ jobs:
             echo "Head SHA: ${HEAD_SHA}"
             echo "Matched files for this reviewer:"
             printf '%s\n' "${MATCHED_FILES_JSON}" | jq -r '.[]'
+            echo ""
+            echo "Pull request description:"
+            echo "-----BEGIN PR DESCRIPTION-----"
+            cat pr-body.txt
+            echo ""
+            echo "-----END PR DESCRIPTION-----"
             echo ""
             echo "Changed files:"
             git --no-pager diff --name-status "${BASE_SHA}" "${HEAD_SHA}"
